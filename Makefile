@@ -3,7 +3,7 @@
 #
 #FCFLAGS=  -Wuse-without-only -g
 #FC=mpif90
-FC=gfortran
+FC=h5pfc
 
 SRCDIR = src
 OBJDIR = obj
@@ -20,7 +20,7 @@ OPTIONS3 = -DHDF5
 #OPTIONS3 = -DEULER
 #OPTIONS3=-O3
 
-EXE=fact
+EXE=astrr.exe
 
 LIBS= -lz -lm
 
@@ -28,7 +28,8 @@ TARGET = $(BINDIR)/$(EXE)
 
 VPATH = $(SRCDIR):$(OBJDIR)
 
-srs=  readwrite.F90 astrr.F90
+srs=  tecio.F90 commvar.F90 commarray.F90 parallel.F90 hdf5io.F90 readwrite.F90 \
+      astrr.F90
 OBJS=$(srs:.F90=.o)
 
 %.o:%.F90

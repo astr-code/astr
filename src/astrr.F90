@@ -6,13 +6,32 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 program astrr
   !
-  use ReadWrite
+  use parallel
+  use readwrite
+  use commarray
   !
   implicit none
   !
+  call mpiinitial
+  !
   call statement
   !
-  print*,' ** all the jobs are done!'
+  call readinput
+  !
+  call mpisizedis
+  !
+  call parapp
+  !
+  call parallelini
+  !
+  call infodisp
+  !
+  call allocommarray
+  !
+  call ReadGrid
+  !
+  if(mpirank==0) print*,' ** The job is done!'
+  call mpistop
   !
 end program astrr
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
