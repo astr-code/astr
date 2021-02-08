@@ -6,3 +6,6 @@
 
 # lihomo,ljhomo,lkhomo
 t,f,t
+
+# conschm, difschm # scheme of convectional and diffusional terms
+642c,642c

@@ -28,8 +28,8 @@ TARGET = $(BINDIR)/$(EXE)
 
 VPATH = $(SRCDIR):$(OBJDIR)
 
-srs=  tecio.F90 commvar.F90 commarray.F90 parallel.F90 hdf5io.F90 readwrite.F90 \
-      astrr.F90
+srs=  constdef.F90 tecio.F90 commvar.F90 commarray.F90 parallel.F90 hdf5io.F90 \
+      readwrite.F90 commfunc.F90 solver.F90 astrr.F90
 OBJS=$(srs:.F90=.o)
 
 %.o:%.F90

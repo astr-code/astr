@@ -10,12 +10,17 @@ module commvar
   implicit none
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
-  integer :: nh
+  integer :: hm
+  integer :: numq
+  character(len=4) :: conschm,difschm
   !+---------------------+---------------------------------------------+
   !|            ia,ja,ka | the dimension of the entire domain          | 
   !|            im,jm,km | the dimension of the local domain           | 
   !|   is,ie,js,je,ks,ke | start and end nodes number.                 |
   !|                  nh | level of halo nodes.                        |
+  !|                numq | number of independent variables.            |
+  !|     conschm,difschm | the scheme of solving convectional and      |
+  !|                     | diffusional terms.
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
   !+---------------------+---------------------------------------------+
@@ -26,8 +31,13 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|               npdci | to control scheme at boundary.              |
   !+---------------------+---------------------------------------------+
+  real(8) :: xmax,xmin,ymax,ymin,zmax,zmin
+  !+---------------------+---------------------------------------------+
+  !|                *mix | min coordinates                             |
+  !|                *max | max coordinates                             |
+  !+---------------------+---------------------------------------------+
   !
-  parameter(nh=4)
+  parameter(hm=5)
   !
 end module commvar
 !+---------------------------------------------------------------------+

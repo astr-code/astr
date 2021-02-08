@@ -72,7 +72,7 @@ module readwrite
   subroutine infodisp
     !
     use parallel, only : lio,isize,jsize,ksize
-    use commvar, only : ia,ja,ka
+    use commvar, only : ia,ja,ka,hm,numq,conschm,difschm
     !
     if(lio) then
       write(*,'(2X,62A)')('-',i=1,62)
@@ -83,9 +83,32 @@ module readwrite
       write(*,"(4(1x,I15))")isize,jsize,ksize,isize*jsize*ksize
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                        *** Grid Size ***'
-      write(*,"(1x,3(A21))")'im','jm','km'
-      write(*,"(1x,3(I21))")ia,ja,ka
+      write(*,"(4(1x,A15))")'im','jm','km','halo'
+      write(*,"(4(1x,I15))")ia,ja,ka,hm
+      write(*,'(2X,A)')'                  *** independent variables ***'
+      write(*,"(2X,I62)")numq
       write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                      *** convection term ***'
+      if(conschm(4:4)=='c') then
+        write(*,'(2X,A62)')' compact scheme'
+        write(*,'(48X,11A)')conschm(3:3),'-',conschm(2:2),'-',         &
+                            conschm(1:1),'......',conschm(1:1),'-',    &
+                            conschm(2:2),'-',conschm(3:3)
+      else
+        stop ' !! error: conschm not defined !!'
+      endif
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                      *** diffusional term ***'
+      if(difschm(4:4)=='c') then
+        write(*,'(2X,A62)')' compact scheme'
+        write(*,'(48X,11A)')difschm(3:3),'-',difschm(2:2),'-',         &
+                            difschm(1:1),'......',difschm(1:1),'-',    &
+                            difschm(2:2),'-',difschm(3:3)
+      else
+        stop ' !! error: difschm not defined !!'
+      endif
+      write(*,'(2X,62A)')('-',i=1,62)
+      !
     endif
     !
   end subroutine infodisp
@@ -103,7 +126,8 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readinput
     !
-    use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo
+    use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm
+    use parallel,only : bcast
     !
     ! local data
     character(len=64) :: inputfile
@@ -122,10 +146,23 @@ module readwrite
       if(lihomo) write(*,'(A)',advance='no')'i,'
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
+      read(11,'(/)')
+      read(11,*)conschm,difschm
       close(11)
       print*,' >> ',trim(inputfile),' ... done'
       !
     endif
+    !
+    call bcast(ia)
+    call bcast(ja)
+    call bcast(ka)
+    !
+    call bcast(lihomo)
+    call bcast(ljhomo)
+    call bcast(lkhomo)
+    !
+    call bcast(conschm)
+    call bcast(difschm)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+
@@ -150,10 +187,6 @@ module readwrite
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2))
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3))
     call h5io_end
-    !
-    call tecbin('tecgrid'//mpirankname//'.plt',x(0:im,0:jm,0:km,1),'x',&
-                                               x(0:im,0:jm,0:km,2),'y',&
-                                               x(0:im,0:jm,0:km,3),'z' )
     !
   end subroutine readgrid
   !+-------------------------------------------------------------------+

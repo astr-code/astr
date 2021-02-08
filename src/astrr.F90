@@ -9,6 +9,7 @@ program astrr
   use parallel
   use readwrite
   use commarray
+  use solver
   !
   implicit none
   !
@@ -24,11 +25,19 @@ program astrr
   !
   call parallelini
   !
+  call refcal
+  !
   call infodisp
   !
   call allocommarray
   !
-  call ReadGrid
+  call readgrid
+  !
+  call geomcal
+  !
+  call solvrinit
+  !
+  call gradcal
   !
   if(mpirank==0) print*,' ** The job is done!'
   call mpistop
