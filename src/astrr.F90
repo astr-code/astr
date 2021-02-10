@@ -10,6 +10,8 @@ program astrr
   use readwrite
   use commarray
   use solver
+  use initialisation
+  use mainloop
   !
   implicit none
   !
@@ -37,9 +39,10 @@ program astrr
   !
   call solvrinit
   !
-  call gradcal
+  call flowinit
   !
-  if(mpirank==0) print*,' ** The job is done!'
+  call steploop
+  !
   call mpistop
   !
 end program astrr

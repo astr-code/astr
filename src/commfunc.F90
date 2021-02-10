@@ -25,7 +25,6 @@ module commfunc
   !+-------------------------------------------------------------------+
   function ddf(f,stype,ntype,dim,af,cc)
     !
-    !
     ! arguments
     character(len=4),intent(in) :: stype
     integer,intent(in) :: ntype,dim
@@ -41,8 +40,14 @@ module commfunc
     !
     read(stype(1:3),*) nscheme
     !
-    b  =ptds_rhs(f,dim,nscheme,ntype)
-    ddf=ptds_cal(b,af,cc,dim,ntype)
+    if(dim==0) then
+      ddf=f(1)-f(0)
+    else
+      !
+      b  =ptds_rhs(f,dim,nscheme,ntype)
+      ddf=ptds_cal(b,af,cc,dim,ntype)
+      !
+    endif
     !
     return
     !
@@ -112,6 +117,11 @@ module commfunc
     integer :: l
     !
     allocate(cc(1:2,0:dim))
+    !
+    if(dim==0) then
+      cc=0.d0
+      return
+    endif
     !
     if(ntype==1) then
       ! the block with boundary at i==0

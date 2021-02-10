@@ -1,11 +1,25 @@
 ########################################################################
-#                the input file of ASTRR code                          #
+#                    input file of ASTRR code                          #
 ########################################################################
-# im, jm, km
-32,32,32
+
+# flowtype
+2dvort
+
+# im,jm,km
+400,200,0
 
 # lihomo,ljhomo,lkhomo
-t,f,t
+t,t,t
 
-# conschm, difschm # scheme of convectional and diffusional terms
+# nondimen, diffterm
+t,f
+
+# ref_t,reynolds,mach
+273.15d0,  3000.d0,  0.5d0     
+
+# conschm,difschm
 642c,642c
+
+# num_species
+1
+

@@ -114,8 +114,6 @@ module parallel
     !
     logical :: l2dcomp
     !
-    l2dcomp=.false.
-    !
     if(mpisize==1) then
        !
       isize=1
@@ -124,6 +122,12 @@ module parallel
       !
       return
       !
+    endif
+    !
+    if(ka==0) then
+      l2dcomp=.true.
+    else 
+      l2dcomp=.false.
     endif
     !
     if(mpirank==0) then
@@ -681,7 +685,12 @@ module parallel
     !
     integer :: ierr
     !
+    call mpi_barrier(mpi_comm_world,ierr)
+    !
     call mpi_finalize(ierr)
+    !
+    if(lio) print*,' ** The job is done!'
+    !
     stop
     !
   end subroutine mpistop
@@ -1151,6 +1160,17 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! Finish message pass in k direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    else
+      !
+      if(km==0) then
+        !
+        do k=-hm,hm
+          x(0:im,0:jm,k,1:2)=x(0:im,0:jm,0,1:2)
+          x(0:im,0:jm,k,3)=x(0:im,0:jm,0,3)+real(k,9)
+        enddo
+        !
+      endif
+      !
     end if
     !
     if(lio) print*,' ** grid coordinates swapped'
@@ -1357,7 +1377,8 @@ module parallel
   !+-------------------------------------------------------------------+
   !| The end of the subroutine array3d_sendrecv.                       |
   !+-------------------------------------------------------------------+
-  !!+-------------------------------------------------------------------+
+  !!
+  !!+------------------------------------------------------------------+
   !| This subroutine is used to swap a 4-D tensor.                     |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -1762,6 +1783,267 @@ module parallel
   !| The end of the subroutine array5d_sendrecv.                       |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to swap q and update the flow variables.  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
+  !+-------------------------------------------------------------------+
+  subroutine qswap
+    !
+    use commvar,   only: numq
+    use commarray, only: q,rho,vel,prs,tmp,spc
+    use fludyna,   only: q2fvar
+    !
+    ! local data
+    integer :: ncou
+    integer :: ierr,k
+    real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! buf1: send buffer
+    ! buf2: send buffer
+    ! buf1: redevice buffer
+    ! buf2: redevice buffer
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ncou=(jm+1)*(km+1)*numq*(hm+1)
+    !
+    allocate( sbuf1(0:hm, 0:jm,0:km,1:numq),                        &
+              sbuf2(0:hm, 0:jm,0:km,1:numq),                        &
+              rbuf1(0:hm, 0:jm,0:km,1:numq),                        &
+              rbuf2(-hm:0,0:jm,0:km,1:numq) )
+    !
+    if(mpileft .ne. MPI_PROC_NULL) then
+      ! pack the left send buffer
+      sbuf1(0:hm,0:jm,0:km,:)=q(0:hm,0:jm,0:km,:)
+    endif
+    if(mpiright .ne. MPI_PROC_NULL) then
+      ! pack the right send buffer
+      sbuf2(0:hm,0:jm,0:km,:)=q(im-hm:im,0:jm,0:km,:)
+    endif
+    !
+    ! Message passing
+    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
+                      rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
+                      rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    !
+    if(mpiright .ne. MPI_PROC_NULL) then
+      !
+      ! unpack the received the packet from right
+      q(im+1:im+hm,0:jm,0:km,:)=rbuf1(1:hm,0:jm,0:km,:)
+      !
+      q(im,0:jm,0:km,:)=0.5d0*( q(im,0:jm,0:km,:) +            &
+                                rbuf1(0,0:jm,0:km,:) )
+      !
+      call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                           &
+                                     density=rho(im:im+hm,0:jm,0:km),  &
+                                    velocity=vel(im:im+hm,0:jm,0:km,:),&
+                                    pressure=prs(im:im+hm,0:jm,0:km),  &
+                                 temperature=tmp(im:im+hm,0:jm,0:km),  &
+                                     species=spc(im:im+hm,0:jm,0:km,:) )
+      ! 
+    end if
+    !
+    if(mpileft .ne. MPI_PROC_NULL) then
+      !
+      ! unpack the received the packet from left
+      q(-hm:-1,0:jm,0:km,:)=rbuf2(-hm:-1,0:jm,0:km,:)
+      !
+      q(0,0:jm,0:km,:)=0.5d0*( q(0,0:jm,0:km,:) +              &
+                               rbuf2(0,0:jm,0:km,:) )
+      !
+      call q2fvar(q=q(-hm:0,0:jm,0:km,:),                              &
+                                     density=rho(-hm:0,0:jm,0:km),     &
+                                    velocity=vel(-hm:0,0:jm,0:km,:),   &
+                                    pressure=prs(-hm:0,0:jm,0:km),     &
+                                 temperature=tmp(-hm:0,0:jm,0:km),     &
+                                     species=spc(-hm:0,0:jm,0:km,:)    )
+      ! 
+    end if
+    !
+    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Finish message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Message pass in j direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ncou=(im+1)*(km+1)*numq*(hm+1)
+    !
+    allocate( sbuf1(0:im,0:hm, 0:km,1:numq),                        &
+              sbuf2(0:im,0:hm, 0:km,1:numq),                        &
+              rbuf1(0:im,0:hm, 0:km,1:numq),                        &
+              rbuf2(0:im,-hm:0,0:km,1:numq) )
+    !
+    if(mpidown .ne. MPI_PROC_NULL) then
+      ! pack the upper send buffer
+      sbuf1(0:im,0:hm,0:km,:)=q(0:im,0:hm,0:km,:)
+    endif
+    if(mpiup .ne. MPI_PROC_NULL) then
+      ! pack the down send buffer
+      sbuf2(0:im,0:hm,0:km,:)=q(0:im,jm-hm:jm,0:km,:)
+    end if
+    !
+    ! Message passing
+    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
+                      rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
+                      rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    !
+    if(mpiup .ne. MPI_PROC_NULL) then
+      ! unpack the received the packet from up
+      q(0:im,jm+1:jm+hm,0:km,:)=rbuf1(0:im,1:hm,0:km,:)
+      !
+      q(0:im,jm,0:km,:)=0.5d0*( q(0:im,jm,0:km,:) +            &
+                                rbuf1(0:im, 0,0:km,:) )
+      !
+      call q2fvar(q=q(0:im,jm:jm+hm,0:km,:),                           &
+                                     density=rho(0:im,jm:jm+hm,0:km),  &
+                                    velocity=vel(0:im,jm:jm+hm,0:km,:),&
+                                    pressure=prs(0:im,jm:jm+hm,0:km),  &
+                                 temperature=tmp(0:im,jm:jm+hm,0:km),  &
+                                     species=spc(0:im,jm:jm+hm,0:km,:) )
+    endif
+    !
+    if(mpidown .ne. MPI_PROC_NULL) then
+      ! unpack the received the packet from down
+      q(0:im,-hm:-1,0:km,:)=rbuf2(0:im,-hm:-1,0:km,:) 
+      !
+      q(0:im,0,0:km,:)=0.5d0*( q(0:im, 0,0:km,:) +            &
+                               rbuf2(0:im, 0,0:km,:) )
+      !
+      call q2fvar(q=q(0:im,-hm:0,0:km,:),                              &
+                                     density=rho(0:im,-hm:0,0:km),     &
+                                    velocity=vel(0:im,-hm:0,0:km,:),   &
+                                    pressure=prs(0:im,-hm:0,0:km),     &
+                                 temperature=tmp(0:im,-hm:0,0:km),     &
+                                     species=spc(0:im,-hm:0,0:km,:)    )
+    end if
+    !
+    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Finish message pass in j direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(ksize==1 .and. lkhomo) then
+      !
+      if(km==0) then
+        do k=-hm,hm
+          q(0:im,0:jm,k,:)=q(0:im,0:jm,0,:)
+        enddo
+      else
+        q(0:im,0:jm, -hm:-1   ,:)=q(0:im,0:jm,km-hm:km-1,:)
+        q(0:im,0:jm,km+1:km+hm,:)=q(0:im,0:jm,    1:hm,  :)
+        !
+        q(0:im,0:jm,0,:)=0.5d0*(q(0:im,0:jm,0,:)+q(0:im,0:jm,km,:))
+        q(0:im,0:jm,km,:)=q(0:im,0:jm,0,:)
+      endif
+      !
+      call q2fvar(q=q(0:im,0:jm,-hm:0,:),                              &
+                                     density=rho(0:im,0:jm,-hm:0),     &
+                                    velocity=vel(0:im,0:jm,-hm:0,:),   &
+                                    pressure=prs(0:im,0:jm,-hm:0),     &
+                                 temperature=tmp(0:im,0:jm,-hm:0),     &
+                                     species=spc(0:im,0:jm,-hm:0,:)    )
+      call q2fvar(q=q(0:im,0:jm,km:km+hm,:),                           &
+                                density=rho(0:im,0:jm,km:km+hm),       &
+                               velocity=vel(0:im,0:jm,km:km+hm,:),     &
+                               pressure=prs(0:im,0:jm,km:km+hm),       &
+                            temperature=tmp(0:im,0:jm,km:km+hm),       &
+                                species=spc(0:im,0:jm,km:km+hm,:)      )
+    else
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(jm+1)*numq*(hm+1)
+      !
+      allocate( sbuf1(0:im,0:jm, 0:hm,1:numq),                      &
+                sbuf2(0:im,0:jm, 0:hm,1:numq),                      &
+                rbuf1(0:im,0:jm, 0:hm,1:numq),                      &
+                rbuf2(0:im,0:jm,-hm:0,1:numq) )
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        ! pack the back send buffer
+        sbuf1(0:im,0:jm,0:hm,:)=q(0:im,0:jm,0:hm,:)
+      endif
+      if(mpifront .ne. MPI_PROC_NULL) then
+        ! pack the front send buffer
+        sbuf2(0:im,0:jm,0:hm,:)=q(0:im,0:jm,km-hm:km,:)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpiback, mpitag,          &
+                        rbuf1,ncou,mpi_real8,mpifront,mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpifront,mpitag,          &
+                        rbuf2,ncou,mpi_real8,mpiback, mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpifront .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from front
+        q(0:im,0:jm,km+1:km+hm,:)=rbuf1(0:im,0:jm,1:hm,:)
+        !
+        q(0:im,0:jm,km,:)=0.5d0*( q(0:im,0:jm,km,:) +              &
+                                  rbuf1(0:im,0:jm, 0,:) )
+        !
+        call q2fvar(q=q(0:im,0:jm,km:km+hm,:),                         &
+                                  density=rho(0:im,0:jm,km:km+hm),     &
+                                 velocity=vel(0:im,0:jm,km:km+hm,:),   &
+                                 pressure=prs(0:im,0:jm,km:km+hm),     &
+                              temperature=tmp(0:im,0:jm,km:km+hm),     &
+                                  species=spc(0:im,0:jm,km:km+hm,:)    )
+        !
+      end if
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet back
+        q(0:im,0:jm,-hm:-1,:)=rbuf2(0:im,0:jm,-hm:-1,:)
+        !
+        q(0:im,0:jm,0,:)=0.5d0*( q(0:im,0:jm,0,:) +                &
+                                 rbuf2(0:im,0:jm,0,:)  )
+        !
+        call q2fvar(q=q(0:im,0:jm,-hm:0,:),                             &
+                                       density=rho(0:im,0:jm,-hm:0),    &
+                                      velocity=vel(0:im,0:jm,-hm:0,:),  &
+                                      pressure=prs(0:im,0:jm,-hm:0),    &
+                                   temperature=tmp(0:im,0:jm,-hm:0),    &
+                                       species=spc(0:im,0:jm,-hm:0,:)   )
+        !
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    return
+    !
+  end subroutine qswap
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine qswap.                                  |
+  !+-------------------------------------------------------------------+
 end module parallel
 !+---------------------------------------------------------------------+
 !| The end of the module parallel.                                     |

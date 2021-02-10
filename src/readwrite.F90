@@ -71,12 +71,30 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine infodisp
     !
-    use parallel, only : lio,isize,jsize,ksize
-    use commvar, only : ia,ja,ka,hm,numq,conschm,difschm
+    use parallel,only : lio,isize,jsize,ksize,mpistop
+    use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
+                        diffterm,ref_t,reynolds,mach,num_species,      &
+                        flowtype,ndims
+    !
+    ! local data
+    character(len=42) :: typedefine
     !
     if(lio) then
+      !
+      select case(trim(flowtype))
+      case('2dvort')
+        typedefine='                 2D inviscid vortical flow'
+      case default
+        print*,trim(flowtype)
+        stop ' !! flowtype not defined @ infodisp'
+      end select
+      !
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                   *** computation Setup ***'
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                     ***    flow type   ***'
+      write(*,'(2X,A59,I3)')' dimension: ',ndims
+      write(*,'(14X,A,A,A42)')trim(flowtype),': ',typedefine
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                     ***    MPI size    ***'
       write(*,"(4(1x,A15))")'isize','jsize','ksize','size'
@@ -85,25 +103,47 @@ module readwrite
       write(*,'(2X,A)')'                        *** Grid Size ***'
       write(*,"(4(1x,A15))")'im','jm','km','halo'
       write(*,"(4(1x,I15))")ia,ja,ka,hm
-      write(*,'(2X,A)')'                  *** independent variables ***'
-      write(*,"(2X,I62)")numq
       write(*,'(2X,62A)')('-',i=1,62)
-      write(*,'(2X,A)')'                      *** convection term ***'
+      write(*,'(2X,A)')'                         *** Equations ***'
+      !
+      if(nondimen) then
+        write(*,'(2X,A62)')' non-dimensional'
+      else
+        write(*,'(2X,A62)')' metric equations'
+      endif
+      !
+      if(diffterm) then
+        write(*,'(2X,A62)')' N-S equations are solved'
+      else
+        write(*,'(2X,A62)')' Euler equations are solved'
+      endif
+      !
+      write(*,'(2X,A59,I3)')' number of independent variables: ',numq
+      write(*,'(2X,A59,I3)')' number of species: ',num_species
+      !
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                      *** Flow Parameters ***'
+      if(nondimen) then
+         write(*,'(4X,3(A20))')'ref_t','Reynolds','Mach'
+         write(*,"(4X,3(F20.6))")ref_t,reynolds,mach
+      endif
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                          *** sceheme ***'
+      write(*,'(19X,A)',advance='no')'  convection terms: '
       if(conschm(4:4)=='c') then
-        write(*,'(2X,A62)')' compact scheme'
-        write(*,'(48X,11A)')conschm(3:3),'-',conschm(2:2),'-',         &
-                            conschm(1:1),'......',conschm(1:1),'-',    &
-                            conschm(2:2),'-',conschm(3:3)
+        write(*,'(A)',advance='no')' compact '
+        write(*,'(11A)')conschm(3:3),'-',conschm(2:2),'-',             &
+                        conschm(1:1),'......',conschm(1:1),'-',        &
+                        conschm(2:2),'-',conschm(3:3)
       else
         stop ' !! error: conschm not defined !!'
       endif
-      write(*,'(2X,62A)')('-',i=1,62)
-      write(*,'(2X,A)')'                      *** diffusional term ***'
+      write(*,'(19X,A)',advance='no')'   diffusion terms: '
       if(difschm(4:4)=='c') then
-        write(*,'(2X,A62)')' compact scheme'
-        write(*,'(48X,11A)')difschm(3:3),'-',difschm(2:2),'-',         &
-                            difschm(1:1),'......',difschm(1:1),'-',    &
-                            difschm(2:2),'-',difschm(3:3)
+        write(*,'(A)',advance='no')' compact '
+        write(*,'(11A)')difschm(3:3),'-',difschm(2:2),'-',             &
+                        difschm(1:1),'......',difschm(1:1),'-',        &
+                        difschm(2:2),'-',difschm(3:3)
       else
         stop ' !! error: difschm not defined !!'
       endif
@@ -126,7 +166,9 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readinput
     !
-    use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm
+    use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
+                        nondimen,diffterm,ref_t,reynolds,mach,         &
+                        num_species,flowtype
     use parallel,only : bcast
     !
     ! local data
@@ -137,9 +179,10 @@ module readwrite
     if(mpirank==0) then
       !
       open(11,file=trim(inputfile),action='read')
-      read(11,'(///)')
+      read(11,'(////)')
+      read(11,*)flowtype
+      read(11,'(/)')
       read(11,*)ia,ja,ka
-      write(*,'(3(a,i0))')'  ** Dimension: ',ia,' x ',ja,' x ',ka
       read(11,'(/)')
       read(11,*)lihomo,ljhomo,lkhomo
       write(*,'(A)',advance='no')'  ** homogeneous direction: '
@@ -147,7 +190,19 @@ module readwrite
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
       read(11,'(/)')
+      read(11,*)nondimen,diffterm
+      !
+      if(nondimen) then
+        read(11,'(/)')
+        read(11,*)ref_t,reynolds,mach
+      else
+        read(11,'(///)')
+      endif
+      !
+      read(11,'(/)')
       read(11,*)conschm,difschm
+      read(11,'(/)')
+      read(11,*)num_species
       close(11)
       print*,' >> ',trim(inputfile),' ... done'
       !
@@ -161,12 +216,60 @@ module readwrite
     call bcast(ljhomo)
     call bcast(lkhomo)
     !
+    call bcast(flowtype)
     call bcast(conschm)
     call bcast(difschm)
+    !
+    call bcast(nondimen)
+    call bcast(diffterm)
+    call bcast(ref_t)
+    call bcast(reynolds)
+    call bcast(mach)
+    !
+    call bcast(num_species)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to read a file that is sued to control    |
+  !| computation.                                                      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readcont
+    !
+    use commvar, only: maxstep,nwrite,deltat
+    use parallel,only : bcast
+    !
+    ! local data
+    character(len=64) :: inputfile
+    !
+    inputfile='datin/contr.dat'
+    !
+    if(mpirank==0) then
+      !
+      open(11,file=trim(inputfile),action='read')
+      read(11,'(////)')
+      read(11,*)maxstep,nwrite
+      read(11,'(/)')
+      read(11,*)deltat
+      close(11)
+      print*,' >> ',trim(inputfile),' ... done'
+      !
+    endif
+    !
+    call bcast(maxstep)
+    call bcast(nwrite)
+    call bcast(deltat)
+    !
+  end subroutine readcont
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readcont.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

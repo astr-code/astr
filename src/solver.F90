@@ -8,7 +8,8 @@
 module solver
   !
   use constdef
-  use parallel,  only : mpirankname,mpistop,mpirank,lio,dataswap
+  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap
+  use commvar,  only : ndims,ks,ke
   !
   implicit none
   !
@@ -26,9 +27,48 @@ module solver
   !+-------------------------------------------------------------------+
   subroutine refcal
     !
-    use commvar,   only : numq
+    use commvar, only : numq,num_species,prandtl,gamma,rgas,ia,ja,ka,  &
+                        uinf,vinf,winf,roinf,pinf,tinf,const1,const2,  &
+                        const3,const4,const5,const6,const7,tempconst,  &
+                        tempconst1,reynolds,ref_t,mach
     !
-    numq=1
+    numq=5+num_species
+    !
+    if(ia>0 .and. ja>0 .and. ka>0) then
+      ndims=3
+    elseif(ka==0 .and. ja==0 .and. ia==0) then
+      ndims=0
+    elseif(ka==0 .and. ja==0) then
+      ndims=1
+    elseif(ka==0) then
+      ndims=2
+    else
+      print*,ndims
+      stop ' !! ndims error @ refcal'
+    endif
+    !
+    prandtl=0.72d0
+    gamma=1.4d0
+    rgas=287.1d0
+    !
+    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+    const2=gamma*mach**2
+    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+    const5=(gamma-1.d0)*mach**2
+    const6=1.d0/(gamma-1.d0)
+    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+    !
+    uinf=1.d0
+    vinf=0.d0
+    winf=0.d0
+    tinf=1.d0
+    roinf=1.d0
+    !
+    pinf=roinf*tinf/const2
+    !
+    tempconst=110.3d0/ref_t
+    tempconst1=1.d0+tempconst
     !
   end subroutine refcal
   !+-------------------------------------------------------------------+
@@ -169,287 +209,508 @@ module solver
     ! Calculating geometrical 
     ! Jacobian
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    jacob(0:im,0:jm,0:km)=dx(0:im,0:jm,0:km,1,1)*                      &
-                          dx(0:im,0:jm,0:km,2,2)*                      &
-                          dx(0:im,0:jm,0:km,3,3)                       &
-                        + dx(0:im,0:jm,0:km,1,2)*                      &
-                          dx(0:im,0:jm,0:km,2,3)*                      &
-                          dx(0:im,0:jm,0:km,3,1)                       &
-                        + dx(0:im,0:jm,0:km,1,3)*                      &
-                          dx(0:im,0:jm,0:km,2,1)*                      &
-                          dx(0:im,0:jm,0:km,3,2)                       &
-                        - dx(0:im,0:jm,0:km,1,3)*                      &
-                          dx(0:im,0:jm,0:km,2,2)*                      &
-                          dx(0:im,0:jm,0:km,3,1)                       &
-                        - dx(0:im,0:jm,0:km,1,2)*                      &
-                          dx(0:im,0:jm,0:km,2,1)*                      &
-                          dx(0:im,0:jm,0:km,3,3)                       &
-                        - dx(0:im,0:jm,0:km,1,1)*                      &
-                          dx(0:im,0:jm,0:km,2,3)*                      &
-                          dx(0:im,0:jm,0:km,3,2)
-   !
-   call dataswap(jacob)
-   !
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   ! End of Calculating 
-   ! geometrical Jacobian
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   !
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   ! Calculating d<i,j,k>/d<x,y,z>
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   dxi=0.d0
-   !
-   allocate( phi(-hm:im+hm)  )
-   do k=0,km
-   do j=0,jm
-     !
-     phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,3)-           &
-                   dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,2))
-     dxi(0:im,j,k,2,1)=dxi(0:im,j,k,2,1)+ddf(phi,cscheme,npdci,im,alfa,gci)
-     !
-     phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,1)-           &
-                   dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,3))
-     dxi(0:im,j,k,2,2)=dxi(0:im,j,k,2,2)+ddf(phi,cscheme,npdci,im,alfa,gci)
-     !
-     phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,2)-           &
-                   dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,1))
-     dxi(0:im,j,k,2,3)=dxi(0:im,j,k,2,3)+ddf(phi,cscheme,npdci,im,alfa,gci)
-     !
-     phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,2)-           &
-                   dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,3))
-     dxi(0:im,j,k,3,1)=dxi(0:im,j,k,3,1)+ddf(phi,cscheme,npdci,im,alfa,gci)
-     !
-     phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,3)-           &
-                   dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,1))
-     dxi(0:im,j,k,3,2)=dxi(0:im,j,k,3,2)+ddf(phi,cscheme,npdci,im,alfa,gci)
-     !
-     phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,1)-           &
-                   dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,2))
-     dxi(0:im,j,k,3,3)=dxi(0:im,j,k,3,3)+ddf(phi,cscheme,npdci,im,alfa,gci)
-     !
-   enddo
-   enddo
-   deallocate( phi )
-   !
-   allocate( phi(-hm:jm+hm)  )
-   do k=0,km
-   do i=0,im
-     !
-     phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,2)-           &
-                   dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,3))
-     dxi(i,0:jm,k,1,1)=dxi(i,0:jm,k,1,1)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
-     !
-     phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,3)-           &
-                   dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,1))
-     dxi(i,0:jm,k,1,2)=dxi(i,0:jm,k,1,2)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
-     !
-     phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,1)-           &
-                   dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,2))
-     dxi(i,0:jm,k,1,3)=dxi(i,0:jm,k,1,3)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
-     !
-     phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,3)-           &
-                   dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,2))
-     dxi(i,0:jm,k,3,1)=dxi(i,0:jm,k,3,1)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
-     !
-     phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,1)-           &
-                   dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,3))
-     dxi(i,0:jm,k,3,2)=dxi(i,0:jm,k,3,2)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
-     !
-     phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,2)-           &
-                   dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,1))
-     dxi(i,0:jm,k,3,3)=dxi(i,0:jm,k,3,3)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
-   enddo
-   enddo
-   deallocate( phi )
-   !
-   allocate( phi(-hm:km+hm)  )
-   do j=0,jm
-   do i=0,im
-     !
-     phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,2)*x(i,j,-hm:km+hm,3)-           &
-                   dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,2))
-     dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+ddf(phi,cscheme,npdck,km,alfa,gck)
-     !
-     phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,1)-           &
-                   dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,3))
-     dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+ddf(phi,cscheme,npdck,km,alfa,gck)
-     !
-     phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,2)-           &
-                   dx(i,j,-hm:km+hm,2,2)*x(i,j,-hm:km+hm,1))
-     dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+ddf(phi,cscheme,npdck,km,alfa,gck)
-     !
-     phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,2)-           &
-                   dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,3))
-     dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+ddf(phi,cscheme,npdck,km,alfa,gck)
-     !
-     phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,3)-           &
-                   dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,1))
-     dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+ddf(phi,cscheme,npdck,km,alfa,gck)
-     !
-     phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,1)-           &
-                   dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,2))
-     dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+ddf(phi,cscheme,npdck,km,alfa,gck)
-     !
-   enddo
-   enddo
-   deallocate( phi )
-   !
-   call dataswap(dxi)
-   !
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   ! Calculating geometrical
-   ! metric identities
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   allocate(can(0:im,0:jm,0:km,1:3))
-   !
-   can=0.d0
-   !
-   do k=0,km
-   do j=0,jm
-    can(:,j,k,1)=can(:,j,k,1)+ddf(dxi(:,j,k,1,1),cscheme,npdci,im,alfa,gci)
-    can(:,j,k,2)=can(:,j,k,2)+ddf(dxi(:,j,k,1,2),cscheme,npdci,im,alfa,gci)
-    can(:,j,k,3)=can(:,j,k,3)+ddf(dxi(:,j,k,1,3),cscheme,npdci,im,alfa,gci)
-   enddo
-   enddo
-   !
-   do k=0,km
-   do i=0,im
-    can(i,:,k,1)=can(i,:,k,1)+ddf(dxi(i,:,k,2,1),cscheme,npdcj,jm,alfa,gcj)
-    can(i,:,k,2)=can(i,:,k,2)+ddf(dxi(i,:,k,2,2),cscheme,npdcj,jm,alfa,gcj)
-    can(i,:,k,3)=can(i,:,k,3)+ddf(dxi(i,:,k,2,3),cscheme,npdcj,jm,alfa,gcj)
-   enddo
-   enddo
-   !
-   do j=0,jm
-   do i=0,im
-    can(i,j,:,1)=can(i,j,:,1)+ddf(dxi(i,j,:,3,1),cscheme,npdck,km,alfa,gck)
-    can(i,j,:,2)=can(i,j,:,2)+ddf(dxi(i,j,:,3,2),cscheme,npdck,km,alfa,gck)
-    can(i,j,:,3)=can(i,j,:,3)+ddf(dxi(i,j,:,3,3),cscheme,npdck,km,alfa,gck)
-   enddo
-   enddo
-   !
-   can1av=0.d0
-   can2av=0.d0
-   can3av=0.d0
-   do k=1,km
-   do j=1,jm
-   do i=1,im
-     can1av=can1av+can(i,j,k,1)
-     can2av=can2av+can(i,j,k,2)
-     can3av=can3av+can(i,j,k,3)
-   end do
-   end do
-   end do
-   can1av=psum(can1av)/real(ia*ja*ka,8)
-   can2av=psum(can2av)/real(ia*ja*ka,8)
-   can3av=psum(can3av)/real(ia*ja*ka,8)
-   !
-   can1var=0.d0
-   can2var=0.d0
-   can3var=0.d0
-   !
-   do k=1,km
-   do j=1,jm
-   do i=1,im
-     can1var=can1var+(can(i,j,k,1)-can1av)**2
-     can2var=can2var+(can(i,j,k,2)-can2av)**2
-     can3var=can3var+(can(i,j,k,3)-can3av)**2
-   end do
-   end do
-   end do
-   can1var=psum(can1var)/real(ia*ja*ka,8)
-   can2var=psum(can2var)/real(ia*ja*ka,8)
-   can3var=psum(can3var)/real(ia*ja*ka,8)
-   !
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   ! End ofCalculating 
-   ! geometrical metric 
-   ! identities
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   !
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   ! normlizing 
-   ! d<i,j,k>/d<x,y,z> and
-   ! geometrical vector.
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   !
-   do j=1,3
-   do i=1,3
-     dxi(0:im,0:jm,0:km,i,j)=dxi(0:im,0:jm,0:km,i,j)/jacob(0:im,0:jm,0:km)
-   enddo
-   enddo
-   !
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   ! End of normlizing
-   ! d<i,j,k>/d<x,y,z> and
-   ! geometrical vector.
-   !!!!!!!!!!!!!!!!!!!!!!!!!!!
-   !
-   call dataswap(dxi)
-   !
-   xmax=maxval(x(0:im,0:jm,0:km,1))
-   ymax=maxval(x(0:im,0:jm,0:km,2))
-   zmax=maxval(x(0:im,0:jm,0:km,3))
-   !
-   xmin=minval(x(0:im,0:jm,0:km,1))
-   ymin=minval(x(0:im,0:jm,0:km,2))
-   zmin=minval(x(0:im,0:jm,0:km,3))
-   !
-   xmax=pmax(xmax)
-   ymax=pmax(ymax)
-   zmax=pmax(zmax)
-   !
-   xmin=pmin(xmin)
-   ymin=pmin(ymin)
-   zmin=pmin(zmin)
-   !
-   !
-   if(lio) then
-     !
-     write(*,'(2X,62A)')('-',i=1,62)
-     write(*,'(2X,A)')'                    *** Grids Information *** '
-     write(*,'(2X,62A)')('-',i=1,62)
-     write(*,'(3X,62A)')'       xmin      xmax      ymin      ymax      zmin      zmax'
-     write(*,"(4X,6(F10.6))")xmin,xmax,ymin,ymax,zmin,zmax
-     write(*,'(2X,62A)')('-',i=1,62)
-     write(*,'(2X,A)')'                   *** Averaged of Identity ***'
-     write(*,"(1X,3(1X,E20.7E3))")can1av,can2av,can3av
-     write(*,'(2X,62A)')('-',i=1,62)
-     write(*,'(2X,A)')'                   *** Variance of Identity ***'
-     write(*,"(1X,3(1X,E20.7E3))")can1var,can2var,can3var
-     write(*,'(2X,62A)')('-',i=1,62)
-     !
-     if(can1av>1d-15 .or. can2av>1d-15 .or. can3av>1d-15) then
-       write(*,*)' !! Warning: Averaged Grids Identity is too large'
-       write(*,'(2X,62A)')('-',i=1,62)
-     end if
-     if(can1var>1d-15 .or. can2var>1d-15 .or. can3var>1d-15) then
-       write(*,*)' !! Warning: Variance of Grids Identity is too large'
-       write(*,'(2X,62A)')('-',i=1,62)
-     end if
-     !
-     print*,' ** Geometrical parameters calculated'
-   end if
-   !
-   deallocate(dx,gci,gcj,gck,can)
-   !
+    if(ndims==3) then
+      jacob(0:im,0:jm,0:km)=dx(0:im,0:jm,0:km,1,1)*                    &
+                            dx(0:im,0:jm,0:km,2,2)*                    &
+                            dx(0:im,0:jm,0:km,3,3)                     &
+                          + dx(0:im,0:jm,0:km,1,2)*                    &
+                            dx(0:im,0:jm,0:km,2,3)*                    &
+                            dx(0:im,0:jm,0:km,3,1)                     &
+                          + dx(0:im,0:jm,0:km,1,3)*                    &
+                            dx(0:im,0:jm,0:km,2,1)*                    &
+                            dx(0:im,0:jm,0:km,3,2)                     &
+                          - dx(0:im,0:jm,0:km,1,3)*                    &
+                            dx(0:im,0:jm,0:km,2,2)*                    &
+                            dx(0:im,0:jm,0:km,3,1)                     &
+                          - dx(0:im,0:jm,0:km,1,2)*                    &
+                            dx(0:im,0:jm,0:km,2,1)*                    &
+                            dx(0:im,0:jm,0:km,3,3)                     &
+                          - dx(0:im,0:jm,0:km,1,1)*                    &
+                            dx(0:im,0:jm,0:km,2,3)*                    &
+                            dx(0:im,0:jm,0:km,3,2)
+    elseif(ndims==2) then  
+      jacob(0:im,0:jm,0:km)=dx(0:im,0:jm,0:km,1,1)*                    &
+                            dx(0:im,0:jm,0:km,2,2)                     &
+                          - dx(0:im,0:jm,0:km,1,2)*                    &
+                            dx(0:im,0:jm,0:km,2,1)
+    else
+      stop ' !! ndimes not defined at jacob calculation.'
+    endif
+    !
+    call dataswap(jacob)
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End of Calculating 
+    ! geometrical Jacobian
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Calculating d<i,j,k>/d<x,y,z>
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    dxi=0.d0
+    !
+    if(ndims==3) then
+      !
+      allocate( phi(-hm:im+hm)  )
+      do k=0,km
+      do j=0,jm
+        !
+        phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,3)-           &
+                      dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,2))
+        dxi(0:im,j,k,2,1)=dxi(0:im,j,k,2,1)+ddf(phi,cscheme,npdci,im,alfa,gci)
+        !
+        phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,1)-           &
+                      dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,3))
+        dxi(0:im,j,k,2,2)=dxi(0:im,j,k,2,2)+ddf(phi,cscheme,npdci,im,alfa,gci)
+        !
+        phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,2)-           &
+                      dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,1))
+        dxi(0:im,j,k,2,3)=dxi(0:im,j,k,2,3)+ddf(phi,cscheme,npdci,im,alfa,gci)
+        !
+        phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,2)-           &
+                      dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,3))
+        dxi(0:im,j,k,3,1)=dxi(0:im,j,k,3,1)+ddf(phi,cscheme,npdci,im,alfa,gci)
+        !
+        phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,3)-           &
+                      dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,1))
+        dxi(0:im,j,k,3,2)=dxi(0:im,j,k,3,2)+ddf(phi,cscheme,npdci,im,alfa,gci)
+        !
+        phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,1)-           &
+                      dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,2))
+        dxi(0:im,j,k,3,3)=dxi(0:im,j,k,3,3)+ddf(phi,cscheme,npdci,im,alfa,gci)
+        !
+      enddo
+      enddo
+      deallocate( phi )
+      !
+      allocate( phi(-hm:jm+hm)  )
+      do k=0,km
+      do i=0,im
+        !
+        phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,2)-           &
+                      dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,3))
+        dxi(i,0:jm,k,1,1)=dxi(i,0:jm,k,1,1)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
+        !
+        phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,3)-           &
+                      dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,1))
+        dxi(i,0:jm,k,1,2)=dxi(i,0:jm,k,1,2)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
+        !
+        phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,1)-           &
+                      dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,2))
+        dxi(i,0:jm,k,1,3)=dxi(i,0:jm,k,1,3)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
+        !
+        phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,3)-           &
+                      dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,2))
+        dxi(i,0:jm,k,3,1)=dxi(i,0:jm,k,3,1)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
+        !
+        phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,1)-           &
+                      dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,3))
+        dxi(i,0:jm,k,3,2)=dxi(i,0:jm,k,3,2)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
+        !
+        phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,2)-           &
+                      dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,1))
+        dxi(i,0:jm,k,3,3)=dxi(i,0:jm,k,3,3)+ddf(phi,cscheme,npdcj,jm,alfa,gcj)
+      enddo
+      enddo
+      deallocate( phi )
+      !
+      allocate( phi(-hm:km+hm)  )
+      do j=0,jm
+      do i=0,im
+        !
+        phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,2)*x(i,j,-hm:km+hm,3)-           &
+                      dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,2))
+        dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+ddf(phi,cscheme,npdck,km,alfa,gck)
+        !
+        phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,1)-           &
+                      dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,3))
+        dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+ddf(phi,cscheme,npdck,km,alfa,gck)
+        !
+        phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,2)-           &
+                      dx(i,j,-hm:km+hm,2,2)*x(i,j,-hm:km+hm,1))
+        dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+ddf(phi,cscheme,npdck,km,alfa,gck)
+        !
+        phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,2)-           &
+                      dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,3))
+        dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+ddf(phi,cscheme,npdck,km,alfa,gck)
+        !
+        phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,3)-           &
+                      dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,1))
+        dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+ddf(phi,cscheme,npdck,km,alfa,gck)
+        !
+        phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,1)-           &
+                      dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,2))
+        dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+ddf(phi,cscheme,npdck,km,alfa,gck)
+        !
+      enddo
+      enddo
+      deallocate( phi )
+      !
+    elseif(ndims==2) then
+      !
+      dxi(0:im,0:jm,0:km,1,1)= dx(0:im,0:jm,0:km,2,2)  
+      dxi(0:im,0:jm,0:km,1,2)=-dx(0:im,0:jm,0:km,1,2)  
+      dxi(0:im,0:jm,0:km,2,1)=-dx(0:im,0:jm,0:km,2,1)  
+      dxi(0:im,0:jm,0:km,2,2)= dx(0:im,0:jm,0:km,1,1) 
+      !
+      dxi(0:im,0:jm,0:km,1,3)=0.d0
+      dxi(0:im,0:jm,0:km,2,3)=0.d0
+      dxi(0:im,0:jm,0:km,3,:)=0.d0
+      !
+    endif
+    
+    !
+    call dataswap(dxi)
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Calculating geometrical
+    ! metric identities
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(can(0:im,0:jm,0:km,1:3))
+    !
+    can=0.d0
+    !
+    do k=0,km
+    do j=0,jm
+      can(:,j,k,1)=can(:,j,k,1)+ddf(dxi(:,j,k,1,1),cscheme,npdci,im,alfa,gci)
+      can(:,j,k,2)=can(:,j,k,2)+ddf(dxi(:,j,k,1,2),cscheme,npdci,im,alfa,gci)
+      can(:,j,k,3)=can(:,j,k,3)+ddf(dxi(:,j,k,1,3),cscheme,npdci,im,alfa,gci)
+    enddo
+    enddo
+    !
+    do k=0,km
+    do i=0,im
+      can(i,:,k,1)=can(i,:,k,1)+ddf(dxi(i,:,k,2,1),cscheme,npdcj,jm,alfa,gcj)
+      can(i,:,k,2)=can(i,:,k,2)+ddf(dxi(i,:,k,2,2),cscheme,npdcj,jm,alfa,gcj)
+      can(i,:,k,3)=can(i,:,k,3)+ddf(dxi(i,:,k,2,3),cscheme,npdcj,jm,alfa,gcj)
+    enddo
+    enddo
+    !
+    do j=0,jm
+    do i=0,im
+      can(i,j,:,1)=can(i,j,:,1)+ddf(dxi(i,j,:,3,1),cscheme,npdck,km,alfa,gck)
+      can(i,j,:,2)=can(i,j,:,2)+ddf(dxi(i,j,:,3,2),cscheme,npdck,km,alfa,gck)
+      can(i,j,:,3)=can(i,j,:,3)+ddf(dxi(i,j,:,3,3),cscheme,npdck,km,alfa,gck)
+    enddo
+    enddo
+    !
+    can1av=0.d0
+    can2av=0.d0
+    can3av=0.d0
+    if(ndims==3) then
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        can1av=can1av+can(i,j,k,1)
+        can2av=can2av+can(i,j,k,2)
+        can3av=can3av+can(i,j,k,3)
+        !
+        if(isnan(can(i,j,k,1))) print*,mpirank,'|-1',i,j,k,can(i,j,k,:)
+        if(isnan(can(i,j,k,2))) print*,mpirank,'|-2',i,j,k,can(i,j,k,:)
+        if(isnan(can(i,j,k,3))) print*,mpirank,'|-3',i,j,k,can(i,j,k,:)
+        !
+      end do
+      end do
+      end do
+      can1av=psum(can1av)/real(ia*ja*ka,8)
+      can2av=psum(can2av)/real(ia*ja*ka,8)
+      can3av=psum(can3av)/real(ia*ja*ka,8)
+    elseif(ndims==2) then
+      do j=1,jm
+      do i=1,im
+        can1av=can1av+can(i,j,k,1)
+        can2av=can2av+can(i,j,k,2)
+        can3av=can3av+can(i,j,k,3)
+        !
+        if(isnan(can(i,j,k,1))) print*,mpirank,'|-1',i,j,k,can(i,j,k,:)
+        if(isnan(can(i,j,k,2))) print*,mpirank,'|-2',i,j,k,can(i,j,k,:)
+        if(isnan(can(i,j,k,3))) print*,mpirank,'|-3',i,j,k,can(i,j,k,:)
+        !
+      end do
+      end do
+      can1av=psum(can1av)/real(ia*ja,8)
+      can2av=psum(can2av)/real(ia*ja,8)
+      can3av=psum(can3av)/real(ia*ja,8)
+    endif
+    !
+    !
+    can1var=0.d0
+    can2var=0.d0
+    can3var=0.d0
+    !
+    if(ndims==3) then
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        can1var=can1var+(can(i,j,k,1)-can1av)**2
+        can2var=can2var+(can(i,j,k,2)-can2av)**2
+        can3var=can3var+(can(i,j,k,3)-can3av)**2
+      end do
+      end do
+      end do
+      can1var=psum(can1var)/real(ia*ja*ka,8)
+      can2var=psum(can2var)/real(ia*ja*ka,8)
+      can3var=psum(can3var)/real(ia*ja*ka,8)
+    elseif(ndims==2) then
+      do j=1,jm
+      do i=1,im
+        can1var=can1var+(can(i,j,k,1)-can1av)**2
+        can2var=can2var+(can(i,j,k,2)-can2av)**2
+        can3var=can3var+(can(i,j,k,3)-can3av)**2
+      end do
+      end do
+      can1var=psum(can1var)/real(ia*ja,8)
+      can2var=psum(can2var)/real(ia*ja,8)
+      can3var=psum(can3var)/real(ia*ja,8)
+    endif
+    !
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End ofCalculating 
+    ! geometrical metric 
+    ! identities
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! normlizing 
+    ! d<i,j,k>/d<x,y,z> and
+    ! geometrical vector.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    do j=1,3
+    do i=1,3
+      dxi(0:im,0:jm,0:km,i,j)=dxi(0:im,0:jm,0:km,i,j)/jacob(0:im,0:jm,0:km)
+    enddo
+    enddo
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End of normlizing
+    ! d<i,j,k>/d<x,y,z> and
+    ! geometrical vector.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    call dataswap(dxi)
+    !
+    xmax=maxval(x(0:im,0:jm,0:km,1))
+    ymax=maxval(x(0:im,0:jm,0:km,2))
+    zmax=maxval(x(0:im,0:jm,0:km,3))
+    !
+    xmin=minval(x(0:im,0:jm,0:km,1))
+    ymin=minval(x(0:im,0:jm,0:km,2))
+    zmin=minval(x(0:im,0:jm,0:km,3))
+    !
+    xmax=pmax(xmax)
+    ymax=pmax(ymax)
+    zmax=pmax(zmax)
+    !
+    xmin=pmin(xmin)
+    ymin=pmin(ymin)
+    zmin=pmin(zmin)
+    !
+    !
+    if(lio) then
+      !
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                    *** Grids Information *** '
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(3X,62A)')'       xmin      xmax      ymin      ymax      zmin      zmax'
+      write(*,"(4X,6(F10.6))")xmin,xmax,ymin,ymax,zmin,zmax
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                   *** Averaged of Identity ***'
+      write(*,"(1X,3(1X,E20.7E3))")can1av,can2av,can3av
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                   *** Variance of Identity ***'
+      write(*,"(1X,3(1X,E20.7E3))")can1var,can2var,can3var
+      write(*,'(2X,62A)')('-',i=1,62)
+      !
+      if(can1av>1d-15 .or. can2av>1d-15 .or. can3av>1d-15) then
+        write(*,*)' !! Warning: Averaged Grids Identity is too large'
+        write(*,'(2X,62A)')('-',i=1,62)
+      end if
+      if(can1var>1d-15 .or. can2var>1d-15 .or. can3var>1d-15) then
+        write(*,*)' !! Warning: Variance of Grids Identity is too large'
+        write(*,'(2X,62A)')('-',i=1,62)
+      end if
+      !
+      print*,' ** geometrical parameters calculated'
+    end if
+    !
+    deallocate(dx,gci,gcj,can)
+    !
+    if(allocated(gck)) deallocate(gck)
+    !
     ! if(mpirank==0) then
     !   do k=0,km
     !     print*,x(1,1,k,3),dx(1,1,k,3,3),x(1,1,k,3)-x(1,1,k-1,3)
     !   enddo
     ! endif
     ! call tecbin('testout/tecgrid'//mpirankname//'.plt',                &
-    !                                   x(0:im,-hm:jm+hm,0:km,1),'x',    &
-    !                                   x(0:im,-hm:jm+hm,0:km,2),'y',    &
-    !                                   x(0:im,-hm:jm+hm,0:km,3),'z',    &
-    !                                  dx(0:im,-hm:jm+hm,0:km,1,1),'dxdi')
-    ! !
+    !                                   x(0:im,0:jm,0:km,1),'x',    &
+    !                                   x(0:im,0:jm,0:km,2),'y',    &
+    !                                   x(0:im,0:jm,0:km,3),'z',    &
+    !                                 dxi(0:im,0:jm,0:km,1,1),'dxdi',    &
+    !                                 dxi(0:im,0:jm,0:km,2,2),'dydj')
+    ! ! 
+    ! call mpistop
+    !
   end subroutine geomcal
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine GeomCal.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calulate the rhs of N-S equations.          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine rhscal
+    !
+    use commarray, only : qrhs
+    !
+    qrhs=0.d0
+    !
+    call convrsdcal6
+    !
+    qrhs=-qrhs
+    !
+  end subroutine rhscal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine rhscal.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the convectional residual
+  ! terms with compact six-order central scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2009-06-03.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine convrsdcal6
+    !
+    use commvar,  only: im,jm,km,hm,numq,num_species,conschm,          &
+                        npdci,npdcj,npdck
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+    use commfunc, only: ddf
+    !
+    ! local data
+    integer :: i,j,k,jspc,m
+    real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:) 
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq),uu(-hm:im+hm))
+    do k=0,km
+    do j=0,jm
+      !
+      uu(:)=dxi(:,j,k,1,1)*vel(:,j,k,1)+dxi(:,j,k,1,2)*vel(:,j,k,2) +  &
+            dxi(:,j,k,1,3)*vel(:,j,k,3)
+      fcs(:,1)=jacob(:,j,k)*  q(:,j,k,1)*uu
+      fcs(:,2)=jacob(:,j,k)*( q(:,j,k,2)*uu+dxi(:,j,k,1,1)*prs(:,j,k) )
+      fcs(:,3)=jacob(:,j,k)*( q(:,j,k,3)*uu+dxi(:,j,k,1,2)*prs(:,j,k) )
+      fcs(:,4)=jacob(:,j,k)*( q(:,j,k,4)*uu+dxi(:,j,k,1,3)*prs(:,j,k) )
+      fcs(:,5)=jacob(:,j,k)*( q(:,j,k,5)+prs(:,j,k) )*uu
+      !
+      if(num_species>0) then
+        do jspc=1,num_species
+          fcs(:,5+jspc)=jacob(:,j,k)*q(:,j,k,5+jspc)*uu
+        enddo
+      endif
+      !
+      do m=1,numq
+        dfcs(:,m)=ddf(fcs(:,m),conschm,npdci,im,alfa_con,cci)
+        !
+        qrhs(:,j,k,m)=qrhs(:,j,k,m)+dfcs(:,m)
+      enddo
+      !
+      ! print*,maxval(dfcs(:,2)),maxval(dfcs(:,3))
+      !
+      !
+    enddo
+    enddo
+    deallocate(fcs,dfcs,uu)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq),uu(-hm:jm+hm))
+    do k=0,km
+    do i=0,im
+      !
+      uu(:)=dxi(i,:,k,2,1)*vel(i,:,k,1)+dxi(i,:,k,2,2)*vel(i,:,k,2) +  &
+            dxi(i,:,k,2,3)*vel(i,:,k,3)
+      fcs(:,1)=jacob(i,:,k)*  q(i,:,k,1)*uu
+      fcs(:,2)=jacob(i,:,k)*( q(i,:,k,2)*uu+dxi(i,:,k,2,1)*prs(i,:,k) )
+      fcs(:,3)=jacob(i,:,k)*( q(i,:,k,3)*uu+dxi(i,:,k,2,2)*prs(i,:,k) )
+      fcs(:,4)=jacob(i,:,k)*( q(i,:,k,4)*uu+dxi(i,:,k,2,3)*prs(i,:,k) )
+      fcs(:,5)=jacob(i,:,k)*( q(i,:,k,5)+prs(i,:,k) )*uu
+      !
+      if(num_species>0) then
+        do jspc=1,num_species
+          fcs(:,5+jspc)=jacob(i,:,k)*q(i,:,k,5+jspc)*uu
+        enddo
+      endif
+      !
+      do m=1,numq
+        dfcs(:,m)=ddf(fcs(:,m),conschm,npdcj,jm,alfa_con,ccj)
+        !
+        qrhs(i,:,k,m)=qrhs(i,:,k,m)+dfcs(:,m)
+      enddo
+      !
+    enddo
+    enddo
+    deallocate(fcs,dfcs,uu)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(ndims==3) then
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! calculating along j direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq),uu(-hm:km+hm))
+      do j=0,jm
+      do i=0,im
+        !
+        uu(:)=dxi(i,j,:,3,1)*vel(i,j,:,1)+dxi(i,j,:,3,2)*vel(i,j,:,2) +  &
+              dxi(i,j,:,3,3)*vel(i,j,:,3)
+        fcs(:,1)=jacob(i,j,:)*  q(i,j,:,1)*uu
+        fcs(:,2)=jacob(i,j,:)*( q(i,j,:,2)*uu+dxi(i,j,:,3,1)*prs(i,j,:) )
+        fcs(:,3)=jacob(i,j,:)*( q(i,j,:,3)*uu+dxi(i,j,:,3,2)*prs(i,j,:) )
+        fcs(:,4)=jacob(i,j,:)*( q(i,j,:,4)*uu+dxi(i,j,:,3,3)*prs(i,j,:) )
+        fcs(:,5)=jacob(i,j,:)*( q(i,j,:,5)+prs(i,j,:) )*uu
+        !
+        if(num_species>0) then
+          do jspc=1,num_species
+            fcs(:,5+jspc)=jacob(i,j,:)*q(i,j,:,5+jspc)*uu
+          enddo
+        endif
+        !
+        do m=1,numq
+          dfcs(:,m)=ddf(fcs(:,m),conschm,npdck,km,alfa_con,cck)
+          !
+          qrhs(i,j,:,m)=qrhs(i,j,:,m)+dfcs(:,m)
+        enddo
+        !
+      enddo
+      enddo
+      deallocate(fcs,dfcs,uu)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end calculating along j direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+    endif
+    !
+  end subroutine convrsdcal6
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine ConvRsdCal6.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
   subroutine gradcal
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm

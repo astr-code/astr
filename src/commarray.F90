@@ -9,13 +9,20 @@ module commarray
   !
   implicit none
   !
-  real(8),allocatable,dimension(:,:,:,:) :: x,q
-  real(8),allocatable,dimension(:,:,:) :: jacob
+  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc
+  real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
-  !|               jacob | geometrical jacobian.                       |
+  !|               jacob | geometrical Jacobian.                       |
   !|                 dxi | geometrical transform matrix                |
+  !|                   q | indepedent conservation variables.          |
+  !|                qrhs | R.H.S of equations.                         |
+  !|                 rho | density.                                    |
+  !|                 prs | pressure.                                   |
+  !|                 tmp | temperature.                                |
+  !|                 vel | velocity.                                   |
+  !|                 spc | species.                                    |
   !+---------------------+---------------------------------------------+
   !
   contains
@@ -29,7 +36,7 @@ module commarray
   !+-------------------------------------------------------------------+
   subroutine allocommarray
     !
-    use commvar, only : im,jm,km,hm,numq
+    use commvar, only : im,jm,km,hm,numq,num_species
     !
     ! local data
     integer :: lallo
@@ -45,6 +52,24 @@ module commarray
     !
     allocate( q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating q'
+    !
+    allocate( rho(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating rho'
+    !
+    allocate( prs(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating prs'
+    !
+    allocate( tmp(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tmp'
+    !
+    allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating vel'
+    !
+    allocate( spc(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating spc'
+    !
+    allocate(qrhs(0:im,0:jm,0:km,1:numq),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating qrhs'
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+
