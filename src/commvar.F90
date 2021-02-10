@@ -25,12 +25,13 @@ module commvar
   !|          num_species| number of species                           |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm
+  logical :: nondimen,diffterm,lfilter
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
   !|             nondimen| if the equation is non-dimensional          |
   !|             diffterm| if the diffusion terms is solved.           |
   !|                     | .f. means Euler equations are solved.       |
+  !|             lfilter | to activate filer flag                      |
   !+---------------------+---------------------------------------------+
   !
   integer :: npdci,npdcj,npdck
@@ -38,9 +39,11 @@ module commvar
   !|               npdci | to control scheme at boundary.              |
   !+---------------------+---------------------------------------------+
   real(8) :: xmax,xmin,ymax,ymin,zmax,zmin
+  real(8) :: alfa_filter
   !+---------------------+---------------------------------------------+
   !|                *mix | min coordinates                             |
   !|                *max | max coordinates                             |
+  !|         alfa_filter | the parameter to control width of filter.   |
   !+---------------------+---------------------------------------------+
   integer :: nstep,maxstep,nwrite,filenumb
   real(8) :: time,deltat
@@ -74,7 +77,7 @@ module commvar
   !+---------------------+---------------------------------------------+
 
   !
-  parameter(hm=4)
+  parameter(hm=5)
   !
 end module commvar
 !+---------------------------------------------------------------------+

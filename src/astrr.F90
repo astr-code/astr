@@ -42,6 +42,7 @@ program astrr
   call flowinit
   !
   call steploop
+  ! call gradcal
   !
   call mpistop
   !

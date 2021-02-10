@@ -86,10 +86,10 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine rk3
     !
-    use commvar,  only : hm,im,jm,km,numq,deltat
+    use commvar,  only : hm,im,jm,km,numq,deltat,lfilter
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
-    use solver,   only : rhscal
+    use solver,   only : rhscal,filterq
     !
     ! logical data
     logical,save :: firstcall = .true.
@@ -135,6 +135,8 @@ module mainloop
         !
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
       enddo
+      !
+      if(lfilter) call filterq
       !
       call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
                                      density=rho(0:im,0:jm,0:km),      &

@@ -11,8 +11,11 @@
 # lihomo,ljhomo,lkhomo
 t,t,t
 
-# nondimen, diffterm
-t,f
+# nondimen,diffterm,lfilter
+t,f,t
+
+# alfa_filter
+0.49d0
 
 # ref_t,reynolds,mach
 273.15d0,  3000.d0,  0.5d0     

@@ -74,7 +74,7 @@ module readwrite
     use parallel,only : lio,isize,jsize,ksize,mpistop
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
-                        flowtype,ndims
+                        flowtype,ndims,lfilter,alfa_filter
     !
     ! local data
     character(len=42) :: typedefine
@@ -135,6 +135,7 @@ module readwrite
         write(*,'(11A)')conschm(3:3),'-',conschm(2:2),'-',             &
                         conschm(1:1),'......',conschm(1:1),'-',        &
                         conschm(2:2),'-',conschm(3:3)
+      !
       else
         stop ' !! error: conschm not defined !!'
       endif
@@ -146,6 +147,10 @@ module readwrite
                         difschm(2:2),'-',difschm(3:3)
       else
         stop ' !! error: difschm not defined !!'
+      endif
+      if(lfilter) then
+        write(*,'(2X,A43)',advance='no')' low-pass filter is used, '
+        write(*,'(A13,F6.3)')' coefficient:',alfa_filter
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       !
@@ -168,7 +173,7 @@ module readwrite
     !
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
-                        num_species,flowtype
+                        num_species,flowtype,lfilter,alfa_filter
     use parallel,only : bcast
     !
     ! local data
@@ -190,7 +195,9 @@ module readwrite
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
       read(11,'(/)')
-      read(11,*)nondimen,diffterm
+      read(11,*)nondimen,diffterm,lfilter
+      read(11,'(/)')
+      read(11,*)alfa_filter
       !
       if(nondimen) then
         read(11,'(/)')
@@ -222,6 +229,10 @@ module readwrite
     !
     call bcast(nondimen)
     call bcast(diffterm)
+    call bcast(lfilter)
+    !
+    call bcast(alfa_filter)
+    !
     call bcast(ref_t)
     call bcast(reynolds)
     call bcast(mach)
