@@ -9,7 +9,7 @@ module solver
   !
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap
-  use commvar,  only : ndims,ks,ke
+  use commvar,  only : ndims,ks,ke,hm
   !
   implicit none
   !
@@ -37,12 +37,27 @@ module solver
     !
     if(ia>0 .and. ja>0 .and. ka>0) then
       ndims=3
+      !
+      if(ia<hm .or. ja<hm .or. ka<hm) then
+        print*,' !! input dimension smaller than the halo cells'
+      endif
+      !
     elseif(ka==0 .and. ja==0 .and. ia==0) then
       ndims=0
     elseif(ka==0 .and. ja==0) then
       ndims=1
+      !
+      if(ia<hm) then
+        print*,' !! input dimension smaller than the halo cells'
+      endif
+      !
     elseif(ka==0) then
       ndims=2
+      !
+      if(ia<hm .or. ja<hm) then
+        print*,' !! input dimension smaller than the halo cells'
+      endif
+      !
     else
       print*,ndims
       stop ' !! ndims error @ refcal'
@@ -590,6 +605,8 @@ module solver
     !
     qrhs=-qrhs
     !
+    call diffrsdcal6
+    !
   end subroutine rhscal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rhscal.                                 |
@@ -726,6 +743,332 @@ module solver
   ! End of the subroutine ConvRsdCal6.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the diffusion term with 6-order
+  ! Compact Central scheme.
+  !   sixth-order Compact Central scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2009-06-09.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine diffrsdcal6
+    !
+    use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
+                          conschm,ndims,num_species,reynolds,prandtl,  &
+                          const5
+    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs
+    use commfunc,  only : ddfc
+    use fludyna,   only : miucal
+    use tecio
+    !
+    ! local data
+    integer :: i,j,k,n
+    real(8),allocatable :: df(:),ff(:)
+    real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux
+    real(8) :: miu,miu2,hcc,s11,s12,s13,s22,s23,s33,skk
+    !
+    dvel=0.d0
+    dtmp=0.d0
+    dspc=0.d0
+    !
+    ! calculate velocity and temperature gradient
+    !
+    allocate(df(0:im))
+    !
+    do k=0,km
+    do j=0,jm
+      !
+      do n=1,3
+        df=ddfc(vel(:,j,k,n),difschm,npdci,im,alfa_dif,dci)
+        dvel(:,j,k,n,1)=dvel(:,j,k,n,1)+df*dxi(0:im,j,k,1,1)
+        dvel(:,j,k,n,2)=dvel(:,j,k,n,2)+df*dxi(0:im,j,k,1,2)
+        dvel(:,j,k,n,3)=dvel(:,j,k,n,3)+df*dxi(0:im,j,k,1,3)
+        !
+      enddo
+      !
+      df=ddfc(tmp(:,j,k),difschm,npdci,im,alfa_dif,dci)
+      dtmp(:,j,k,1)=dtmp(:,j,k,1)+df*dxi(0:im,j,k,1,1)
+      dtmp(:,j,k,2)=dtmp(:,j,k,2)+df*dxi(0:im,j,k,1,2)
+      dtmp(:,j,k,3)=dtmp(:,j,k,3)+df*dxi(0:im,j,k,1,3)
+      !
+      if(num_species>1) then
+        do n=1,num_species
+          df=ddfc(spc(:,j,k,n),difschm,npdci,im,alfa_dif,dci)
+          dspc(:,j,k,n,1)=dspc(:,j,k,n,1)+df*dxi(0:im,j,k,1,1)
+          dspc(:,j,k,n,2)=dspc(:,j,k,n,2)+df*dxi(0:im,j,k,1,2)
+          dspc(:,j,k,n,3)=dspc(:,j,k,n,3)+df*dxi(0:im,j,k,1,3)
+        enddo
+      endif
+      !
+    enddo
+    enddo
+    !
+    deallocate(df)
+    !
+    allocate(df(0:jm))
+    do k=0,km
+    do i=0,im
+      !
+      do n=1,3
+        df=ddfc(vel(i,:,k,n),difschm,npdcj,jm,alfa_dif,dcj)
+        dvel(i,:,k,n,1)=dvel(i,:,k,n,1)+df*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,n,2)=dvel(i,:,k,n,2)+df*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,n,3)=dvel(i,:,k,n,3)+df*dxi(i,0:jm,k,2,3)
+      enddo
+      !
+      df=ddfc(tmp(i,:,k),difschm,npdcj,jm,alfa_dif,dcj)
+      dtmp(i,:,k,1)=dtmp(i,:,k,1)+df*dxi(i,0:jm,k,2,1)
+      dtmp(i,:,k,2)=dtmp(i,:,k,2)+df*dxi(i,0:jm,k,2,2)
+      dtmp(i,:,k,3)=dtmp(i,:,k,3)+df*dxi(i,0:jm,k,2,3)
+      !
+      if(num_species>1) then
+        do n=1,num_species
+          df=ddfc(spc(i,:,k,n),difschm,npdcj,jm,alfa_dif,dcj)
+          dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df*dxi(i,0:jm,k,2,1)
+          dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df*dxi(i,0:jm,k,2,2)
+          dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df*dxi(i,0:jm,k,2,3)
+        enddo
+      endif
+      !
+    enddo
+    enddo
+    deallocate(df)
+    !
+    if(ndims==3) then
+      allocate(df(0:km))
+      do j=0,jm
+      do i=0,im
+        !
+        do n=1,3
+          df=ddfc(vel(i,j,:,n),difschm,npdck,km,alfa_dif,dck)
+          dvel(i,j,:,n,1)=dvel(i,j,:,n,1)+df*dxi(i,j,0:km,3,1)
+          dvel(i,j,:,n,2)=dvel(i,j,:,n,2)+df*dxi(i,j,0:km,3,2)
+          dvel(i,j,:,n,3)=dvel(i,j,:,n,3)+df*dxi(i,j,0:km,3,3)
+        enddo
+        !
+        df=ddfc(tmp(i,j,:),difschm,npdck,km,alfa_dif,dck)
+        dtmp(i,j,:,1)=dtmp(i,j,:,1)+df*dxi(i,j,0:km,3,1)
+        dtmp(i,j,:,2)=dtmp(i,j,:,2)+df*dxi(i,j,0:km,3,2)
+        dtmp(i,j,:,3)=dtmp(i,j,:,3)+df*dxi(i,j,0:km,3,3)
+        !
+        if(num_species>1) then
+          do n=1,num_species
+            df=ddfc(spc(i,j,:,n),difschm,npdck,km,alfa_dif,dck)
+            dspc(i,j,:,n,1)=dspc(i,j,:,n,1)+df*dxi(i,j,0:km,3,1)
+            dspc(i,j,:,n,2)=dspc(i,j,:,n,2)+df*dxi(i,j,0:km,3,2)
+            dspc(i,j,:,n,3)=dspc(i,j,:,n,3)+df*dxi(i,j,0:km,3,3)
+          enddo
+        endif
+        !
+      enddo
+      enddo
+      deallocate(df)
+    endif
+    !
+    allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
+              qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    ! 
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      miu=miucal(tmp(i,j,k))
+      !
+      s11=dvel(i,j,k,1,1)
+      s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
+      s13=0.5d0*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
+      s22=dvel(i,j,k,2,2)
+      s23=0.5d0*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
+      s33=dvel(i,j,k,3,3)
+      !
+      skk=num1d3*(s11+s22+s33)
+      !
+      miu2=2.d0*miu/reynolds
+      hcc=(miu/reynolds/prandtl)/const5
+      !
+      sigma(i,j,k,1)=miu2*(s11-skk)  !s11   
+      sigma(i,j,k,2)=miu2*s12        !s12  
+      sigma(i,j,k,3)=miu2*s13        !s13   
+      sigma(i,j,k,4)=miu2*(s22-skk)  !s22   
+      sigma(i,j,k,5)=miu2*s23        !s23  
+      sigma(i,j,k,6)=miu2*(s33-skk)  !s33  
+      !
+      qflux(i,j,k,1)=hcc*dtmp(i,j,k,1)+sigma(i,j,k,1)*vel(i,j,k,1) +   &
+                                       sigma(i,j,k,2)*vel(i,j,k,2) +   &
+                                       sigma(i,j,k,3)*vel(i,j,k,3)
+      qflux(i,j,k,2)=hcc*dtmp(i,j,k,2)+sigma(i,j,k,2)*vel(i,j,k,1) +   &
+                                       sigma(i,j,k,4)*vel(i,j,k,2) +   &
+                                       sigma(i,j,k,5)*vel(i,j,k,3)
+      qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
+                                       sigma(i,j,k,5)*vel(i,j,k,2) +   &
+                                       sigma(i,j,k,6)*vel(i,j,k,3)
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(sigma)
+    !
+    call dataswap(qflux)
+    !
+    ! Calculating along i direction.
+    !
+    allocate(ff(-hm:im+hm),df(0:im))
+    do k=0,km
+    do j=0,jm
+      !
+      ff(:)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                          &
+              sigma(:,j,k,2)*dxi(:,j,k,1,2) +                          &
+              sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      !
+      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+      !
+      qrhs(:,j,k,2)=qrhs(:,j,k,2)+df
+      !
+      ff(:)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                          &
+              sigma(:,j,k,4)*dxi(:,j,k,1,2) +                          &
+              sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      !
+      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+      !
+      qrhs(:,j,k,3)=qrhs(:,j,k,3)+df
+      !
+      ff(:)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                          &
+              sigma(:,j,k,5)*dxi(:,j,k,1,2) +                          &
+              sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      !
+      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+      !
+      qrhs(:,j,k,4)=qrhs(:,j,k,4)+df
+      !
+      ff(:)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                          &
+              qflux(:,j,k,2)*dxi(:,j,k,1,2) +                          &
+              qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      !
+      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+      !
+      qrhs(:,j,k,5)=qrhs(:,j,k,5)+df
+      !
+      !
+    enddo
+    enddo
+    !
+    deallocate(ff,df)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End calculating along i
+    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    ! Calculating along j direction.
+    !
+    allocate(ff(-hm:im+hm),df(0:im))
+    do k=0,km
+    do i=0,im
+      !
+      ff(:)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                          &
+              sigma(i,:,k,2)*dxi(i,:,k,2,2) +                          &
+              sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      !
+      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+      !
+      qrhs(i,:,k,2)=qrhs(i,:,k,2)+df
+      !
+      ff(:)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                          &
+              sigma(i,:,k,4)*dxi(i,:,k,2,2) +                          &
+              sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      !
+      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+      !
+      qrhs(i,:,k,3)=qrhs(i,:,k,3)+df
+      !
+      ff(:)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                          &
+              sigma(i,:,k,5)*dxi(i,:,k,2,2) +                          &
+              sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      !
+      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+      !
+      qrhs(i,:,k,4)=qrhs(i,:,k,4)+df
+      !
+      ff(:)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                          &
+              qflux(i,:,k,2)*dxi(i,:,k,2,2) +                          &
+              qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      !
+      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+      !
+      qrhs(i,:,k,5)=qrhs(i,:,k,5)+df
+      !
+      !
+    enddo
+    enddo
+    !
+    deallocate(ff,df)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End calculating along j
+    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(ndims==3) then
+      ! Calculating along j direction.
+      !
+      allocate(ff(-hm:im+hm),df(0:im))
+      do j=0,jm
+      do i=0,im
+        !
+        ff(:)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                        &
+                sigma(i,j,:,2)*dxi(i,j,:,3,2) +                        &
+                sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        !
+        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        !
+        qrhs(i,j,:,2)=qrhs(i,j,:,2)+df
+        !
+        ff(:)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                        &
+                sigma(i,j,:,4)*dxi(i,j,:,3,2) +                        &
+                sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        !
+        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        !
+        qrhs(i,j,:,3)=qrhs(i,j,:,3)+df
+        !
+        ff(:)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                        &
+                sigma(i,j,:,5)*dxi(i,j,:,3,2) +                        &
+                sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        !
+        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        !
+        qrhs(i,j,:,4)=qrhs(i,j,:,4)+df
+        !
+        ff(:)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                        &
+                qflux(i,j,:,2)*dxi(i,j,:,3,2) +                        &
+                qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        !
+        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        !
+        qrhs(i,j,:,5)=qrhs(i,j,:,5)+df
+        !
+        !
+      enddo
+      enddo
+      !
+      deallocate(ff,df)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! End calculating along j
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    ! call tecbin('testout/tecgrad'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                 vel(0:im,0:jm,0:km,1),'u',         &
+    !                                 vel(0:im,0:jm,0:km,2),'v',         &
+    !                                dvel(0:im,0:jm,0:km,1,1),'dudx',    &
+    !                                dvel(0:im,0:jm,0:km,1,2),'dudy',    &
+    !                                dvel(0:im,0:jm,0:km,2,1),'dvdx',    &
+    !                                dvel(0:im,0:jm,0:km,2,2),'dvdy' )
+    !
+    deallocate(sigma,qflux)
+    !
+  end subroutine diffrsdcal6
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine diffrsdcal6.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used for spatial filter the conservative variable
   ! for stabilizing the computation.

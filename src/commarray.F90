@@ -9,9 +9,9 @@ module commarray
   !
   implicit none
   !
-  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc
+  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp
   real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
-  real(8),allocatable,dimension(:,:,:,:,:) :: dxi
+  real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
   !|               jacob | geometrical Jacobian.                       |
@@ -70,6 +70,15 @@ module commarray
     !
     allocate(qrhs(0:im,0:jm,0:km,1:numq),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating qrhs'
+    !
+    allocate(dvel(0:im,0:jm,0:km,1:3,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating dvel'
+    !
+    allocate(dspc(0:im,0:jm,0:km,1:num_species,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating dvel'
+    !
+    allocate(dtmp(0:im,0:jm,0:km,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating dvel'
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+

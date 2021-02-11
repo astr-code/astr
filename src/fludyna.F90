@@ -174,6 +174,28 @@ module fludyna
   !| The end of the subroutine q2fvar.                                 |
   !+-------------------------------------------------------------------+
   !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! calculate dynamic viscosity coefficient at different temperature.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  real(8) function miucal(temper)
+    !
+    use commvar, only :  tempconst,tempconst1
+    !
+    real(8),intent(in) :: temper
+    ! temper represent temperature, dimensionless
+    ! below calculate miucal using sutherland's law
+    ! tempconst=110.4d0/ref_t
+    ! tempconst1=1.d0+tempconst
+    !
+    miucal=temper*sqrt(temper)*tempconst1/(temper+tempconst)
+    !
+    return
+    !
+  end function miucal
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of function MiuCal.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
 end module fludyna
 !+---------------------------------------------------------------------+
 !| The end of the module fludyna.                                      |

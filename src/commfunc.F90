@@ -340,12 +340,15 @@ module commfunc
     !
   end function pfilterrhs
   !
-  function PFilterRHS2(var,dim,ntype) result(b)
+  function pfilterrhs2(var,dim,ntype) result(b)
     !
     
-    integer :: dim,ntype
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: var(-hm:dim+hm)
+    real(8) :: b(0:dim)
+    !
+    ! local data
     integer :: l
-    real(8) :: var(-hm:dim+hm),b(0:dim)
     real(8) :: var0,var1,var2,var3,var4,var5
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! dim: dimensions in the direction.
@@ -386,11 +389,11 @@ module commfunc
              +0.0009765625d0*(var(dim-5)+var(dim+5))
     
     else
-      print*,' !! Error in subroutine PFilterRHS!'
+      print*,' !! error in subroutine pfilterrhs!'
     end if
     !
     !
-  end function PFilterRHS2
+  end function pfilterrhs2
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the function pfilterrhs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
