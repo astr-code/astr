@@ -3,13 +3,13 @@
 ########################################################################
 
 # flowtype
-2dvort
+channel
 
 # im,jm,km
-400,200,0
+32,32,0
 
 # lihomo,ljhomo,lkhomo
-t,t,t
+t,f,t
 
 # nondimen,diffterm,lfilter
 t,t,t
@@ -18,7 +18,7 @@ t,t,t
 0.49d0
 
 # ref_t,reynolds,mach
-273.15d0,  20.d0,  0.5d0     
+273.15d0,  300.d0,  0.5d0     
 
 # conschm,difschm
 642c,642c
@@ -26,3 +26,5 @@ t,t,t
 # num_species
 1
 
+# gridfile
+./datin/grid.2dch

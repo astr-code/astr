@@ -10,7 +10,7 @@ module commarray
   implicit none
   !
   real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp
-  real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
+  real(8),allocatable,dimension(:,:,:) :: jacob,celvol,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
@@ -46,6 +46,9 @@ module commarray
     !
     allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating jacob'
+    !
+    allocate( celvol(1:im,1:jm,1:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating celvol'
     !
     allocate( dxi(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating dxi'

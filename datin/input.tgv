@@ -3,22 +3,22 @@
 ########################################################################
 
 # flowtype
-2dvort
+tgv
 
 # im,jm,km
-400,200,0
+64,64,64
 
 # lihomo,ljhomo,lkhomo
 t,t,t
 
-# nondimen,diffterm,lfilter
-t,t,t
+# nondimen,diffterm,lfilter,lreadgrid
+t,t,t,f
 
 # alfa_filter
 0.49d0
 
 # ref_t,reynolds,mach
-273.15d0,  20.d0,  0.5d0     
+273.15d0,  1600.d0,  0.1d0     
 
 # conschm,difschm
 642c,642c

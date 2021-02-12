@@ -37,11 +37,11 @@ module mainloop
     counter=0
     do while(nstep<=maxstep)
       !
+      call rk3
+      !
       counter=counter+1
       nstep=nstep+1
       time=time+deltat
-      !
-      call rk3
       !
       if(counter==nwrite) then
         !
@@ -62,14 +62,8 @@ module mainloop
         !
       endif
       !
-      rho_max=pmax(maxval(rho(0:im,0:jm,0:km)))
-      u_max  =pmax(maxval(vel(0:im,0:jm,0:km,:)))
-      p_max  =pmax(maxval(prs(0:im,0:jm,0:km)))
-      t_max  =pmax(maxval(tmp(0:im,0:jm,0:km)))
-      !
-      if(lio) write(*,'(I0,F10.6,4(1X,E12.6))')nstep,time,rho_max,u_max,p_max,t_max
-      !
     enddo
+    if(lio) print*,' << flowstate.dat'
     !
   end subroutine steploop
   !+-------------------------------------------------------------------+
@@ -86,10 +80,11 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine rk3
     !
-    use commvar,  only : hm,im,jm,km,numq,deltat,lfilter
+    use commvar,  only : hm,im,jm,km,numq,deltat,lfilter,nstep,nlstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq
+    use statistic,only : statcal,statout
     !
     ! logical data
     logical,save :: firstcall = .true.
@@ -126,6 +121,12 @@ module mainloop
       call qswap
       !
       call rhscal
+      !
+      if(irk==1) then
+        call statcal
+        !
+        call statout
+      endif
       !
       do m=1,numq
         q(0:im,0:jm,0:km,m)=rkcoe(1,irk)*qsave(0:im,0:jm,0:km,m)+      &

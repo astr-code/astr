@@ -13,6 +13,7 @@ module commvar
   integer :: hm
   integer :: numq,num_species,ndims
   character(len=4) :: conschm,difschm
+  character(len=64) :: gridfile 
   !+---------------------+---------------------------------------------+
   !|            ia,ja,ka | the dimension of the entire domain          | 
   !|            im,jm,km | the dimension of the local domain           | 
@@ -22,10 +23,11 @@ module commvar
   !|                numq | number of independent variables.            |
   !|     conschm,difschm | the scheme of solving convectional and      |
   !|                     | diffusional terms.                          |
-  !|          num_species| number of species                           |
+  !|         num_species | number of species                           |
+  !|            gridfile | the gridfile.                               |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter
+  logical :: nondimen,diffterm,lfilter,lreadgrid
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
   !|             nondimen| if the equation is non-dimensional          |
@@ -38,14 +40,15 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|               npdci | to control scheme at boundary.              |
   !+---------------------+---------------------------------------------+
-  real(8) :: xmax,xmin,ymax,ymin,zmax,zmin
+  real(8) :: xmax,xmin,ymax,ymin,zmax,zmin,voldom
   real(8) :: alfa_filter
   !+---------------------+---------------------------------------------+
   !|                *mix | min coordinates                             |
   !|                *max | max coordinates                             |
   !|         alfa_filter | the parameter to control width of filter.   |
+  !|              voldom | total volume of the domain.                 |
   !+---------------------+---------------------------------------------+
-  integer :: nstep,maxstep,nwrite,filenumb
+  integer :: nstep,maxstep,nwrite,nlstep,filenumb
   real(8) :: time,deltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
   real(8) :: ref_t,reynolds,mach,rgas,gamma,prandtl
@@ -55,6 +58,7 @@ module commvar
   !|               nstep | the total time step number.                 |
   !|             maxstep | the max step to run.                        |
   !|              nwrite | frequency of output                         |
+  !|              nlstep | frequency of list flowstate.                |
   !|            filenumb | filenumber                                  |
   !|                time | total time of computation.                  |
   !|              deltat | time step.                                  |

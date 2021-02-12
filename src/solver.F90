@@ -161,10 +161,10 @@ module solver
   subroutine geomcal
     !
     use commvar,   only : ia,ja,ka,im,jm,km,hm,npdci,npdcj,npdck,hm,   &
-                          xmax,xmin,ymax,ymin,zmax,zmin
-    use commarray, only : x,jacob,dxi
+                          xmax,xmin,ymax,ymin,zmax,zmin,voldom
+    use commarray, only : x,jacob,dxi,celvol
     use parallel,  only : gridsendrecv,ksize,psum,pmax,pmin
-    use commfunc,  only : coeffcompac,ptds_ini,ddfc
+    use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
     use tecio
     !
     ! local data
@@ -226,6 +226,35 @@ module solver
       !
     enddo
     enddo
+    !
+    if(ndims==3) then
+      voldom=0.d0
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        celvol(i,j,k)=volhex( x(i-1,j-1,k-1,:), x(i,j-1,k-1,:),        &
+                              x(i,j-1,k,:),     x(i-1,j-1,k,:),        &
+                              x(i-1,j,k-1,:),   x(i,j,k-1,:)  ,        &
+                              x(i,j,k,:),       x(i-1,j,k,:) )
+        voldom=voldom+celvol(i,j,k)
+      enddo
+      enddo
+      enddo
+      voldom=psum(voldom)
+    elseif(ndims==3) then
+      voldom=0.d0
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        celvol(i,j,k)=arquad( x(i-1,j-1,k,:),   x(i,j-1,k,:),          &
+                              x(i,j,k,:),       x(i-1,j,k,:) )
+        voldom=voldom+celvol(i,j,k)
+      enddo
+      enddo
+      enddo
+      voldom=psum(voldom)
+    endif
+    if(lio) print*,' ** total volume of the domain is: ',voldom
     !
     if(lio) print*,' ** dxyz/dijk calculated.'
     !

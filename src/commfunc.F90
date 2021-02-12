@@ -357,7 +357,107 @@ module commfunc
     ! b: return variable.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    if(ntype==3) then
+    if(ntype==1) then
+      ! the block with boundary at 0
+      b(0)=var(0)
+      !
+      b(1)=coefb(1,0)*var(0)+coefb(1,1)*var(1)+coefb(1,2)*var(2)+      &
+           coefb(1,3)*var(3)+coefb(1,4)*var(4)+coefb(1,5)*var(5)+      &
+           coefb(1,6)*var(6)
+      !
+      b(2)=coefb(2,0)*var(0)+coefb(2,1)*var(1)+coefb(2,2)*var(2)+      &
+           coefb(2,3)*var(3)+coefb(2,4)*var(4)+coefb(2,5)*var(5)+      &
+           coefb(2,6)*var(6)
+      !
+      var0=var(3)+var(3)
+      var1=var(4)+var(2)
+      var2=var(5)+var(1)
+      var3=var(6)+var(0)
+      b(3)=coef6i(0)*var0+coef6i(1)*var1+coef6i(2)*var2+coef6i(3)*var3
+      !
+      var0=var(4)+var(4)
+      var1=var(5)+var(3)
+      var2=var(6)+var(2)
+      var3=var(7)+var(1)
+      var4=var(8)+var(0)
+      b(4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +              &
+           coef8i(3)*var3+coef8i(4)*var4
+      !
+      ! inner block
+      do l=5,dim-1
+        !
+        var0=var(l)+var(l)
+        var1=var(l+1)+var(l-1)
+        var2=var(l+2)+var(l-2)
+        var3=var(l+3)+var(l-3)
+        var4=var(l+4)+var(l-4)
+        var5=var(l+5)+var(l-5)
+        !
+        b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
+             coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
+        !
+      end do
+      !
+      b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
+             + 0.205078125d0*(var(dim-1)+var(dim+1))   &
+             -   0.1171875d0*(var(dim-2)+var(dim+2))   &
+             +0.0439453125d0*(var(dim-3)+var(dim+3))   &
+             - 0.009765625d0*(var(dim-4)+var(dim+4))   &
+             +0.0009765625d0*(var(dim-5)+var(dim+5))
+    
+    elseif(ntype==2) then
+      ! the block with boundary at m
+      b(0)=    0.376953125d0*(var(0)  +var(0))   &
+             + 0.205078125d0*(var(-1) +var(1))   &
+             -   0.1171875d0*(var(-2) +var(2))   &
+             +0.0439453125d0*(var(-3) +var(3))   &
+             - 0.009765625d0*(var(-4) +var(4))   &
+             +0.0009765625d0*(var(-5) +var(5))
+    
+      ! inner block
+      do l=1,dim-5
+        !
+        var0=var(l)+var(l)
+        var1=var(l+1)+var(l-1)
+        var2=var(l+2)+var(l-2)
+        var3=var(l+3)+var(l-3)
+        var4=var(l+4)+var(l-4)
+        var5=var(l+5)+var(l-5)
+        !
+        b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
+             coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
+        !
+      end do
+      !
+      var0=var(dim-4)+var(dim-4)
+      var1=var(dim-3)+var(dim-5)
+      var2=var(dim-2)+var(dim-6)
+      var3=var(dim-1)+var(dim-7)
+      var4=var(dim)  +var(dim-8)
+      b(dim-4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +          &
+               coef8i(3)*var3+coef8i(4)*var4
+      !
+      var0=var(dim-3)+var(dim-3)
+      var1=var(dim-2)+var(dim-4)
+      var2=var(dim-1)+var(dim-5)
+      var3=var(dim)  +var(dim-6)
+      b(dim-3)=coef6i(0)*var0+coef6i(1)*var1+                          &
+               coef6i(2)*var2+coef6i(3)*var3
+      !
+      b(dim-2)=coefb(2,0)*var(dim)  +coefb(2,1)*var(dim-1)+            &
+               coefb(2,2)*var(dim-2)+coefb(2,3)*var(dim-3)+            &
+               coefb(2,4)*var(dim-4)+coefb(2,5)*var(dim-5)+            &
+               coefb(2,6)*var(dim-6)
+      !
+      b(dim-1)=coefb(1,0)*var(dim)  +coefb(1,1)*var(dim-1)+            &
+               coefb(1,2)*var(dim-2)+coefb(1,3)*var(dim-3)+            &
+               coefb(1,4)*var(dim-4)+coefb(1,5)*var(dim-5)+            &
+               coefb(1,6)*var(dim-6)
+      !
+      b(dim)=var(dim)
+      !
+    elseif(ntype==3) then
+      ! inner block
       !
       b(0)=    0.376953125d0*(var(0)  +var(0))   &
              + 0.205078125d0*(var(-1) +var(1))   &
@@ -389,7 +489,7 @@ module commfunc
              +0.0009765625d0*(var(dim-5)+var(dim+5))
     
     else
-      print*,' !! error in subroutine pfilterrhs!'
+      print*,' !! error in subroutine pfilterrhs2!'
     end if
     !
     !
@@ -949,6 +1049,152 @@ module commfunc
   ! End of the function ptds_cal.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This function is used to calculate the area of a quadrilateral.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  real(8) function arquad(x1,x2,x3,x4)
+    !
+    real(8),intent(in) :: x1(3),x2(3),x3(3),x4(3)
+    !
+    real(8) :: a,b,c,d,e
+    !
+    a=sqrt((x1(1)-x2(1))*(x1(1)-x2(1))+(x1(2)-x2(2))*(x1(2)-x2(2)))
+    b=sqrt((x2(1)-x3(1))*(x2(1)-x3(1))+(x2(2)-x3(2))*(x2(2)-x3(2)))
+    c=sqrt((x3(1)-x4(1))*(x3(1)-x4(1))+(x3(2)-x4(2))*(x3(2)-x4(2)))
+    d=sqrt((x4(1)-x1(1))*(x4(1)-x1(1))+(x4(2)-x1(2))*(x4(2)-x1(2)))
+    !
+    e=sqrt((x1(1)-x3(1))*(x1(1)-x3(1))+(x1(2)-x3(2))*(x1(2)-x3(2)))
+    !
+    arquad=artria(a,b,e)+artria(c,d,e)
+    !
+  end function arquad
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function arquad.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This function is used to calculate the area of a triangle.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  real(8) function artria(a,b,c)
+    !
+    real(8),intent(in) :: a,b,c
+    !
+    real(8) :: s
+    !
+    s=0.5d0*(a+b+c)
+    artria=sqrt(s*(s-a)*(s-b)*(s-c))
+    !
+    return
+    !
+  end function artria
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function artria.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This function is used to calculate the volume of a cell.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  real(8) function volhex(x1,x2,x3,x4,x5,x6,x7,x8 )
+    !
+    real(8),intent(in) :: x1(3),x2(3),x3(3),x4(3),x5(3),x6(3),x7(3),x8(3)
+    !
+    ! local data
+    real(8) :: martix(3,3),centroid(3),pyramid(6,3,3)
+    integer :: ii
+    !
+    centroid(1)=0.125d0*(x1(1)+x2(1)+x3(1)+x4(1)+x5(1)+x6(1)+x7(1)+x8(1))
+    centroid(2)=0.125d0*(x1(2)+x2(2)+x3(2)+x4(2)+x5(2)+x6(2)+x7(2)+x8(2))
+    centroid(3)=0.125d0*(x1(3)+x2(3)+x3(3)+x4(3)+x5(3)+x6(3)+x7(3)+x8(3))
+    !
+    pyramid(1,1,1)=centroid(1)-x1(1)
+    pyramid(1,1,2)=centroid(2)-x1(2)
+    pyramid(1,1,3)=centroid(3)-x1(3)
+    pyramid(1,2,1)=x3(1)-x1(1)
+    pyramid(1,2,2)=x3(2)-x1(2)
+    pyramid(1,2,3)=x3(3)-x1(3)
+    pyramid(1,3,1)=x2(1)-x4(1)
+    pyramid(1,3,2)=x2(2)-x4(2)
+    pyramid(1,3,3)=x2(3)-x4(3)
+    !
+    pyramid(2,1,1)=centroid(1)-x5(1)
+    pyramid(2,1,2)=centroid(2)-x5(2)
+    pyramid(2,1,3)=centroid(3)-x5(3)
+    pyramid(2,2,1)=x7(1)-x5(1)
+    pyramid(2,2,2)=x7(2)-x5(2)
+    pyramid(2,2,3)=x7(3)-x5(3)
+    pyramid(2,3,1)=x8(1)-x6(1)
+    pyramid(2,3,2)=x8(2)-x6(2)
+    pyramid(2,3,3)=x8(3)-x6(3)
+ 
+    pyramid(3,1,1)=centroid(1)-x1(1)
+    pyramid(3,1,2)=centroid(2)-x1(2)
+    pyramid(3,1,3)=centroid(3)-x1(3)
+    pyramid(3,2,1)=x5(1)-x4(1)
+    pyramid(3,2,2)=x5(2)-x4(2)
+    pyramid(3,2,3)=x5(3)-x4(3)
+    pyramid(3,3,1)=x8(1)-x1(1)
+    pyramid(3,3,2)=x8(2)-x1(2)
+    pyramid(3,3,3)=x8(3)-x1(3) 
+ 
+    pyramid(4,1,1)=centroid(1)-x2(1)
+    pyramid(4,1,2)=centroid(2)-x2(2)
+    pyramid(4,1,3)=centroid(3)-x2(3)
+    pyramid(4,2,1)=x6(1)-x3(1)
+    pyramid(4,2,2)=x6(2)-x3(2)
+    pyramid(4,2,3)=x6(3)-x3(3)
+    pyramid(4,3,1)=x2(1)-x7(1)
+    pyramid(4,3,2)=x2(2)-x7(2)
+    pyramid(4,3,3)=x2(3)-x7(3) 
+ 
+    pyramid(5,1,1)=centroid(1)-x3(1)
+    pyramid(5,1,2)=centroid(2)-x3(2)
+    pyramid(5,1,3)=centroid(3)-x3(3)
+    pyramid(5,2,1)=x8(1)-x3(1)
+    pyramid(5,2,2)=x8(2)-x3(2)
+    pyramid(5,2,3)=x8(3)-x3(3)
+    pyramid(5,3,1)=x7(1)-x4(1)
+    pyramid(5,3,2)=x7(2)-x4(2)
+    pyramid(5,3,3)=x7(3)-x4(3) 
+ 
+    pyramid(6,1,1)=centroid(1)-x1(1)
+    pyramid(6,1,2)=centroid(2)-x1(2)
+    pyramid(6,1,3)=centroid(3)-x1(3)
+    pyramid(6,2,1)=x5(1)-x2(1)
+    pyramid(6,2,2)=x5(2)-x2(2)
+    pyramid(6,2,3)=x5(3)-x2(3)
+    pyramid(6,3,1)=x1(1)-x6(1)
+    pyramid(6,3,2)=x1(2)-x6(2)
+    pyramid(6,3,3)=x1(3)-x6(3) 
+    !
+    volhex=0.d0
+    do ii=1,6                            
+      martix(1,1)=pyramid(ii,1,1)
+      martix(1,2)=pyramid(ii,1,2)
+      martix(1,3)=pyramid(ii,1,3)
+      martix(2,1)=pyramid(ii,2,1)
+      martix(2,2)=pyramid(ii,2,2)
+      martix(2,3)=pyramid(ii,2,3)
+      martix(3,1)=pyramid(ii,3,1)
+      martix(3,2)=pyramid(ii,3,2)
+      martix(3,3)=pyramid(ii,3,3)
+      !
+      volhex=volhex+determinant33(martix)*num1d6
+    enddo  
+    !
+    return
+    !
+  end function volhex
+  !
+  pure real(8) function determinant33(a)
+    real(8),intent(in) :: a(3,3)
+    !
+    determinant33=a(1,1)*a(2,2)*a(3,3)+a(1,2)*a(2,3)*a(3,1)+           &
+                  a(1,3)*a(2,1)*a(3,2)-a(1,3)*a(2,2)*a(3,1)-           &
+                  a(1,1)*a(2,3)*a(3,2)-a(1,2)*a(2,1)*a(3,3)
+    return
+  end function determinant33
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine volhex.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
 end module commfunc
 !+---------------------------------------------------------------------+
 !| The end of the module commfunc.                                     |

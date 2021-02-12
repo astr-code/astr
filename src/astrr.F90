@@ -12,6 +12,7 @@ program astrr
   use solver
   use initialisation
   use mainloop
+  use gridgeneration
   !
   implicit none
   !
@@ -33,7 +34,7 @@ program astrr
   !
   call allocommarray
   !
-  call readgrid
+  call gridgen
   !
   call geomcal
   !

@@ -22,6 +22,12 @@ module hdf5io
     !
   end Interface h5read
   !
+  Interface h5write
+    !
+    module procedure h5wa3d_r8
+    !
+  end Interface h5write
+  !
 #ifdef HDF5
   integer(hid_t) :: h5file_id
 #endif
@@ -66,7 +72,7 @@ module hdf5io
                                                                 h5error)
     if(h5error.ne.0)  stop ' !! error in h5io_init call h5pset_fapl_mpio_f'
     !
-    if(mode=='writ') then
+    if(mode=='write') then
       call h5fcreate_f(filename,h5f_acc_trunc_f,h5file_id,             &
                                             h5error,access_prp=plist_id)
       if(h5error.ne.0)  stop ' !! error in h5io_init call h5fcreate_f'
@@ -182,6 +188,62 @@ module hdf5io
   end subroutine h5ra3d_r8
   !+-------------------------------------------------------------------+
   !| This end of the function h5ra3d_r8.                               |
+  !+-------------------------------------------------------------------+
+  !
+  subroutine h5wa3d_r8(varname,var)
+    !
+    use commvar, only: ia,ja,ka
+    use parallel,only: lio,ig0,jg0,kg0
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(in) :: var(:,:,:)
+    !
+#ifdef HDF5
+    ! local data
+    integer :: dim(3),dima
+    integer(hsize_t), dimension(3) :: offset
+    integer :: h5error
+    !
+    integer(hid_t) :: dset_id,filespace,memspace,plist_id
+    integer(hsize_t) :: dimt(3),dimat(3)
+    !
+    dim(1)=size(var,1)
+    dim(2)=size(var,2)
+    dim(3)=size(var,3)
+    !
+    dimt=dim
+    dimat=(/ia+1,ja+1,ka+1/)
+    !
+    dimt=dim
+    offset=(/ig0,jg0,kg0/)
+    !
+    call h5screate_simple_f(3,dimat,filespace,h5error)
+    call h5dcreate_f(h5file_id,varname,H5T_NATIVE_DOUBLE,filespace,    &
+                                                       dset_id,h5error)
+    call h5screate_simple_f(3,dimt,memspace,h5error)
+    call h5sclose_f(filespace,h5error)
+    call h5dget_space_f(dset_id,filespace,h5error)
+    call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,offset,     &
+                                                          dimt,h5error)
+    call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,h5error) 
+    !
+    call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,h5error)
+    call h5dwrite_f(dset_id,H5T_NATIVE_DOUBLE,var,dimt,h5error,       &
+                    file_space_id=filespace,mem_space_id=memspace,    &
+                                                     xfer_prp=plist_id)
+    call h5sclose_f(filespace,h5error)
+    call h5sclose_f(memspace,h5error)
+    call h5dclose_f(dset_id,h5error)
+    call h5pclose_f(plist_id,h5error)
+    !
+    if(lio) print*,' << ',varname
+    !
+#endif
+    !
+  end subroutine h5wa3d_r8
+  !+-------------------------------------------------------------------+
+  !| This end of the function h5wa3d_r8.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

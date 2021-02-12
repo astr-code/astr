@@ -2,8 +2,8 @@
 #                  control file of ASTRR code                          #
 ########################################################################
 
-# maxstep,nwrite
-20000,1000
+# maxstep,nwrite,nlstep
+20000,1000,10
 
 # deltat
 1.d-3

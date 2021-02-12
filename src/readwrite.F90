@@ -7,7 +7,7 @@
 !+---------------------------------------------------------------------+
 module readwrite
   !
-  use parallel,only : mpirank,mpirankname
+  use parallel,only : mpirank,mpirankname,mpistop
   use tecio
   !
   contains
@@ -84,6 +84,10 @@ module readwrite
       select case(trim(flowtype))
       case('2dvort')
         typedefine='                 2D inviscid vortical flow'
+      case('channel')
+        typedefine='                              channel flow'
+      case('tgv')
+        typedefine='                  Taylor-Green Vortex flow'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -173,15 +177,18 @@ module readwrite
     !
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
-                        num_species,flowtype,lfilter,alfa_filter
+                        num_species,flowtype,lfilter,alfa_filter,      &
+                        lreadgrid,gridfile
     use parallel,only : bcast
     !
     ! local data
     character(len=64) :: inputfile
     !
-    inputfile='datin/input.dat'
-    !
     if(mpirank==0) then
+      !
+      call readkeyboad(inputfile=inputfile)
+      !
+      if(trim(inputfile)=='.') inputfile='datin/input.dat'
       !
       open(11,file=trim(inputfile),action='read')
       read(11,'(////)')
@@ -195,7 +202,7 @@ module readwrite
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
       read(11,'(/)')
-      read(11,*)nondimen,diffterm,lfilter
+      read(11,*)nondimen,diffterm,lfilter,lreadgrid
       read(11,'(/)')
       read(11,*)alfa_filter
       !
@@ -210,6 +217,10 @@ module readwrite
       read(11,*)conschm,difschm
       read(11,'(/)')
       read(11,*)num_species
+      if(lreadgrid) then
+        read(11,'(/)')
+        read(11,'(A)')gridfile
+      endif
       close(11)
       print*,' >> ',trim(inputfile),' ... done'
       !
@@ -222,10 +233,12 @@ module readwrite
     call bcast(lihomo)
     call bcast(ljhomo)
     call bcast(lkhomo)
+    call bcast(lreadgrid)
     !
     call bcast(flowtype)
     call bcast(conschm)
     call bcast(difschm)
+    call bcast(gridfile)
     !
     call bcast(nondimen)
     call bcast(diffterm)
@@ -254,7 +267,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readcont
     !
-    use commvar, only: maxstep,nwrite,deltat
+    use commvar, only: maxstep,nwrite,deltat,nlstep
     use parallel,only : bcast
     !
     ! local data
@@ -266,7 +279,7 @@ module readwrite
       !
       open(11,file=trim(inputfile),action='read')
       read(11,'(////)')
-      read(11,*)maxstep,nwrite
+      read(11,*)maxstep,nwrite,nlstep
       read(11,'(/)')
       read(11,*)deltat
       close(11)
@@ -276,6 +289,7 @@ module readwrite
     !
     call bcast(maxstep)
     call bcast(nwrite)
+    call bcast(nlstep)
     call bcast(deltat)
     !
   end subroutine readcont
@@ -284,7 +298,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is used to print the state of computation         |
+  !| This subroutine is used to read grid file.                        |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -292,11 +306,11 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readgrid
     !
-    use commvar,   only : im,jm,km
+    use commvar,   only : im,jm,km,gridfile
     use commarray, only : x
     use hdf5io
     !
-    call h5io_init(filename='datin/grid.h5',mode='read')
+    call h5io_init(filename=trim(gridfile),mode='read')
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1))
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2))
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3))
@@ -305,6 +319,68 @@ module readwrite
   end subroutine readgrid
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write a grid file for postprocess.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 07-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine writegrid
+    !
+    use commvar,   only : im,jm,km
+    use commarray, only : x
+    use hdf5io
+    !
+    call h5io_init('./grid.h5',mode='write')
+    call h5write(varname='x',var=x(0:im,0:jm,0:km,1))
+    call h5write(varname='y',var=x(0:im,0:jm,0:km,2))
+    call h5write(varname='z',var=x(0:im,0:jm,0:km,3))
+    call h5io_end
+    !
+  end subroutine writegrid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readinput.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to input command from keyboard.           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 11-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readkeyboad(inputfile)
+    !
+    character(len=*),intent(out),optional :: inputfile
+    !
+    ! local data
+    integer :: ierr,cli_len,nkey,nlen,arg_count
+    character(len=128) :: keyin
+    !
+    nkey=0
+    cli_len=1
+    !
+    if(present(inputfile)) inputfile='.' ! default value
+    !
+    do while(cli_len>0) 
+      !
+      nkey=nkey+1
+      call get_command_argument(nkey,keyin,cli_len,ierr)
+      !
+      if(trim(keyin)=='-input') then
+        nkey=nkey+1
+        call get_command_argument(nkey,keyin,cli_len,ierr)
+        inputfile=trim(keyin)
+      endif
+      !
+    enddo
+    !
+  end subroutine readkeyboad
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readkeyboad.                            |
   !+-------------------------------------------------------------------+
   !
   !
