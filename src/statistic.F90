@@ -48,7 +48,7 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statout
     !
-    use commvar, only : nstep,time,nlstep,maxstep
+    use commvar, only : nstep,time,nlstep,maxstep,hand_fs
     !
     ! local data
     logical,save :: linit=.true.
@@ -58,17 +58,12 @@ module statistic
     if(lio) then
       !
       if(linit) then
-        open(13,file='flowstate.dat')
-        write(13,"(A7,1X,A13,2(1X,A20))")'nstep','time','enstophy','kenergy'
+        open(hand_fs,file='flowstate.dat')
+        write(hand_fs,"(A7,1X,A13,2(1X,A20))")'nstep','time','enstophy','kenergy'
         linit=.false.
       endif
       !
-      write(13,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,enstophy,kenergy
-      !
-      if(nstep==maxstep) then
-        close(13)
-        print*,' << flowstate.dat'
-      endif
+      write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,enstophy,kenergy
       !
       if(mod(nstep,nlstep)==0) then
         !
@@ -79,8 +74,14 @@ module statistic
         !
         write(*,"(2X,I7,3(1X,E13.6E2))")nstep,time,enstophy,kenergy
         !
-        flush(13)
+        flush(hand_fs)
       endif
+      !
+      if(nstep==maxstep) then
+        close(hand_fs)
+        print*,' << flowstate.dat'
+      endif
+      !
     endif
     !
   end subroutine statout

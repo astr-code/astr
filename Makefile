@@ -13,7 +13,7 @@ FCFLAGS= -O3
 
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
-OPTIONS3 = -DHDF5
+OPTIONS3 = -DHDF5 -Dcputime
 # OMP = -fopenmp
 # OPTIONS1 = -D__GFORTRAN__ -ffree-line-length-none
 #OPTIONS2 = -fno-range-check -fcheck=all
@@ -34,7 +34,7 @@ srs=  constdef.F90 tecio.F90 commvar.F90 commarray.F90 fludyna.F90 parallel.F90 
 OBJS=$(srs:.F90=.o)
 
 %.o:%.F90
-	@mkdir -p $(OBJDIR)
+	@mkdir -p $(OBJDIR) 
 	$(FC) $(FCFLAGS) $(OPTIONS1) $(OPTIONS2) $(OPTIONS3) $(OMP) -c -o $(OBJDIR)/$@  $<
 
 default: $(OBJS)

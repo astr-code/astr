@@ -9,7 +9,7 @@ module parallel
   !
   use mpi
   use commvar,   only : im,jm,km,hm,ia,ja,ka,lihomo,ljhomo,lkhomo,     &
-                        npdci,npdcj,npdck
+                        npdci,npdcj,npdck,ctime
   !
   implicit none
   !
@@ -1198,6 +1198,9 @@ module parallel
     integer :: ncou
     integer :: ierr
     real(8),allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    real(8) :: time_beg
+    !
+    time_beg=ptime()
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -1371,6 +1374,10 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
+#ifdef cputime
+    ctime(7)=ctime(7)+ptime()-time_beg
+#endif
+    !
     return
     !
   end subroutine array3d_sendrecv
@@ -1395,6 +1402,9 @@ module parallel
     integer :: ncou,nx,dir
     integer :: ierr
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    real(8) :: time_beg
+    !
+    time_beg=ptime()
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -1591,6 +1601,10 @@ module parallel
       !
     endif
     !
+#ifdef cputime
+    ctime(7)=ctime(7)+ptime()-time_beg
+#endif
+    !
     return
     !
   end subroutine array4d_sendrecv
@@ -1614,6 +1628,9 @@ module parallel
     integer :: ncou,nx,mx
     integer :: ierr
     real(8),allocatable,dimension(:,:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    real(8) :: time_beg
+    !
+    time_beg=ptime()
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -1794,6 +1811,10 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
+#ifdef cputime
+    ctime(7)=ctime(7)+ptime()-time_beg
+#endif
+    !
     return
     !
   end subroutine array5d_sendrecv
@@ -1818,6 +1839,9 @@ module parallel
     integer :: ncou
     integer :: ierr,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    real(8) :: time_beg
+    !
+    time_beg=ptime()
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -2059,12 +2083,35 @@ module parallel
     if(mpitag>10000) mpitag=100
     ! reset mpitag
     !
+#ifdef cputime
+    ctime(7)=ctime(7)+ptime()-time_beg
+#endif
+    !
     return
     !
   end subroutine qswap
   !+-------------------------------------------------------------------+
   !| The end of the subroutine qswap.                                  |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| The wraper of MPI_Wtime                                           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-November-2019: Created by J. Fang @ STFC Daresbury Laboratory  |
+  !+-------------------------------------------------------------------+
+  real(8) function ptime()
+    !
+    ptime=MPI_Wtime()
+    !
+    return
+    !
+  end function ptime
+  !+-------------------------------------------------------------------+
+  !| The end of the function ptime.                                    |
+  !+-------------------------------------------------------------------+
+  !
 end module parallel
 !+---------------------------------------------------------------------+
 !| The end of the module parallel.                                     |

@@ -25,6 +25,8 @@ module hdf5io
   Interface h5write
     !
     module procedure h5wa3d_r8
+    module procedure h5w_int4
+    module procedure h5w_real8
     !
   end Interface h5write
   !
@@ -189,6 +191,61 @@ module hdf5io
   !+-------------------------------------------------------------------+
   !| This end of the function h5ra3d_r8.                               |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write a 1D array with hdf5 interface.  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 02-Jun-2020 | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine h5w_int4(varname,var)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    integer,intent(in) :: var
+    !
+#ifdef HDF5
+    ! local data
+    integer :: nvar(1)
+    integer :: h5error
+    integer(hsize_t) :: dimt(1)=(/1/)
+    !
+    ! writing the data
+    !
+    nvar=var
+    call h5ltmake_dataset_f(h5file_id,varname,1,dimt,                  &
+                                        h5t_native_integer,nvar,h5error)
+    if(h5error.ne.0)  stop ' !! error in h5w_int4 call h5ltmake_dataset_f'
+    !
+    if(lio) print*,' << ',varname
+    !
+#endif
+    !
+  end subroutine h5w_int4
+  !
+  subroutine h5w_real8(varname,var)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(in) :: var
+    !
+#ifdef HDF5
+    ! local data
+    real(8) :: rvar(1)
+    integer :: h5error
+    integer(hsize_t) :: dimt(1)=(/1/)
+    !
+    rvar=var
+    call h5ltmake_dataset_f(h5file_id,varname,1,dimt,                  &
+                                        h5t_native_double,rvar,h5error)
+    if(h5error.ne.0)  stop ' !! error in h5w_real8 call h5ltmake_dataset_f'
+    !
+    if(mpirank==0) print*,' << ',varname
+    !
+#endif
+    !
+  end subroutine h5w_real8
   !
   subroutine h5wa3d_r8(varname,var)
     !

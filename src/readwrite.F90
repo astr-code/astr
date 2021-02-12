@@ -7,7 +7,7 @@
 !+---------------------------------------------------------------------+
 module readwrite
   !
-  use parallel,only : mpirank,mpirankname,mpistop
+  use parallel,only : mpirank,mpirankname,mpistop,lio
   use tecio
   !
   contains
@@ -60,6 +60,31 @@ module readwrite
   end subroutine statement
   !+-------------------------------------------------------------------+
   !| The end of the subroutine statement.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to initialise files and folders.          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine fileini
+    !
+    use commvar, only : hand_fs,hand_rp
+    !
+    if(lio) then
+      call system('mkdir testout/')
+      call system('mkdir outdat/')
+      !
+      hand_fs=13
+      hand_rp=14
+      !
+    endif
+    !
+  end subroutine fileini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine fileini.                                |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -381,6 +406,126 @@ module readwrite
   end subroutine readkeyboad
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readkeyboad.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to dump flow field data                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine output
+    !
+    use commvar, only: time,nstep,filenumb,num_species
+    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
+    use hdf5io
+    !
+    ! local data
+    character(len=4) :: stepname
+    character(len=2) :: spname
+    integer :: jsp
+    !
+    write(stepname,'(i4.4)')filenumb
+    !
+
+    
+    call h5io_init('outdat/flowfield'//stepname//'.h5',mode='write')
+    call h5write(varname='nstep',var=nstep)
+    call h5write(varname='time',var=time)
+    call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
+    call h5write(varname='u', var=vel(0:im,0:jm,0:km,1))
+    call h5write(varname='v', var=vel(0:im,0:jm,0:km,2))
+    call h5write(varname='w', var=vel(0:im,0:jm,0:km,3))
+    call h5write(varname='p', var=prs(0:im,0:jm,0:km))
+    call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
+    do jsp=1,num_species
+       write(spname,'(i2.2)')jsp
+      call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+    enddo
+    call h5io_end
+    !
+    ! call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
+    !                                           x(0:im,0:jm,0:km,1),'x', &
+    !                                           x(0:im,0:jm,0:km,2),'y', &
+    !                                           x(0:im,0:jm,0:km,3),'z', &
+    !                                         rho(0:im,0:jm,0:km),'ro',  &
+    !                                         vel(0:im,0:jm,0:km,1),'u', &
+    !                                         vel(0:im,0:jm,0:km,2),'v', &
+    !                                         prs(0:im,0:jm,0:km),'p',   &
+    !                                         spc(0:im,0:jm,0:km,1),'Y1' )
+    filenumb=filenumb+1
+    !
+  end subroutine output
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine output.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write report file.                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine timerept
+    !
+    use commvar, only : hand_rp,nstep,maxstep,ctime
+    !
+    ! local data
+    logical,save :: linit=.true.
+    logical :: lexist
+    integer :: i
+    !
+    if(lio) then
+      !
+      if(linit) then
+        !
+        inquire(file='report.txt', exist=lexist)
+        !
+        if(lexist) call system('mv -v report.txt report.bak')
+        !
+        open(hand_rp,file='report.txt')
+        linit=.false.
+      endif
+      !
+      write(hand_rp,'(2X,62A)')('-',i=1,62)
+      write(hand_rp,'(2X,A,I7)')'time report at nstep ',nstep
+      write(hand_rp,'(2X,62A)')('-',i=1,62)
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'total time cost : ',    &
+                            ctime(2),' - ',100.d0*ctime(2)/ctime(2),' %'
+      !
+#ifdef cputime
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - rk          : ',    &
+                            ctime(3),' - ',100.d0*ctime(3)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - rhs       : ',    &
+                            ctime(4),' - ',100.d0*ctime(4)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Convc   : ',    &
+                            ctime(9),' - ',100.d0*ctime(9)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
+                          ctime(10),' - ',100.d0*ctime(10)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - filter    : ',    &
+                            ctime(8),' - ',100.d0*ctime(9)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io        : ',    &
+                            ctime(6),' - ',100.d0*ctime(6)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - sta       : ',    &
+                            ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
+                           ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
+#endif
+      !
+      flush(hand_rp)
+      !
+      if(nstep==maxstep) then
+        close(hand_rp)
+        print*,' << report.txt'
+      endif
+      !
+    endif
+    !
+  end subroutine timerept
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine timerept.                               |
   !+-------------------------------------------------------------------+
   !
   !

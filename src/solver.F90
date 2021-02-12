@@ -8,8 +8,8 @@
 module solver
   !
   use constdef
-  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap
-  use commvar,  only : ndims,ks,ke,hm
+  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,ptime
+  use commvar,  only : ndims,ks,ke,hm,ctime
   !
   implicit none
   !
@@ -628,13 +628,31 @@ module solver
     !
     use commarray, only : qrhs
     !
+#ifdef cputime
+    real(8) :: time_beg
+    !
+    time_beg=ptime() 
+#endif
+    !
     qrhs=0.d0
     !
     call convrsdcal6
     !
+#ifdef cputime
+    ctime(9)=ctime(9)+ptime()-time_beg
+#endif
+    !
     qrhs=-qrhs
     !
+#ifdef cputime
+    time_beg=ptime() 
+#endif
+    !
     call diffrsdcal6
+    !
+#ifdef cputime
+    ctime(10)=ctime(10)+ptime()-time_beg
+#endif
     !
   end subroutine rhscal
   !+-------------------------------------------------------------------+
@@ -1112,12 +1130,19 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine filterq
     !
-    use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,alfa_filter,ndims
+    use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
+                         alfa_filter,ndims
     use commarray,only : q
     use commfunc, only : spafilter10
     !
     ! local data
     integer :: i,j,k,m
+    !
+#ifdef cputime
+    real(8) :: time_beg
+    !
+    time_beg=ptime()
+#endif
     !
     ! filtering in i direction
     call dataswap(q,direction=1)
@@ -1170,6 +1195,14 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in k direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+#ifdef cputime
+    !
+    ctime(8)=ctime(8)+ptime()-time_beg
+    !
+#endif
+    !
+    return
     !
   end subroutine filterq
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

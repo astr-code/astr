@@ -9,7 +9,7 @@ module mainloop
   !
   use constdef
   use parallel, only: lio,mpistop,mpirank,qswap,dataswap,mpirankname,  &
-                      pmax
+                      pmax,ptime
   use commvar,  only: im,jm,km
   use tecio
   !
@@ -26,44 +26,40 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine steploop
     !
-    use commvar, only: maxstep,time,deltat,nstep,nwrite,filenumb
-    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
+    use commvar,  only: maxstep,time,deltat,nstep,nwrite,ctime,nlstep
+    use readwrite,only: readcont,timerept
     !
     ! local data
-    character(len=4) :: stepname
     integer :: counter
-    real(8) :: rho_max,u_max,p_max,t_max
+    real(8) :: var1
     !
-    counter=0
+    var1=ptime()
+    !
+    counter=nwrite
     do while(nstep<=maxstep)
       !
-      call rk3
+      call rk3(counter)
+      !
+      if(counter==nwrite) then
+        !
+        call readcont
+        !
+        ctime(2)=ptime()-var1
+        !
+        call timerept
+        !
+        counter=0
+        !
+      endif
       !
       counter=counter+1
       nstep=nstep+1
       time=time+deltat
       !
-      if(counter==nwrite) then
-        !
-        filenumb=filenumb+1
-        !
-        write(stepname,'(i4.4)')filenumb
-        !
-        call tecbin('testout/tecfield'//stepname//mpirankname//'.plt', &
-                                              x(0:im,0:jm,0:km,1),'x', &
-                                              x(0:im,0:jm,0:km,2),'y', &
-                                              x(0:im,0:jm,0:km,3),'z', &
-                                            rho(0:im,0:jm,0:km),'ro',  &
-                                            vel(0:im,0:jm,0:km,1),'u', &
-                                            vel(0:im,0:jm,0:km,2),'v', &
-                                            prs(0:im,0:jm,0:km),'p',   &
-                                            spc(0:im,0:jm,0:km,1),'Y1' )
-        counter=0
-        !
-      endif
-      !
     enddo
-    if(lio) print*,' << flowstate.dat'
+    !
+    ctime(1)=ptime()-var1
+
     !
   end subroutine steploop
   !+-------------------------------------------------------------------+
@@ -78,19 +74,28 @@ module mainloop
   !| -------------                                                     |
   !| 27-Nov-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  subroutine rk3
+  subroutine rk3(counter)
     !
-    use commvar,  only : hm,im,jm,km,numq,deltat,lfilter,nstep,nlstep
+    use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
+                         ctime
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq
     use statistic,only : statcal,statout
+    use readwrite,only : output
+    !
+    integer,intent(in) :: counter
     !
     ! logical data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
     integer :: irk,m
+    real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
+    !
+#ifdef cputime
+    time_beg=ptime()
+#endif
     !
     if(firstcall) then
       !
@@ -120,12 +125,41 @@ module mainloop
       !
       call qswap
       !
+#ifdef cputime
+      time_beg_rhs=ptime()
+#endif
       call rhscal
+#ifdef cputime
+      ctime(4)=ctime(4)+ptime()-time_beg_rhs
+#endif
       !
       if(irk==1) then
+        !
+#ifdef cputime
+        time_beg_sta=ptime()
+#endif
+        !
         call statcal
         !
         call statout
+        !
+#ifdef cputime
+        ctime(5)=ctime(5)+ptime()-time_beg_sta
+#endif
+        !
+        if(counter==nwrite) then
+#ifdef cputime
+          time_beg_io=ptime()
+#endif
+          !
+          call output
+          !
+#ifdef cputime
+          ctime(6)=ctime(6)+ptime()-time_beg_io
+#endif
+          !
+        endif
+        !
       endif
       !
       do m=1,numq
@@ -160,6 +194,10 @@ module mainloop
     enddo
     !
     deallocate(qsave)
+    !
+    ctime(3)=ctime(3)+ptime()-time_beg
+    !
+    return
     !
   end subroutine rk3
   !+-------------------------------------------------------------------+

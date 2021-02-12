@@ -30,6 +30,8 @@ program astrr
   !
   call refcal
   !
+  call fileini
+  !
   call infodisp
   !
   call allocommarray
