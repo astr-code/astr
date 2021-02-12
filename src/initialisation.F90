@@ -159,15 +159,15 @@ module initialisation
                    pressure=prs(0:im,0:jm,0:km),                       &
                     species=spc(0:im,0:jm,0:km,:)                      )
     !
-    call tecbin('testout/tecinit'//mpirankname//'.plt',                &
-                                      x(0:im,0:jm,0:km,1),'x',         &
-                                      x(0:im,0:jm,0:km,2),'y',         &
-                                      x(0:im,0:jm,0:km,3),'z',         &
-                                   rho(0:im,0:jm,0:km)  ,'ro',         &
-                                   vel(0:im,0:jm,0:km,1),'u',          &
-                                   vel(0:im,0:jm,0:km,2),'v',          &
-                                   prs(0:im,0:jm,0:km)  ,'p',          &
-                                   tmp(0:im,0:jm,0:km)  ,'t' )
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+    !                                prs(0:im,0:jm,0:km)  ,'p',          &
+    !                                tmp(0:im,0:jm,0:km)  ,'t' )
     !
     if(lio)  write(*,'(A,I1,A)')'  ** 2-D vortical field initialised.'
     !

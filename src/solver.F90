@@ -987,7 +987,7 @@ module solver
     !
     ! Calculating along j direction.
     !
-    allocate(ff(-hm:im+hm),df(0:im))
+    allocate(ff(-hm:jm+hm),df(0:jm))
     do k=0,km
     do i=0,im
       !
@@ -1035,7 +1035,7 @@ module solver
     if(ndims==3) then
       ! Calculating along j direction.
       !
-      allocate(ff(-hm:im+hm),df(0:im))
+      allocate(ff(-hm:km+hm),df(0:km))
       do j=0,jm
       do i=0,im
         !
@@ -1043,7 +1043,7 @@ module solver
                 sigma(i,j,:,2)*dxi(i,j,:,3,2) +                        &
                 sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
-        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
         !
         qrhs(i,j,:,2)=qrhs(i,j,:,2)+df
         !
@@ -1051,7 +1051,7 @@ module solver
                 sigma(i,j,:,4)*dxi(i,j,:,3,2) +                        &
                 sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
-        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
         !
         qrhs(i,j,:,3)=qrhs(i,j,:,3)+df
         !
@@ -1059,7 +1059,7 @@ module solver
                 sigma(i,j,:,5)*dxi(i,j,:,3,2) +                        &
                 sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
-        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
         !
         qrhs(i,j,:,4)=qrhs(i,j,:,4)+df
         !
@@ -1067,7 +1067,7 @@ module solver
                 qflux(i,j,:,2)*dxi(i,j,:,3,2) +                        &
                 qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
-        df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
         !
         qrhs(i,j,:,5)=qrhs(i,j,:,5)+df
         !
