@@ -16,6 +16,12 @@ module fludyna
      module procedure thermal_scar
      module procedure thermal_3d
   end interface
+  !
+  interface fvar2q
+     module procedure fvar2q_sca
+     module procedure fvar2q_3da
+  end interface
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -78,7 +84,46 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine fvar2q(q,density,velocity,pressure,temperature,species)
+  subroutine fvar2q_sca(q,density,velocity,pressure,temperature,species)
+    !
+    use commvar, only: numq,ndims,num_species,const1,const6
+    !
+    real(8),intent(in) :: density,velocity(:)
+    real(8),intent(in),optional :: pressure,temperature,species(:)
+    real(8),intent(out) :: q(:)
+    !
+    ! local data
+    integer :: jspec
+    !
+    q(1)=density
+    q(2)=density*velocity(1)
+    q(3)=density*velocity(2)
+    q(4)=density*velocity(3)
+    !
+    if(present(temperature)) then
+        q(5)=density*( temperature*const1 + 0.5d0*(velocity(1)**2 +    &
+                                                   velocity(2)**2 +    &
+                                                   velocity(3)**2) )
+    elseif(present(pressure)) then
+        q(5)=pressure*const6+0.5d0*density*( velocity(1)**2 +          &
+                                             velocity(2)**2 +          &
+                                             velocity(3)**2 )
+    else
+      print*,' !! pressure or temperature required !!'
+      stop ' !! error @ fvar2q'
+    endif
+    !
+    if(num_species>0) then
+      !
+      do jspec=1,num_species
+        q(5+jspec)=density*species(jspec)
+      enddo
+      !
+    endif
+    !
+  end subroutine fvar2q_sca
+  !
+  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
@@ -118,7 +163,7 @@ module fludyna
       !
     endif
     !
-  end subroutine fvar2q
+  end subroutine fvar2q_3da
   !+-------------------------------------------------------------------+
   !| The end of the subroutine fvar2q.                                 |
   !+-------------------------------------------------------------------+

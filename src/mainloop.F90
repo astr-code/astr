@@ -83,6 +83,7 @@ module mainloop
     use solver,   only : rhscal,filterq
     use statistic,only : statcal,statout
     use readwrite,only : output
+    use bc,       only : boucon
     !
     integer,intent(in) :: counter
     !
@@ -122,6 +123,8 @@ module mainloop
     enddo
     !
     do irk=1,3
+      !
+      call boucon
       !
       call qswap
       !

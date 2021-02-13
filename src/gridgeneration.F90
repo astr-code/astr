@@ -34,9 +34,10 @@ module gridgeneration
         print*,trim(flowtype),'not defined @ gridgen'
         stop ' !! error at gridgen' 
       endif
+      !
+      call writegrid
+      !
     endif
-    !
-    call writegrid
     !
   end subroutine gridgen
   !+-------------------------------------------------------------------+

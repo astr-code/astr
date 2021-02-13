@@ -96,15 +96,21 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine infodisp
     !
-    use parallel,only : lio,isize,jsize,ksize,mpistop
+    use parallel,only : mpirank,mpirankmax,isize,jsize,ksize,mpistop
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
-                        flowtype,ndims,lfilter,alfa_filter
+                        flowtype,ndims,lfilter,alfa_filter,bctype,twall
     !
     ! local data
     character(len=42) :: typedefine
+    integer :: n
+    character(len=4) :: bcdir(1:6)
     !
-    if(lio) then
+    bcdir(1)='imin'; bcdir(2)='imax'
+    bcdir(3)='jmin'; bcdir(4)='jmax'
+    bcdir(5)='kmin'; bcdir(6)='kmax'
+    !
+    if(mpirank==mpirankmax) then
       !
       select case(trim(flowtype))
       case('2dvort')
@@ -182,6 +188,14 @@ module readwrite
         write(*,'(A13,F6.3)')' coefficient:',alfa_filter
       endif
       write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                    *** Boundary Conditions ***'
+      do n=1,6
+        if(bctype(n)==41) then
+          write(*,'(17X,3(A),F6.3)')' isothermal nonslip wall at ',    &
+                                           bcdir(n),', Twall= ',twall(n)
+        endif
+      enddo
+      write(*,'(2X,62A)')('-',i=1,62)
       !
     endif
     !
@@ -203,11 +217,12 @@ module readwrite
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
-                        lreadgrid,gridfile
+                        lreadgrid,gridfile,bctype,twall
     use parallel,only : bcast
     !
     ! local data
     character(len=64) :: inputfile
+    integer :: n
     !
     if(mpirank==0) then
       !
@@ -242,6 +257,14 @@ module readwrite
       read(11,*)conschm,difschm
       read(11,'(/)')
       read(11,*)num_species
+      read(11,'(/)')
+      do n=1,6
+        read(11,*)bctype(n)
+        if(bctype(n)==41) then
+          backspace(11)
+          read(11,*)bctype(n),twall(n)
+        endif
+      enddo
       if(lreadgrid) then
         read(11,'(/)')
         read(11,'(A)')gridfile
@@ -276,6 +299,9 @@ module readwrite
     call bcast(mach)
     !
     call bcast(num_species)
+    !
+    call bcast(bctype)
+    call bcast(twall)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+
@@ -417,7 +443,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine output
     !
-    use commvar, only: time,nstep,filenumb,num_species
+    use commvar, only: time,nstep,filenumb,num_species,im,jm,km
     use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
     use hdf5io
     !
@@ -428,8 +454,6 @@ module readwrite
     !
     write(stepname,'(i4.4)')filenumb
     !
-
-    
     call h5io_init('outdat/flowfield'//stepname//'.h5',mode='write')
     call h5write(varname='nstep',var=nstep)
     call h5write(varname='time',var=time)
@@ -445,15 +469,15 @@ module readwrite
     enddo
     call h5io_end
     !
-    ! call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
-    !                                           x(0:im,0:jm,0:km,1),'x', &
-    !                                           x(0:im,0:jm,0:km,2),'y', &
-    !                                           x(0:im,0:jm,0:km,3),'z', &
-    !                                         rho(0:im,0:jm,0:km),'ro',  &
-    !                                         vel(0:im,0:jm,0:km,1),'u', &
-    !                                         vel(0:im,0:jm,0:km,2),'v', &
-    !                                         prs(0:im,0:jm,0:km),'p',   &
-    !                                         spc(0:im,0:jm,0:km,1),'Y1' )
+    call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
+                                              x(0:im,0:jm,0:km,1),'x', &
+                                              x(0:im,0:jm,0:km,2),'y', &
+                                              x(0:im,0:jm,0:km,3),'z', &
+                                            rho(0:im,0:jm,0:km),'ro',  &
+                                            vel(0:im,0:jm,0:km,1),'u', &
+                                            vel(0:im,0:jm,0:km,2),'v', &
+                                            prs(0:im,0:jm,0:km),'p',   &
+                                            spc(0:im,0:jm,0:km,1),'Y1' )
     filenumb=filenumb+1
     !
   end subroutine output

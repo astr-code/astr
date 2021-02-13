@@ -8,7 +8,8 @@
 !+---------------------------------------------------------------------+
 module initialisation
   !
-  use parallel,only: lio,mpistop,mpirank,mpirankname
+  use constdef
+  use parallel,only: lio,mpistop,mpirank,mpirankname,bcast
   use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,ndims,num_species
   use tecio
   !
@@ -186,13 +187,13 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine chanini
     !
-    use commvar,  only: prandtl,mach,gamma
+    use commvar,  only: prandtl,mach,gamma,xmin,xmax,ymin,ymax,zmin,zmax
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal,fvar2q
     !
     ! local data
-    integer :: i,j,k
-    real(8) :: theta
+    integer :: i,j,k,l
+    real(8) :: theta,theter,fx,gz,zl,randomv(15)
     !
     theta=0.1d0
     !
@@ -210,10 +211,61 @@ module initialisation
         !
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
-        if(num_species>1) spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+        if(num_species>0) then
+          spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+        endif
+        !
       enddo
       enddo
       enddo
+      !
+    elseif(ndims==3) then
+      !
+      if(mpirank==0) then
+        do l=1,15
+          call random_number(randomv(l))
+        end do
+      endif
+      !
+      call bcast(randomv)
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        theter=x(i,0,k,1)/(xmax-xmin)*2.d0*pi
+        fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*0.192450089729875d0
+        !
+        gz=0.d0
+        do l=1,10
+          !
+          if(l==1) then
+            zl=0.2d0/(1.d0-0.8d0**10)
+          else
+            zl=zl*0.8d0
+          end if
+          !
+          gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/(zmax-zmin)+randomv(l)))
+          !
+        end do
+        !
+        rho(i,j,k)  =roinf
+        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)*(1.d0+0.3d0*fx*gz)
+        vel(i,j,k,2)=0.d0
+        vel(i,j,k,3)=0.d0
+        tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
+                                     1.5d0*(1.d0-((x(i,j,k,2)-1.d0)**4))
+        !
+        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        !
+        if(num_species>0) then
+          spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
       !
     endif
     !
@@ -233,8 +285,6 @@ module initialisation
                                    spc(0:im,0:jm,0:km,1),'Y1' )
     
     if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D channel flow initialised.'
-    !
-    call mpistop
     !
   end subroutine chanini
   !+-------------------------------------------------------------------+

@@ -450,6 +450,7 @@ module solver
       can(i,j,:,1)=can(i,j,:,1)+ddfc(dxi(i,j,:,3,1),cscheme,npdck,km,alfa,gck)
       can(i,j,:,2)=can(i,j,:,2)+ddfc(dxi(i,j,:,3,2),cscheme,npdck,km,alfa,gck)
       can(i,j,:,3)=can(i,j,:,3)+ddfc(dxi(i,j,:,3,3),cscheme,npdck,km,alfa,gck)
+      !
     enddo
     enddo
     !
@@ -475,6 +476,7 @@ module solver
       can2av=psum(can2av)/real(ia*ja*ka,8)
       can3av=psum(can3av)/real(ia*ja*ka,8)
     elseif(ndims==2) then
+      k=0
       do j=1,jm
       do i=1,im
         can1av=can1av+can(i,j,k,1)
@@ -491,7 +493,6 @@ module solver
       can2av=psum(can2av)/real(ia*ja,8)
       can3av=psum(can3av)/real(ia*ja,8)
     endif
-    !
     !
     can1var=0.d0
     can2var=0.d0
@@ -627,6 +628,7 @@ module solver
   subroutine rhscal
     !
     use commarray, only : qrhs
+    use commvar,   only : flowtype
     !
 #ifdef cputime
     real(8) :: time_beg
@@ -651,6 +653,8 @@ module solver
     !
     call diffrsdcal6
     !
+    if(trim(flowtype)=='channel') call srcchan
+    !
 #ifdef cputime
     ctime(10)=ctime(10)+ptime()-time_beg
 #endif
@@ -658,6 +662,77 @@ module solver
   end subroutine rhscal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rhscal.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine add a source term to the rsd of the equation to   |
+  !| drive channel flow.                                               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine srcchan
+    !
+    use commvar, only : force,im,jm,km
+    use parallel,only : psum 
+    use commarray,only: q,qrhs,x,jacob
+    !
+    ! local data
+    integer :: i,j,k,k1,k2
+    !
+    real(8) :: u1bulk,u2bulk,u3bulk,robulk,dy
+    !
+    if(ndims==2) then
+      k1=0
+      k2=0
+    elseif(ndims==3) then
+      k1=1
+      k2=km
+    else
+      print*,' !! ndims=',ndims
+      stop ' !! error @ massfluxchan !!'
+    endif
+    !
+    u1bulk=0.d0
+    u2bulk=0.d0
+    u3bulk=0.d0
+    robulk=0.d0
+    !
+    do k=k1,k2
+    do j=1,jm
+    do i=1,im
+      !
+      dy=x(i,j,k,2)-x(i,j-1,k,2)
+      robulk=robulk+0.5d0*(q(i,j-1,k,1)+q(i,j,k,1))*dy
+      u1bulk=u1bulk+0.5d0*(q(i,j-1,k,2)+q(i,j,k,2))*dy
+      u2bulk=u2bulk+0.5d0*(q(i,j-1,k,3)+q(i,j,k,3))*dy
+      u3bulk=u3bulk+0.5d0*(q(i,j-1,k,4)+q(i,j,k,4))*dy
+      !
+    end do
+    end do
+    end do
+    !
+    robulk=psum(robulk)
+    u1bulk=psum(u1bulk)/robulk
+    u2bulk=psum(u2bulk)/robulk
+    u3bulk=psum(u3bulk)/robulk
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      qrhs(i,j,k,2)=qrhs(i,j,k,2)+force(1)*jacob(i,j,k)
+      qrhs(i,j,k,3)=qrhs(i,j,k,3)+force(2)*jacob(i,j,k)
+      qrhs(i,j,k,4)=qrhs(i,j,k,4)+force(3)*jacob(i,j,k)
+      qrhs(i,j,k,5)=qrhs(i,j,k,5)+( force(1)*u1bulk+force(2)*u2bulk+   &
+                                    force(3)*u3bulk )*jacob(i,j,k)
+    end do
+    end do
+    end do
+    !
+  end subroutine srcchan
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine source1.                                |
   !+-------------------------------------------------------------------+
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
