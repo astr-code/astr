@@ -9,7 +9,7 @@
 module initialisation
   !
   use parallel,only: lio,mpistop,mpirank,mpirankname
-  use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,ndims
+  use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,ndims,num_species
   use tecio
   !
   implicit none
@@ -93,7 +93,7 @@ module initialisation
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
       !
-      spc(i,j,k,1)=exp(-0.5d0*radi2)
+      if(num_species>1) spc(i,j,k,1)=exp(-0.5d0*radi2)
     enddo
     enddo
     enddo
@@ -148,7 +148,7 @@ module initialisation
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
       !
-      spc(i,j,k,1)=1.d0
+      if(num_species>1) spc(i,j,k,1)=1.d0
     enddo
     enddo
     enddo
@@ -210,7 +210,7 @@ module initialisation
         !
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
-        spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+        if(num_species>1) spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
       enddo
       enddo
       enddo

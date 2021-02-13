@@ -637,6 +637,7 @@ module solver
     qrhs=0.d0
     !
     call convrsdcal6
+    ! call ConvRsdCal6_legc
     !
 #ifdef cputime
     ctime(9)=ctime(9)+ptime()-time_beg
@@ -673,7 +674,7 @@ module solver
     use commfunc, only: ddfc
     !
     ! local data
-    integer :: i,j,k,jspc,m
+    integer :: i,j,k,jspc
     real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:) 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -697,11 +698,9 @@ module solver
         enddo
       endif
       !
-      do m=1,numq
-        dfcs(:,m)=ddfc(fcs(:,m),conschm,npdci,im,alfa_con,cci)
-        !
-        qrhs(:,j,k,m)=qrhs(:,j,k,m)+dfcs(:,m)
-      enddo
+      dfcs=ddfc(fcs,conschm,npdci,im,alfa_con,cci,numq)
+      !
+      qrhs(:,j,k,:)=qrhs(:,j,k,:)+dfcs(:,:) 
       !
       ! print*,maxval(dfcs(:,2)),maxval(dfcs(:,3))
       !
@@ -734,11 +733,9 @@ module solver
         enddo
       endif
       !
-      do m=1,numq
-        dfcs(:,m)=ddfc(fcs(:,m),conschm,npdcj,jm,alfa_con,ccj)
-        !
-        qrhs(i,:,k,m)=qrhs(i,:,k,m)+dfcs(:,m)
-      enddo
+      dfcs=ddfc(fcs,conschm,npdcj,jm,alfa_con,ccj,numq)
+      !
+      qrhs(i,:,k,:)=qrhs(i,:,k,:)+dfcs(:,:)
       !
     enddo
     enddo
@@ -770,11 +767,9 @@ module solver
           enddo
         endif
         !
-        do m=1,numq
-          dfcs(:,m)=ddfc(fcs(:,m),conschm,npdck,km,alfa_con,cck)
-          !
-          qrhs(i,j,:,m)=qrhs(i,j,:,m)+dfcs(:,m)
-        enddo
+        dfcs=ddfc(fcs,conschm,npdck,km,alfa_con,cck,numq)
+        !
+        qrhs(i,j,:,:)=qrhs(i,j,:,:)+dfcs(:,:)
         !
       enddo
       enddo
@@ -789,7 +784,151 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine ConvRsdCal6.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the convectional residual
+  ! terms with compact six-order central scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2009-06-03.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine ConvRsdCal6_legc
+    !
+    use commvar,  only: im,jm,km,hm,numq,num_species,conschm,          &
+                        npdci,npdcj,npdck
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+    use commfunc, only: ddfc
+    !
+    real(8) :: UU
+    real(8), allocatable, dimension(:,:) :: Fcs,dFcs
+    real(8) :: var1,var2,var3,var4,var5
+    integer :: i,j,k
+    !
+    !!$ SAVE Fcs,btemp,vtemp,wtemp
+    !!$OMP THREADPRIVATE(Fcs,btemp,vtemp,wtemp)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! btemp,vtemp,wtemp: temporary arraies
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,UU)
+    !
+    ! calculate along i direction
+    allocate(Fcs(1:5,-4:im+4),dFcs(1:5,0:im))
+    !   
+    !!$OMP do
+    do k=0,km
+    do j=0,jm
+      !
+      do i=-4,im+4
+        UU=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
+           dxi(i,j,k,1,3)*vel(i,j,k,3)
+        Fcs(1,i)=jacob(i,j,k)* q(i,j,k,1)*UU
+        Fcs(2,i)=jacob(i,j,k)*(q(i,j,k,2)*UU+dxi(i,j,k,1,1)*prs(i,j,k))
+        Fcs(3,i)=jacob(i,j,k)*(q(i,j,k,3)*UU+dxi(i,j,k,1,2)*prs(i,j,k))
+        Fcs(4,i)=jacob(i,j,k)*(q(i,j,k,4)*UU+dxi(i,j,k,1,3)*prs(i,j,k))
+        Fcs(5,i)=jacob(i,j,k)*(q(i,j,k,5)+prs(i,j,k))*UU 
+      end do
+      !
+      dFcs(1,:)=ddfc(fcs(1,:),conschm,npdci,im,alfa_con,cci)
+      dFcs(2,:)=ddfc(fcs(2,:),conschm,npdci,im,alfa_con,cci)
+      dFcs(3,:)=ddfc(fcs(3,:),conschm,npdci,im,alfa_con,cci)
+      dFcs(4,:)=ddfc(fcs(4,:),conschm,npdci,im,alfa_con,cci)
+      dFcs(5,:)=ddfc(fcs(5,:),conschm,npdci,im,alfa_con,cci)
+      !
+      qrhs(:,j,k,1)=qrhs(:,j,k,1)+dFcs(1,:)
+      qrhs(:,j,k,2)=qrhs(:,j,k,2)+dFcs(2,:)
+      qrhs(:,j,k,3)=qrhs(:,j,k,3)+dFcs(3,:)
+      qrhs(:,j,k,4)=qrhs(:,j,k,4)+dFcs(4,:)
+      qrhs(:,j,k,5)=qrhs(:,j,k,5)+dFcs(5,:)
+      !
+    end do
+    end do
+    !!$OMP end do
+    !
+    !
+    deallocate(Fcs,dFcs)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+    ! calculating along j direction
+    allocate(Fcs(1:5,-4:jm+4),dFcs(1:5,0:jm))
+    !
+    !!$OMP do
+    do k=0,km
+    do i=0,im
+      !
+      do j=-4,jm+4
+        UU=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2)+    &
+           dxi(i,j,k,2,3)*vel(i,j,k,3)
+        Fcs(1,j)=jacob(i,j,k)* q(i,j,k,1)*UU
+        Fcs(2,j)=jacob(i,j,k)*(q(i,j,k,2)*UU+dxi(i,j,k,2,1)*prs(i,j,k))
+        Fcs(3,j)=jacob(i,j,k)*(q(i,j,k,3)*UU+dxi(i,j,k,2,2)*prs(i,j,k))
+        Fcs(4,j)=jacob(i,j,k)*(q(i,j,k,4)*UU+dxi(i,j,k,2,3)*prs(i,j,k))
+        Fcs(5,j)=jacob(i,j,k)*(q(i,j,k,5)+prs(i,j,k))*UU 
+      end do
+      !
+      dFcs(1,:)=ddfc(fcs(1,:),conschm,npdcj,jm,alfa_con,ccj)
+      dFcs(2,:)=ddfc(fcs(2,:),conschm,npdcj,jm,alfa_con,ccj)
+      dFcs(3,:)=ddfc(fcs(3,:),conschm,npdcj,jm,alfa_con,ccj)
+      dFcs(4,:)=ddfc(fcs(4,:),conschm,npdcj,jm,alfa_con,ccj)
+      dFcs(5,:)=ddfc(fcs(5,:),conschm,npdcj,jm,alfa_con,ccj)
+      !
+      qrhs(i,:,k,1)=qrhs(i,:,k,1)+dFcs(1,:)
+      qrhs(i,:,k,2)=qrhs(i,:,k,2)+dFcs(2,:)
+      qrhs(i,:,k,3)=qrhs(i,:,k,3)+dFcs(3,:)
+      qrhs(i,:,k,4)=qrhs(i,:,k,4)+dFcs(4,:)
+      qrhs(i,:,k,5)=qrhs(i,:,k,5)+dFcs(5,:)
+      !
+    end do
+    end do
+    !!$OMP end do
+    deallocate(Fcs,dFcs)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    ! calculating along k direction
+    !
+    allocate(Fcs(1:5,-4:km+4),dFcs(1:5,0:km))
+    !
+    !!$OMP do
+    do j=0,jm
+    do i=0,im
+      !
+      do k=-4,km+4
+        UU=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2)+  &
+           dxi(i,j,k,3,3)*vel(i,j,k,3)
+        Fcs(1,k)=jacob(i,j,k)* q(i,j,k,1)*UU
+        Fcs(2,k)=jacob(i,j,k)*(q(i,j,k,2)*UU+dxi(i,j,k,3,1)*prs(i,j,k))
+        Fcs(3,k)=jacob(i,j,k)*(q(i,j,k,3)*UU+dxi(i,j,k,3,2)*prs(i,j,k))
+        Fcs(4,k)=jacob(i,j,k)*(q(i,j,k,4)*UU+dxi(i,j,k,3,3)*prs(i,j,k))
+        Fcs(5,k)=jacob(i,j,k)*(q(i,j,k,5)+prs(i,j,k))*UU 
+      end do
+      !
+      dFcs(1,:)=ddfc(fcs(1,:),conschm,npdck,km,alfa_con,cck)
+      dFcs(2,:)=ddfc(fcs(2,:),conschm,npdck,km,alfa_con,cck)
+      dFcs(3,:)=ddfc(fcs(3,:),conschm,npdck,km,alfa_con,cck)
+      dFcs(4,:)=ddfc(fcs(4,:),conschm,npdck,km,alfa_con,cck)
+      dFcs(5,:)=ddfc(fcs(5,:),conschm,npdck,km,alfa_con,cck)
+      !
+      qrhs(i,j,:,1)=qrhs(i,j,:,1)+dFcs(1,:)
+      qrhs(i,j,:,2)=qrhs(i,j,:,2)+dFcs(2,:)
+      qrhs(i,j,:,3)=qrhs(i,j,:,3)+dFcs(3,:)
+      qrhs(i,j,:,4)=qrhs(i,j,:,4)+dFcs(4,:)
+      qrhs(i,j,:,5)=qrhs(i,j,:,5)+dFcs(5,:)
+      !
+    end do
+    end do
+    !!$OMP end do
+    deallocate(Fcs,dFcs)
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along k direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!$OMP END PARALLEL
+    !
+  end subroutine ConvRsdCal6_legc
+  !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the diffusion term with 6-order
   ! Compact Central scheme.
@@ -808,8 +947,8 @@ module solver
     use tecio
     !
     ! local data
-    integer :: i,j,k,n
-    real(8),allocatable :: df(:),ff(:)
+    integer :: i,j,k,n,ncolm
+    real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux
     real(8) :: miu,miu2,hcc,s11,s12,s13,s22,s23,s33,skk
     !
@@ -819,96 +958,145 @@ module solver
     !
     ! calculate velocity and temperature gradient
     !
-    allocate(df(0:im))
+    ncolm=4+num_species
+    !
+    allocate(ff(-hm:im+hm,ncolm),df(0:im,ncolm))
     !
     do k=0,km
     do j=0,jm
       !
-      do n=1,3
-        df=ddfc(vel(:,j,k,n),difschm,npdci,im,alfa_dif,dci)
-        dvel(:,j,k,n,1)=dvel(:,j,k,n,1)+df*dxi(0:im,j,k,1,1)
-        dvel(:,j,k,n,2)=dvel(:,j,k,n,2)+df*dxi(0:im,j,k,1,2)
-        dvel(:,j,k,n,3)=dvel(:,j,k,n,3)+df*dxi(0:im,j,k,1,3)
-        !
-      enddo
-      !
-      df=ddfc(tmp(:,j,k),difschm,npdci,im,alfa_dif,dci)
-      dtmp(:,j,k,1)=dtmp(:,j,k,1)+df*dxi(0:im,j,k,1,1)
-      dtmp(:,j,k,2)=dtmp(:,j,k,2)+df*dxi(0:im,j,k,1,2)
-      dtmp(:,j,k,3)=dtmp(:,j,k,3)+df*dxi(0:im,j,k,1,3)
+      ff(:,1)=vel(:,j,k,1)
+      ff(:,2)=vel(:,j,k,2)
+      ff(:,3)=vel(:,j,k,3)
+      ff(:,4)=tmp(:,j,k)
       !
       if(num_species>1) then
         do n=1,num_species
-          df=ddfc(spc(:,j,k,n),difschm,npdci,im,alfa_dif,dci)
-          dspc(:,j,k,n,1)=dspc(:,j,k,n,1)+df*dxi(0:im,j,k,1,1)
-          dspc(:,j,k,n,2)=dspc(:,j,k,n,2)+df*dxi(0:im,j,k,1,2)
-          dspc(:,j,k,n,3)=dspc(:,j,k,n,3)+df*dxi(0:im,j,k,1,3)
+          ff(:,4+n)=spc(:,j,k,n)
+        enddo
+      endif
+      !
+      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci,ncolm)
+      !
+      dvel(:,j,k,1,1)=dvel(:,j,k,1,1)+df(:,1)*dxi(0:im,j,k,1,1)
+      dvel(:,j,k,1,2)=dvel(:,j,k,1,2)+df(:,1)*dxi(0:im,j,k,1,2)
+      dvel(:,j,k,1,3)=dvel(:,j,k,1,3)+df(:,1)*dxi(0:im,j,k,1,3)
+      !
+      dvel(:,j,k,2,1)=dvel(:,j,k,2,1)+df(:,2)*dxi(0:im,j,k,1,1)
+      dvel(:,j,k,2,2)=dvel(:,j,k,2,2)+df(:,2)*dxi(0:im,j,k,1,2)
+      dvel(:,j,k,2,3)=dvel(:,j,k,2,3)+df(:,2)*dxi(0:im,j,k,1,3)
+      !
+      dvel(:,j,k,3,1)=dvel(:,j,k,3,1)+df(:,3)*dxi(0:im,j,k,1,1)
+      dvel(:,j,k,3,2)=dvel(:,j,k,3,2)+df(:,3)*dxi(0:im,j,k,1,2)
+      dvel(:,j,k,3,3)=dvel(:,j,k,3,3)+df(:,3)*dxi(0:im,j,k,1,3)
+      !
+      dtmp(:,j,k,1)=dtmp(:,j,k,1)+df(:,4)*dxi(0:im,j,k,1,1)
+      dtmp(:,j,k,2)=dtmp(:,j,k,2)+df(:,4)*dxi(0:im,j,k,1,2)
+      dtmp(:,j,k,3)=dtmp(:,j,k,3)+df(:,4)*dxi(0:im,j,k,1,3)
+      !
+      if(num_species>1) then
+        do n=1,num_species
+          dspc(:,j,k,n,1)=dspc(:,j,k,n,1)+df(:,4+n)*dxi(0:im,j,k,1,1)
+          dspc(:,j,k,n,2)=dspc(:,j,k,n,2)+df(:,4+n)*dxi(0:im,j,k,1,2)
+          dspc(:,j,k,n,3)=dspc(:,j,k,n,3)+df(:,4+n)*dxi(0:im,j,k,1,3)
         enddo
       endif
       !
     enddo
     enddo
     !
-    deallocate(df)
+    deallocate(ff,df)
     !
-    allocate(df(0:jm))
+    allocate(ff(-hm:jm+hm,ncolm),df(0:jm,ncolm))
     do k=0,km
     do i=0,im
       !
-      do n=1,3
-        df=ddfc(vel(i,:,k,n),difschm,npdcj,jm,alfa_dif,dcj)
-        dvel(i,:,k,n,1)=dvel(i,:,k,n,1)+df*dxi(i,0:jm,k,2,1)
-        dvel(i,:,k,n,2)=dvel(i,:,k,n,2)+df*dxi(i,0:jm,k,2,2)
-        dvel(i,:,k,n,3)=dvel(i,:,k,n,3)+df*dxi(i,0:jm,k,2,3)
-      enddo
-      !
-      df=ddfc(tmp(i,:,k),difschm,npdcj,jm,alfa_dif,dcj)
-      dtmp(i,:,k,1)=dtmp(i,:,k,1)+df*dxi(i,0:jm,k,2,1)
-      dtmp(i,:,k,2)=dtmp(i,:,k,2)+df*dxi(i,0:jm,k,2,2)
-      dtmp(i,:,k,3)=dtmp(i,:,k,3)+df*dxi(i,0:jm,k,2,3)
+      ff(:,1)=vel(i,:,k,1)
+      ff(:,2)=vel(i,:,k,2)
+      ff(:,3)=vel(i,:,k,3)
+      ff(:,4)=tmp(i,:,k)
       !
       if(num_species>1) then
         do n=1,num_species
-          df=ddfc(spc(i,:,k,n),difschm,npdcj,jm,alfa_dif,dcj)
-          dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df*dxi(i,0:jm,k,2,1)
-          dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df*dxi(i,0:jm,k,2,2)
-          dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df*dxi(i,0:jm,k,2,3)
+          ff(:,4+n)=spc(i,:,k,n)
+        enddo
+      endif
+      !
+      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj,ncolm)
+      !
+      dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
+      dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(:,1)*dxi(i,0:jm,k,2,2)
+      dvel(i,:,k,1,3)=dvel(i,:,k,1,3)+df(:,1)*dxi(i,0:jm,k,2,3)
+      !
+      dvel(i,:,k,2,1)=dvel(i,:,k,2,1)+df(:,2)*dxi(i,0:jm,k,2,1)
+      dvel(i,:,k,2,2)=dvel(i,:,k,2,2)+df(:,2)*dxi(i,0:jm,k,2,2)
+      dvel(i,:,k,2,3)=dvel(i,:,k,2,3)+df(:,2)*dxi(i,0:jm,k,2,3)
+      !
+      dvel(i,:,k,3,1)=dvel(i,:,k,3,1)+df(:,3)*dxi(i,0:jm,k,2,1)
+      dvel(i,:,k,3,2)=dvel(i,:,k,3,2)+df(:,3)*dxi(i,0:jm,k,2,2)
+      dvel(i,:,k,3,3)=dvel(i,:,k,3,3)+df(:,3)*dxi(i,0:jm,k,2,3)
+      !
+      dtmp(i,:,k,1)=dtmp(i,:,k,1)+df(:,4)*dxi(i,0:jm,k,2,1)
+      dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
+      dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
+      !
+      if(num_species>1) then
+        do n=1,num_species
+          dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
+          dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
+          dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df(:,4+n)*dxi(i,0:jm,k,2,3)
         enddo
       endif
       !
     enddo
     enddo
-    deallocate(df)
+    deallocate(ff,df)
     !
     if(ndims==3) then
-      allocate(df(0:km))
+      allocate(ff(-hm:km+hm,ncolm),df(0:km,ncolm))
       do j=0,jm
       do i=0,im
         !
-        do n=1,3
-          df=ddfc(vel(i,j,:,n),difschm,npdck,km,alfa_dif,dck)
-          dvel(i,j,:,n,1)=dvel(i,j,:,n,1)+df*dxi(i,j,0:km,3,1)
-          dvel(i,j,:,n,2)=dvel(i,j,:,n,2)+df*dxi(i,j,0:km,3,2)
-          dvel(i,j,:,n,3)=dvel(i,j,:,n,3)+df*dxi(i,j,0:km,3,3)
-        enddo
-        !
-        df=ddfc(tmp(i,j,:),difschm,npdck,km,alfa_dif,dck)
-        dtmp(i,j,:,1)=dtmp(i,j,:,1)+df*dxi(i,j,0:km,3,1)
-        dtmp(i,j,:,2)=dtmp(i,j,:,2)+df*dxi(i,j,0:km,3,2)
-        dtmp(i,j,:,3)=dtmp(i,j,:,3)+df*dxi(i,j,0:km,3,3)
+        ff(:,1)=vel(i,j,:,1)
+        ff(:,2)=vel(i,j,:,2)
+        ff(:,3)=vel(i,j,:,3)
+        ff(:,4)=tmp(i,j,:)
         !
         if(num_species>1) then
           do n=1,num_species
-            df=ddfc(spc(i,j,:,n),difschm,npdck,km,alfa_dif,dck)
-            dspc(i,j,:,n,1)=dspc(i,j,:,n,1)+df*dxi(i,j,0:km,3,1)
-            dspc(i,j,:,n,2)=dspc(i,j,:,n,2)+df*dxi(i,j,0:km,3,2)
-            dspc(i,j,:,n,3)=dspc(i,j,:,n,3)+df*dxi(i,j,0:km,3,3)
+            ff(:,4+n)=spc(i,j,:,n)
+          enddo
+        endif
+        !
+        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck,ncolm)
+        !
+        dvel(i,j,:,1,1)=dvel(i,j,:,1,1)+df(:,1)*dxi(i,j,0:km,3,1)
+        dvel(i,j,:,1,2)=dvel(i,j,:,1,2)+df(:,1)*dxi(i,j,0:km,3,2)
+        dvel(i,j,:,1,3)=dvel(i,j,:,1,3)+df(:,1)*dxi(i,j,0:km,3,3)
+        !
+        dvel(i,j,:,2,1)=dvel(i,j,:,2,1)+df(:,2)*dxi(i,j,0:km,3,1)
+        dvel(i,j,:,2,2)=dvel(i,j,:,2,2)+df(:,2)*dxi(i,j,0:km,3,2)
+        dvel(i,j,:,2,3)=dvel(i,j,:,2,3)+df(:,2)*dxi(i,j,0:km,3,3)
+        !
+        dvel(i,j,:,3,1)=dvel(i,j,:,3,1)+df(:,3)*dxi(i,j,0:km,3,1)
+        dvel(i,j,:,3,2)=dvel(i,j,:,3,2)+df(:,3)*dxi(i,j,0:km,3,2)
+        dvel(i,j,:,3,3)=dvel(i,j,:,3,3)+df(:,3)*dxi(i,j,0:km,3,3)
+        !
+        dtmp(i,j,:,1)=dtmp(i,j,:,1)+df(:,4)*dxi(i,j,0:km,3,1)
+        dtmp(i,j,:,2)=dtmp(i,j,:,2)+df(:,4)*dxi(i,j,0:km,3,2)
+        dtmp(i,j,:,3)=dtmp(i,j,:,3)+df(:,4)*dxi(i,j,0:km,3,3)
+        !
+        if(num_species>1) then
+          do n=1,num_species
+            dspc(i,j,:,n,1)=dspc(i,j,:,n,1)+df(:,4+n)*dxi(i,j,0:km,3,1)
+            dspc(i,j,:,n,2)=dspc(i,j,:,n,2)+df(:,4+n)*dxi(i,j,0:km,3,2)
+            dspc(i,j,:,n,3)=dspc(i,j,:,n,3)+df(:,4+n)*dxi(i,j,0:km,3,3)
           enddo
         endif
         !
       enddo
       enddo
-      deallocate(df)
+      deallocate(ff,df)
     endif
     !
     allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
@@ -958,42 +1146,31 @@ module solver
     !
     ! Calculating along i direction.
     !
-    allocate(ff(-hm:im+hm),df(0:im))
+    ncolm=4
+    !
+    allocate(ff(-hm:im+hm,1:ncolm),df(0:im,1:ncolm))
     do k=0,km
     do j=0,jm
       !
-      ff(:)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                          &
-              sigma(:,j,k,2)*dxi(:,j,k,1,2) +                          &
-              sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,1)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                        &
+                sigma(:,j,k,2)*dxi(:,j,k,1,2) +                        &
+                sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,2)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                        &
+                sigma(:,j,k,4)*dxi(:,j,k,1,2) +                        &
+                sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,3)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                        &
+                sigma(:,j,k,5)*dxi(:,j,k,1,2) +                        &
+                sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,4)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                        &
+                qflux(:,j,k,2)*dxi(:,j,k,1,2) +                        &
+                qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       !
-      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci,ncolm)
       !
-      qrhs(:,j,k,2)=qrhs(:,j,k,2)+df
-      !
-      ff(:)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                          &
-              sigma(:,j,k,4)*dxi(:,j,k,1,2) +                          &
-              sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      !
-      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
-      !
-      qrhs(:,j,k,3)=qrhs(:,j,k,3)+df
-      !
-      ff(:)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                          &
-              sigma(:,j,k,5)*dxi(:,j,k,1,2) +                          &
-              sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      !
-      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
-      !
-      qrhs(:,j,k,4)=qrhs(:,j,k,4)+df
-      !
-      ff(:)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                          &
-              qflux(:,j,k,2)*dxi(:,j,k,1,2) +                          &
-              qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      !
-      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
-      !
-      qrhs(:,j,k,5)=qrhs(:,j,k,5)+df
-      !
+      qrhs(:,j,k,2)=qrhs(:,j,k,2)+df(:,1)
+      qrhs(:,j,k,3)=qrhs(:,j,k,3)+df(:,2)
+      qrhs(:,j,k,4)=qrhs(:,j,k,4)+df(:,3)
+      qrhs(:,j,k,5)=qrhs(:,j,k,5)+df(:,4)
       !
     enddo
     enddo
@@ -1005,41 +1182,29 @@ module solver
     !
     ! Calculating along j direction.
     !
-    allocate(ff(-hm:jm+hm),df(0:jm))
+    allocate(ff(-hm:jm+hm,1:ncolm),df(0:jm,1:ncolm))
     do k=0,km
     do i=0,im
       !
-      ff(:)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                          &
-              sigma(i,:,k,2)*dxi(i,:,k,2,2) +                          &
-              sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(:,1)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
+                sigma(i,:,k,2)*dxi(i,:,k,2,2) +                        &
+                sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(:,2)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                        &
+                sigma(i,:,k,4)*dxi(i,:,k,2,2) +                        &
+                sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(:,3)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                        &
+                sigma(i,:,k,5)*dxi(i,:,k,2,2) +                        &
+                sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(:,4)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                        &
+                qflux(i,:,k,2)*dxi(i,:,k,2,2) +                        &
+                qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
       !
-      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
+      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj,ncolm)
       !
-      qrhs(i,:,k,2)=qrhs(i,:,k,2)+df
-      !
-      ff(:)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                          &
-              sigma(i,:,k,4)*dxi(i,:,k,2,2) +                          &
-              sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-      !
-      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
-      !
-      qrhs(i,:,k,3)=qrhs(i,:,k,3)+df
-      !
-      ff(:)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                          &
-              sigma(i,:,k,5)*dxi(i,:,k,2,2) +                          &
-              sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-      !
-      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
-      !
-      qrhs(i,:,k,4)=qrhs(i,:,k,4)+df
-      !
-      ff(:)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                          &
-              qflux(i,:,k,2)*dxi(i,:,k,2,2) +                          &
-              qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-      !
-      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
-      !
-      qrhs(i,:,k,5)=qrhs(i,:,k,5)+df
+      qrhs(i,:,k,2)=qrhs(i,:,k,2)+df(:,1)
+      qrhs(i,:,k,3)=qrhs(i,:,k,3)+df(:,2)
+      qrhs(i,:,k,4)=qrhs(i,:,k,4)+df(:,3)
+      qrhs(i,:,k,5)=qrhs(i,:,k,5)+df(:,4)
       !
       !
     enddo
@@ -1053,41 +1218,29 @@ module solver
     if(ndims==3) then
       ! Calculating along j direction.
       !
-      allocate(ff(-hm:km+hm),df(0:km))
+      allocate(ff(-hm:km+hm,1:ncolm),df(0:km,1:ncolm))
       do j=0,jm
       do i=0,im
         !
-        ff(:)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                        &
-                sigma(i,j,:,2)*dxi(i,j,:,3,2) +                        &
-                sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(:,1)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
+                  sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+                  sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(:,2)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                      &
+                  sigma(i,j,:,4)*dxi(i,j,:,3,2) +                      &
+                  sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(:,3)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                      &
+                  sigma(i,j,:,5)*dxi(i,j,:,3,2) +                      &
+                  sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(:,4)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                      &
+                  qflux(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+                  qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
-        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
+        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck,ncolm)
         !
-        qrhs(i,j,:,2)=qrhs(i,j,:,2)+df
-        !
-        ff(:)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                        &
-                sigma(i,j,:,4)*dxi(i,j,:,3,2) +                        &
-                sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        !
-        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
-        !
-        qrhs(i,j,:,3)=qrhs(i,j,:,3)+df
-        !
-        ff(:)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                        &
-                sigma(i,j,:,5)*dxi(i,j,:,3,2) +                        &
-                sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        !
-        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
-        !
-        qrhs(i,j,:,4)=qrhs(i,j,:,4)+df
-        !
-        ff(:)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                        &
-                qflux(i,j,:,2)*dxi(i,j,:,3,2) +                        &
-                qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        !
-        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
-        !
-        qrhs(i,j,:,5)=qrhs(i,j,:,5)+df
+        qrhs(i,j,:,2)=qrhs(i,j,:,2)+df(:,1)
+        qrhs(i,j,:,3)=qrhs(i,j,:,3)+df(:,2)
+        qrhs(i,j,:,4)=qrhs(i,j,:,4)+df(:,3)
+        qrhs(i,j,:,5)=qrhs(i,j,:,5)+df(:,4)
         !
         !
       enddo
@@ -1137,6 +1290,7 @@ module solver
     !
     ! local data
     integer :: i,j,k,m
+    real(8),allocatable :: phi(:,:),fph(:,:)
     !
 #ifdef cputime
     real(8) :: time_beg
@@ -1147,15 +1301,22 @@ module solver
     ! filtering in i direction
     call dataswap(q,direction=1)
     !
+    allocate(phi(-hm:im+hm,1:numq),fph(0:im,1:numq))
+    !
     do k=0,km
     do j=0,jm
       !
-      do m=1,numq
-        q(0:im,j,k,m)=spafilter10(q(:,j,k,m),npdci,im,alfa_filter,fci)
-      enddo
+      phi(:,:)=q(:,j,k,:)
+      !
+      fph=spafilter10(phi,npdci,im,alfa_filter,fci,numq)
+      !
+      q(0:im,j,k,:)=fph
       !
     end do
     end do
+    !
+    deallocate(phi,fph)
+    !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1163,15 +1324,22 @@ module solver
     ! filtering in j direction
     call dataswap(q,direction=2)
     !
+    allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
+    !
     do k=0,km
     do i=0,im
       !
-      do m=1,numq
-        q(i,0:jm,k,m)=spafilter10(q(i,:,k,m),npdcj,jm,alfa_filter,fcj)
-      enddo
+      phi(:,:)=q(i,:,k,:)
+      !
+      fph=spafilter10(phi,npdcj,jm,alfa_filter,fcj,numq)
+      !
+      q(i,0:jm,k,:)=fph
       !
     end do
     end do
+    !
+    deallocate(phi,fph)
+    !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in j direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1180,16 +1348,23 @@ module solver
       !
       call dataswap(q,direction=3)
       !
+      !
+      allocate(phi(-hm:km+hm,1:numq),fph(0:km,1:numq))
+      !
       ! filtering in k direction
       do j=0,jm
       do i=0,im
         !
-        do m=1,numq
-          q(i,j,0:km,m)=spafilter10(q(i,j,:,m),npdck,km,alfa_filter,fck)
-        enddo
+        phi(:,:)=q(i,j,:,:)
+        !
+        fph=spafilter10(phi,npdck,km,alfa_filter,fck,numq)
+        !
+        q(i,j,0:km,:)=fph
         !
       end do
       end do
+      !
+      deallocate(phi,fph)
       !
     end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

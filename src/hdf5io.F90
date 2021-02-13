@@ -320,7 +320,7 @@ module hdf5io
     integer(hid_t)  :: file, space, dset
     integer(hsize_t) :: ndims(3)
     integer         :: h5error ! error flag
-    integer(hid_t) :: dims_h5(3)
+    integer(hsize_t) :: dims_h5(3)
     !
     !
     call h5open_f(h5error)

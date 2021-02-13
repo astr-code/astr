@@ -13,6 +13,18 @@ module commfunc
   !
   implicit none
   !
+  interface ddfc
+    module procedure ddfc_basic
+    module procedure ddfc_2d
+    ! module procedure ddfc_3d
+    ! module procedure ddfc_4d
+  end interface
+  !
+  interface spafilter10
+    module procedure spafilter10_basic
+    module procedure spafilter10_2d
+  end interface
+  !
   real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),     &
                          coef10i(:),coefb(:,:)
   !
@@ -26,7 +38,7 @@ module commfunc
   !| -------------                                                     |
   !| 08-02-2021  | Created by J. Fang @ Warrington.                    |
   !+-------------------------------------------------------------------+
-  function ddfc(f,stype,ntype,dim,af,cc)
+  function ddfc_basic(f,stype,ntype,dim,af,cc) result(ddfc)
     !
     ! arguments
     character(len=4),intent(in) :: stype
@@ -54,7 +66,109 @@ module commfunc
     !
     return
     !
-  end function ddfc
+  end function ddfc_basic
+  !
+  function ddfc_2d(f,stype,ntype,dim,af,cc,ncolm) result(ddfc)
+    !
+    ! arguments
+    character(len=4),intent(in) :: stype
+    integer,intent(in) :: ntype,dim,ncolm
+    real(8),intent(in) :: f(-hm:dim+hm,1:ncolm)
+    real(8),intent(in),optional :: af(3),cc(1:2,0:dim)
+    real(8) :: ddfc(0:dim,1:ncolm)
+    !
+    ! local data
+    integer :: nscheme,n
+    real(8) :: b(0:dim,1:ncolm)
+    !
+    ! print*,mpirank,'|',dim,im
+    !
+    read(stype(1:3),*) nscheme
+    !
+    if(dim==0) then
+      do n=1,ncolm
+        ddfc(:,n)=f(1,n)-f(0,n)
+      enddo
+    else
+      !
+      b   =ptds2d_rhs(f,dim,nscheme,ntype,ncolm)
+      ddfc=ptds2d_cal(b,af,cc,dim,ntype,ncolm)
+      !
+    endif
+    !
+    return
+    !
+  end function ddfc_2d
+  ! !
+  ! function ddfc_3d(f,stype,ntype,dim,af,cc,ncolm1,ncolm2) result(ddfc)
+  !   !
+  !   ! arguments
+  !   character(len=4),intent(in) :: stype
+  !   integer,intent(in) :: ntype,dim,ncolm1,ncolm2
+  !   real(8),intent(in) :: f(-hm:dim+hm,1:ncolm1,1:ncolm2)
+  !   real(8),intent(in),optional :: af(3),cc(1:2,0:dim)
+  !   real(8) :: ddfc(0:dim,1:ncolm1,1:ncolm2)
+  !   !
+  !   ! local data
+  !   integer :: nscheme,n1,n2
+  !   real(8) :: b(0:dim,1:ncolm1,1:ncolm2)
+  !   !
+  !   ! print*,mpirank,'|',dim,im
+  !   !
+  !   read(stype(1:3),*) nscheme
+  !   !
+  !   if(dim==0) then
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       ddfc(:,n1,n2)=f(1,n1,n2)-f(0,n1,n2)
+  !     enddo
+  !     enddo
+  !   else
+  !     !
+  !     b   =ptds3d_rhs(f,dim,nscheme,ntype,ncolm1,ncolm2)
+  !     ddfc=ptds3d_cal(b,af,cc,dim,ntype,ncolm1,ncolm2)
+  !     !
+  !   endif
+  !   !
+  !   return
+  !   !
+  ! end function ddfc_3d
+  ! !
+  ! function ddfc_4d(f,stype,ntype,dim,af,cc,ncolm1,ncolm2,ncolm3) result(ddfc)
+  !   !
+  !   ! arguments
+  !   character(len=4),intent(in) :: stype
+  !   integer,intent(in) :: ntype,dim,ncolm1,ncolm2,ncolm3
+  !   real(8),intent(in) :: f(-hm:dim+hm,1:ncolm1,1:ncolm2,1:ncolm3)
+  !   real(8),intent(in),optional :: af(3),cc(1:2,0:dim)
+  !   real(8) :: ddfc(0:dim,1:ncolm1,1:ncolm2,1:ncolm3)
+  !   !
+  !   ! local data
+  !   integer :: nscheme,n1,n2,n3
+  !   real(8) :: b(0:dim,1:ncolm1,1:ncolm2,1:ncolm3)
+  !   !
+  !   ! print*,mpirank,'|',dim,im
+  !   !
+  !   read(stype(1:3),*) nscheme
+  !   !
+  !   if(dim==0) then
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       ddfc(:,n1,n2,n3)=f(1,n1,n2,n3)-f(0,n1,n2,n3)
+  !     enddo
+  !     enddo
+  !     enddo
+  !   else
+  !     !
+  !     b   =ptds4d_rhs(f,dim,nscheme,ntype,ncolm1,ncolm2,ncolm3)
+  !     ddfc=ptds4d_cal(b,af,cc,dim,ntype,ncolm1,ncolm2,ncolm3)
+  !     !
+  !   endif
+  !   !
+  !   return
+  !   !
+  ! end function ddfc_4d
   !+-------------------------------------------------------------------+
   !| The end of the function ddf.                                      |
   !+-------------------------------------------------------------------+
@@ -113,7 +227,7 @@ module commfunc
     !
   end function filter8exp
   !
-  function spafilter10(f,ntype,dim,af,fc) result(ff)
+  function spafilter10_basic(f,ntype,dim,af,fc) result(ff)
     !
     ! arguments
     integer,intent(in) :: ntype,dim
@@ -122,7 +236,7 @@ module commfunc
     real(8) :: ff(0:dim)
     !
     ! local data
-    real(8),allocatable :: b(:)
+    real(8) :: b(0:dim)
     integer :: i
     real(8) :: aff(3)
     !
@@ -131,7 +245,7 @@ module commfunc
     aff(3)=af
     ! b =pfilterrhs(f,dim,ntype)
     ! ff=ptdsfilter_cal(b,af,fc,dim,ntype)
-    b=PFilterRHS2(f,dim,ntype)
+    b =PFilterRHS2(f,dim,ntype)
     ff=ptds_cal(b,aff,fc,dim,ntype)
     !
     ! do i=0,dim
@@ -140,7 +254,36 @@ module commfunc
     !
     return
     !
-  end function spafilter10
+  end function spafilter10_basic
+  !
+  function spafilter10_2d(f,ntype,dim,af,fc,ncolm) result(ff)
+    !
+    ! arguments
+    integer,intent(in) :: ntype,dim,ncolm
+    real(8),intent(in) :: f(-hm:dim+hm,1:ncolm)
+    real(8),intent(in) :: af,fc(1:2,-hm:dim+hm)
+    real(8) :: ff(0:dim,1:ncolm)
+    !
+    ! local data
+    real(8) :: b(0:dim,1:ncolm)
+    integer :: i
+    real(8) :: aff(3)
+    !
+    aff(1)=0.d0
+    aff(2)=af
+    aff(3)=af
+    ! b =pfilterrhs(f,dim,ntype)
+    ! ff=ptdsfilter_cal(b,af,fc,dim,ntype)
+    b =PFilterRHS2_2d(f,dim,ntype,ncolm)
+    ff=ptds2d_cal(b,aff,fc,dim,ntype,ncolm)
+    !
+    ! do i=0,dim
+    !     ff(i)=filter8exp(f(i-4:i+4))
+    ! enddo
+    !
+    return
+    !
+  end function spafilter10_2d
   !+-------------------------------------------------------------------+
   !| The end of the function spafilter10.                              |
   !+-------------------------------------------------------------------+
@@ -343,7 +486,7 @@ module commfunc
   function pfilterrhs2(var,dim,ntype) result(b)
     !
     
-    integer,intent(in) :: dim,ntype
+    integer,intent(in) :: dim,ntype 
     real(8),intent(in) :: var(-hm:dim+hm)
     real(8) :: b(0:dim)
     !
@@ -398,22 +541,43 @@ module commfunc
         !
       end do
       !
-      b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
-             + 0.205078125d0*(var(dim-1)+var(dim+1))   &
-             -   0.1171875d0*(var(dim-2)+var(dim+2))   &
-             +0.0439453125d0*(var(dim-3)+var(dim+3))   &
-             - 0.009765625d0*(var(dim-4)+var(dim+4))   &
-             +0.0009765625d0*(var(dim-5)+var(dim+5))
-    
+      if(hm>=5) then
+        b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
+               + 0.205078125d0*(var(dim-1)+var(dim+1))   &
+               -   0.1171875d0*(var(dim-2)+var(dim+2))   &
+               +0.0439453125d0*(var(dim-3)+var(dim+3))   &
+               - 0.009765625d0*(var(dim-4)+var(dim+4))   &
+               +0.0009765625d0*(var(dim-5)+var(dim+5))
+      elseif(hm>=4) then
+        b(dim)=var(dim)-(0.2734375d0*var(dim)                          &
+                     -0.21875d0*(var(dim-1)+var(dim+1))                &
+                     +0.109375d0*(var(dim-2)+var(dim+2))               &
+                     -3.125d-2*(var(dim-3)+var(dim+3))                 &
+                   +3.90625d-3*(var(dim-4)+var(dim+4)))*1.d0
+      else
+        print*,' !! halo cell not sufficient !!'
+        stop ' error01 @ pfilterrhs2'
+      endif
+      !
     elseif(ntype==2) then
       ! the block with boundary at m
-      b(0)=    0.376953125d0*(var(0)  +var(0))   &
-             + 0.205078125d0*(var(-1) +var(1))   &
-             -   0.1171875d0*(var(-2) +var(2))   &
-             +0.0439453125d0*(var(-3) +var(3))   &
-             - 0.009765625d0*(var(-4) +var(4))   &
-             +0.0009765625d0*(var(-5) +var(5))
-    
+      if(hm>=5) then
+        b(0)=    0.376953125d0*(var(0)  +var(0))   &
+               + 0.205078125d0*(var(-1) +var(1))   &
+               -   0.1171875d0*(var(-2) +var(2))   &
+               +0.0439453125d0*(var(-3) +var(3))   &
+               - 0.009765625d0*(var(-4) +var(4))   &
+               +0.0009765625d0*(var(-5) +var(5))
+      elseif(hm>=4) then
+        b(0)=var(0)-(0.2734375d0*var(0)-0.21875d0*(var(-1)+var(1))     &
+                    +0.109375d0*(var(-2)+var(2))                       &
+                    -3.125d-2*(var(-3)+var(3))                         &
+                    +3.90625d-3*(var(-4)+var(4)))*1.d0
+      else
+        print*,' !! halo cell not sufficient !!'
+        stop ' error02 @ pfilterrhs2'
+      endif
+      !
       ! inner block
       do l=1,dim-5
         !
@@ -459,13 +623,23 @@ module commfunc
     elseif(ntype==3) then
       ! inner block
       !
-      b(0)=    0.376953125d0*(var(0)  +var(0))   &
-             + 0.205078125d0*(var(-1) +var(1))   &
-             -   0.1171875d0*(var(-2) +var(2))   &
-             +0.0439453125d0*(var(-3) +var(3))   &
-             - 0.009765625d0*(var(-4) +var(4))   &
-             +0.0009765625d0*(var(-5) +var(5))
-    
+      if(hm>=5) then
+        b(0)=    0.376953125d0*(var(0)  +var(0))   &
+               + 0.205078125d0*(var(-1) +var(1))   &
+               -   0.1171875d0*(var(-2) +var(2))   &
+               +0.0439453125d0*(var(-3) +var(3))   &
+               - 0.009765625d0*(var(-4) +var(4))   &
+               +0.0009765625d0*(var(-5) +var(5))
+      elseif(hm>=4) then
+        b(0)=var(0)-(0.2734375d0*var(0)-0.21875d0*(var(-1)+var(1))     &
+                    +0.109375d0*(var(-2)+var(2))                       &
+                    -3.125d-2*(var(-3)+var(3))                         &
+                    +3.90625d-3*(var(-4)+var(4)))*1.d0
+      else
+        print*,' !! halo cell not sufficient !!'
+        stop ' error03 @ pfilterrhs2'
+      endif
+      !
       ! inner block
       do l=1,dim-1
         !
@@ -481,12 +655,24 @@ module commfunc
         !
       end do
       !
-      b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
-             + 0.205078125d0*(var(dim-1)+var(dim+1))   &
-             -   0.1171875d0*(var(dim-2)+var(dim+2))   &
-             +0.0439453125d0*(var(dim-3)+var(dim+3))   &
-             - 0.009765625d0*(var(dim-4)+var(dim+4))   &
-             +0.0009765625d0*(var(dim-5)+var(dim+5))
+      if(hm>=5) then
+        b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
+               + 0.205078125d0*(var(dim-1)+var(dim+1))   &
+               -   0.1171875d0*(var(dim-2)+var(dim+2))   &
+               +0.0439453125d0*(var(dim-3)+var(dim+3))   &
+               - 0.009765625d0*(var(dim-4)+var(dim+4))   &
+               +0.0009765625d0*(var(dim-5)+var(dim+5))
+      elseif(hm>=4) then
+        b(dim)=var(dim)-(0.2734375d0*var(dim)                          &
+                     -0.21875d0*(var(dim-1)+var(dim+1))                &
+                     +0.109375d0*(var(dim-2)+var(dim+2))               &
+                     -3.125d-2*(var(dim-3)+var(dim+3))                 &
+                   +3.90625d-3*(var(dim-4)+var(dim+4)))*1.d0
+      else
+        print*,' !! halo cell not sufficient !!'
+        stop ' error04 @ pfilterrhs2'
+      endif
+      !
     
     else
       print*,' !! error in subroutine pfilterrhs2!'
@@ -494,6 +680,202 @@ module commfunc
     !
     !
   end function pfilterrhs2
+  !
+  function PFilterRHS2_2d(var,dim,ntype,ncolm) result(b)
+    !
+    
+    integer,intent(in) :: dim,ntype ,ncolm
+    real(8),intent(in) :: var(-hm:dim+hm,1:ncolm)
+    real(8) :: b(0:dim,1:ncolm)
+    !
+    ! local data
+    integer :: l,n
+    real(8) :: var0,var1,var2,var3,var4,var5
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! dim: dimensions in the direction.
+    ! var: the variable of the filetering.
+    ! var* : temporary variable.
+    ! b: return variable.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(ntype==1) then
+      ! the block with boundary at 0
+      do n=1,ncolm
+        !
+        b(0,n)=var(0,n)
+        !
+        b(1,n)=coefb(1,0)*var(0,n)+coefb(1,1)*var(1,n)+                  &
+               coefb(1,2)*var(2,n)+coefb(1,3)*var(3,n)+                  &
+               coefb(1,4)*var(4,n)+coefb(1,5)*var(5,n)+                  &
+               coefb(1,6)*var(6,n)
+        !
+        b(2,n)=coefb(2,0)*var(0,n)+coefb(2,1)*var(1,n)+                  &
+               coefb(2,2)*var(2,n)+coefb(2,3)*var(3,n)+                  &
+               coefb(2,4)*var(4,n)+coefb(2,5)*var(5,n)+                  &
+               coefb(2,6)*var(6,n)
+        !
+        b(3,n)=coef6i(0)*(var(3,n)+var(3,n))+                            &
+               coef6i(1)*(var(4,n)+var(2,n))+                            &
+               coef6i(2)*(var(5,n)+var(1,n))+                            &
+               coef6i(3)*(var(6,n)+var(0,n))
+        !
+        b(4,n)=coef8i(0)*(var(4,n)+var(4,n)) +                           &
+               coef8i(1)*(var(5,n)+var(3,n)) +                           &
+               coef8i(2)*(var(6,n)+var(2,n)) +                           &
+               coef8i(3)*(var(7,n)+var(1,n)) +                           &
+               coef8i(4)*(var(8,n)+var(0,n))
+        !
+        ! inner block
+        do l=5,dim-1
+          !
+          b(l,n)=coef10i(0)*(var(l,n)  +var(l,n))  +                     &
+                 coef10i(1)*(var(l+1,n)+var(l-1,n))+                     &
+                 coef10i(2)*(var(l+2,n)+var(l-2,n))+                     &
+                 coef10i(3)*(var(l+3,n)+var(l-3,n))+                     &
+                 coef10i(4)*(var(l+4,n)+var(l-4,n))+                     &
+                 coef10i(5)*(var(l+5,n)+var(l-5,n)) 
+          !
+        end do
+        !
+        if(hm>=5) then
+          b(dim,n)=  0.376953125d0*(var(dim,n)  +var(dim,n))             &
+                   + 0.205078125d0*(var(dim-1,n)+var(dim+1,n))           &
+                   -   0.1171875d0*(var(dim-2,n)+var(dim+2,n))           &
+                   +0.0439453125d0*(var(dim-3,n)+var(dim+3,n))           &
+                   - 0.009765625d0*(var(dim-4,n)+var(dim+4,n))           &
+                   +0.0009765625d0*(var(dim-5,n)+var(dim+5,n))
+        elseif(hm>=4) then
+          b(dim,n)=var(dim,n)-(0.2734375d0*var(dim,n)                    &
+                       -0.21875d0*(var(dim-1,n)+var(dim+1,n))            &
+                       +0.109375d0*(var(dim-2,n)+var(dim+2,n))           &
+                       -3.125d-2*(var(dim-3,n)+var(dim+3,n))             &
+                     +3.90625d-3*(var(dim-4,n)+var(dim+4,n)))*1.d0
+        else
+          print*,' !! halo cell not sufficient !!'
+          stop ' error01 @ PFilterRHS2_2d'
+        endif
+        !
+      enddo
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at m
+      do n=1,ncolm
+        !
+        if(hm>=5) then
+          b(0,n)=    0.376953125d0*(var(0,n)  +var(0,n))                 &
+                   + 0.205078125d0*(var(-1,n) +var(1,n))                 &
+                   -   0.1171875d0*(var(-2,n) +var(2,n))                 &
+                   +0.0439453125d0*(var(-3,n) +var(3,n))                 &
+                   - 0.009765625d0*(var(-4,n) +var(4,n))                 &
+                   +0.0009765625d0*(var(-5,n) +var(5,n))              
+        elseif(hm>=4) then
+          b(0,n)=var(0,n)-(0.2734375d0*var(0,n)-                         &
+                        0.21875d0*(var(-1,n)+var(1,n))                   &
+                      +0.109375d0*(var(-2,n)+var(2,n))                   &
+                        -3.125d-2*(var(-3,n)+var(3,n))                   &
+                      +3.90625d-3*(var(-4,n)+var(4,n)))*1.d0
+        else
+          print*,' !! halo cell not sufficient !!'
+          stop ' error02 @ PFilterRHS2_2d'
+        endif
+        !
+        ! inner block
+        do l=1,dim-5
+          !
+          b(l,n)=coef10i(0)*(var(l,n)  +var(l,n))  +                     &
+                 coef10i(1)*(var(l+1,n)+var(l-1,n))+                     &
+                 coef10i(2)*(var(l+2,n)+var(l-2,n))+                     &
+                 coef10i(3)*(var(l+3,n)+var(l-3,n))+                     &
+                 coef10i(4)*(var(l+4,n)+var(l-4,n))+                     &
+                 coef10i(5)*(var(l+5,n)+var(l-5,n)) 
+          !
+        end do
+        !
+        b(dim-4,n)=coef8i(0)*(var(dim-4,n)+var(dim-4,n)) +               &
+                   coef8i(1)*(var(dim-3,n)+var(dim-5,n)) +               &
+                   coef8i(2)*(var(dim-2,n)+var(dim-6,n)) +               &
+                   coef8i(3)*(var(dim-1,n)+var(dim-7,n)) +               &
+                   coef8i(4)*(var(dim,n)  +var(dim-8,n))
+        !
+        b(dim-3,n)=coef6i(0)*(var(dim-3,n)+var(dim-3,n))+                &
+                   coef6i(1)*(var(dim-2,n)+var(dim-4,n))+                &
+                   coef6i(2)*(var(dim-1,n)+var(dim-5,n))+                &
+                   coef6i(3)*(var(dim,n)  +var(dim-6,n))
+        !
+        b(dim-2,n)=coefb(2,0)*var(dim,n)  +coefb(2,1)*var(dim-1,n)+      &
+                   coefb(2,2)*var(dim-2,n)+coefb(2,3)*var(dim-3,n)+      &
+                   coefb(2,4)*var(dim-4,n)+coefb(2,5)*var(dim-5,n)+      &
+                   coefb(2,6)*var(dim-6,n)
+        !  
+        b(dim-1,n)=coefb(1,0)*var(dim,n)  +coefb(1,1)*var(dim-1,n)+      &
+                   coefb(1,2)*var(dim-2,n)+coefb(1,3)*var(dim-3,n)+      &
+                   coefb(1,4)*var(dim-4,n)+coefb(1,5)*var(dim-5,n)+      &
+                   coefb(1,6)*var(dim-6,n)
+        !
+        b(dim,n)=var(dim,n)
+        !
+      enddo
+      !
+    elseif(ntype==3) then
+      ! inner block
+      !
+      do n=1,ncolm
+        !
+        if(hm>=5) then
+          b(0,n)=    0.376953125d0*(var(0,n)  +var(0,n))                 &
+                   + 0.205078125d0*(var(-1,n) +var(1,n))                 &
+                   -   0.1171875d0*(var(-2,n) +var(2,n))                 &
+                   +0.0439453125d0*(var(-3,n) +var(3,n))                 &
+                   - 0.009765625d0*(var(-4,n) +var(4,n))                 &
+                   +0.0009765625d0*(var(-5,n) +var(5,n))              
+        elseif(hm>=4) then
+          b(0,n)=var(0,n)-(0.2734375d0*var(0,n)-                         &
+                        0.21875d0*(var(-1,n)+var(1,n))                   &
+                      +0.109375d0*(var(-2,n)+var(2,n))                   &
+                        -3.125d-2*(var(-3,n)+var(3,n))                   &
+                      +3.90625d-3*(var(-4,n)+var(4,n)))*1.d0
+        else
+          print*,' !! halo cell not sufficient !!'
+          stop ' error03 @ PFilterRHS2_2d'
+        endif
+        !
+        ! inner block
+        do l=1,dim-1
+          !
+          b(l,n)=coef10i(0)*(var(l,n)  +var(l,n))  +                     &
+                 coef10i(1)*(var(l+1,n)+var(l-1,n))+                     &
+                 coef10i(2)*(var(l+2,n)+var(l-2,n))+                     &
+                 coef10i(3)*(var(l+3,n)+var(l-3,n))+                     &
+                 coef10i(4)*(var(l+4,n)+var(l-4,n))+                     &
+                 coef10i(5)*(var(l+5,n)+var(l-5,n)) 
+          !
+        end do
+        !
+        if(hm>=5) then
+          b(dim,n)=  0.376953125d0*(var(dim,n)  +var(dim,n))             &
+                   + 0.205078125d0*(var(dim-1,n)+var(dim+1,n))           &
+                   -   0.1171875d0*(var(dim-2,n)+var(dim+2,n))           &
+                   +0.0439453125d0*(var(dim-3,n)+var(dim+3,n))           &
+                   - 0.009765625d0*(var(dim-4,n)+var(dim+4,n))           &
+                   +0.0009765625d0*(var(dim-5,n)+var(dim+5,n))
+        elseif(hm>=4) then
+          b(dim,n)=var(dim,n)-(0.2734375d0*var(dim,n)                    &
+                       -0.21875d0*(var(dim-1,n)+var(dim+1,n))            &
+                       +0.109375d0*(var(dim-2,n)+var(dim+2,n))           &
+                       -3.125d-2*(var(dim-3,n)+var(dim+3,n))             &
+                     +3.90625d-3*(var(dim-4,n)+var(dim+4,n)))*1.d0
+        else
+          print*,' !! halo cell not sufficient !!'
+          stop ' error04 @ PFilterRHS2_2d'
+        endif
+        !
+      enddo
+    else
+      print*,' !! error in subroutine PFilterRHS2_2d!'
+    end if
+    !
+    !
+  end function PFilterRHS2_2d
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the function pfilterrhs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -892,6 +1274,282 @@ module commfunc
     return
     !
   end function ptds_rhs
+  !
+  function ptds2d_rhs(vin,dim,ns,ntype,ncolm) result(vout)
+    !
+    integer,intent(in) :: dim,ns,ntype,ncolm
+    real(8),intent(in) :: vin(-hm:dim+hm,1:ncolm)
+    real(8) :: vout(0:dim,1:ncolm)
+    !
+    ! local data
+    integer :: l,n
+    real(8) :: var1,var2,var3
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! ns=601: 6-o compact central scheme with
+    ! boundary scheme: 2-4-6.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      if(ns==642) then
+        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+        do n=1,ncolm
+          vout(0,n)=2.d0*  (-vin(0,n)+vin(1,n))
+          vout(1,n)=0.75d0*( vin(2,n)-vin(0,n))
+        enddo
+        !
+      end if
+      !
+      do n=1,ncolm
+        ! first order deritive
+        do l=2,dim-1
+          vout(l,n)=num7d9* (vin(l+1,n)-vin(l-1,n))+                   &
+                    num1d36*(vin(l+2,n)-vin(l-2,n))
+        end do
+        vout(dim,n)=0.75d0 *(vin(dim+1,n)-vin(dim-1,n))-               &
+                    0.15d0 *(vin(dim+2,n)-vin(dim-2,n))+               &
+                    num1d60*(vin(dim+3,n)-vin(dim-3,n))
+      enddo
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      ! first order deritive
+      do n=1,ncolm
+        vout(0,n)=0.75d0* (vin(1,n)-vin(-1,n)) -                      &
+                  0.15d0* (vin(2,n)-vin(-2,n)) +                      &
+                  num1d60*(vin(3,n)-vin(-3,n))
+        do l=1,dim-2
+          vout(l,n)=num7d9* (vin(l+1,n)-vin(l-1,n))+                  &
+                    num1d36*(vin(l+2,n)-vin(l-2,n))
+        end do
+      enddo
+      !
+      if(ns==642) then
+        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+        do n=1,ncolm
+          vout(dim-1,n)=0.75d0*( vin(dim,n)  -vin(dim-2,n))
+          vout(dim,n)  =2.d0*  (-vin(dim-1,n)+vin(dim,n))
+        end do
+      end if
+      !
+    elseif(ntype==3) then
+      ! inner block
+      do n=1,ncolm
+        vout(0,n)=0.75d0* (vin(1,n)-vin(-1,n)) -                       &
+                  0.15d0* (vin(2,n)-vin(-2,n))+                        &
+                  num1d60*(vin(3,n)-vin(-3,n))
+        do l=1,dim-1
+          vout(l,n)=num7d9* (vin(l+1,n)-vin(l-1,n))+                   &
+                    num1d36*(vin(l+2,n)-vin(l-2,n))
+        end do
+          vout(dim,n)=0.75d0* (vin(dim+1,n)-vin(dim-1,n))-            &
+                      0.15d0* (vin(dim+2,n)-vin(dim-2,n))+            &
+                      num1d60*(vin(dim+3,n)-vin(dim-3,n))
+      enddo
+     
+    else
+      print*, ' !! error in subroutine ptds_rhs !'
+      stop
+    end if
+    !
+    return
+    !
+  end function ptds2d_rhs
+  !
+  ! function ptds3d_rhs(vin,dim,ns,ntype,ncolm1,ncolm2) result(vout)
+  !   !
+  !   integer,intent(in) :: dim,ns,ntype,ncolm1,ncolm2
+  !   real(8),intent(in) :: vin(-hm:dim+hm,1:ncolm1,1:ncolm2)
+  !   real(8) :: vout(0:dim,1:ncolm1,1:ncolm2)
+  !   !
+  !   ! local data
+  !   integer :: l,n1,n2
+  !   real(8) :: var1,var2,var3
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   ! ns=601: 6-o compact central scheme with
+  !   ! boundary scheme: 2-4-6.
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   !
+  !   if(ntype==1) then
+  !     ! the block with boundary at i==0
+  !     if(ns==642) then
+  !       ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+  !       do n2=1,ncolm2
+  !       do n1=1,ncolm1
+  !         vout(0,n1,n2)=2.d0*  (-vin(0,n1,n2)+vin(1,n1,n2))
+  !         vout(1,n1,n2)=0.75d0*( vin(2,n1,n2)-vin(0,n1,n2))
+  !       enddo
+  !       enddo
+  !       !
+  !     end if
+  !     !
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       ! first order deritive
+  !       do l=2,dim-1
+  !         vout(l,n1,n2)=num7d9* (vin(l+1,n1,n2)-vin(l-1,n1,n2))+      &
+  !                   num1d36*(vin(l+2,n1,n2)-vin(l-2,n1,n2))
+  !       end do
+  !       vout(dim,n1,n2)=0.75d0 *(vin(dim+1,n1,n2)-vin(dim-1,n1,n2))-   &
+  !                   0.15d0 *(vin(dim+2,n1,n2)-vin(dim-2,n1,n2))+       &
+  !                   num1d60*(vin(dim+3,n1,n2)-vin(dim-3,n1,n2))
+  !     enddo
+  !     enddo
+  !     !
+  !   elseif(ntype==2) then
+  !     ! the block with boundary at i==im
+  !     ! first order deritive
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       vout(0,n1,n2)=0.75d0* (vin(1,n1,n2)-vin(-1,n1,n2)) -           &
+  !                 0.15d0* (vin(2,n1,n2)-vin(-2,n1,n2)) +               &
+  !                 num1d60*(vin(3,n1,n2)-vin(-3,n1,n2))
+  !       do l=1,dim-2
+  !         vout(l,n1,n2)=num7d9* (vin(l+1,n1,n2)-vin(l-1,n1,n2))+       &
+  !                   num1d36*(vin(l+2,n1,n2)-vin(l-2,n1,n2))
+  !       end do
+  !     enddo
+  !     enddo
+  !     !
+  !     if(ns==642) then
+  !       ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+  !       !
+  !       do n2=1,ncolm2
+  !       do n1=1,ncolm1
+  !         vout(dim-1,n1,n2)=0.75d0*( vin(dim,n1,n2)  -vin(dim-2,n1,n2))
+  !         vout(dim,n1,n2)  =2.d0*  (-vin(dim-1,n1,n2)+vin(dim,n1,n2))
+  !       end do
+  !       end do
+  !     end if
+  !     !
+  !   elseif(ntype==3) then
+  !     ! inner block
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       vout(0,n1,n2)=0.75d0* (vin(1,n1,n2)-vin(-1,n1,n2)) -           &
+  !                 0.15d0* (vin(2,n1,n2)-vin(-2,n1,n2))+                &
+  !                 num1d60*(vin(3,n1,n2)-vin(-3,n1,n2))
+  !       do l=1,dim-1
+  !         vout(l,n1,n2)=num7d9* (vin(l+1,n1,n2)-vin(l-1,n1,n2))+       &
+  !                   num1d36*(vin(l+2,n1,n2)-vin(l-2,n1,n2))
+  !       end do
+  !         vout(dim,n1,n2)=0.75d0* (vin(dim+1,n1,n2)-vin(dim-1,n1,n2))- &
+  !                     0.15d0* (vin(dim+2,n1,n2)-vin(dim-2,n1,n2))+     &
+  !                     num1d60*(vin(dim+3,n1,n2)-vin(dim-3,n1,n2))
+  !     enddo
+  !     enddo
+     
+  !   else
+  !     print*, ' !! error in subroutine ptds_rhs !'
+  !     stop
+  !   end if
+  !   !
+  !   return
+  !   !
+  ! end function ptds3d_rhs
+  ! !
+  ! function ptds4d_rhs(vin,dim,ns,ntype,ncolm1,ncolm2,ncolm3) result(vout)
+  !   !
+  !   integer,intent(in) :: dim,ns,ntype,ncolm1,ncolm2,ncolm3
+  !   real(8),intent(in) :: vin(-hm:dim+hm,1:ncolm1,1:ncolm2,1:ncolm3)
+  !   real(8) :: vout(0:dim,1:ncolm1,1:ncolm2,1:ncolm3)
+  !   !
+  !   ! local data
+  !   integer :: l,n1,n2,n3
+  !   real(8) :: var1,var2,var3
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   ! ns=601: 6-o compact central scheme with
+  !   ! boundary scheme: 2-4-6.
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   !
+  !   if(ntype==1) then
+  !     ! the block with boundary at i==0
+  !     if(ns==642) then
+  !       ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+  !       do n3=1,ncolm3
+  !       do n2=1,ncolm2
+  !       do n1=1,ncolm1
+  !         vout(0,n1,n2,n3)=2.d0*  (-vin(0,n1,n2,n3)+vin(1,n1,n2,n3))
+  !         vout(1,n1,n2,n3)=0.75d0*( vin(2,n1,n2,n3)-vin(0,n1,n2,n3))
+  !       enddo
+  !       enddo
+  !       enddo
+  !       !
+  !     end if
+  !     !
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       ! first order deritive
+  !       do l=2,dim-1
+  !         vout(l,n1,n2,n3)=num7d9* (vin(l+1,n1,n2,n3)-vin(l-1,n1,n2,n3))+      &
+  !                   num1d36*(vin(l+2,n1,n2,n3)-vin(l-2,n1,n2,n3))
+  !       end do
+  !       vout(dim,n1,n2,n3)=0.75d0 *(vin(dim+1,n1,n2,n3)-vin(dim-1,n1,n2,n3))-   &
+  !                   0.15d0 *(vin(dim+2,n1,n2,n3)-vin(dim-2,n1,n2,n3))+       &
+  !                   num1d60*(vin(dim+3,n1,n2,n3)-vin(dim-3,n1,n2,n3))
+  !     enddo
+  !     enddo
+  !     enddo
+  !     !
+  !   elseif(ntype==2) then
+  !     ! the block with boundary at i==im
+  !     ! first order deritive
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       vout(0,n1,n2,n3)=0.75d0* (vin(1,n1,n2,n3)-vin(-1,n1,n2,n3)) -           &
+  !                 0.15d0* (vin(2,n1,n2,n3)-vin(-2,n1,n2,n3)) +               &
+  !                 num1d60*(vin(3,n1,n2,n3)-vin(-3,n1,n2,n3))
+  !       do l=1,dim-2
+  !         vout(l,n1,n2,n3)=num7d9* (vin(l+1,n1,n2,n3)-vin(l-1,n1,n2,n3))+       &
+  !                   num1d36*(vin(l+2,n1,n2,n3)-vin(l-2,n1,n2,n3))
+  !       end do
+  !     enddo
+  !     enddo
+  !     enddo
+  !     !
+  !     if(ns==642) then
+  !       ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+  !       !
+  !       do n3=1,ncolm3
+  !       do n2=1,ncolm2
+  !       do n1=1,ncolm1
+  !         vout(dim-1,n1,n2,n3)=0.75d0*( vin(dim,n1,n2,n3)  -vin(dim-2,n1,n2,n3))
+  !         vout(dim,n1,n2,n3)  =2.d0*  (-vin(dim-1,n1,n2,n3)+vin(dim,n1,n2,n3))
+  !       end do
+  !       end do
+  !       end do
+  !       !
+  !     end if
+  !     !
+  !   elseif(ntype==3) then
+  !     ! inner block
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       vout(0,n1,n2,n3)=0.75d0* (vin(1,n1,n2,n3)-vin(-1,n1,n2,n3)) -           &
+  !                 0.15d0* (vin(2,n1,n2,n3)-vin(-2,n1,n2,n3))+                &
+  !                 num1d60*(vin(3,n1,n2,n3)-vin(-3,n1,n2,n3))
+  !       do l=1,dim-1
+  !         vout(l,n1,n2,n3)=num7d9* (vin(l+1,n1,n2,n3)-vin(l-1,n1,n2,n3))+       &
+  !                   num1d36*(vin(l+2,n1,n2,n3)-vin(l-2,n1,n2,n3))
+  !       end do
+  !         vout(dim,n1,n2,n3)=0.75d0* (vin(dim+1,n1,n2,n3)-vin(dim-1,n1,n2,n3))- &
+  !                     0.15d0* (vin(dim+2,n1,n2,n3)-vin(dim-2,n1,n2,n3))+     &
+  !                     num1d60*(vin(dim+3,n1,n2,n3)-vin(dim-3,n1,n2,n3))
+  !     enddo
+  !     enddo
+  !     enddo
+     
+  !   else
+  !     print*, ' !! error in subroutine ptds_rhs !'
+  !     stop
+  !   end if
+  !   !
+  !   return
+  !   !
+  ! end function ptds4d_rhs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the function ptds_rhs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -977,6 +1635,234 @@ module commfunc
     return
     !
   end function ptds_cal
+  !!
+  function ptds2d_cal(bd,af,cc,dim,ntype,ncolm) result(xd)
+    !
+    integer,intent(in) :: dim,ntype,ncolm
+    real(8),intent(in) :: af(3),bd(0:dim,1:ncolm),cc(1:2,0:dim)
+    real(8) :: xd(0:dim,1:ncolm)
+    !
+    ! local data
+    integer :: l,n
+    real(8),allocatable :: yd(:,:)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(3): input dat
+    ! bd: input array
+    ! xd: output array
+    ! cc: input array
+    ! dim: input dat
+    ! l, yd: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate ( yd(0:dim,1:ncolm) )
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      do n=1,ncolm
+        yd(0,n)=bd(0,n)*cc(1,0)
+        yd(1,n)=(bd(1,n)-af(2)*yd(0,n))*cc(1,1)
+        do l=2,dim-2
+          yd(l,n)=(bd(l,n)-af(3)*yd(l-1,n))*cc(1,l)
+        end do
+        yd(dim-1,n)=(bd(dim-1,n)-af(3)*yd(dim-2,n))*cc(1,dim-1)
+        yd(dim,n)=(bd(dim,n)-0.d0*yd(dim-1,n))*cc(1,dim)
+      enddo
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      do n=1,ncolm
+        yd(0,n)=bd(0,n)*cc(1,0)
+        yd(1,n)=(bd(1,n)-af(3)*yd(0,n))*cc(1,1)
+        do l=2,dim-2
+          yd(l,n)=(bd(l,n)-af(3)*yd(l-1,n))*cc(1,l)
+        end do
+        yd(dim-1,n)=(bd(dim-1,n)-af(2)*yd(dim-2,n))*cc(1,dim-1)
+        yd(dim,n)=(bd(dim,n)-af(1)*yd(dim-1,n))*cc(1,dim)
+      enddo
+    elseif(ntype==3) then
+      ! inner block
+      do n=1,ncolm
+        yd(0,n)=bd(0,n)*cc(1,0)
+        yd(1,n)=(bd(1,n)-af(3)*yd(0,n))*cc(1,1)
+        do l=2,dim-2
+          yd(l,n)=(bd(l,n)-af(3)*yd(l-1,n))*cc(1,l)
+        end do
+        yd(dim-1,n)=(bd(dim-1,n)-af(3)*yd(dim-2,n))*cc(1,dim-1)
+        yd(dim,n)=(bd(dim,n)-0.d0*yd(dim-1,n))*cc(1,dim)
+      enddo
+    else
+      print*, ' !! error in subroutine ptds_cal !'
+      stop
+    end if
+    !
+    xd(dim,:)=yd(dim,:)
+    do l=dim-1,0,-1
+      xd(l,:)=yd(l,:)-cc(2,l)*xd(l+1,:)
+    end do
+    !
+    deallocate( yd )
+    !
+    return
+    !
+  end function ptds2d_cal
+  !
+  ! function ptds3d_cal(bd,af,cc,dim,ntype,ncolm1,ncolm2) result(xd)
+  !   !
+  !   integer,intent(in) :: dim,ntype,ncolm1,ncolm2
+  !   real(8),intent(in) :: af(3),bd(0:dim,1:ncolm1,1:ncolm2),cc(1:2,0:dim)
+  !   real(8) :: xd(0:dim,1:ncolm1,1:ncolm2)
+  !   !
+  !   ! local data
+  !   integer :: l,n1,n2
+  !   real(8),allocatable :: yd(:,:,:)
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   ! af(3): input dat
+  !   ! bd: input array
+  !   ! xd: output array
+  !   ! cc: input array
+  !   ! dim: input dat
+  !   ! l, yd: temporary variable
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   allocate ( yd(0:dim,1:ncolm1,1:ncolm2) )
+  !   !
+  !   if(ntype==1) then
+  !     ! the block with boundary at i==0
+  !     !
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       yd(0,n1,n2)=bd(0,n1,n2)*cc(1,0)
+  !       yd(1,n1,n2)=(bd(1,n1,n2)-af(2)*yd(0,n1,n2))*cc(1,1)
+  !       do l=2,dim-2
+  !         yd(l,n1,n2)=(bd(l,n1,n2)-af(3)*yd(l-1,n1,n2))*cc(1,l)
+  !       end do
+  !       yd(dim-1,n1,n2)=(bd(dim-1,n1,n2)-af(3)*yd(dim-2,n1,n2))*cc(1,dim-1)
+  !       yd(dim,n1,n2)=(bd(dim,n1,n2)-0.d0*yd(dim-1,n1,n2))*cc(1,dim)
+  !     enddo
+  !     enddo
+  !   elseif(ntype==2) then
+  !     ! the block with boundary at i==im
+  !     !
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       yd(0,n1,n2)=bd(0,n1,n2)*cc(1,0)
+  !       yd(1,n1,n2)=(bd(1,n1,n2)-af(3)*yd(0,n1,n2))*cc(1,1)
+  !       do l=2,dim-2
+  !         yd(l,n1,n2)=(bd(l,n1,n2)-af(3)*yd(l-1,n1,n2))*cc(1,l)
+  !       end do
+  !       yd(dim-1,n1,n2)=(bd(dim-1,n1,n2)-af(2)*yd(dim-2,n1,n2))*cc(1,dim-1)
+  !       yd(dim,n1,n2)=(bd(dim,n1,n2)-af(1)*yd(dim-1,n1,n2))*cc(1,dim)
+  !     enddo
+  !     enddo
+  !   elseif(ntype==3) then
+  !     ! inner block
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       yd(0,n1,n2)=bd(0,n1,n2)*cc(1,0)
+  !       yd(1,n1,n2)=(bd(1,n1,n2)-af(3)*yd(0,n1,n2))*cc(1,1)
+  !       do l=2,dim-2
+  !         yd(l,n1,n2)=(bd(l,n1,n2)-af(3)*yd(l-1,n1,n2))*cc(1,l)
+  !       end do
+  !       yd(dim-1,n1,n2)=(bd(dim-1,n1,n2)-af(3)*yd(dim-2,n1,n2))*cc(1,dim-1)
+  !       yd(dim,n1,n2)=(bd(dim,n1,n2)-0.d0*yd(dim-1,n1,n2))*cc(1,dim)
+  !     enddo
+  !     enddo
+  !   else
+  !     print*, ' !! error in subroutine ptds_cal !'
+  !     stop
+  !   end if
+  !   !
+  !   xd(dim,:,:)=yd(dim,:,:)
+  !   do l=dim-1,0,-1
+  !     xd(l,:,:)=yd(l,:,:)-cc(2,l)*xd(l+1,:,:)
+  !   end do
+  !   !
+  !   deallocate( yd )
+  !   !
+  !   return
+  !   !
+  ! end function ptds3d_cal
+  ! !
+  ! function ptds4d_cal(bd,af,cc,dim,ntype,ncolm1,ncolm2,ncolm3) result(xd)
+  !   !
+  !   integer,intent(in) :: dim,ntype,ncolm1,ncolm2,ncolm3
+  !   real(8),intent(in) :: af(3),bd(0:dim,1:ncolm1,1:ncolm2,1:ncolm3),cc(1:2,0:dim)
+  !   real(8) :: xd(0:dim,1:ncolm1,1:ncolm2,1:ncolm3)
+  !   !
+  !   ! local data
+  !   integer :: l,n1,n2,n3
+  !   real(8),allocatable :: yd(:,:,:,:)
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   ! af(3): input dat
+  !   ! bd: input array
+  !   ! xd: output array
+  !   ! cc: input array
+  !   ! dim: input dat
+  !   ! l, yd: temporary variable
+  !   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !   allocate ( yd(0:dim,1:ncolm1,1:ncolm2,1:ncolm3) )
+  !   !
+  !   if(ntype==1) then
+  !     ! the block with boundary at i==0
+  !     !
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       yd(0,n1,n2,n3)=bd(0,n1,n2,n3)*cc(1,0)
+  !       yd(1,n1,n2,n3)=(bd(1,n1,n2,n3)-af(2)*yd(0,n1,n2,n3))*cc(1,1)
+  !       do l=2,dim-2
+  !         yd(l,n1,n2,n3)=(bd(l,n1,n2,n3)-af(3)*yd(l-1,n1,n2,n3))*cc(1,l)
+  !       end do
+  !       yd(dim-1,n1,n2,n3)=(bd(dim-1,n1,n2,n3)-af(3)*yd(dim-2,n1,n2,n3))*cc(1,dim-1)
+  !       yd(dim,n1,n2,n3)=(bd(dim,n1,n2,n3)-0.d0*yd(dim-1,n1,n2,n3))*cc(1,dim)
+  !     enddo
+  !     enddo
+  !     enddo
+  !   elseif(ntype==2) then
+  !     ! the block with boundary at i==im
+  !     !
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       yd(0,n1,n2,n3)=bd(0,n1,n2,n3)*cc(1,0)
+  !       yd(1,n1,n2,n3)=(bd(1,n1,n2,n3)-af(3)*yd(0,n1,n2,n3))*cc(1,1)
+  !       do l=2,dim-2
+  !         yd(l,n1,n2,n3)=(bd(l,n1,n2,n3)-af(3)*yd(l-1,n1,n2,n3))*cc(1,l)
+  !       end do
+  !       yd(dim-1,n1,n2,n3)=(bd(dim-1,n1,n2,n3)-af(2)*yd(dim-2,n1,n2,n3))*cc(1,dim-1)
+  !       yd(dim,n1,n2,n3)=(bd(dim,n1,n2,n3)-af(1)*yd(dim-1,n1,n2,n3))*cc(1,dim)
+  !     enddo
+  !     enddo
+  !     enddo
+  !   elseif(ntype==3) then
+  !     ! inner block
+  !     do n3=1,ncolm3
+  !     do n2=1,ncolm2
+  !     do n1=1,ncolm1
+  !       yd(0,n1,n2,n3)=bd(0,n1,n2,n3)*cc(1,0)
+  !       yd(1,n1,n2,n3)=(bd(1,n1,n2,n3)-af(3)*yd(0,n1,n2,n3))*cc(1,1)
+  !       do l=2,dim-2
+  !         yd(l,n1,n2,n3)=(bd(l,n1,n2,n3)-af(3)*yd(l-1,n1,n2,n3))*cc(1,l)
+  !       end do
+  !       yd(dim-1,n1,n2,n3)=(bd(dim-1,n1,n2,n3)-af(3)*yd(dim-2,n1,n2,n3))*cc(1,dim-1)
+  !       yd(dim,n1,n2,n3)=(bd(dim,n1,n2,n3)-0.d0*yd(dim-1,n1,n2,n3))*cc(1,dim)
+  !     enddo
+  !     enddo
+  !     enddo
+  !   else
+  !     print*, ' !! error in subroutine ptds_cal !'
+  !     stop
+  !   end if
+  !   !
+  !   xd(dim,:,:,:)=yd(dim,:,:,:)
+  !   do l=dim-1,0,-1
+  !     xd(l,:,:,:)=yd(l,:,:,:)-cc(2,l)*xd(l+1,:,:,:)
+  !   end do
+  !   !
+  !   deallocate( yd )
+  !   !
+  !   return
+  !   !
+  ! end function ptds4d_cal
   !
   function ptdsfilter_cal(bd,af,cc,dim,ntype) result(xd)
     !

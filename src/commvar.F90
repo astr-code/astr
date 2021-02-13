@@ -96,7 +96,7 @@ module commvar
 
 
   !
-  parameter(hm=5)
+  parameter(hm=4)
   !
 end module commvar
 !+---------------------------------------------------------------------+
