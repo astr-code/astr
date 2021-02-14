@@ -189,6 +189,10 @@ module commfunc
       alfa(3)=num1d3
       alfa(2)=0.25d0
       alfa(1)=1.d0
+    elseif(scheme==644) then
+      alfa(3)=num1d3
+      alfa(2)=0.25d0
+      alfa(1)=0.d0
     else
       stop ' !! scheme not defined @ coef_diffcompac'
     endif
@@ -1225,6 +1229,11 @@ module commfunc
         vout(0)=2.d0*  (-vin(0)+vin(1))
         vout(1)=0.75d0*( vin(2)-vin(0))
         !
+      elseif(ns==644) then
+        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
+        vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
+        vout(1)=0.75d0*( vin(2)-vin(0))
+        !
       end if
       !
       ! first order deritive
@@ -1251,6 +1260,12 @@ module commfunc
         ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
         vout(dim)  =2.d0*  (-vin(dim-1)+vin(dim))
+      elseif(ns==644) then
+        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
+        vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
+        vout(dim)=num2d3*( vin(dim+1)-vin(dim-1)) -                    &
+                  num1d12*( vin(dim+2)-vin(dim-2))
+        !
       end if
       !
     elseif(ntype==3) then
@@ -1298,6 +1313,13 @@ module commfunc
           vout(1,n)=0.75d0*( vin(2,n)-vin(0,n))
         enddo
         !
+      elseif(ns==644) then
+        do n=1,ncolm
+          ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
+          vout(0,n)=num2d3*( vin(1,n)-vin(-1,n)) -                     &
+                   num1d12*( vin(2,n)-vin(-2,n))
+          vout(1,n)=0.75d0*( vin(2,n)-vin(0,n))
+        enddo
       end if
       !
       do n=1,ncolm
@@ -1329,6 +1351,13 @@ module commfunc
         do n=1,ncolm
           vout(dim-1,n)=0.75d0*( vin(dim,n)  -vin(dim-2,n))
           vout(dim,n)  =2.d0*  (-vin(dim-1,n)+vin(dim,n))
+        end do
+      elseif(ns==644) then
+        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
+        do n=1,ncolm
+          vout(dim-1,n)=0.75d0*( vin(dim,n)  -vin(dim-2,n))
+          vout(dim,n)=num2d3*( vin(dim+1,n)-vin(dim-1,n)) -            &
+                     num1d12*( vin(dim+2,n)-vin(dim-2,n))
         end do
       end if
       !

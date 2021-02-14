@@ -10,7 +10,7 @@ module bc
   use constdef
   use parallel,only: lio,mpistop,mpirank,mpirankname,irk,jrk,krk,      &
                      irkm,jrkm,krkm
-  use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,ndims,num_species
+  use commvar, only: hm,im,jm,km,uinf,vinf,pinf,roinf,ndims,num_species
   use tecio
   !
   implicit none
@@ -61,7 +61,7 @@ module bc
     real(8),intent(in) :: tw
     !
     ! local data
-    integer :: i,j,k
+    integer :: i,j,k,l,jspec
     real(8) :: pe
     !
     if(ndir==3) then
@@ -80,9 +80,9 @@ module bc
           prs(i,j,k)  =pe
           tmp(i,j,k)  =tw
           !
-          if(num_species>0) then
-            spc(i,j,k,1)=num1d3*(4.d0*spc(i,1,k,1)-spc(i,2,k,1))
-          endif
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=num1d3*(4.d0*spc(i,1,k,jspec)-spc(i,2,k,jspec))
+          enddo
           !
           rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
           !
@@ -91,6 +91,20 @@ module bc
                      velocity=vel(i,j,k,:),                            &
                      pressure=prs(i,j,k),                              &
                       species=spc(i,j,k,:)                             )
+          !
+          do l=1,hm
+            q(i,j-l,k,1)= q(i,j+l,k,1) ! rho   is even
+            q(i,j-l,k,2)=-q(i,j+l,k,2) ! rho*u is odd 
+            q(i,j-l,k,3)=-q(i,j+l,k,3) ! rho*v is odd 
+            q(i,j-l,k,4)=-q(i,j+l,k,4) ! rho*w is odd
+            q(i,j-l,k,5)= q(i,j+l,k,5) ! rho*E is even
+            !
+            do jspec=1,num_species
+              q(i,j-l,k,5+jspec)= q(i,j+l,k,5+jspec) ! rho*Yj is even
+            enddo
+            !
+          enddo
+          !
         enddo
         enddo
         !
@@ -122,6 +136,20 @@ module bc
                      velocity=vel(i,j,k,:),                            &
                      pressure=prs(i,j,k),                              &
                       species=spc(i,j,k,:)                             )
+          !
+          do l=1,hm
+            q(i,j+l,k,1)= q(i,j-l,k,1) ! rho   is even
+            q(i,j+l,k,2)=-q(i,j-l,k,2) ! rho*u is odd 
+            q(i,j+l,k,3)=-q(i,j-l,k,3) ! rho*v is odd 
+            q(i,j+l,k,4)=-q(i,j-l,k,4) ! rho*w is odd
+            q(i,j+l,k,5)= q(i,j-l,k,5) ! rho*E is even
+            !
+            do jspec=1,num_species
+              q(i,j+l,k,5+jspec)= q(i,j-l,k,5+jspec) ! rho*Yj is even
+            enddo
+            !
+          enddo
+          !
         enddo
         enddo
         !

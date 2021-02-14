@@ -97,11 +97,8 @@ module commvar
   !|               twall | wall temperature.                           |
   !|               force | body force.                                 |
   !+---------------------+---------------------------------------------+
-
-
-
   !
-  parameter(hm=4)
+  parameter(hm=5)
   !
 end module commvar
 !+---------------------------------------------------------------------+

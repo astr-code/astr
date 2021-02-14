@@ -275,14 +275,14 @@ module initialisation
                    pressure=prs(0:im,0:jm,0:km),                       &
                     species=spc(0:im,0:jm,0:km,:)                      )
     !
-    call tecbin('testout/tecinit'//mpirankname//'.plt',                &
-                                      x(0:im,0:jm,0:km,1),'x',         &
-                                      x(0:im,0:jm,0:km,2),'y',         &
-                                   rho(0:im,0:jm,0:km)  ,'ro',         &
-                                   vel(0:im,0:jm,0:km,1),'u',          &
-                                   vel(0:im,0:jm,0:km,2),'v',          &
-                                   prs(0:im,0:jm,0:km)  ,'p',          &
-                                   spc(0:im,0:jm,0:km,1),'Y1' )
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+    !                                prs(0:im,0:jm,0:km)  ,'p',          &
+    !                                spc(0:im,0:jm,0:km,1),'Y1' )
     
     if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D channel flow initialised.'
     !
