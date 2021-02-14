@@ -318,7 +318,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readcont
     !
-    use commvar, only: maxstep,nwrite,deltat,nlstep
+    use commvar, only: maxstep,nwrite,deltat,nlstep,lwrite
     use parallel,only : bcast
     !
     ! local data
@@ -330,6 +330,8 @@ module readwrite
       !
       open(11,file=trim(inputfile),action='read')
       read(11,'(////)')
+      read(11,*)lwrite
+      read(11,'(/)')
       read(11,*)maxstep,nwrite,nlstep
       read(11,'(/)')
       read(11,*)deltat
@@ -338,6 +340,7 @@ module readwrite
       !
     endif
     !
+    call bcast(lwrite)
     call bcast(maxstep)
     call bcast(nwrite)
     call bcast(nlstep)
@@ -443,24 +446,32 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine output
     !
-    use commvar, only: time,nstep,filenumb,num_species,im,jm,km
+    use commvar, only: time,nstep,filenumb,num_species,im,jm,km,lwrite
     use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
     use hdf5io
     !
     ! local data
     character(len=4) :: stepname
     character(len=2) :: spname
+    character(len=64) :: outfilename
     integer :: jsp
     !
-    write(stepname,'(i4.4)')filenumb
+    if(lwrite) then
+      write(stepname,'(i4.4)')filenumb
+      filenumb=filenumb+1
+      !
+      outfilename='outdat/flowfield'//stepname//'.h5'
+    else
+      outfilename='outdat/flowfield.h5'
+    endif
     !
-    call h5io_init('outdat/flowfield'//stepname//'.h5',mode='write')
+    call h5io_init(trim(outfilename),mode='write')
     call h5write(varname='nstep',var=nstep)
     call h5write(varname='time',var=time)
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
-    call h5write(varname='u', var=vel(0:im,0:jm,0:km,1))
-    call h5write(varname='v', var=vel(0:im,0:jm,0:km,2))
-    call h5write(varname='w', var=vel(0:im,0:jm,0:km,3))
+    call h5write(varname='u1', var=vel(0:im,0:jm,0:km,1))
+    call h5write(varname='u2', var=vel(0:im,0:jm,0:km,2))
+    call h5write(varname='u3', var=vel(0:im,0:jm,0:km,3))
     call h5write(varname='p', var=prs(0:im,0:jm,0:km))
     call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
     do jsp=1,num_species
@@ -469,16 +480,15 @@ module readwrite
     enddo
     call h5io_end
     !
-    call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
-                                              x(0:im,0:jm,0:km,1),'x', &
-                                              x(0:im,0:jm,0:km,2),'y', &
-                                              x(0:im,0:jm,0:km,3),'z', &
-                                            rho(0:im,0:jm,0:km),'ro',  &
-                                            vel(0:im,0:jm,0:km,1),'u', &
-                                            vel(0:im,0:jm,0:km,2),'v', &
-                                            prs(0:im,0:jm,0:km),'p',   &
-                                            spc(0:im,0:jm,0:km,1),'Y1' )
-    filenumb=filenumb+1
+    ! call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
+    !                                           x(0:im,0:jm,0:km,1),'x', &
+    !                                           x(0:im,0:jm,0:km,2),'y', &
+    !                                           x(0:im,0:jm,0:km,3),'z', &
+    !                                         rho(0:im,0:jm,0:km),'ro',  &
+    !                                         vel(0:im,0:jm,0:km,1),'u', &
+    !                                         vel(0:im,0:jm,0:km,2),'v', &
+    !                                         prs(0:im,0:jm,0:km),'p',   &
+    !                                         spc(0:im,0:jm,0:km,1),'Y1' )
     !
   end subroutine output
   !+-------------------------------------------------------------------+

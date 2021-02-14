@@ -8,12 +8,13 @@
 module statistic
   !
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
-                       zmin,zmax,nstep,deltat,force
-  use parallel, only : mpirank,lio,psum
+                       zmin,zmax,nstep,deltat,force,numq
+  use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop
   !
   implicit none
   !
-  real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target
+  real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms
+  real(8),allocatable :: max_q(:),min_q(:)
   !
   contains
   !
@@ -36,15 +37,63 @@ module statistic
     elseif(trim(flowtype)=='channel') then
       fbcx=fbcxchan()
       massflux=massfluxchan()
+      wrms=wrmscal()
       !
-      if(nstep==0) massflux_target=massflux
+      if(nstep==0) then
+        massflux_target=massflux
+        force=0.d0
+        !
+        if(lio) print*,' ** target mass flux= ',massflux_target
+        !
+      endif
       !
       force(1)=chanfoce(force(1),massflux,fbcx,massflux_target)
+      !
+      call bcast(force)
     endif
+    !
+    call maxmincal
     !
   end subroutine statcal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine statcal.                                |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to return min and max variables.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine maxmincal
+    !
+    use commvar,   only : im,jm,km
+    use commarray, only : q
+    !
+    ! local data
+    integer :: n
+    logical,save :: linit=.true.
+    !
+    if(linit) then
+      allocate(max_q(1:numq),min_q(1:numq))
+      linit=.false.
+    endif
+    !
+    do n=1,numq
+      max_q(n)=maxval(q(0:im,0:jm,0:km,n))
+      min_q(n)=minval(q(0:im,0:jm,0:km,n))
+      !
+      max_q(n)=pmax(max_q(n))
+      min_q(n)=pmin(min_q(n))
+      !
+    enddo
+    !
+    return
+    !
+  end subroutine maxmincal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine maxmincal.                              |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -73,8 +122,11 @@ module statistic
           write(hand_fs,"(A7,1X,A13,2(1X,A20))")'nstep','time',        &
                                                     'enstophy','kenergy'
         elseif(trim(flowtype)=='channel') then
-          write(hand_fs,"(A7,1X,A13,3(1X,A20))")'nstep','time',        &
-                                              'massflux','fbcx','forcex'
+          write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',        &
+                                       'massflux','fbcx','forcex','wrms'
+        else
+          write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',        &
+                                 'q1max','q2max','q3max','q4max','q5max'
         endif
         !
         linit=.false.
@@ -84,8 +136,12 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,     &
                                                         enstophy,kenergy
       elseif(trim(flowtype)=='channel') then
-        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,     &
-                                                  massflux,fbcx,force(1)
+        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,     &
+                                             massflux,fbcx,force(1),wrms
+      else
+        ! general flowstate
+        write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,     &
+                                                        (max_q(i),i=1,5)
       endif
       !
       if(mod(nstep,nlstep)==0) then
@@ -94,17 +150,22 @@ module statistic
           if(trim(flowtype)=='tgv') then
             write(*,"(2X,A7,3(1X,A13))")'nstep','time','enstophy','kenergy'
           elseif(trim(flowtype)=='channel') then
-            write(*,"(2X,A7,4(1X,A13))")'nstep','time','massflux',     &
-                                                         'fbcx','forcex'
+            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
+                                                  'fbcx','forcex','wrms'
+          else
+            write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
+                                 'q1max','q2max','q3max','q4max','q5max'
           endif
-          write(*,'(2X,62A)')('-',i=1,62)
+          write(*,'(2X,76A)')('-',i=1,76)
         endif
         !
         if(trim(flowtype)=='tgv') then
           write(*,"(2X,I7,3(1X,E13.6E2))")nstep,time,enstophy,kenergy
         elseif(trim(flowtype)=='channel') then
-          write(*,"(2X,I7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
-                                          force(1)
+          write(*,"(2X,I7,5(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
+                                          force(1),wrms
+        else
+          write(*,"(2X,I7,6(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
         !
         flush(hand_fs)
@@ -203,6 +264,55 @@ module statistic
   end function kenergycal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine kenergycal.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to return rms spanwise velocity fluctuation.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  function wrmscal() result(vout)
+    !
+    use commvar,   only : im,jm,km,ia,ja,ka
+    use commarray, only : vel
+    !
+    real(8) :: vout
+    !
+    ! local data
+    integer :: i,j,k,k1,k2
+    real(8) :: norm
+    !
+    if(ndims==2) then
+      k1=0
+      k2=0
+      norm=real(ia*ja,8)
+    elseif(ndims==3) then
+      k1=1
+      k2=km
+      norm=real(ia*ja*ka,8)
+    else
+      print*,' !! ndims=',ndims
+      stop ' !! error @ fbcxchan !!'
+    endif
+    !
+    vout=0.d0
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      vout=vout+vel(i,j,k,3)*vel(i,j,k,3)
+    enddo
+    enddo
+    enddo
+    !
+    vout=sqrt(psum(vout)/norm)
+    !
+    return
+    !
+  end function wrmscal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine wrmscal.                                |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -352,7 +462,7 @@ module statistic
                0.2d0*(massflux-massfluxtarget))/ly
     endif
     !
-    ! if(lio) print*,massflux,massfluxtarget,qn1
+    ! if(lio) print*,massflux,massfluxtarget,'|',qn1,force,chanfoce
     !
   end function chanfoce
   !+-------------------------------------------------------------------+

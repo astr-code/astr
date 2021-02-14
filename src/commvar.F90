@@ -27,13 +27,14 @@ module commvar
   !|            gridfile | the gridfile.                               |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
   !|             nondimen| if the equation is non-dimensional          |
   !|             diffterm| if the diffusion terms is solved.           |
   !|                     | .f. means Euler equations are solved.       |
   !|             lfilter | to activate filer flag                      |
+  !|              lwrite | write samples or not.                       |
   !+---------------------+---------------------------------------------+
   !
   integer :: npdci,npdcj,npdck
