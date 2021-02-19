@@ -24,22 +24,17 @@ module readwrite
     if(mpirank==0) then
       !
       write(*,*)
-      write(*,*)'                ___   _____________            ___ '
-      write(*,*)'               / _ | / __/_  __/ _ \   ____   / _\\'
-      write(*,*)'              / __ |_\ \  / / / , _/  /___/  / , _/'
-      write(*,*)'             /_/ |_/___/ /_/ /_/|_|         /_/|_| '
       write(*,*)
-      write(*,*)
-  
-      print*,' +----------------------- Statement --------------------------+'
+      print*,' +------------------------ Statement -------------------------+'
       print*,' |                                                            |'
-      print*,' |                   Developed by Jian Fang                   |'
-      print*,' |             <ASTR-R> Copyright Resvered <2020>             |'
-      print*,' |                 ASTR code for reacting flow                |'
+      print*,' |              Developed by Jian Fang since 2008             |'
+      print*,' |                   Re-mastered at 02-2021                   |'
+      print*,' |               <ASTR> Copyright Resvered <2008>             |'
+      print*,' |         Advanced Simulatior for Turbulence Research        |'
       print*,' |                                                            |'
       print*,' +------------------------------------------------------------+'
       print*,' |                                                            |'
-      print*,' | Copyright 2020 Jian Fang                                   |'
+      print*,' | Copyright 2008 Jian Fang                                   |'
       print*,' |                                                            |'
       print*,' | Licensed under the Apache License, Version 2.0             |'
       print*,' | you may not use this file except in compliance with the    |'
@@ -55,8 +50,21 @@ module readwrite
       print*,' | under the License.                                         |'
       print*,' |                                                            |'
       print*,' +--------------------- End of Statement ---------------------+'
-    !
+      write(*,*)
+      !
+      write(*,*)'                        ___   _____________  '
+      write(*,*)'                       / _ | / __/_  __/ _ \ '
+      write(*,*)'                      / __ |_\ \  / / / , _/ '
+      write(*,*)'                     /_/ |_/___/ /_/ /_/|_|  '
+      write(*,*)
+      write(*,*)
+      !
     endif
+    !
+    call mpistop
+    !
+    return
+    !
   end subroutine statement
   !+-------------------------------------------------------------------+
   !| The end of the subroutine statement.                              |
