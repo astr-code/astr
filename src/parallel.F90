@@ -9,7 +9,7 @@ module parallel
   !
   use mpi
   use commvar,   only : im,jm,km,hm,ia,ja,ka,lihomo,ljhomo,lkhomo,     &
-                        npdci,npdcj,npdck,ctime
+                        npdci,npdcj,npdck,ctime,lfftk
   !
   implicit none
   !
@@ -156,7 +156,7 @@ module parallel
       do n2=1,n
       do n3=1,n
         !
-        if(l2dcomp) then
+        if(l2dcomp .or. lfftk) then
           !
           nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
           if(nfactor(n3) .ne. 1) cycle
@@ -1008,9 +1008,9 @@ module parallel
     !! unpack the received left the packet
     if(mpileft==MPI_PROC_NULL) then
       !
-      do n=1,hm
-        x(-n,0:jm,0:km,1:3)=x(0,0:jm,0:km,1:3)
-      enddo
+      ! do n=1,hm
+      !   x(-n,0:jm,0:km,1:3)=2.d0*x(0,0:jm,0:km,1:3)-x(n,0:jm,0:km,1:3) ! even
+      ! enddo
       !
     else
       !
@@ -1023,9 +1023,9 @@ module parallel
     ! unpack the received right the packet
     if(mpiright==MPI_PROC_NULL) then
       !
-      do n=1,hm
-        x(im+n,0:jm,0:km,1:3)=x(im,0:jm,0:km,1:3)
-      enddo
+      ! do n=1,hm
+      !   x(im+n,0:jm,0:km,1:3)=2.d0*x(im,0:jm,0:km,1:3)-x(im-n,0:jm,0:km,1:3)
+      ! enddo
       !
     else
       do n=1,hm
@@ -1068,9 +1068,9 @@ module parallel
     ! unpack the received up the packet
     if(mpidown==MPI_PROC_NULL) then
       !
-      do n=1,hm
-        x(0:im,-n,0:km,1:3)=x(0:im,0,0:km,1:3)
-      enddo
+      ! do n=1,hm
+      !   x(0:im,-n,0:km,1:3)=2.d0*x(0:im,0,0:km,1:3)-x(0:im,n,0:km,1:3)
+      ! enddo
       !
     else
       !
@@ -1082,9 +1082,9 @@ module parallel
     !
     ! unpack the received down the packet
     if(mpiup==MPI_PROC_NULL) then
-      do n=1,hm
-        x(0:im,jm+n,0:km,1:3)=x(0:im,jm,0:km,1:3)
-      enddo
+      ! do n=1,hm
+      !   x(0:im,jm+n,0:km,1:3)=2.d0*x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3)
+      ! enddo
     else
       !
       do n=1,hm
@@ -1129,9 +1129,9 @@ module parallel
       ! unpack the received back the packet
       if(mpiback==MPI_PROC_NULL) then
         !
-        do n=1,hm
-          x(0:im,0:jm,-n,1:3)=x(0:im,0:jm,0,1:3)
-        end do
+        ! do n=1,hm
+        !   x(0:im,0:jm,-n,1:3)=2.d0*x(0:im,0:jm,0,1:3)-x(0:im,0:jm,n,1:3)
+        ! end do
         !
       else
         !
@@ -1144,9 +1144,9 @@ module parallel
       ! unpack the received front the packet
       if(mpifront==MPI_PROC_NULL) then
         !
-        do n=1,hm
-          x(0:im,0:jm,km+n,1:3)=x(0:im,0:jm,km,1:3)
-        end do
+        ! do n=1,hm
+        !   x(0:im,0:jm,km+n,1:3)=2.d0*x(0:im,0:jm,km,1:3)-x(0:im,0:jm,km-n,1:3)
+        ! end do
         !
       else
         !

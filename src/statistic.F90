@@ -213,6 +213,8 @@ module statistic
       omegam=omega(1)*omega(1)+omega(2)*omega(2)+omega(3)*omega(3)
       !
       vout=vout+rho(i,j,k)*omegam
+      !
+      !
     enddo
     enddo
     enddo

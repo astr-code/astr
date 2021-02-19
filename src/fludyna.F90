@@ -22,6 +22,11 @@ module fludyna
      module procedure fvar2q_3da
   end interface
   !
+  interface q2fvar
+     module procedure q2fvar_sca
+     module procedure q2fvar_3da
+  end interface
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -175,7 +180,7 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine q2fvar(q,density,velocity,pressure,temperature,species)
+  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
@@ -214,7 +219,40 @@ module fludyna
       !
     endif
     !
-  end subroutine q2fvar
+  end subroutine q2fvar_3da
+  !
+  subroutine q2fvar_sca(q,density,velocity,pressure,temperature,species)
+    !
+    use commvar, only: numq,ndims,num_species,const1,const6
+    !
+    real(8),intent(in) :: q(:)
+    real(8),intent(out) :: density,velocity(:),           &
+                           pressure,temperature 
+    real(8),intent(out),optional :: species(:)
+    !
+    ! local data
+    integer :: jspec
+    !
+    density   =q(1)
+    !
+    velocity(1)=q(2)/density
+    velocity(2)=q(3)/density
+    velocity(3)=q(4)/density
+    !
+    pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+    &
+                                     velocity(3)**2) )/const6
+    !
+    temperature=thermal(pressure=pressure,density=density)
+    !
+    if(num_species>0 .and. present(species)) then
+      !
+      do jspec=1,num_species
+        species(jspec)=q(5+jspec)/density
+      enddo
+      !
+    endif
+    !
+  end subroutine q2fvar_sca
   !+-------------------------------------------------------------------+
   !| The end of the subroutine q2fvar.                                 |
   !+-------------------------------------------------------------------+

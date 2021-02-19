@@ -43,7 +43,7 @@ program astrr
   call solvrinit
   !
   call flowinit
-  !
+  ! 
   call steploop
   ! call gradcal
   !

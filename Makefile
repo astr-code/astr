@@ -22,24 +22,27 @@ OPTIONS3 = -DHDF5 -Dcputime
 
 EXE=astrr.exe
 
-LIBS= -lz -lm
+# INCL=-I/home/fangjian/opt/fftw-3.3.9/include
+
+# LIBS= -L/home/fangjian/opt/fftw-3.3.9/lib -lz -lm -lfftw3
+LIBS= -lz -lm 
 
 TARGET = $(BINDIR)/$(EXE)
 
 VPATH = $(SRCDIR):$(OBJDIR)
 
-srs=  constdef.F90 tecio.F90 commvar.F90 commarray.F90 fludyna.F90 parallel.F90  \
-      hdf5io.F90 readwrite.F90 commfunc.F90 gridgeneration.F90 solver.F90 bc.F90 \
-      initialisation.F90 statistic.F90 mainloop.F90 astrr.F90
+srs=  singleton.F90 constdef.F90 tecio.F90 commvar.F90 commarray.F90 fludyna.F90 \
+      parallel.F90 hdf5io.F90 readwrite.F90 commfunc.F90 gridgeneration.F90      \
+      bc.F90 solver.F90 initialisation.F90 statistic.F90 mainloop.F90 astrr.F90
 OBJS=$(srs:.F90=.o)
 
 %.o:%.F90
 	@mkdir -p $(OBJDIR) 
-	$(FC) $(FCFLAGS) $(OPTIONS1) $(OPTIONS2) $(OPTIONS3) $(OMP) -c -o $(OBJDIR)/$@  $<
+	$(FC) $(FCFLAGS) $(INCL) $(OPTIONS1) $(OPTIONS2) $(OPTIONS3) $(OMP) -c -o $(OBJDIR)/$@  $<
 
 default: $(OBJS)
 	@mkdir -p $(BINDIR)
-	$(FC) $(FCFLAGS) -o $(TARGET) $(OBJDIR)/*.o $(LIBS) $(OMP)
+	$(FC) $(FCFLAGS) -o $(TARGET) $(OBJDIR)/*.o $(LIBS) $(INCL) $(OMP)
 
 clean:
 	rm -fv $(OBJDIR)/*.o $(OBJDIR)/*.mod $(TARGET)

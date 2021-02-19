@@ -7,26 +7,29 @@
 !+---------------------------------------------------------------------+
 module commfunc
   !
-  use commvar, only : hm
-  use parallel, only: mpirank,mpistop
+  use commvar, only : hm,kcutoff
+  use parallel, only: mpirank,mpistop,lio
   use constdef
   !
   implicit none
   !
+  ! include 'fftw3.f'
+  !
   interface ddfc
     module procedure ddfc_basic
-    module procedure ddfc_2d
+    ! module procedure ddfc_2d
     ! module procedure ddfc_3d
     ! module procedure ddfc_4d
   end interface
   !
   interface spafilter10
     module procedure spafilter10_basic
-    module procedure spafilter10_2d
+    ! module procedure spafilter10_2d
   end interface
   !
   real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),     &
                          coef10i(:),coefb(:,:)
+  complex(8) :: ci=(0.d0,1.d0)
   !
   contains
   !
@@ -38,18 +41,32 @@ module commfunc
   !| -------------                                                     |
   !| 08-02-2021  | Created by J. Fang @ Warrington.                    |
   !+-------------------------------------------------------------------+
-  function ddfc_basic(f,stype,ntype,dim,af,cc) result(ddfc)
+  function ddfc_basic(f,stype,ntype,dim,af,cc,lfft) result(ddfc)
+    !
+    use singleton
     !
     ! arguments
     character(len=4),intent(in) :: stype
     integer,intent(in) :: ntype,dim
     real(8),intent(in) :: f(-hm:dim+hm)
     real(8),intent(in),optional :: af(3),cc(1:2,0:dim)
+    logical,intent(in),optional :: lfft
     real(8) :: ddfc(0:dim)
     !
     ! local data
-    integer :: nscheme
+    integer :: nscheme,k
     real(8) :: b(0:dim)
+    logical :: ffton
+    ! integer(8),save :: plan_f,plan_b
+    !
+    complex(8),allocatable :: cf(:)
+    real(8),allocatable :: kama(:)
+    !
+    if(present(lfft)) then
+      ffton=lfft
+    else
+      ffton=.false.
+    endif
     !
     ! print*,mpirank,'|',dim,im
     !
@@ -59,8 +76,78 @@ module commfunc
       ddfc=f(1)-f(0)
     else
       !
-      b   =ptds_rhs(f,dim,nscheme,ntype)
-      ddfc=ptds_cal(b,af,cc,dim,ntype)
+      if(ffton) then
+        !
+        ! double complex in, out
+        ! dimension in(N), out(N)
+        ! integer*8 plan
+
+        ! call dfftw_plan_dft_1d(plan,N,in,out,FFTW_FORWARD,FFTW_ESTIMATE)
+        ! call dfftw_execute_dft(plan, in, out)
+        ! call dfftw_destroy_plan(plan)
+        !
+        allocate(cf(1:dim),kama(1:dim))
+        !
+        ! call dfftw_plan_dft_1d(plan_f,dim,cf,cf,fftw_forward,fftw_estimate)
+        ! call dfftw_plan_dft_1d(plan_b,dim,cf,cf,fftw_backward,fftw_estimate)
+        !
+        cf=dcmplx(f(1:dim))
+        !
+        cf=fft(cf,inv=.false.)
+        ! call dfftw_execute_dft(plan_f, cf, cf)
+        !
+        do k=1,dim/2
+          kama(k)=dble(k-1)
+          !
+          ! cutoff filter
+          ! if(k>=kcutoff) kama(k)=0.d0
+          !
+        enddo
+        kama(dim/2+1)=0.d0
+        do k=dim/2+2,dim
+          kama(k)=dble(k-dim-1)
+          !
+          ! cutoff filter
+          ! if(dim+2-k>=kcutoff) kama(k)=0.d0
+          !
+        enddo
+        !
+        kama=kama*2.d0*pi/dble(dim)
+        !
+        cf=cf*kama*ci
+        !
+        cf=fft(cf,inv=.true.)
+        ! call dfftw_execute_dft(plan_b, cf, cf)
+        !
+        ddfc(1:dim)=dble(cf(1:dim))
+        ddfc(0)=ddfc(dim)
+        !
+        deallocate(cf,kama)
+        !
+        ! call dfftw_destroy_plan(plan_f)
+        ! call dfftw_destroy_plan(plan_b)
+        !
+      else
+        !
+        if(stype(4:4)=='c') then
+          b   =ptds_rhs(f,dim,nscheme,ntype)
+          ddfc=ptds_cal(b,af,cc,dim,ntype)
+        elseif(stype(4:4)=='e') then
+          !
+          if(nscheme/100==6) then
+            ddfc=diff6ec(f,dim,nscheme,ntype)
+          else
+            print*,' !! nscheme',nscheme
+            stop ' !! scheme not defined @ ddfc_basic'
+          endif
+        else
+          !
+          print*,' !! stype',stype(4:4)
+          stop ' !! error at ddfc_basic' 
+          !
+        endif
+        !
+      endif
       !
     endif
     !
@@ -68,18 +155,30 @@ module commfunc
     !
   end function ddfc_basic
   !
-  function ddfc_2d(f,stype,ntype,dim,af,cc,ncolm) result(ddfc)
+  function ddfc_2d(f,stype,ntype,dim,af,cc,ncolm,lfft) result(ddfc)
+    !
+    use singleton
     !
     ! arguments
     character(len=4),intent(in) :: stype
     integer,intent(in) :: ntype,dim,ncolm
     real(8),intent(in) :: f(-hm:dim+hm,1:ncolm)
     real(8),intent(in),optional :: af(3),cc(1:2,0:dim)
+    logical,intent(in),optional :: lfft
     real(8) :: ddfc(0:dim,1:ncolm)
     !
     ! local data
-    integer :: nscheme,n
+    integer :: nscheme,n,k
+    logical :: ffton
     real(8) :: b(0:dim,1:ncolm)
+    complex(8),allocatable :: cf(:,:)
+    real(8),allocatable :: kama(:)
+    !
+    if(present(lfft)) then
+      ffton=lfft
+    else
+      ffton=.false.
+    endif
     !
     ! print*,mpirank,'|',dim,im
     !
@@ -91,8 +190,44 @@ module commfunc
       enddo
     else
       !
-      b   =ptds2d_rhs(f,dim,nscheme,ntype,ncolm)
-      ddfc=ptds2d_cal(b,af,cc,dim,ntype,ncolm)
+      if(ffton) then
+        !
+        allocate(cf(1:dim,1:ncolm),kama(1:dim))
+        !
+        do k=1,dim/2
+          kama(k)=dble(k-1)
+          ! cutoff filt
+          ! if(k>=kcutoff) kama(k)=0.d0
+        enddo
+        kama(dim/2+1)=0.d0
+        do k=dim/2+2,dim
+          kama(k)=dble(k-dim-1)
+          ! cutoff filter
+          ! if(dim+2-k>=kcutoff) kama(k)=0.d0
+        enddo
+        kama=kama*2.d0*pi/dble(dim)
+        !
+        cf=dcmplx(f(1:dim,1:ncolm))
+        !
+        do n=1,ncolm
+          !
+          cf(:,n)=fft(cf(:,n),inv=.false.)
+          !
+          cf(:,n)=cf(:,n)*kama*ci
+          !
+          cf(:,n)=fft(cf(:,n),inv=.true.)
+          !
+          ddfc(1:dim,n)=dble(cf(1:dim,n))
+          ddfc(0,n)=ddfc(dim,n)
+          !
+        enddo
+        !
+        deallocate(cf,kama)
+        !
+      else
+        b   =ptds2d_rhs(f,dim,nscheme,ntype,ncolm)
+        ddfc=ptds2d_cal(b,af,cc,dim,ntype,ncolm)
+      endif
       !
     endif
     !
@@ -174,6 +309,76 @@ module commfunc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This function is to return the finit difference value of 6th-order|
+  !| central scheme, inculding boundary closure.                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-02-2021  | Created by J. Fang @ Warrington.                    |
+  !+-------------------------------------------------------------------+
+  function diff6ec(vin,dim,ns,ntype) result(vout)
+    !
+    integer,intent(in) :: dim,ns,ntype
+    real(8),intent(in) :: vin(-hm:dim+hm)
+    real(8) :: vout(0:dim)
+    !
+    ! local data
+    integer :: i
+    !
+    if(ntype==1) then
+      !
+      if(ns==642) then
+        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+        vout(1)=0.5d0*(vin(2)-vin(0))
+        vout(2)=num2d3*(vin(3)-vin(1))-num1d12*(vin(4)-vin(0))
+      else
+        print*,' !! ns=',ns
+        stop ' error 1 @ diff6c'
+      endif
+      !
+      do i=3,dim
+        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
+                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
+                  num1d60*(vin(i+3)-vin(i-3))
+      enddo
+      !
+    elseif(ntype==2) then
+      !
+      do i=0,dim-3
+        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
+                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
+                  num1d60*(vin(i+3)-vin(i-3))
+      enddo
+      !
+      if(ns==642) then
+        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+        vout(dim-2) =num2d3*(vin(dim-1)-vin(dim-3))-                   &
+                    num1d12*(vin(dim)  -vin(dim-4))
+        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
+        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+      else
+        print*,' !! ns=',ns
+        stop ' error 2 @ diff6c'
+      endif
+      !
+    elseif(ntype==3) then
+      do i=0,dim
+        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
+                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
+                  num1d60*(vin(i+3)-vin(i-3))
+      enddo
+    else
+      print*,' !! ntype=',ntype
+      stop ' !! errpr 3 @ diff6c'
+    endif
+    !
+  end function diff6ec
+  !+-------------------------------------------------------------------+
+  !| The end of the diffcen ddf.                                       |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This function is to return the coefficients of a compact scheme.  |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -231,26 +436,67 @@ module commfunc
     !
   end function filter8exp
   !
-  function spafilter10_basic(f,ntype,dim,af,fc) result(ff)
+  function spafilter10_basic(f,ntype,dim,af,fc,lfft) result(ff)
+    !
+    use singleton
     !
     ! arguments
     integer,intent(in) :: ntype,dim
     real(8),intent(in) :: f(-hm:dim+hm)
     real(8),intent(in) :: af,fc(1:2,-hm:dim+hm)
     real(8) :: ff(0:dim)
+    logical,intent(in),optional :: lfft
     !
     ! local data
     real(8) :: b(0:dim)
-    integer :: i
+    integer :: k
     real(8) :: aff(3)
+    logical :: ffton
+    complex(8),allocatable :: cf(:)
+    real(8),allocatable :: kama(:)
     !
-    aff(1)=0.d0
-    aff(2)=af
-    aff(3)=af
-    ! b =pfilterrhs(f,dim,ntype)
-    ! ff=ptdsfilter_cal(b,af,fc,dim,ntype)
-    b =PFilterRHS2(f,dim,ntype)
-    ff=ptds_cal(b,aff,fc,dim,ntype)
+    if(present(lfft)) then
+      ffton=lfft
+    else
+      ffton=.false.
+    endif
+    !
+    if(ffton) then
+      !
+      allocate(cf(1:dim),kama(1:dim))
+      !
+      cf=dcmplx(f(1:dim))
+      !
+      cf=fft(cf,inv=.false.)
+      !
+      cf(dim/2+1)=0.d0 ! remove grid-grid oscillation
+      ! filter the wavenumber higher than kcutoff
+      do k=kcutoff,dim/2
+        cf(k)=0.d0
+        cf(dim+2-k)=0.d0
+      enddo
+      !
+      ! do k=1,dim
+      !   if(lio) print*,k,real(cf(k)),AIMAG(cf(k))
+      ! enddo
+      !
+      !
+      cf=fft(cf,inv=.true.)
+      !
+      ff(1:dim)=dble(cf(1:dim))
+      ff(0)=ff(dim)
+      !
+      deallocate(cf,kama)
+        !
+    else
+      aff(1)=0.d0
+      aff(2)=af
+      aff(3)=af
+      ! b =pfilterrhs(f,dim,ntype)
+      ! ff=ptdsfilter_cal(b,af,fc,dim,ntype)
+      b =PFilterRHS2(f,dim,ntype)
+      ff=ptds_cal(b,aff,fc,dim,ntype)
+    endif
     !
     ! do i=0,dim
     !     ff(i)=filter8exp(f(i-4:i+4))
@@ -1232,6 +1478,7 @@ module commfunc
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
+        ! vout(0)=-1.5d0*vin(0)+2.d0*vin(1)-0.5d0*vin(2)
         vout(1)=0.75d0*( vin(2)-vin(0))
         !
       end if
@@ -1265,7 +1512,8 @@ module commfunc
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
         vout(dim)=num2d3*( vin(dim+1)-vin(dim-1)) -                    &
                   num1d12*( vin(dim+2)-vin(dim-2))
-        !
+        
+        ! vout(dim)=1.5d0*vin(dim)-2.d0*vin(dim-1)+0.5d0*vin(dim-2)
       end if
       !
     elseif(ntype==3) then
@@ -1316,6 +1564,7 @@ module commfunc
       elseif(ns==644) then
         do n=1,ncolm
           ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
+          ! vout(0,n)=-1.5d0*vin(0,n)+2.d0*vin(1,n)-0.5d0*vin(2,n)
           vout(0,n)=num2d3*( vin(1,n)-vin(-1,n)) -                     &
                    num1d12*( vin(2,n)-vin(-2,n))
           vout(1,n)=0.75d0*( vin(2,n)-vin(0,n))
@@ -1356,8 +1605,9 @@ module commfunc
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         do n=1,ncolm
           vout(dim-1,n)=0.75d0*( vin(dim,n)  -vin(dim-2,n))
-          vout(dim,n)=num2d3*( vin(dim+1,n)-vin(dim-1,n)) -            &
-                     num1d12*( vin(dim+2,n)-vin(dim-2,n))
+            vout(dim,n)=num2d3*( vin(dim+1,n)-vin(dim-1,n)) -          &
+                       num1d12*( vin(dim+2,n)-vin(dim-2,n))
+          ! vout(dim,n)=1.5d0*vin(dim,n)-2.d0*vin(dim-1,n)+0.5d0*vin(dim-2,n)
         end do
       end if
       !
@@ -2110,6 +2360,33 @@ module commfunc
   ! End of the subroutine volhex.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this subroutine is to extraoplation according to the gradient
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  function gradextrp(qbou,q1st,dq) result(q)
+    !
+    real(8) :: q(4)
+    real(8),intent(in) :: qbou,q1st
+    real(8),intent(in),optional :: dq
+    !
+    real(8) :: dqr
+    !
+    if(present(dq)) then
+      dqr=dq
+    else
+      dqr=qbou-q1st
+    endif
+    !
+    q(1)=q1st+2.d0*dqr
+    q(2)=-2.d0*q1st -3.d0*qbou +6.d0*q(1) -6.d0*dqr
+    q(3)= 3.d0*q1st+10.d0*qbou-18.d0*q(1) +6.d0*q(2)+12.d0*dqr
+    q(4)=-4.d0*q1st-num65d3*qbou+40.d0*q(1)-20.d0*q(2)+num20d3*q(3)-20.d0*dqr
+    !
+  end function gradextrp
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine gradextrp.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
 end module commfunc
 !+---------------------------------------------------------------------+
 !| The end of the module commfunc.                                     |

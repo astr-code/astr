@@ -99,7 +99,8 @@ module readwrite
     use parallel,only : mpirank,mpirankmax,isize,jsize,ksize,mpistop
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
-                        flowtype,ndims,lfilter,alfa_filter,bctype,twall
+                        flowtype,ndims,lfilter,alfa_filter,bctype,     &
+                        twall,lfftk,kcutoff
     !
     ! local data
     character(len=42) :: typedefine
@@ -167,25 +168,37 @@ module readwrite
       write(*,'(19X,A)',advance='no')'  convection terms: '
       if(conschm(4:4)=='c') then
         write(*,'(A)',advance='no')' compact '
-        write(*,'(11A)')conschm(3:3),'-',conschm(2:2),'-',             &
-                        conschm(1:1),'......',conschm(1:1),'-',        &
-                        conschm(2:2),'-',conschm(3:3)
-      !
+      elseif(conschm(4:4)=='e') then
+        write(*,'(A)',advance='no')' explicit '
       else
         stop ' !! error: conschm not defined !!'
       endif
+      write(*,'(11A)')conschm(3:3),'-',conschm(2:2),'-',               &
+                      conschm(1:1),'......',conschm(1:1),'-',          &
+                      conschm(2:2),'-',conschm(3:3)
       write(*,'(19X,A)',advance='no')'   diffusion terms: '
       if(difschm(4:4)=='c') then
         write(*,'(A)',advance='no')' compact '
-        write(*,'(11A)')difschm(3:3),'-',difschm(2:2),'-',             &
-                        difschm(1:1),'......',difschm(1:1),'-',        &
-                        difschm(2:2),'-',difschm(3:3)
+      elseif(difschm(4:4)=='e') then
+        write(*,'(A)',advance='no')' explicit '
       else
         stop ' !! error: difschm not defined !!'
       endif
+      write(*,'(11A)')difschm(3:3),'-',difschm(2:2),'-',               &
+                      difschm(1:1),'......',difschm(1:1),'-',          &
+                      difschm(2:2),'-',difschm(3:3)
       if(lfilter) then
         write(*,'(2X,A43)',advance='no')' low-pass filter is used, '
-        write(*,'(A13,F6.3)')' coefficient:',alfa_filter
+        write(*,'(A12,F7.3)')' coefficient:',alfa_filter
+      endif
+      if(lfftk) then
+        write(*,'(2X,A41)',advance='no')' FFT used at the k direction,'
+        write(*,'(A,I4,A,I4)')'  cutoff k:',kcutoff,' /',ka/2
+        !
+        if(kcutoff>=ka/2) then
+          write(*,'(2X,A62)')'   !! Warning  cutoff wavenumber too big !!'
+        endif
+        !
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                    *** Boundary Conditions ***'
@@ -217,7 +230,7 @@ module readwrite
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
-                        lreadgrid,gridfile,bctype,twall
+                        lreadgrid,lfftk,gridfile,bctype,twall,kcutoff
     use parallel,only : bcast
     !
     ! local data
@@ -242,9 +255,9 @@ module readwrite
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
       read(11,'(/)')
-      read(11,*)nondimen,diffterm,lfilter,lreadgrid
+      read(11,*)nondimen,diffterm,lfilter,lreadgrid,lfftk
       read(11,'(/)')
-      read(11,*)alfa_filter
+      read(11,*)alfa_filter,kcutoff
       !
       if(nondimen) then
         read(11,'(/)')
@@ -282,6 +295,7 @@ module readwrite
     call bcast(ljhomo)
     call bcast(lkhomo)
     call bcast(lreadgrid)
+    call bcast(lfftk)
     !
     call bcast(flowtype)
     call bcast(conschm)
@@ -293,6 +307,7 @@ module readwrite
     call bcast(lfilter)
     !
     call bcast(alfa_filter)
+    call bcast(kcutoff)
     !
     call bcast(ref_t)
     call bcast(reynolds)

@@ -27,7 +27,7 @@ module commvar
   !|            gridfile | the gridfile.                               |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lfftk
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
   !|             nondimen| if the equation is non-dimensional          |
@@ -35,6 +35,7 @@ module commvar
   !|                     | .f. means Euler equations are solved.       |
   !|             lfilter | to activate filer flag                      |
   !|              lwrite | write samples or not.                       |
+  !|               lfftk | to use fft in the k direction.              |
   !+---------------------+---------------------------------------------+
   !
   integer :: npdci,npdcj,npdck
@@ -43,10 +44,12 @@ module commvar
   !+---------------------+---------------------------------------------+
   real(8) :: xmax,xmin,ymax,ymin,zmax,zmin,voldom
   real(8) :: alfa_filter
+  integer :: kcutoff
   !+---------------------+---------------------------------------------+
   !|                *mix | min coordinates                             |
   !|                *max | max coordinates                             |
   !|         alfa_filter | the parameter to control width of filter.   |
+  !|             kcutoff | cutoff wavenumber when fft used.            |
   !|              voldom | total volume of the domain.                 |
   !+---------------------+---------------------------------------------+
   integer :: nstep,maxstep,nwrite,nlstep,filenumb

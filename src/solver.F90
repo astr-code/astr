@@ -9,7 +9,7 @@ module solver
   !
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,ptime
-  use commvar,  only : ndims,ks,ke,hm,ctime
+  use commvar,  only : ndims,ks,ke,hm,ctime,hm,lfftk
   !
   implicit none
   !
@@ -166,6 +166,7 @@ module solver
     use parallel,  only : gridsendrecv,ksize,psum,pmax,pmin
     use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
     use tecio
+    use bc,       only : geombc,xyzbc
     !
     ! local data
     character(len=4) :: cscheme
@@ -180,6 +181,8 @@ module solver
     allocate( dx(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3) )
     !
     call gridsendrecv
+    !
+    call xyzbc
     !
     cscheme='642c'
     !
@@ -220,9 +223,17 @@ module solver
     do j=0,jm
     do i=0,im
       !
-      do m=1,3
-        dx(i,j,0:km,m,3)=ddfc(x(i,j,:,m),cscheme,npdck,km,alfa,gck)
-      enddo
+      if(lfftk) then
+        !
+        do m=1,2
+          dx(i,j,0:km,m,3)=ddfc(x(i,j,:,m),cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        enddo
+        dx(i,j,0:km,3,3)=x(i,j,1,3)-x(i,j,0,3)
+      else
+        do m=1,3
+          dx(i,j,0:km,m,3)=ddfc(x(i,j,:,m),cscheme,npdck,km,alfa,gck)
+        enddo
+      endif
       !
     enddo
     enddo
@@ -379,27 +390,51 @@ module solver
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,2)*x(i,j,-hm:km+hm,3)-           &
                       dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,2))
-        dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+ddfc(phi,cscheme,npdck,km,alfa,gck)
+        if(lfftk) then
+          dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+phi(1)-phi(0)
+        else
+          dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,1)-           &
                       dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,3))
-        dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+ddfc(phi,cscheme,npdck,km,alfa,gck)
+        if(lfftk) then
+          dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+phi(1)-phi(0)
+        else
+          dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,2)-           &
                       dx(i,j,-hm:km+hm,2,2)*x(i,j,-hm:km+hm,1))
-        dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+ddfc(phi,cscheme,npdck,km,alfa,gck)
+        if(lfftk) then
+          dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+phi(1)-phi(0)
+        else
+          dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,2)-           &
                       dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,3))
-        dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+ddfc(phi,cscheme,npdck,km,alfa,gck)
+        if(lfftk) then
+          dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+phi(1)-phi(0)
+        else
+          dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,3)-           &
                       dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,1))
-        dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+ddfc(phi,cscheme,npdck,km,alfa,gck)
+        if(lfftk) then
+          dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+phi(1)-phi(0)
+        else
+          dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,1)-           &
                       dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,2))
-        dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+ddfc(phi,cscheme,npdck,km,alfa,gck)
+        if(lfftk) then
+          dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+phi(1)-phi(0)
+        else
+          dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+        endif
         !
       enddo
       enddo
@@ -447,9 +482,9 @@ module solver
     !
     do j=0,jm
     do i=0,im
-      can(i,j,:,1)=can(i,j,:,1)+ddfc(dxi(i,j,:,3,1),cscheme,npdck,km,alfa,gck)
-      can(i,j,:,2)=can(i,j,:,2)+ddfc(dxi(i,j,:,3,2),cscheme,npdck,km,alfa,gck)
-      can(i,j,:,3)=can(i,j,:,3)+ddfc(dxi(i,j,:,3,3),cscheme,npdck,km,alfa,gck)
+      can(i,j,:,1)=can(i,j,:,1)+ddfc(dxi(i,j,:,3,1),cscheme,npdck,km,alfa,gck,lfft=lfftk)
+      can(i,j,:,2)=can(i,j,:,2)+ddfc(dxi(i,j,:,3,2),cscheme,npdck,km,alfa,gck,lfft=lfftk)
+      can(i,j,:,3)=can(i,j,:,3)+ddfc(dxi(i,j,:,3,3),cscheme,npdck,km,alfa,gck,lfft=lfftk)
       !
     enddo
     enddo
@@ -551,6 +586,8 @@ module solver
     !
     call dataswap(dxi)
     !
+    call geombc
+    !
     xmax=maxval(x(0:im,0:jm,0:km,1))
     ymax=maxval(x(0:im,0:jm,0:km,2))
     zmax=maxval(x(0:im,0:jm,0:km,3))
@@ -595,22 +632,23 @@ module solver
       print*,' ** geometrical parameters calculated'
     end if
     !
-    deallocate(dx,gci,gcj,can)
-    !
-    if(allocated(gck)) deallocate(gck)
-    !
     ! if(mpirank==0) then
     !   do k=0,km
     !     print*,x(1,1,k,3),dx(1,1,k,3,3),x(1,1,k,3)-x(1,1,k-1,3)
     !   enddo
-    ! endif
+    ! ! endif
     ! call tecbin('testout/tecgrid'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',    &
     !                                   x(0:im,0:jm,0:km,2),'y',    &
     !                                   x(0:im,0:jm,0:km,3),'z',    &
     !                                 dxi(0:im,0:jm,0:km,1,1),'dxdi',    &
-    !                                 dxi(0:im,0:jm,0:km,2,2),'dydj')
-    ! ! 
+    !                                 dxi(0:im,0:jm,0:km,2,2),'dydj',    &
+    !                                 dxi(0:im,0:jm,0:km,3,3),'dzdk')
+    ! ! ! 
+    deallocate(dx,gci,gcj,can)
+    !
+    if(allocated(gck)) deallocate(gck)
+    !
     ! call mpistop
     !
   end subroutine geomcal
@@ -627,9 +665,10 @@ module solver
   !+-------------------------------------------------------------------+
   subroutine rhscal
     !
-    use commarray, only : qrhs
+    use commarray, only : qrhs,x,q
     use commvar,   only : flowtype
     !
+    integer :: j
 #ifdef cputime
     real(8) :: time_beg
     !
@@ -674,9 +713,9 @@ module solver
   !+-------------------------------------------------------------------+
   subroutine srcchan
     !
-    use commvar, only : force,im,jm,km
-    use parallel,only : psum 
-    use commarray,only: q,qrhs,x,jacob
+    use commvar,  only : force,im,jm,km
+    use parallel, only : psum 
+    use commarray,only : q,qrhs,x,jacob
     !
     ! local data
     integer :: i,j,k,k1,k2
@@ -749,7 +788,7 @@ module solver
     use commfunc, only: ddfc
     !
     ! local data
-    integer :: i,j,k,jspc
+    integer :: i,j,k,jspc,n
     real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:) 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -773,7 +812,9 @@ module solver
         enddo
       endif
       !
-      dfcs=ddfc(fcs,conschm,npdci,im,alfa_con,cci,numq)
+      do n=1,numq
+        dfcs(:,n)=ddfc(fcs(:,n),conschm,npdci,im,alfa_con,cci)
+      enddo
       !
       qrhs(:,j,k,:)=qrhs(:,j,k,:)+dfcs(:,:) 
       !
@@ -808,9 +849,12 @@ module solver
         enddo
       endif
       !
-      dfcs=ddfc(fcs,conschm,npdcj,jm,alfa_con,ccj,numq)
+      do n=1,numq
+        dfcs(:,n)=ddfc(fcs(:,n),conschm,npdcj,jm,alfa_con,ccj)
+      enddo
       !
       qrhs(i,:,k,:)=qrhs(i,:,k,:)+dfcs(:,:)
+      !
       !
     enddo
     enddo
@@ -842,7 +886,9 @@ module solver
           enddo
         endif
         !
-        dfcs=ddfc(fcs,conschm,npdck,km,alfa_con,cck,numq)
+        do n=1,numq
+          dfcs(:,n)=ddfc(fcs(:,n),conschm,npdck,km,alfa_con,cck,lfft=lfftk)
+        enddo
         !
         qrhs(i,j,:,:)=qrhs(i,j,:,:)+dfcs(:,:)
         !
@@ -859,151 +905,7 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine ConvRsdCal6.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! This subroutine is used to calculate the convectional residual
-  ! terms with compact six-order central scheme.
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! Writen by Fang Jian, 2009-06-03.
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine ConvRsdCal6_legc
-    !
-    use commvar,  only: im,jm,km,hm,numq,num_species,conschm,          &
-                        npdci,npdcj,npdck
-    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
-    use commfunc, only: ddfc
-    !
-    real(8) :: UU
-    real(8), allocatable, dimension(:,:) :: Fcs,dFcs
-    real(8) :: var1,var2,var3,var4,var5
-    integer :: i,j,k
-    !
-    !!$ SAVE Fcs,btemp,vtemp,wtemp
-    !!$OMP THREADPRIVATE(Fcs,btemp,vtemp,wtemp)
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! btemp,vtemp,wtemp: temporary arraies
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    !!$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,UU)
-    !
-    ! calculate along i direction
-    allocate(Fcs(1:5,-4:im+4),dFcs(1:5,0:im))
-    !   
-    !!$OMP do
-    do k=0,km
-    do j=0,jm
-      !
-      do i=-4,im+4
-        UU=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
-           dxi(i,j,k,1,3)*vel(i,j,k,3)
-        Fcs(1,i)=jacob(i,j,k)* q(i,j,k,1)*UU
-        Fcs(2,i)=jacob(i,j,k)*(q(i,j,k,2)*UU+dxi(i,j,k,1,1)*prs(i,j,k))
-        Fcs(3,i)=jacob(i,j,k)*(q(i,j,k,3)*UU+dxi(i,j,k,1,2)*prs(i,j,k))
-        Fcs(4,i)=jacob(i,j,k)*(q(i,j,k,4)*UU+dxi(i,j,k,1,3)*prs(i,j,k))
-        Fcs(5,i)=jacob(i,j,k)*(q(i,j,k,5)+prs(i,j,k))*UU 
-      end do
-      !
-      dFcs(1,:)=ddfc(fcs(1,:),conschm,npdci,im,alfa_con,cci)
-      dFcs(2,:)=ddfc(fcs(2,:),conschm,npdci,im,alfa_con,cci)
-      dFcs(3,:)=ddfc(fcs(3,:),conschm,npdci,im,alfa_con,cci)
-      dFcs(4,:)=ddfc(fcs(4,:),conschm,npdci,im,alfa_con,cci)
-      dFcs(5,:)=ddfc(fcs(5,:),conschm,npdci,im,alfa_con,cci)
-      !
-      qrhs(:,j,k,1)=qrhs(:,j,k,1)+dFcs(1,:)
-      qrhs(:,j,k,2)=qrhs(:,j,k,2)+dFcs(2,:)
-      qrhs(:,j,k,3)=qrhs(:,j,k,3)+dFcs(3,:)
-      qrhs(:,j,k,4)=qrhs(:,j,k,4)+dFcs(4,:)
-      qrhs(:,j,k,5)=qrhs(:,j,k,5)+dFcs(5,:)
-      !
-    end do
-    end do
-    !!$OMP end do
-    !
-    !
-    deallocate(Fcs,dFcs)
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end calculating along i direction
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
-    ! calculating along j direction
-    allocate(Fcs(1:5,-4:jm+4),dFcs(1:5,0:jm))
-    !
-    !!$OMP do
-    do k=0,km
-    do i=0,im
-      !
-      do j=-4,jm+4
-        UU=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2)+    &
-           dxi(i,j,k,2,3)*vel(i,j,k,3)
-        Fcs(1,j)=jacob(i,j,k)* q(i,j,k,1)*UU
-        Fcs(2,j)=jacob(i,j,k)*(q(i,j,k,2)*UU+dxi(i,j,k,2,1)*prs(i,j,k))
-        Fcs(3,j)=jacob(i,j,k)*(q(i,j,k,3)*UU+dxi(i,j,k,2,2)*prs(i,j,k))
-        Fcs(4,j)=jacob(i,j,k)*(q(i,j,k,4)*UU+dxi(i,j,k,2,3)*prs(i,j,k))
-        Fcs(5,j)=jacob(i,j,k)*(q(i,j,k,5)+prs(i,j,k))*UU 
-      end do
-      !
-      dFcs(1,:)=ddfc(fcs(1,:),conschm,npdcj,jm,alfa_con,ccj)
-      dFcs(2,:)=ddfc(fcs(2,:),conschm,npdcj,jm,alfa_con,ccj)
-      dFcs(3,:)=ddfc(fcs(3,:),conschm,npdcj,jm,alfa_con,ccj)
-      dFcs(4,:)=ddfc(fcs(4,:),conschm,npdcj,jm,alfa_con,ccj)
-      dFcs(5,:)=ddfc(fcs(5,:),conschm,npdcj,jm,alfa_con,ccj)
-      !
-      qrhs(i,:,k,1)=qrhs(i,:,k,1)+dFcs(1,:)
-      qrhs(i,:,k,2)=qrhs(i,:,k,2)+dFcs(2,:)
-      qrhs(i,:,k,3)=qrhs(i,:,k,3)+dFcs(3,:)
-      qrhs(i,:,k,4)=qrhs(i,:,k,4)+dFcs(4,:)
-      qrhs(i,:,k,5)=qrhs(i,:,k,5)+dFcs(5,:)
-      !
-    end do
-    end do
-    !!$OMP end do
-    deallocate(Fcs,dFcs)
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end calculating along j direction
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    ! calculating along k direction
-    !
-    allocate(Fcs(1:5,-4:km+4),dFcs(1:5,0:km))
-    !
-    !!$OMP do
-    do j=0,jm
-    do i=0,im
-      !
-      do k=-4,km+4
-        UU=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2)+  &
-           dxi(i,j,k,3,3)*vel(i,j,k,3)
-        Fcs(1,k)=jacob(i,j,k)* q(i,j,k,1)*UU
-        Fcs(2,k)=jacob(i,j,k)*(q(i,j,k,2)*UU+dxi(i,j,k,3,1)*prs(i,j,k))
-        Fcs(3,k)=jacob(i,j,k)*(q(i,j,k,3)*UU+dxi(i,j,k,3,2)*prs(i,j,k))
-        Fcs(4,k)=jacob(i,j,k)*(q(i,j,k,4)*UU+dxi(i,j,k,3,3)*prs(i,j,k))
-        Fcs(5,k)=jacob(i,j,k)*(q(i,j,k,5)+prs(i,j,k))*UU 
-      end do
-      !
-      dFcs(1,:)=ddfc(fcs(1,:),conschm,npdck,km,alfa_con,cck)
-      dFcs(2,:)=ddfc(fcs(2,:),conschm,npdck,km,alfa_con,cck)
-      dFcs(3,:)=ddfc(fcs(3,:),conschm,npdck,km,alfa_con,cck)
-      dFcs(4,:)=ddfc(fcs(4,:),conschm,npdck,km,alfa_con,cck)
-      dFcs(5,:)=ddfc(fcs(5,:),conschm,npdck,km,alfa_con,cck)
-      !
-      qrhs(i,j,:,1)=qrhs(i,j,:,1)+dFcs(1,:)
-      qrhs(i,j,:,2)=qrhs(i,j,:,2)+dFcs(2,:)
-      qrhs(i,j,:,3)=qrhs(i,j,:,3)+dFcs(3,:)
-      qrhs(i,j,:,4)=qrhs(i,j,:,4)+dFcs(4,:)
-      qrhs(i,j,:,5)=qrhs(i,j,:,5)+dFcs(5,:)
-      !
-    end do
-    end do
-    !!$OMP end do
-    deallocate(Fcs,dFcs)
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end calculating along k direction
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    !!$OMP END PARALLEL
-    !
-  end subroutine ConvRsdCal6_legc
-  !
+  !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the diffusion term with 6-order
   ! Compact Central scheme.
@@ -1051,7 +953,9 @@ module solver
         enddo
       endif
       !
-      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci,ncolm)
+      do n=1,ncolm
+        df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+      enddo
       !
       dvel(:,j,k,1,1)=dvel(:,j,k,1,1)+df(:,1)*dxi(0:im,j,k,1,1)
       dvel(:,j,k,1,2)=dvel(:,j,k,1,2)+df(:,1)*dxi(0:im,j,k,1,2)
@@ -1097,7 +1001,9 @@ module solver
         enddo
       endif
       !
-      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj,ncolm)
+      do n=1,ncolm
+        df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+      enddo
       !
       dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
       dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(:,1)*dxi(i,0:jm,k,2,2)
@@ -1143,7 +1049,9 @@ module solver
           enddo
         endif
         !
-        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck,ncolm)
+        do n=1,ncolm
+          df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+        enddo
         !
         dvel(i,j,:,1,1)=dvel(i,j,:,1,1)+df(:,1)*dxi(i,j,0:km,3,1)
         dvel(i,j,:,1,2)=dvel(i,j,:,1,2)+df(:,1)*dxi(i,j,0:km,3,2)
@@ -1240,7 +1148,9 @@ module solver
                 qflux(:,j,k,2)*dxi(:,j,k,1,2) +                        &
                 qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       !
-      df=ddfc(ff,difschm,npdci,im,alfa_dif,dci,ncolm)
+      do n=1,ncolm
+        df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+      enddo
       !
       qrhs(:,j,k,2)=qrhs(:,j,k,2)+df(:,1)
       qrhs(:,j,k,3)=qrhs(:,j,k,3)+df(:,2)
@@ -1274,7 +1184,9 @@ module solver
                 qflux(i,:,k,2)*dxi(i,:,k,2,2) +                        &
                 qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
       !
-      df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj,ncolm)
+      do n=1,ncolm
+        df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+      enddo
       !
       qrhs(i,:,k,2)=qrhs(i,:,k,2)+df(:,1)
       qrhs(i,:,k,3)=qrhs(i,:,k,3)+df(:,2)
@@ -1310,7 +1222,9 @@ module solver
                   qflux(i,j,:,2)*dxi(i,j,:,3,2) +                      &
                   qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
-        df=ddfc(ff,difschm,npdck,km,alfa_dif,dck,ncolm)
+        do n=1,ncolm
+          df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+        enddo
         !
         qrhs(i,j,:,2)=qrhs(i,j,:,2)+df(:,1)
         qrhs(i,j,:,3)=qrhs(i,j,:,3)+df(:,2)
@@ -1364,7 +1278,7 @@ module solver
     use commfunc, only : spafilter10
     !
     ! local data
-    integer :: i,j,k,m
+    integer :: i,j,k,n,m
     real(8),allocatable :: phi(:,:),fph(:,:)
     !
 #ifdef cputime
@@ -1383,7 +1297,9 @@ module solver
       !
       phi(:,:)=q(:,j,k,:)
       !
-      fph=spafilter10(phi,npdci,im,alfa_filter,fci,numq)
+      do n=1,numq
+        fph(:,n)=spafilter10(phi(:,n),npdci,im,alfa_filter,fci)
+      enddo
       !
       q(0:im,j,k,:)=fph
       !
@@ -1406,7 +1322,9 @@ module solver
       !
       phi(:,:)=q(i,:,k,:)
       !
-      fph=spafilter10(phi,npdcj,jm,alfa_filter,fcj,numq)
+      do n=1,numq
+        fph(:,n)=spafilter10(phi(:,n),npdcj,jm,alfa_filter,fcj)
+      enddo
       !
       q(i,0:jm,k,:)=fph
       !
@@ -1432,7 +1350,9 @@ module solver
         !
         phi(:,:)=q(i,j,:,:)
         !
-        fph=spafilter10(phi,npdck,km,alfa_filter,fck,numq)
+        do n=1,numq
+          fph(:,n)=spafilter10(phi(:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
+        enddo
         !
         q(i,j,0:km,:)=fph
         !
@@ -1463,44 +1383,65 @@ module solver
   !!
   subroutine gradcal
     !
-    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,alfa_filter
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
+                          alfa_filter,numq
     use commarray, only : x,q,dxi
     use commfunc,  only : ddfc,spafilter10
     !
     ! local data
-    integer :: i,j,k
-    real(8),allocatable :: dq(:)
+    integer :: i,j,k,n
+    real(8),allocatable :: dq(:,:)
     !
-    ! do k=0,km
-    ! do j=0,jm
-    ! do i=0,im
-    !   q(i,j,k,1)=sin(0.1d0*pi*x(i,j,k,2))+0.1d0*sin(pi*j+0.5d0*pi)
-    !   !
-    ! enddo
-    ! enddo
-    ! enddo
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      ! q(i,j,k,1)=sin(4.d0*x(1,1,k,3)) !+0.1d0*sin(pi*j+0.5d0*pi)
+      do n=1,numq
+        q(i,j,k,n)=sin(10.d0*(x(1,1,k,3)-0.5*pi))*exp(-4.d0*(x(1,1,k,3)-0.5*pi)**2)+0.1d0*sin(pi*k+0.5d0*pi)
+      enddo
+      !
+    enddo
+    enddo
+    enddo
     !
     call dataswap(q)
-    !
-    allocate(dq(0:im))
+    ! !
+    ! allocate(dq(0:im))
     !
     ! dq=ddfc(q(:,1,1,1),conschm,npdci,im,alfa_con,cci)*dxi(:,1,1,1,1)
     
-    dq=spafilter10(q(:,jm,0,2),npdci,im,alfa_filter,fci)
+    ! dq=spafilter10(q(:,jm,0,2),npdci,im,alfa_filter,fci)
     !
     ! allocate(dq(0:jm))
     ! dq=ddfc(q(1,:,1,1),conschm,npdcj,jm,alfa_con,ccj)*dxi(1,0:jm,1,2,2)
     ! dq=spafilter10(q(1,:,0,1),npdcj,jm,alfa_filter,fcj)
     !
-    ! allocate(dq(0:km))
-    ! dq=ddfc(q(1,1,:,1),conschm,npdck,km,alfa_con,cck)*dxi(1,1,0:km,3,3)
+    allocate(dq(0:km,1:numq))
+    do n=1,numq
+      ! dq(:,n)=ddfc(q(1,1,:,n),conschm,npdck,km,alfa_con,cck,lfft=.true.)
+      dq(:,n)=spafilter10(q(1,1,:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
+    enddo
+    !
+    ! do n=1,numq
+    !   dq(:,n)=dq(:,n)*dxi(1,1,0:km,3,3)
+    ! enddo
+    ! !
+    ! if(mpirank==0) then
+    !   do k=0,km
+    !     print*,k,dxi(1,1,k,3,3)
+    !   enddo
+    ! endif
+    !
+    ! dq=ddfc(q(1,1,:,1),conschm,npdck,km,alfa_con,cck)/(x(1,1,1,3)-x(1,1,0,3))
     !
     open(18,file='testout/profile'//mpirankname//'.dat')
-    do i=0,im
-      write(18,*)x(i,jm,0,1),q(i,jm,0,2),dq(i)
+    do k=0,km
+      write(18,*)x(1,1,k,3),q(1,1,k,5),dq(k,5)
     enddo
     close(18)
     print*,' << testout/profile',mpirankname,'.dat'
+    !
+    deallocate(dq)
     !
   end subroutine gradcal
   !

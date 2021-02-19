@@ -77,7 +77,7 @@ module mainloop
   subroutine rk3(counter)
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime
+                         ctime,hm
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq
@@ -90,7 +90,7 @@ module mainloop
     ! logical data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    integer :: irk,m
+    integer :: irk,i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
     !
@@ -183,6 +183,8 @@ module mainloop
                                  temperature=tmp(0:im,0:jm,0:km),      &
                                      species=spc(0:im,0:jm,0:km,:)     )
       !
+      call crashcheck
+      !
       ! call tecbin('testout/tecinit'//mpirankname//'.plt',              &
       !                                    x(0:im,0:jm,-hm:km+hm,1),'x', &
       !                                    x(0:im,0:jm,-hm:km+hm,2),'y', &
@@ -205,6 +207,79 @@ module mainloop
   end subroutine rk3
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rk3.                                    |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to check if the computational is crashed.      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-Nov-2018: Created by J. Fang @ Warrington                      |
+  !+-------------------------------------------------------------------+
+  subroutine crashcheck
+    !
+    use commvar,   only : hm
+    use commarray, only : q,rho,tmp,prs,x
+    !
+    ! local data
+    integer :: i,j,k,l
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(rho(i,j,k)>=0.d0) then
+        continue
+      else
+        print*,' !! non-positive density identified !!'
+        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
+                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
+        stop ' !! computational crashed' 
+      endif
+      !
+      if(tmp(i,j,k)>=0.d0) then
+        continue
+      else
+        print*,' !! non-positive temperature identified !!'
+        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
+                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
+        do l=-hm,hm
+          print*,l,x(i,j+l,k,2),q(i,j+l,k,5),tmp(i,j+l,k)
+        enddo
+        stop ' !! computational crashed' 
+      endif
+      !
+      if(prs(i,j,k)>=0.d0) then
+        continue
+      else
+        print*,' !! non-positive pressure identified !!'
+        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
+                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
+        stop ' !! computational crashed' 
+      endif
+      !
+      if(q(i,j,k,5)>=0.d0) then
+        continue
+      else
+        print*,' !! non-positive energy identified !!'
+        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
+                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
+        stop ' !! computational crashed' 
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    return
+    !
+  end subroutine crashcheck
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine crashcheck.                             |
   !+-------------------------------------------------------------------+
   !
 end module mainloop

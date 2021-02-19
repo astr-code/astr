@@ -6,16 +6,16 @@
 channel
 
 # im,jm,km
-32,32,32
+128,128,128
 
 # lihomo,ljhomo,lkhomo
 t,f,t
 
-# nondimen,diffterm,lfilter,lreadgrid
-t,t,t,t
+# nondimen,diffterm,lfilter,lreadgrid,lfftz
+t,t,t,t,t
 
-# alfa_filter
-0.49d0
+# alfa_filter, kcutoff
+0.49d0,48
 
 # ref_t,reynolds,mach
 273.15d0,  3000.d0,  0.5d0     
