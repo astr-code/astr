@@ -15,6 +15,8 @@ module mainloop
   !
   implicit none
   !
+  integer :: loop_counter=0
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -30,17 +32,15 @@ module mainloop
     use readwrite,only: readcont,timerept
     !
     ! local data
-    integer :: counter
     real(8) :: var1
     !
     var1=ptime()
     !
-    counter=nwrite
     do while(nstep<=maxstep)
       !
-      call rk3(counter)
+      call rk3
       !
-      if(counter==nwrite) then
+      if(loop_counter==nwrite .or. loop_counter==0) then
         !
         call readcont
         !
@@ -48,11 +48,11 @@ module mainloop
         !
         call timerept
         !
-        counter=0
+        loop_counter=0
         !
       endif
       !
-      counter=counter+1
+      loop_counter=loop_counter+1
       nstep=nstep+1
       time=time+deltat
       !
@@ -74,18 +74,16 @@ module mainloop
   !| -------------                                                     |
   !| 27-Nov-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  subroutine rk3(counter)
+  subroutine rk3
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm
+                         ctime,hm,lavg,navg,nstep,nsamples
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq
-    use statistic,only : statcal,statout
+    use statistic,only : statcal,statout,meanflowcal
     use readwrite,only : output
     use bc,       only : boucon
-    !
-    integer,intent(in) :: counter
     !
     ! logical data
     logical,save :: firstcall = .true.
@@ -146,11 +144,23 @@ module mainloop
         !
         call statout
         !
+        if(loop_counter.ne.0) then
+          !
+          if(lavg) then
+            if(mod(nstep,navg)==0) call meanflowcal
+          else
+            nsamples=0
+          endif
+          !
+        else
+          nsamples=0
+        endif
+        !
 #ifdef cputime
         ctime(5)=ctime(5)+ptime()-time_beg_sta
 #endif
         !
-        if(counter==nwrite) then
+        if(loop_counter==nwrite .or. loop_counter==0) then
 #ifdef cputime
           time_beg_io=ptime()
 #endif

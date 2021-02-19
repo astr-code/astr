@@ -26,20 +26,35 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine flowinit
     !
-    use commvar,  only: flowtype,nstep,time,filenumb
-    use readwrite,only: readcont
+    use commvar,  only: flowtype,nstep,time,filenumb,ninit
+    use commarray,only: vel,rho,prs,spc,tmp,q
+    use readwrite,only: readcont,readflowini3d
+    use fludyna,  only: fvar2q
     !
-    select case(trim(flowtype))
-    case('2dvort')
-      call vortini
-    case('channel')
-      call chanini
-    case('tgv')
-      call tgvini
-    case default
-      print*,trim(flowtype)
-      stop ' !! flowtype not defined @ flowinit'
-    end select
+    if(ninit==3) then
+      !
+      call readflowini3d
+      !
+      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+    else
+      !
+      select case(trim(flowtype))
+      case('2dvort')
+        call vortini
+      case('channel')
+        call chanini
+      case('tgv')
+        call tgvini
+      case default
+        print*,trim(flowtype)
+        stop ' !! flowtype not defined @ flowinit'
+      end select
+    !
+    endif
     !
     nstep=0
     time=0.d0

@@ -13,10 +13,127 @@ module statistic
   !
   implicit none
   !
+  integer :: nsamples
+  logical :: lmeanallocated=.false.
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms
   real(8),allocatable :: max_q(:),min_q(:)
   !
+  real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,u11,   &
+                                          u22,u33,u12,u13,u23,tt,pp
+  !
   contains
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to allocate mean flow arraies.            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine allomeanflow
+    !
+    use commarray, only : rom,u1m,u2m,u3m,pm,tm,u11,                   &
+                          u22,u33,u12,u13,u23,tt,pp
+    !
+    ! local data
+    integer :: lallo
+    !
+    allocate(rom(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating rom'
+    allocate(u1m(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u1m'
+    allocate(u2m(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u2m'
+    allocate(u3m(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u3m'
+    allocate(pm(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating pm'
+    allocate(tm(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tm'
+    !
+    allocate(u11(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u11'
+    allocate(u22(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u22'
+    allocate(u33(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u33'
+    allocate(u12(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u12'
+    allocate(u13(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u13'
+    allocate(u23(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating u23'
+    allocate( tt(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tt'
+    allocate( pp(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating pp'
+    !
+    lmeanallocated=.true.
+    !
+  end subroutine allomeanflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine allomeanflow.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to calculate mean flow variables.         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine meanflowcal
+    !
+    use commvar,   only : nsamples
+    use commarray, only : rho,vel,prs,tmp
+    use commarray, only : rom,u1m,u2m,u3m,pm,tm,u11,                   &
+                          u22,u33,u12,u13,u23,tt,pp
+    !
+    if(nsamples==0) then
+      !
+      if(.not. lmeanallocated) call allomeanflow
+      !
+      rom=0.d0
+      u1m=0.d0
+      u2m=0.d0
+      u3m=0.d0
+      pm =0.d0
+      tm =0.d0
+      u11=0.d0
+      u22=0.d0
+      u33=0.d0
+      u12=0.d0
+      u13=0.d0
+      u23=0.d0
+      tt =0.d0
+      pp =0.d0
+      !
+      if(lio) print*,' ** meanflow initilised, nsamples=',nsamples
+      !
+    endif
+    !
+    rom=rom + rho(0:im,0:jm,0:km)
+    u1m=u1m + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)
+    u2m=u2m + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,2)
+    u3m=u3m + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,3)
+    pm =pm  + prs(0:im,0:jm,0:km)
+    tm =tm  + rho(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)
+    u11=u11 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)*vel(0:im,0:jm,0:km,1)
+    u22=u22 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,2)*vel(0:im,0:jm,0:km,2)
+    u33=u33 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,3)*vel(0:im,0:jm,0:km,3)
+    u12=u12 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)*vel(0:im,0:jm,0:km,2)
+    u13=u13 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)*vel(0:im,0:jm,0:km,3)
+    u23=u23 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,2)*vel(0:im,0:jm,0:km,3)
+    tt =tt  + rho(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)
+    pp =pp  + prs(0:im,0:jm,0:km)*prs(0:im,0:jm,0:km)
+    !
+    nsamples=nsamples+1
+    if(lio) print*,' ** meanflow calculated, nsamples=',nsamples
+    !
+  end subroutine meanflowcal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine allomeanflow.                           |
+  !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is used to calculate and output instantous status.|

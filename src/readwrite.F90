@@ -10,6 +10,8 @@ module readwrite
   use parallel,only : mpirank,mpirankname,mpistop,lio
   use tecio
   !
+  implicit none
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -59,9 +61,10 @@ module readwrite
       write(*,*)
       write(*,*)
       !
+      print*,' ** computation start ... '
+      write(*,*)
+      write(*,*)
     endif
-    !
-    call mpistop
     !
     return
     !
@@ -108,11 +111,11 @@ module readwrite
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
                         flowtype,ndims,lfilter,alfa_filter,bctype,     &
-                        twall,lfftk,kcutoff
+                        twall,lfftk,kcutoff,ninit
     !
     ! local data
     character(len=42) :: typedefine
-    integer :: n
+    integer :: n,i
     character(len=4) :: bcdir(1:6)
     !
     bcdir(1)='imin'; bcdir(2)='imax'
@@ -218,6 +221,15 @@ module readwrite
       enddo
       write(*,'(2X,62A)')('-',i=1,62)
       !
+      if(ninit==2) then
+        write(*,'(2X,A62)')' initialise by rading a flowini2d file'
+      elseif(ninit==3) then
+        write(*,'(2X,A62)')' initialise by rading a flowini3d file'
+      else
+        write(*,'(2X,A62)')' initialise by a user defined way'
+      endif
+      write(*,'(2X,62A)')('-',i=1,62)
+      !
     endif
     !
   end subroutine infodisp
@@ -238,7 +250,8 @@ module readwrite
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
-                        lreadgrid,lfftk,gridfile,bctype,twall,kcutoff
+                        lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
+                        ninit
     use parallel,only : bcast
     !
     ! local data
@@ -286,6 +299,8 @@ module readwrite
           read(11,*)bctype(n),twall(n)
         endif
       enddo
+      read(11,'(/)')
+      read(11,*)ninit
       if(lreadgrid) then
         read(11,'(/)')
         read(11,'(A)')gridfile
@@ -325,6 +340,7 @@ module readwrite
     !
     call bcast(bctype)
     call bcast(twall)
+    call bcast(ninit)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+
@@ -341,7 +357,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readcont
     !
-    use commvar, only: maxstep,nwrite,deltat,nlstep,lwrite
+    use commvar, only: maxstep,nwrite,deltat,nlstep,lwrite,lavg,navg
     use parallel,only : bcast
     !
     ! local data
@@ -353,9 +369,9 @@ module readwrite
       !
       open(11,file=trim(inputfile),action='read')
       read(11,'(////)')
-      read(11,*)lwrite
+      read(11,*)lwrite,lavg
       read(11,'(/)')
-      read(11,*)maxstep,nwrite,nlstep
+      read(11,*)maxstep,nwrite,nlstep,navg
       read(11,'(/)')
       read(11,*)deltat
       close(11)
@@ -364,9 +380,11 @@ module readwrite
     endif
     !
     call bcast(lwrite)
+    call bcast(lavg)
     call bcast(maxstep)
     call bcast(nwrite)
     call bcast(nlstep)
+    call bcast(navg)
     call bcast(deltat)
     !
   end subroutine readcont
@@ -398,6 +416,40 @@ module readwrite
   !| The end of the subroutine readinput.                              |
   !+-------------------------------------------------------------------+
   !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to read a initial flow filed.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine readflowini3d
+    !
+    use commvar,   only : im,jm,km,num_species
+    use commarray, only : rho,vel,prs,tmp,spc
+    use hdf5io
+    !
+    ! local data
+    !
+    integer :: jsp
+    character(len=2) :: spname
+    !
+    call h5io_init(filename='datin/flowini3d.h5',mode='read')
+    !
+    call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
+    call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1))
+    call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2))
+    call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3))
+    call h5read(varname='p', var=prs(0:im,0:jm,0:km))
+    call h5read(varname='t', var=tmp(0:im,0:jm,0:km))
+    do jsp=1,num_species
+       write(spname,'(i2.2)')jsp
+      call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+    enddo
+    !
+    call h5io_end
+    !
+  end subroutine readflowini3d
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of subroutine readflowini3d.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
   !+-------------------------------------------------------------------+
   !| This subroutine is used to write a grid file for postprocess.     |
   !+-------------------------------------------------------------------+
@@ -469,8 +521,11 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine output
     !
-    use commvar, only: time,nstep,filenumb,num_species,im,jm,km,lwrite
-    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
+    use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
+                       lwrite,lavg,nsamples
+    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs,rom,u1m,u2m,u3m,   &
+                         pm,tm,u11,u22,u33,u12,u13,u23,tt,pp
+    !
     use hdf5io
     !
     ! local data
@@ -502,6 +557,29 @@ module readwrite
       call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
     enddo
     call h5io_end
+    !
+    if(lavg .and. nsamples>0) then
+      !
+      call h5io_init('outdat/meanflow.h5',mode='write')
+      call h5write(varname='nstep',var=nstep)
+      call h5write(varname='nsamples',var=nsamples)
+      call h5write(varname='rom',var=rom(0:im,0:jm,0:km))
+      call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km))
+      call h5write(varname='u2m',var=u2m(0:im,0:jm,0:km))
+      call h5write(varname='u3m',var=u3m(0:im,0:jm,0:km))
+      call h5write(varname='pm ',var=pm (0:im,0:jm,0:km))
+      call h5write(varname='tm ',var=tm (0:im,0:jm,0:km))
+      call h5write(varname='u11',var=u11(0:im,0:jm,0:km))
+      call h5write(varname='u22',var=u22(0:im,0:jm,0:km))
+      call h5write(varname='u33',var=u33(0:im,0:jm,0:km))
+      call h5write(varname='u12',var=u12(0:im,0:jm,0:km))
+      call h5write(varname='u13',var=u13(0:im,0:jm,0:km))
+      call h5write(varname='u23',var=u23(0:im,0:jm,0:km))
+      call h5write(varname='tt ',var=tt (0:im,0:jm,0:km))
+      call h5write(varname='pp ',var=pp (0:im,0:jm,0:km))
+      call h5io_end
+      !
+    endif
     !
     ! call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
     !                                           x(0:im,0:jm,0:km,1),'x', &

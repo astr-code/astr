@@ -11,7 +11,7 @@ module commvar
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
   integer :: hm
-  integer :: numq,num_species,ndims
+  integer :: numq,num_species,ndims,navg,nsamples,ninit
   character(len=4) :: conschm,difschm
   character(len=64) :: gridfile 
   !+---------------------+---------------------------------------------+
@@ -24,10 +24,12 @@ module commvar
   !|     conschm,difschm | the scheme of solving convectional and      |
   !|                     | diffusional terms.                          |
   !|         num_species | number of species                           |
+  !|                navg | frequency of averaging.                     |
+  !|               ninit | initialisation method.                      |
   !|            gridfile | the gridfile.                               |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lfftk
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lavg,lfftk
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
   !|             nondimen| if the equation is non-dimensional          |
@@ -35,6 +37,7 @@ module commvar
   !|                     | .f. means Euler equations are solved.       |
   !|             lfilter | to activate filer flag                      |
   !|              lwrite | write samples or not.                       |
+  !|                lavg | average the flow field or not .             |
   !|               lfftk | to use fft in the k direction.              |
   !+---------------------+---------------------------------------------+
   !
