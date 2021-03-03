@@ -27,6 +27,20 @@ module commfunc
     ! module procedure spafilter10_2d
   end interface
   !
+  interface extrapolate
+    module procedure extrapolate_1o
+    module procedure extrapolate_2o
+    module procedure extrapolate_3o
+    module procedure extrapolate_4o
+  end interface
+  !
+  interface deriv
+    module procedure deriv_1o
+    module procedure deriv_2o
+    module procedure deriv_3o
+    module procedure deriv_4o
+  end interface
+  !
   real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),     &
                          coef10i(:),coefb(:,:)
   complex(8) :: ci=(0.d0,1.d0)
@@ -134,8 +148,12 @@ module commfunc
           ddfc=ptds_cal(b,af,cc,dim,ntype)
         elseif(stype(4:4)=='e') then
           !
-          if(nscheme/100==6) then
+          if(nscheme/100==8) then
+            ddfc=diff8ec(f,dim,nscheme,ntype)
+          elseif(nscheme/100==6) then
             ddfc=diff6ec(f,dim,nscheme,ntype)
+          elseif(nscheme/100==4) then
+            ddfc=diff4ec(f,dim,nscheme,ntype)
           else
             print*,' !! nscheme',nscheme
             stop ' !! scheme not defined @ ddfc_basic'
@@ -316,6 +334,66 @@ module commfunc
   !| -------------                                                     |
   !| 19-02-2021  | Created by J. Fang @ Warrington.                    |
   !+-------------------------------------------------------------------+
+  function diff8ec(vin,dim,ns,ntype) result(vout)
+    !
+    integer,intent(in) :: dim,ns,ntype
+    real(8),intent(in) :: vin(-hm:dim+hm)
+    real(8) :: vout(0:dim)
+    !
+    ! local data
+    integer :: i
+    !
+    if(ntype==1) then
+      !
+      if(ns==642) then
+        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+        vout(1)=0.5d0*(vin(2)-vin(0))
+        vout(2)=num2d3*(vin(3)-vin(1))-num1d12*(vin(4)-vin(0))
+      else
+        print*,' !! ns=',ns
+        stop ' error 1 @ diff6c'
+      endif
+      !
+      do i=3,dim
+        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
+                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
+                  num1d60*(vin(i+3)-vin(i-3))
+      enddo
+      !
+    elseif(ntype==2) then
+      !
+      do i=0,dim-3
+        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
+                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
+                  num1d60*(vin(i+3)-vin(i-3))
+      enddo
+      !
+      if(ns==642) then
+        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
+        vout(dim-2) =num2d3*(vin(dim-1)-vin(dim-3))-                   &
+                    num1d12*(vin(dim)  -vin(dim-4))
+        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
+        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+      else
+        print*,' !! ns=',ns
+        stop ' error 2 @ diff6c'
+      endif
+      !
+    elseif(ntype==3) then
+      do i=0,dim
+        vout(i)  =(672.d0*(vin(i+1)-vin(i-1))-                         &
+                   168.d0*(vin(i+2)-vin(i-2))+                         &
+                    32.d0*(vin(i+3)-vin(i-3))-                         &
+                     3.d0*(vin(i+4)-vin(i-4)))*num1d840
+      enddo
+    else
+      print*,' !! ntype=',ntype
+      stop ' !! errpr 3 @ diff6c'
+    endif
+    !
+  end function diff8ec
+  !
   function diff6ec(vin,dim,ns,ntype) result(vout)
     !
     integer,intent(in) :: dim,ns,ntype
@@ -374,6 +452,59 @@ module commfunc
     endif
     !
   end function diff6ec
+  !
+  function diff4ec(vin,dim,ns,ntype) result(vout)
+    !
+    integer,intent(in) :: dim,ns,ntype
+    real(8),intent(in) :: vin(-hm:dim+hm)
+    real(8) :: vout(0:dim)
+    !
+    ! local data
+    integer :: i
+    !
+    if(ntype==1) then
+      !
+      if(ns==442) then
+        ! ns==642: 2-4-4-...-4-4-2
+        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+        vout(1)=0.5d0*(vin(2)-vin(0))
+      else
+        print*,' !! ns=',ns
+        stop ' error 1 @ diff6c'
+      endif
+      !
+      do i=2,dim
+        vout(i)  =num2d3*(vin(i+1)-vin(i-1))-                         &
+                  num1d12*(vin(i+2)-vin(i-2))
+      enddo
+      !
+    elseif(ntype==2) then
+      !
+      do i=0,dim-2
+        vout(i)  =num2d3*(vin(i+1)-vin(i-1))-                         &
+                  num1d12*(vin(i+2)-vin(i-2))
+      enddo
+      !
+      if(ns==442) then
+        ! ns==642: 2-4-4-...-4-4-2
+        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
+        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+      else
+        print*,' !! ns=',ns
+        stop ' error 2 @ diff6c'
+      endif
+      !
+    elseif(ntype==3) then
+      do i=0,dim
+        vout(i)  =num2d3*(vin(i+1)-vin(i-1))-                         &
+                  num1d12*(vin(i+2)-vin(i-2))
+      enddo
+    else
+      print*,' !! ntype=',ntype
+      stop ' !! errpr 3 @ diff6c'
+    endif
+    !
+  end function diff4ec
   !+-------------------------------------------------------------------+
   !| The end of the diffcen ddf.                                       |
   !+-------------------------------------------------------------------+
@@ -2386,6 +2517,111 @@ module commfunc
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine gradextrp.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to calculate local derivative at point 0.        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-Feb-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  function deriv_1o(v0,v1) result(dv)
+    !
+    real(8) :: dv
+    real(8),intent(in) :: v0,v1
+    !
+    dv=-v0+v1
+    !
+    return
+    !
+  end function deriv_1o
+  !
+  function deriv_2o(v0,v1,v2) result(dv)
+    !
+    real(8) :: dv
+    real(8),intent(in) :: v0,v1,v2
+    !
+    dv=-1.5d0*v0+2.d0*v1-0.5d0*v2
+    !
+    return
+    !
+  end function deriv_2o
+  !
+  function deriv_3o(v0,v1,v2,v3) result(dv)
+    !
+    real(8) :: dv
+    real(8),intent(in) :: v0,v1,v2,v3
+    !
+    dv=-num11d6*v0+3.d0*v1-1.5d0*v2+num1d3*v3
+    !
+    return
+    !
+  end function deriv_3o
+  !
+  function deriv_4o(v0,v1,v2,v3,v4) result(dv)
+    !
+    real(8) :: dv
+    real(8),intent(in) :: v0,v1,v2,v3,v4
+    !
+    dv=-num25d12*v0+4.d0*v1-3.d0*v2+num4d3*v3-0.25d0*v4
+    !
+    return
+    !
+  end function deriv_4o
+  !+-------------------------------------------------------------------+
+  !| The end of the function deriv.                                    |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to extrapolate variables according to gradient.  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-Feb-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  function extrapolate_1o(v1,dv) result(v0)
+    !
+    ! arguments
+    real(8) :: v0
+    real(8),intent(in) :: v1,dv
+    !
+    v0=v1-dv
+    !
+  end function extrapolate_1o
+  !
+  function extrapolate_2o(v1,v2,dv) result(v0)
+    !
+    ! arguments
+    real(8) :: v0
+    real(8),intent(in) :: v1,v2,dv
+    !
+    v0=num1d3*(4.d0*v1-v2-2.d0*dv)
+    !
+  end function extrapolate_2o
+  !
+  function extrapolate_3o(v1,v2,v3,dv) result(v0)
+    !
+    ! arguments
+    real(8) :: v0
+    real(8),intent(in) :: v1,v2,v3,dv
+    !
+    v0=num1d11*(18.d0*v1-9.d0*v2+2.d0*v3-6.d0*dv)
+    !
+  end function extrapolate_3o
+  !
+  function extrapolate_4o(v1,v2,v3,v4,dv) result(v0)
+    !
+    ! arguments
+    real(8) :: v0
+    real(8),intent(in) :: v1,v2,v3,v4,dv
+    !
+    v0=0.04d0*(48.d0*v1-36.d0*v2+16.d0*v3-3.d0*v4-12.d0*dv)
+    !
+  end function extrapolate_4o
+  !+-------------------------------------------------------------------+
+  !| The end of the function extrapolate.                              |
+  !+-------------------------------------------------------------------+
+
   !!
 end module commfunc
 !+---------------------------------------------------------------------+

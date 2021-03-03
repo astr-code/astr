@@ -279,6 +279,90 @@ module fludyna
   ! End of function MiuCal.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
+  !+-------------------------------------------------------------------+
+  !| This function is used to calculate speed of sound.                |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-Feb-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  pure real(8) function sos(tmp)
+    !
+    use commvar, only: mach
+    !
+    real(8),intent(in) :: tmp
+    !
+    sos=sqrt(tmp)/mach
+    !
+    return
+    !
+  end function sos
+  !+-------------------------------------------------------------------+
+  !| The end of the function sos.                                      |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is used to assign the velocity profile of the jet   |
+  !| flow.                                                             |
+  !+-------------------------------------------------------------------+
+  !| ref: Bogey, C., Bailly C., and Juve,D., Noise Investigation of a  |
+  !|      High Subsonic, Moderate Reynolds Number Jet Using a          |
+  !|      Compressible Large Eddy Simulation. Theoret. Comput. Fluid   |
+  !|      Dynamics, 2003, 16, 273–297.                                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-Jun-2020: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  function jetvel(r,time) result(u)
+    !
+    use constdef
+    use commvar, only: uinf,ymin,ymax
+    !
+    ! arguments
+    real(8) :: u(3)
+    real(8),intent(in) :: r
+    real(8),intent(in),optional :: time
+    !
+    ! local data
+    real(8) :: r0,uc,delta,ujet,alfa,theter,Tperi,var1
+    !+-----------------------------+
+    !| delta: the initial momentum |
+    !| thickness of the shear layer|
+    !| uc: jet centerline velocity |
+    !+-----------------------------+
+    !
+    !
+    r0=0.5d0
+    uc=1.67d0*uinf    ! ref: Reichert & Biringen, Mechanics Research
+                      !      Communications 34 (2007) 249–259
+    delta=0.05d0*r0   ! ref: Bogey
+    !
+    var1=0.5d0+0.5d0*tanh((r0-abs(r))/(2.d0*delta)) ! profile 0~1
+    ujet=var1*(uc-uinf)+uinf
+    !
+    if(present(time)) then
+      !
+      ! alfa=2.5d0/180.d0*pi
+      ! theter=sin(2.d0*pi/Tperi*time)*alfa
+      ! !
+      ! u(1)=ujet*cos(theter)+uinf
+      ! u(2)=ujet*sin(theter)
+      !
+    else
+      u(1)=ujet !+uinf
+      u(2)=0.d0
+      u(3)=0.d0
+    endif
+    !
+    return
+    !
+  end function jetvel
+  !+-------------------------------------------------------------------+
+  !| The end of the function jetvel.                                   |
+  !+-------------------------------------------------------------------+
+  !
+  !!
 end module fludyna
 !+---------------------------------------------------------------------+
 !| The end of the module fludyna.                                      |

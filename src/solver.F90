@@ -161,9 +161,9 @@ module solver
   subroutine geomcal
     !
     use commvar,   only : ia,ja,ka,im,jm,km,hm,npdci,npdcj,npdck,hm,   &
-                          xmax,xmin,ymax,ymin,zmax,zmin,voldom
+                          xmax,xmin,ymax,ymin,zmax,zmin,voldom,difschm
     use commarray, only : x,jacob,dxi,celvol
-    use parallel,  only : gridsendrecv,ksize,psum,pmax,pmin
+    use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
     use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
     use tecio
     use bc,       only : geombc,xyzbc
@@ -184,7 +184,8 @@ module solver
     !
     call xyzbc
     !
-    cscheme='642c'
+    ! cscheme='442e'
+    cscheme=difschm
     !
     read(cscheme(1:3),*) nscheme
     !
@@ -195,7 +196,7 @@ module solver
       !
       call ptds_ini(gci,alfa,nscheme,im,npdci)
       call ptds_ini(gcj,alfa,nscheme,jm,npdcj)
-      if(ksize>1) call ptds_ini(gck,alfa,nscheme,km,npdck)
+      call ptds_ini(gck,alfa,nscheme,km,npdck)
       !
     endif
     !
@@ -238,7 +239,31 @@ module solver
     enddo
     enddo
     !
-    if(ndims==3) then
+    if(ndims==1) then
+      !
+      j=0
+      k=0
+      !
+      voldom=0.d0
+      do i=1,im
+        celvol(i,j,k)=abs(x(i,j,k,1)-x(i-1,j,k,1))
+        voldom=voldom+celvol(i,j,k)
+      enddo
+      voldom=psum(voldom)
+      !
+    elseif(ndims==2) then
+      k=0
+      !
+      voldom=0.d0
+      do j=1,jm
+      do i=1,im
+        celvol(i,j,k)=arquad( x(i-1,j-1,k,:),   x(i,j-1,k,:),          &
+                              x(i,j,k,:),       x(i-1,j,k,:) )
+        voldom=voldom+celvol(i,j,k)
+      enddo
+      enddo
+      voldom=psum(voldom)
+    elseif(ndims==3) then
       voldom=0.d0
       do k=1,km
       do j=1,jm
@@ -252,19 +277,8 @@ module solver
       enddo
       enddo
       voldom=psum(voldom)
-    elseif(ndims==3) then
-      voldom=0.d0
-      do k=1,km
-      do j=1,jm
-      do i=1,im
-        celvol(i,j,k)=arquad( x(i-1,j-1,k,:),   x(i,j-1,k,:),          &
-                              x(i,j,k,:),       x(i-1,j,k,:) )
-        voldom=voldom+celvol(i,j,k)
-      enddo
-      enddo
-      enddo
-      voldom=psum(voldom)
     endif
+    !
     if(lio) print*,' ** total volume of the domain is: ',voldom
     !
     if(lio) print*,' ** dxyz/dijk calculated.'
@@ -303,6 +317,9 @@ module solver
                             dx(0:im,0:jm,0:km,2,2)                     &
                           - dx(0:im,0:jm,0:km,1,2)*                    &
                             dx(0:im,0:jm,0:km,2,1)
+    elseif(ndims==1) then  
+      jacob(0:im,0:jm,0:km)=dx(0:im,0:jm,0:km,1,1)*                    &
+                            dx(0:im,0:jm,0:km,2,2)
     else
       stop ' !! ndimes not defined at jacob calculation.'
     endif
@@ -447,6 +464,17 @@ module solver
       dxi(0:im,0:jm,0:km,2,1)=-dx(0:im,0:jm,0:km,2,1)  
       dxi(0:im,0:jm,0:km,2,2)= dx(0:im,0:jm,0:km,1,1) 
       !
+      dxi(0:im,0:jm,0:km,1,3)=0.d0
+      dxi(0:im,0:jm,0:km,2,3)=0.d0
+      dxi(0:im,0:jm,0:km,3,:)=0.d0
+      !
+    elseif(ndims==1) then
+      !
+      dxi(0:im,0:jm,0:km,1,1)= dx(0:im,0:jm,0:km,2,2)    
+      dxi(0:im,0:jm,0:km,2,2)= dx(0:im,0:jm,0:km,1,1) 
+      !
+      dxi(0:im,0:jm,0:km,1,2)=0.d0
+      dxi(0:im,0:jm,0:km,2,1)=0.d0
       dxi(0:im,0:jm,0:km,1,3)=0.d0
       dxi(0:im,0:jm,0:km,2,3)=0.d0
       dxi(0:im,0:jm,0:km,3,:)=0.d0
@@ -611,7 +639,7 @@ module solver
       write(*,'(2X,A)')'                    *** Grids Information *** '
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(3X,62A)')'       xmin      xmax      ymin      ymax      zmin      zmax'
-      write(*,"(4X,6(F10.6))")xmin,xmax,ymin,ymax,zmin,zmax
+      write(*,"(4X,6(F10.3))")xmin,xmax,ymin,ymax,zmin,zmax
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                   *** Averaged of Identity ***'
       write(*,"(1X,3(1X,E20.7E3))")can1av,can2av,can3av
@@ -645,8 +673,10 @@ module solver
     !                                 dxi(0:im,0:jm,0:km,2,2),'dydj',    &
     !                                 dxi(0:im,0:jm,0:km,3,3),'dzdk')
     ! ! ! 
-    deallocate(dx,gci,gcj,can)
+    deallocate(dx,can)
     !
+    if(allocated(gci)) deallocate(gci)
+    if(allocated(gcj)) deallocate(gcj)
     if(allocated(gck)) deallocate(gck)
     !
     ! call mpistop
@@ -675,8 +705,6 @@ module solver
     time_beg=ptime() 
 #endif
     !
-    qrhs=0.d0
-    !
     call convrsdcal6
     ! call ConvRsdCal6_legc
     !
@@ -692,7 +720,9 @@ module solver
     !
     call diffrsdcal6
     !
-    if(trim(flowtype)=='channel') call srcchan
+    if(trim(flowtype)=='channel') then 
+      call srcchan
+    endif
     !
 #ifdef cputime
     ctime(10)=ctime(10)+ptime()-time_beg
@@ -783,7 +813,7 @@ module solver
   subroutine convrsdcal6
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,conschm,          &
-                        npdci,npdcj,npdck
+                        npdci,npdcj,npdck,is,ie,js,je,ks,ke
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use commfunc, only: ddfc
     !
@@ -795,8 +825,8 @@ module solver
     ! calculating along i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq),uu(-hm:im+hm))
-    do k=0,km
-    do j=0,jm
+    do k=ks,ke
+    do j=js,je
       !
       uu(:)=dxi(:,j,k,1,1)*vel(:,j,k,1)+dxi(:,j,k,1,2)*vel(:,j,k,2) +  &
             dxi(:,j,k,1,3)*vel(:,j,k,3)
@@ -816,7 +846,7 @@ module solver
         dfcs(:,n)=ddfc(fcs(:,n),conschm,npdci,im,alfa_con,cci)
       enddo
       !
-      qrhs(:,j,k,:)=qrhs(:,j,k,:)+dfcs(:,:) 
+      qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:) 
       !
       ! print*,maxval(dfcs(:,2)),maxval(dfcs(:,3))
       !
@@ -832,8 +862,8 @@ module solver
     ! calculating along j direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq),uu(-hm:jm+hm))
-    do k=0,km
-    do i=0,im
+    do k=ks,ke
+    do i=is,ie
       !
       uu(:)=dxi(i,:,k,2,1)*vel(i,:,k,1)+dxi(i,:,k,2,2)*vel(i,:,k,2) +  &
             dxi(i,:,k,2,3)*vel(i,:,k,3)
@@ -853,7 +883,7 @@ module solver
         dfcs(:,n)=ddfc(fcs(:,n),conschm,npdcj,jm,alfa_con,ccj)
       enddo
       !
-      qrhs(i,:,k,:)=qrhs(i,:,k,:)+dfcs(:,:)
+      qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
       !
       !
     enddo
@@ -869,8 +899,8 @@ module solver
       ! calculating along j direction
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq),uu(-hm:km+hm))
-      do j=0,jm
-      do i=0,im
+      do j=js,je
+      do i=is,ie
         !
         uu(:)=dxi(i,j,:,3,1)*vel(i,j,:,1)+dxi(i,j,:,3,2)*vel(i,j,:,2) +  &
               dxi(i,j,:,3,3)*vel(i,j,:,3)
@@ -890,7 +920,7 @@ module solver
           dfcs(:,n)=ddfc(fcs(:,n),conschm,npdck,km,alfa_con,cck,lfft=lfftk)
         enddo
         !
-        qrhs(i,j,:,:)=qrhs(i,j,:,:)+dfcs(:,:)
+        qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
         !
       enddo
       enddo

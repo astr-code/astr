@@ -26,6 +26,7 @@ module commarray
   !|                 vel | velocity.                                   |
   !|                 spc | species.                                    |
   !+---------------------+---------------------------------------------+
+  real(8),allocatable :: acctest_ref(:)
   !
   contains
   !
@@ -38,7 +39,7 @@ module commarray
   !+-------------------------------------------------------------------+
   subroutine allocommarray
     !
-    use commvar, only : im,jm,km,hm,numq,num_species
+    use commvar, only : im,jm,km,hm,numq,num_species,ndims
     !
     ! local data
     integer :: lallo
@@ -49,7 +50,13 @@ module commarray
     allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating jacob'
     !
-    allocate( celvol(1:im,1:jm,1:km),stat=lallo)
+    if(ndims==1) then
+      allocate( celvol(1:im,0:0,0:0),stat=lallo)
+    elseif(ndims==2) then
+      allocate( celvol(1:im,1:jm,0:0),stat=lallo)
+    elseif(ndims==3) then
+      allocate( celvol(1:im,1:jm,1:km),stat=lallo)
+    endif
     if(lallo.ne.0) stop ' !! error at allocating celvol'
     !
     allocate( dxi(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3),stat=lallo)

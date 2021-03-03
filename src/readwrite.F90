@@ -111,7 +111,7 @@ module readwrite
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
                         flowtype,ndims,lfilter,alfa_filter,bctype,     &
-                        twall,lfftk,kcutoff,ninit
+                        twall,lfftk,kcutoff,ninit,rkscheme
     !
     ! local data
     character(len=42) :: typedefine
@@ -131,6 +131,10 @@ module readwrite
         typedefine='                              channel flow'
       case('tgv')
         typedefine='                  Taylor-Green Vortex flow'
+      case('jet')
+        typedefine='                                  Jet flow'
+      case('accutest')
+        typedefine='                             accuracy test'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -141,7 +145,7 @@ module readwrite
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                     ***    flow type   ***'
       write(*,'(2X,A59,I3)')' dimension: ',ndims
-      write(*,'(14X,A,A,A42)')trim(flowtype),': ',typedefine
+      write(*,'(2X,A18,A2,A42)')trim(flowtype),': ',typedefine
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                     ***    MPI size    ***'
       write(*,"(4(1x,A15))")'isize','jsize','ksize','size'
@@ -211,13 +215,36 @@ module readwrite
         endif
         !
       endif
+      !
+      write(*,'(14X,A)',advance='no')'  temporal scheme: '
+      if(rkscheme=='rk3') then
+        write(*,'(A)')'  3-stage 3rd-order Runge–Kutta'
+      elseif(rkscheme=='rk4') then
+        write(*,'(A)')'  4-stage 4th-order Runge–Kutta'
+      else
+        stop ' !! error: rk scheme not defined !!'
+      endif
+      !
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                    *** Boundary Conditions ***'
       do n=1,6
-        if(bctype(n)==41) then
-          write(*,'(17X,3(A),F6.3)')' isothermal nonslip wall at ',    &
-                                           bcdir(n),', Twall= ',twall(n)
+        !
+        if(bctype(n)==1) then
+          write(*,'(45X,I0,2(A))')bctype(n),' periodic at: ',bcdir(n)
+        elseif(bctype(n)==41) then
+          write(*,'(24X,I0,3(A),F6.3)')bctype(n),' isothermal wall at ',bcdir(n),&
+                                                     ' Twall= ',twall(n)
+        elseif(bctype(n)==11) then
+          write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
+        elseif(bctype(n)==21) then
+          write(*,'(45X,I0,2(A))')bctype(n),' outflow at: ',bcdir(n)
+        elseif(bctype(n)==22) then
+          write(*,'(38X,I0,2(A))')bctype(n),' nscbcc outflow at: ',bcdir(n)
+        else
+          print*,n,bctype(n)
+          stop ' !! BC not defined !!'
         endif
+        !
       enddo
       write(*,'(2X,62A)')('-',i=1,62)
       !
@@ -251,7 +278,7 @@ module readwrite
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
-                        ninit
+                        ninit,rkscheme
     use parallel,only : bcast
     !
     ! local data
@@ -288,7 +315,7 @@ module readwrite
       endif
       !
       read(11,'(/)')
-      read(11,*)conschm,difschm
+      read(11,*)conschm,difschm,rkscheme
       read(11,'(/)')
       read(11,*)num_species
       read(11,'(/)')
@@ -327,6 +354,7 @@ module readwrite
     !
     call bcast(nondimen)
     call bcast(diffterm)
+    call bcast(rkscheme)
     call bcast(lfilter)
     !
     call bcast(alfa_filter)
@@ -581,15 +609,15 @@ module readwrite
       !
     endif
     !
-    ! call tecbin('testout/tecfield'//stepname//mpirankname//'.plt',     &
-    !                                           x(0:im,0:jm,0:km,1),'x', &
-    !                                           x(0:im,0:jm,0:km,2),'y', &
-    !                                           x(0:im,0:jm,0:km,3),'z', &
-    !                                         rho(0:im,0:jm,0:km),'ro',  &
-    !                                         vel(0:im,0:jm,0:km,1),'u', &
-    !                                         vel(0:im,0:jm,0:km,2),'v', &
-    !                                         prs(0:im,0:jm,0:km),'p',   &
-    !                                         spc(0:im,0:jm,0:km,1),'Y1' )
+    call tecbin('testout/tecfield'//mpirankname//'.plt',               &
+                                              x(0:im,0:jm,0:km,1),'x', &
+                                              x(0:im,0:jm,0:km,2),'y', &
+                                              x(0:im,0:jm,0:km,3),'z', &
+                                            rho(0:im,0:jm,0:km),'ro',  &
+                                            vel(0:im,0:jm,0:km,1),'u', &
+                                            vel(0:im,0:jm,0:km,2),'v', &
+                                            prs(0:im,0:jm,0:km),'p',   &
+                                            spc(0:im,0:jm,0:km,1),'Y1' )
     !
   end subroutine output
   !+-------------------------------------------------------------------+

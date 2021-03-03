@@ -198,6 +198,7 @@ module statistic
     endif
     !
     do n=1,numq
+      !
       max_q(n)=maxval(q(0:im,0:jm,0:km,n))
       min_q(n)=minval(q(0:im,0:jm,0:km,n))
       !

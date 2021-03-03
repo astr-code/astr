@@ -10,7 +10,7 @@ module mainloop
   use constdef
   use parallel, only: lio,mpistop,mpirank,qswap,dataswap,mpirankname,  &
                       pmax,ptime
-  use commvar,  only: im,jm,km
+  use commvar,  only: im,jm,km,ia,ja,ka
   use tecio
   !
   implicit none
@@ -28,7 +28,8 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine steploop
     !
-    use commvar,  only: maxstep,time,deltat,nstep,nwrite,ctime,nlstep
+    use commvar,  only: maxstep,time,deltat,nstep,nwrite,ctime,        &
+                        nlstep,rkscheme
     use readwrite,only: readcont,timerept
     !
     ! local data
@@ -36,9 +37,13 @@ module mainloop
     !
     var1=ptime()
     !
-    do while(nstep<=maxstep)
+    do while(nstep<maxstep)
       !
-      call rk3
+      if(rkscheme=='rk3') then
+        call rk3
+      elseif(rkscheme=='rk4') then
+        call rk4
+      endif
       !
       if(loop_counter==nwrite .or. loop_counter==0) then
         !
@@ -59,11 +64,76 @@ module mainloop
     enddo
     !
     ctime(1)=ptime()-var1
-
+    !
+    call errest
     !
   end subroutine steploop
   !+-------------------------------------------------------------------+
   !| The end of the subroutine steploop.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calculate error to estimate order of        |
+  !| accuracy.                                                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine errest
+    !
+    use commvar, only : flowtype,xmin,xmax,ymin,ymax,zmin,zmax,nstep,  &
+                        time
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
+    use parallel, only: psum,pmax,mpirankname
+    !
+    real(8) :: l1error,l2error,lineror
+    !
+    integer :: i,j,k
+    real(8) :: xc,yc,zc,rvor,radi2,var1
+    !
+    if(trim(flowtype)=='accutest') then
+      !
+      ! error calculation
+      l1error=0.d0
+      l2error=0.d0
+      lineror=0.d0
+      !
+      do i=0,im
+        !
+        var1=(acctest_ref(i)-spc(i,0,0,1))
+        !
+        l1error=l1error+abs(var1)
+        l2error=l2error+var1**2
+        lineror=max(lineror,abs(var1))
+        !
+        ! if(lio) print*,i,acctest_ref(i),spc(i,0,0,1)
+        !
+      enddo
+      !
+      ! print*,l1error,dble(ia)
+      l1error=psum(l1error)/dble(ia)
+      l2error=sqrt(psum(l2error)/dble(ia))
+      lineror=pmax(lineror)
+      !
+      if(lio) then
+        print*,' ** nstep= ',nstep,'time= ',time
+        write(*,'(2X,A7,3(1X,A13))')'mx','L1_error','L2_error','L∞_error'
+        write(*,'(2X,I7,3(1X,E13.6E2))')ia,l1error,l2error,lineror
+      endif
+      !
+      open(18,file='prof'//mpirankname//'.dat')
+      do i=0,im
+        write(18,*)x(i,0,0,1),acctest_ref(i),spc(i,0,0,1)
+      enddo
+      close(18)
+      print*,' << prof',mpirankname,'.dat ... done.'
+      !
+    endif
+    !
+  end subroutine errest
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine errest.                                 |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -121,6 +191,8 @@ module mainloop
     enddo
     !
     do irk=1,3
+      !
+      qrhs=0.d0
       !
       call boucon
       !
@@ -217,6 +289,177 @@ module mainloop
   end subroutine rk3
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rk3.                                    |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine advances the field solution in time using 4-step  |
+  !| 4th-rder Rungle-Kutta scheme.                                     |
+  !+-------------------------------------------------------------------+
+  !| ref: A. Dipankar, T.K. Sengupta, Symmetrized compact scheme for   |
+  !| receptivity study of 2D transitional channel flow, Journal of     |
+  !| Computational Physics 215 (2006) 245–273.                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-Nov-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine rk4
+    !
+    use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
+                         ctime,hm,lavg,navg,nstep,nsamples
+    use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
+    use fludyna,  only : q2fvar
+    use solver,   only : rhscal,filterq
+    use statistic,only : statcal,statout,meanflowcal
+    use readwrite,only : output
+    use bc,       only : boucon
+    !
+    ! logical data
+    logical,save :: firstcall = .true.
+    real(8),save :: rkcoe(2,4)
+    integer :: irk,i,j,k,m
+    real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
+    real(8),allocatable :: qsave(:,:,:,:),rhsav(:,:,:,:)
+    !
+#ifdef cputime
+    time_beg=ptime()
+#endif
+    !
+    if(firstcall) then
+      !
+      rkcoe(1,1)=0.5d0
+      rkcoe(1,2)=0.5d0
+      rkcoe(1,3)=1.d0
+      rkcoe(1,4)=num1d6
+      !
+      rkcoe(2,1)=1.d0
+      rkcoe(2,2)=2.d0
+      rkcoe(2,3)=2.d0
+      rkcoe(2,4)=1.d0
+      !
+      firstcall=.false.
+      !
+    endif
+    !
+    allocate(qsave(0:im,0:jm,0:km,1:numq),rhsav(0:im,0:jm,0:km,1:numq))
+    !
+    do m=1,numq
+      qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
+      rhsav(0:im,0:jm,0:km,m)=0.d0
+    enddo
+    !
+    do irk=1,4
+      !
+      qrhs=0.d0
+      !
+      call boucon
+      !
+      call qswap
+      !
+#ifdef cputime
+      time_beg_rhs=ptime()
+#endif
+      call rhscal
+#ifdef cputime
+      ctime(4)=ctime(4)+ptime()-time_beg_rhs
+#endif
+      !
+      if(irk==1) then
+        !
+#ifdef cputime
+        time_beg_sta=ptime()
+#endif
+        !
+        call statcal
+        !
+        call statout
+        !
+        if(loop_counter.ne.0) then
+          !
+          if(lavg) then
+            if(mod(nstep,navg)==0) call meanflowcal
+          else
+            nsamples=0
+          endif
+          !
+        else
+          nsamples=0
+        endif
+        !
+#ifdef cputime
+        ctime(5)=ctime(5)+ptime()-time_beg_sta
+#endif
+        !
+        if(loop_counter==nwrite .or. loop_counter==0) then
+#ifdef cputime
+          time_beg_io=ptime()
+#endif
+          !
+          call output
+          !
+#ifdef cputime
+          ctime(6)=ctime(6)+ptime()-time_beg_io
+#endif
+          !
+        endif
+        !
+      endif
+      !
+      if(irk<=3) then
+        do m=1,numq
+          q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
+                              rkcoe(1,irk)*deltat*qrhs(0:im,0:jm,0:km,m)
+          !
+          q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+          !
+          rhsav(0:im,0:jm,0:km,m)=rhsav(0:im,0:jm,0:km,m)+             &
+                                  rkcoe(2,irk)*qrhs(0:im,0:jm,0:km,m)
+        enddo
+      else
+        do m=1,numq
+          q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
+                                  rkcoe(1,irk)*deltat*(                &
+                                 qrhs(0:im,0:jm,0:km,m)+               &
+                                 rhsav(0:im,0:jm,0:km,m) )
+          !
+          q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+          !
+        enddo
+      endif
+      !
+      if(lfilter) call filterq
+      !
+      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
+                                     density=rho(0:im,0:jm,0:km),      &
+                                    velocity=vel(0:im,0:jm,0:km,:),    &
+                                    pressure=prs(0:im,0:jm,0:km),      &
+                                 temperature=tmp(0:im,0:jm,0:km),      &
+                                     species=spc(0:im,0:jm,0:km,:)     )
+      !
+      call crashcheck
+      !
+      ! call tecbin('testout/tecinit'//mpirankname//'.plt',              &
+      !                                    x(0:im,0:jm,-hm:km+hm,1),'x', &
+      !                                    x(0:im,0:jm,-hm:km+hm,2),'y', &
+      !                                    x(0:im,0:jm,-hm:km+hm,3),'z', &
+      !                                  rho(0:im,0:jm,-hm:km+hm),'ro',  &
+      !                                  vel(0:im,0:jm,-hm:km+hm,1),'u', &
+      !                                  vel(0:im,0:jm,-hm:km+hm,2),'v', &
+      !                                  prs(0:im,0:jm,-hm:km+hm),'p',   &
+      !                                  spc(0:im,0:jm,-hm:km+hm,1),'T' )
+      ! call mpistop
+      !
+    enddo
+    !
+    deallocate(qsave,rhsav)
+    !
+    ctime(3)=ctime(3)+ptime()-time_beg
+    !
+    return
+    !
+  end subroutine rk4
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine rk4.                                    |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

@@ -112,7 +112,7 @@ module parallel
     integer :: i,j,k,n,n1,n2,n3,nsize
     integer(8) :: nvar1,nvar2,nvar3
     !
-    logical :: l2dcomp
+    integer :: ndims
     !
     if(mpisize==1) then
        !
@@ -124,13 +124,17 @@ module parallel
       !
     endif
     !
-    if(ka==0) then
-      l2dcomp=.true.
-    else 
-      l2dcomp=.false.
+    if(ja==0 .and. ka==0) then
+      ndims=1
+    elseif(ka==0) then
+      ndims=2
+    else
+      ndims=3
     endif
     !
     if(mpirank==0) then
+      !
+      write(*,'(A,I0)')'  ** dimension of domain: ',ndims
       !
       lallo=.false.
       !
@@ -141,12 +145,12 @@ module parallel
         stop
       end if
       !
-      n=1
+      n=0
       do i=1,mpisize
         !
         if(mod(mpisize,i)==0) then
-            nfactor(n)=mpisize/i
             n=n+1
+            nfactor(n)=mpisize/i
         end if
         !
       end do
@@ -156,18 +160,27 @@ module parallel
       do n2=1,n
       do n3=1,n
         !
-        if(l2dcomp .or. lfftk) then
+        !
+        if(ndims==1) then
+          !
+          nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
+          if(nfactor(n2) .ne. 1) cycle
+          if(nfactor(n3) .ne. 1) cycle
+          !
+          ! print*,n1,n2,n3,'|',nfactor(n1),nfactor(n2),nfactor(n3)
+        elseif(ndims==2 .or. lfftk) then
           !
           nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
           if(nfactor(n3) .ne. 1) cycle
+          if(nfactor(n2) == 1) cycle
           !
         else
-          if(nfactor(n3)>1) then
+          if(nfactor(n3)>1 .and. nfactor(n2)>1 .and. nfactor(n1)>1) then
             nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
           else
-              ! for 3D  calculation, the mpisize at k direction should not
-              ! be 1
-              cycle
+           ! for 3D  calculation, the mpisize at k direction should not
+           ! be 1
+           cycle
           end if
           !
         end if
@@ -186,14 +199,16 @@ module parallel
           nvar3=nvar3*nfactor(n3)
           nvar1=nvar1+nvar3
           !
-          if(nvar1<nvar2 .and. nfactor(n1)>1 .and. nfactor(n2)>1) then
+          ! print*,n1,n2,n3,'-',nfactor(n1),nfactor(n2),nfactor(n3)
+          !
+          if(nvar1<nvar2) then
             !
             nvar2=nvar1
             !
             isize=nfactor(n1)
             jsize=nfactor(n2)
             ksize=nfactor(n3)
-            !!
+            !
             print*,' ** isze,jsize,ksize= ',isize,jsize,ksize
             !
             lallo=.true.
@@ -211,7 +226,7 @@ module parallel
       if(.not. lallo) then
         !
         print*,' !! Size of ranks can not be allocated !!'
-        call mpistop
+        stop
         !
       end if
       !
@@ -540,45 +555,56 @@ module parallel
       js=0
       je=jm
       !
-      if(jrk==0) then
-        mpidown=krk*(isize*jsize)+   jrkm*isize+irk
-        mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
-      elseif(jrk==jrkm) then
-        mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
-        mpiup  =krk*(isize*jsize)+      0*isize+irk
-      else
-        mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
-        mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
-      end if
-      !
       npdcj=3
+      !
+      if(jsize==1) then
+        mpidown=MPI_PROC_NULL
+        mpiup  =MPI_PROC_NULL
+      else
+        if(jrk==0) then
+          mpidown=krk*(isize*jsize)+   jrkm*isize+irk
+          mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
+        elseif(jrk==jrkm) then
+          mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
+          mpiup  =krk*(isize*jsize)+      0*isize+irk
+        else
+          mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
+          mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
+        end if
+      endif
+      !
     else
       !
-      if(jrk==0) then
-        js=1
-        je=jm
-        !
-        npdcj=1
-        !
+      if(jsize==1) then
         mpidown=MPI_PROC_NULL
-        mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
-      elseif(jrk==jrkm) then
-        js=0
-        je=jm-1
-        !
-        npdcj=2
-        !
-        mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
-        mpiup=MPI_PROC_NULL
+        mpiup  =MPI_PROC_NULL
       else
-        js=0
-        je=jm
-        !
-        npdcj=3
-        !
-        mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
-        mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
-      end if
+        if(jrk==0) then
+          js=1
+          je=jm
+          !
+          npdcj=1
+          !
+          mpidown=MPI_PROC_NULL
+          mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
+        elseif(jrk==jrkm) then
+          js=0
+          je=jm-1
+          !
+          npdcj=2
+          !
+          mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
+          mpiup=MPI_PROC_NULL
+        else
+          js=0
+          je=jm
+          !
+          npdcj=3
+          !
+          mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
+          mpiup  =krk*(isize*jsize)+(jrk+1)*isize+irk
+        end if
+      endif
       !
     end if
     !
@@ -978,6 +1004,8 @@ module parallel
     ! recvbuf2: received buffer
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
+    ! print*,mpirank,'|',mpileft,mpiright,mpidown,mpiup,mpiback,mpifront
+    !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1039,64 +1067,78 @@ module parallel
     ! Finish message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(im+1)*(km+1)*hm*3
-    !
-    allocate( sendbuf1(0:im,1:hm,0:km,1:3),                            &
-              sendbuf2(0:im,1:hm,0:km,1:3),                            &
-              recvbuf1(0:im,1:hm,0:km,1:3),                            &
-              recvbuf2(0:im,1:hm,0:km,1:3)                             )
-    !
-    ! pack the down send/up buffer
-    do n=1,hm
-      sendbuf1(0:im,n,0:km,1:3)=x(0:im,   n,0:km,1:3)-x(0:im, 0,0:km,1:3)
-      sendbuf2(0:im,n,0:km,1:3)=x(0:im,jm-n,0:km,1:3)-x(0:im,jm,0:km,1:3)
-    enddo
-    !
-    ! Message passing
-    call mpi_sendrecv(sendbuf1,ncou,mpi_real8,mpidown,mpitag,          &
-                      recvbuf1,ncou,mpi_real8,mpiup,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sendbuf2,ncou,mpi_real8,mpiup,mpitag,            &
-                      recvbuf2,ncou,mpi_real8,mpidown,mpitag,          &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    ! unpack the received up the packet
-    if(mpidown==MPI_PROC_NULL) then
+    if(jsize>1) then
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*hm*3
       !
-      ! do n=1,hm
-      !   x(0:im,-n,0:km,1:3)=2.d0*x(0:im,0,0:km,1:3)-x(0:im,n,0:km,1:3)
-      ! enddo
+      allocate( sendbuf1(0:im,1:hm,0:km,1:3),                          &
+                sendbuf2(0:im,1:hm,0:km,1:3),                          &
+                recvbuf1(0:im,1:hm,0:km,1:3),                          &
+                recvbuf2(0:im,1:hm,0:km,1:3)                           )
       !
-    else
-      !
+      ! pack the down send/up buffer
       do n=1,hm
-        x(0:im,-n,0:km,1:3)=recvbuf2(0:im,n,0:km,1:3)+x(0:im,0,0:km,1:3)
+        sendbuf1(0:im,n,0:km,1:3)=x(0:im,   n,0:km,1:3)-x(0:im, 0,0:km,1:3)
+        sendbuf2(0:im,n,0:km,1:3)=x(0:im,jm-n,0:km,1:3)-x(0:im,jm,0:km,1:3)
       enddo
       !
-    end if
-    !
-    ! unpack the received down the packet
-    if(mpiup==MPI_PROC_NULL) then
-      ! do n=1,hm
-      !   x(0:im,jm+n,0:km,1:3)=2.d0*x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3)
-      ! enddo
+      ! Message passing
+      call mpi_sendrecv(sendbuf1,ncou,mpi_real8,mpidown,mpitag,        &
+                        recvbuf1,ncou,mpi_real8,mpiup,mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sendbuf2,ncou,mpi_real8,mpiup,mpitag,          &
+                        recvbuf2,ncou,mpi_real8,mpidown,mpitag,        &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      ! unpack the received up the packet
+      if(mpidown==MPI_PROC_NULL) then
+        !
+        ! do n=1,hm
+        !   x(0:im,-n,0:km,1:3)=2.d0*x(0:im,0,0:km,1:3)-x(0:im,n,0:km,1:3)
+        ! enddo
+        !
+      else
+        !
+        do n=1,hm
+          x(0:im,-n,0:km,1:3)=recvbuf2(0:im,n,0:km,1:3)+x(0:im,0,0:km,1:3)
+        enddo
+        !
+      end if
+      !
+      ! unpack the received down the packet
+      if(mpiup==MPI_PROC_NULL) then
+        ! do n=1,hm
+        !   x(0:im,jm+n,0:km,1:3)=2.d0*x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3)
+        ! enddo
+      else
+        !
+        do n=1,hm
+          x(0:im,jm+n,0:km,1:3)=recvbuf1(0:im,n,0:km,1:3)+x(0:im,jm,0:km,1:3)
+        enddo
+        !
+      endif
+      !
+      deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     else
       !
-      do n=1,hm
-        x(0:im,jm+n,0:km,1:3)=recvbuf1(0:im,n,0:km,1:3)+x(0:im,jm,0:km,1:3)
-      enddo
+      if(ja==0) then
+        !
+        do j=-hm,hm
+          x(0:im,j,0:km,1)=x(0:im,0,0:km,1)
+          x(0:im,j,0:km,2)=x(0:im,0,0:km,2)+real(j,8)
+          x(0:im,j,0:km,3)=x(0:im,0,0:km,3)
+        enddo
+        !
+      endif
       !
     endif
-    !
-    deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Finish message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
     if(ksize>1) then
       !
@@ -1162,7 +1204,7 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     else
       !
-      if(km==0) then
+      if(ka==0) then
         !
         do k=-hm,hm
           x(0:im,0:jm,k,1:2)=x(0:im,0:jm,0,1:2)
@@ -1195,7 +1237,7 @@ module parallel
     real(8),intent(inout) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
     !
     ! logical data
-    integer :: ncou
+    integer :: ncou,j,k
     integer :: ierr
     real(8),allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
@@ -1261,61 +1303,90 @@ module parallel
     ! Finish message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(im+1)*(km+1)*(hm+1)
-    !
-    allocate( sbuf1(0:im,0:hm, 0:km),sbuf2(0:im,0:hm, 0:km),          &
-              rbuf1(0:im,0:hm, 0:km),rbuf2(0:im,-hm:0,0:km) )
-    !
-    if(mpidown .ne. MPI_PROC_NULL) then
-      ! pack the upper send buffer
-      sbuf1(0:im,0:hm,0:km)=var(0:im,0:hm,0:km)
-    endif
-    if(mpiup .ne. MPI_PROC_NULL) then
-      ! pack the down send buffer
-      sbuf2(0:im,0:hm,0:km)=var(0:im,jm-hm:jm,0:km)
-    end if
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
-                      rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
-                      rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiup .ne. MPI_PROC_NULL) then
-      ! unpack the received the packet from up
-      var(0:im,jm+1:jm+hm,0:km)=rbuf1(0:im,1:hm,0:km)
+    if(jsize==1 .and. ljhomo) then
       !
-      var(0:im,jm,0:km)=0.5d0*( var(0:im,jm,0:km) +                    &
-                              rbuf1(0:im, 0,0:km) )
-    endif
-    !
-    if(mpidown .ne. MPI_PROC_NULL) then
-      ! unpack the received the packet from down
-      var(0:im,-hm:-1,0:km)=rbuf2(0:im,-hm:-1,0:km) 
+      if(ja==0) then 
+        do j=-hm,hm
+          var(0:im,j,0:km)    =var(0:im,0,0:km)
+        enddo
+      else
+        var(0:im,-hm:-1,0:km)    =var(0:im,jm-hm:jm-1,0:km)
+        var(0:im,jm+1:jm+hm,0:km)=var(0:im,1:hm,0:km)
+        !
+        var(0:im,0,0:km) =0.5d0*(var(0:im,0,0:km)+var(0:im,jm,0:km))
+        var(0:im,jm,0:km)=var(0:im,0,0:km)
+      endif
       !
-      var(0:im,0,0:km)=0.5d0*( var(0:im, 0,0:km) +                     &
-                             rbuf2(0:im, 0,0:km) )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Finish message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    if(ksize==1 .and. lkhomo) then
-      !
+    else
       var(0:im,0:jm,-hm:-1)    =var(0:im,0:jm,km-hm:km-1)
       var(0:im,0:jm,km+1:km+hm)=var(0:im,0:jm,1:hm)
       !
       var(0:im,0:jm,0) =0.5d0*(var(0:im,0:jm,0)+var(0:im,0:jm,km))
       var(0:im,0:jm,km)=var(0:im,0:jm,0)
+      ! 
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*(hm+1)
+      !
+      allocate( sbuf1(0:im,0:hm, 0:km),sbuf2(0:im,0:hm, 0:km),          &
+                rbuf1(0:im,0:hm, 0:km),rbuf2(0:im,-hm:0,0:km) )
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! pack the upper send buffer
+        sbuf1(0:im,0:hm,0:km)=var(0:im,0:hm,0:km)
+      endif
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! pack the down send buffer
+        sbuf2(0:im,0:hm,0:km)=var(0:im,jm-hm:jm,0:km)
+      end if
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
+                        rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
+                        rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from up
+        var(0:im,jm+1:jm+hm,0:km)=rbuf1(0:im,1:hm,0:km)
+        !
+        var(0:im,jm,0:km)=0.5d0*( var(0:im,jm,0:km) +                    &
+                                rbuf1(0:im, 0,0:km) )
+      endif
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from down
+        var(0:im,-hm:-1,0:km)=rbuf2(0:im,-hm:-1,0:km) 
+        !
+        var(0:im,0,0:km)=0.5d0*( var(0:im, 0,0:km) +                     &
+                               rbuf2(0:im, 0,0:km) )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+    endif
+    !
+    if(ksize==1 .and. lkhomo) then
+      !
+      if(ka==0) then
+        do k=-hm,hm
+          var(0:im,0:jm,k)    =var(0:im,0:jm,0)
+        enddo
+      else
+        var(0:im,0:jm,-hm:-1)    =var(0:im,0:jm,km-hm:km-1)
+        var(0:im,0:jm,km+1:km+hm)=var(0:im,0:jm,1:hm)
+        !
+        var(0:im,0:jm,0) =0.5d0*(var(0:im,0:jm,0)+var(0:im,0:jm,km))
+        var(0:im,0:jm,km)=var(0:im,0:jm,0)
+      endif
       !             
     else
       !
@@ -1400,7 +1471,7 @@ module parallel
     !
     ! logical data
     integer :: ncou,nx,dir
-    integer :: ierr
+    integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
     !
@@ -1480,55 +1551,73 @@ module parallel
     !
     if(dir==2 .or. dir==0) then
       !
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      ! Message pass in j direction.
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      ncou=(im+1)*(km+1)*nx*(hm+1)
-      !
-      allocate( sbuf1(0:im,0:hm, 0:km,1:nx),                        &
-                sbuf2(0:im,0:hm, 0:km,1:nx),                        &
-                rbuf1(0:im,0:hm, 0:km,1:nx),                        &
-                rbuf2(0:im,-hm:0,0:km,1:nx) )
-      !
-      if(mpidown .ne. MPI_PROC_NULL) then
-        ! pack the upper send buffer
-        sbuf1(0:im,0:hm,0:km,:)=var(0:im,0:hm,0:km,:)
-      endif
-      if(mpiup .ne. MPI_PROC_NULL) then
-        ! pack the down send buffer
-        sbuf2(0:im,0:hm,0:km,:)=var(0:im,jm-hm:jm,0:km,:)
-      end if
-      !
-      ! Message passing
-      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
-                        rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
-                                               mpi_comm_world,status,ierr)
-      mpitag=mpitag+1
-      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
-                        rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
-                                               mpi_comm_world,status,ierr)
-      mpitag=mpitag+1
-      !
-      if(mpiup .ne. MPI_PROC_NULL) then
-        ! unpack the received the packet from up
-        var(0:im,jm+1:jm+hm,0:km,:)=rbuf1(0:im,1:hm,0:km,:)
+      if(jsize==1 .and. ljhomo) then
         !
-        var(0:im,jm,0:km,:)=0.5d0*( var(0:im,jm,0:km,:) +            &
-                                  rbuf1(0:im, 0,0:km,:) )
+        if(ja==0) then
+          do j=-hm,hm
+            var(0:im,j,0:km,:)=var(0:im,0,0:km,:)
+          enddo
+        else
+          var(0:im,-hm:-1,0:km,:)    =var(0:im,jm-hm:jm-1,0:km,:)
+          var(0:im,jm+1:jm+hm,0:km,:)=var(0:im,1:hm,0:km,:)
+          !
+          var(0:im,0,0:km,:) =0.5d0*(var(0:im,0,0:km,:)+var(0:im,jm,0:km,:))
+          var(0:im,jm,0:km,:)=var(0:im,0,0:km,:)
+        endif
+        !
+      else
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! Message pass in j direction.
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ncou=(im+1)*(km+1)*nx*(hm+1)
+        !
+        allocate( sbuf1(0:im,0:hm, 0:km,1:nx),                        &
+                  sbuf2(0:im,0:hm, 0:km,1:nx),                        &
+                  rbuf1(0:im,0:hm, 0:km,1:nx),                        &
+                  rbuf2(0:im,-hm:0,0:km,1:nx) )
+        !
+        if(mpidown .ne. MPI_PROC_NULL) then
+          ! pack the upper send buffer
+          sbuf1(0:im,0:hm,0:km,:)=var(0:im,0:hm,0:km,:)
+        endif
+        if(mpiup .ne. MPI_PROC_NULL) then
+          ! pack the down send buffer
+          sbuf2(0:im,0:hm,0:km,:)=var(0:im,jm-hm:jm,0:km,:)
+        end if
+        !
+        ! Message passing
+        call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
+                          rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
+                                                 mpi_comm_world,status,ierr)
+        mpitag=mpitag+1
+        call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
+                          rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
+                                                 mpi_comm_world,status,ierr)
+        mpitag=mpitag+1
+        !
+        if(mpiup .ne. MPI_PROC_NULL) then
+          ! unpack the received the packet from up
+          var(0:im,jm+1:jm+hm,0:km,:)=rbuf1(0:im,1:hm,0:km,:)
+          !
+          var(0:im,jm,0:km,:)=0.5d0*( var(0:im,jm,0:km,:) +            &
+                                    rbuf1(0:im, 0,0:km,:) )
+        endif
+        !
+        if(mpidown .ne. MPI_PROC_NULL) then
+          ! unpack the received the packet from down
+          var(0:im,-hm:-1,0:km,:)=rbuf2(0:im,-hm:-1,0:km,:) 
+          !
+          var(0:im,0,0:km,:)=0.5d0*( var(0:im, 0,0:km,:) +            &
+                                   rbuf2(0:im, 0,0:km,:) )
+        end if
+        !
+        deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! Finish message pass in j direction.
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !
       endif
       !
-      if(mpidown .ne. MPI_PROC_NULL) then
-        ! unpack the received the packet from down
-        var(0:im,-hm:-1,0:km,:)=rbuf2(0:im,-hm:-1,0:km,:) 
-        !
-        var(0:im,0,0:km,:)=0.5d0*( var(0:im, 0,0:km,:) +            &
-                                 rbuf2(0:im, 0,0:km,:) )
-      end if
-      !
-      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      ! Finish message pass in j direction.
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
 
     if(dir==3 .or. dir==0) then
@@ -1536,11 +1625,17 @@ module parallel
       !
       if(ksize==1 .and. lkhomo) then
         !
-        var(0:im,0:jm, -hm:-1   ,:)=var(0:im,0:jm,km-hm:km-1,:)
-        var(0:im,0:jm,km+1:km+hm,:)=var(0:im,0:jm,    1:hm,  :)
-        !
-        var(0:im,0:jm,0,:)=0.5d0*(var(0:im,0:jm,0,:)+var(0:im,0:jm,km,:))
-        var(0:im,0:jm,km,:)=var(0:im,0:jm,0,:)
+        if(ka==0) then
+          do k=-hm,hm
+            var(0:im,0:jm,k,:)=var(0:im,0:jm,0,:)
+          enddo
+        else
+          var(0:im,0:jm, -hm:-1   ,:)=var(0:im,0:jm,km-hm:km-1,:)
+          var(0:im,0:jm,km+1:km+hm,:)=var(0:im,0:jm,    1:hm,  :)
+          !
+          var(0:im,0:jm,0,:)=0.5d0*(var(0:im,0:jm,0,:)+var(0:im,0:jm,km,:))
+          var(0:im,0:jm,km,:)=var(0:im,0:jm,0,:)
+        endif
         !             
       else
         !
@@ -1626,7 +1721,7 @@ module parallel
     !
     ! logical data
     integer :: ncou,nx,mx
-    integer :: ierr
+    integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
     !
@@ -1696,63 +1791,85 @@ module parallel
     ! Finish message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(im+1)*(km+1)*nx*mx*(hm+1)
-    !
-    allocate( sbuf1(0:im,0:hm, 0:km,1:nx,1:mx),                        &
-              sbuf2(0:im,0:hm, 0:km,1:nx,1:mx),                        &
-              rbuf1(0:im,0:hm, 0:km,1:nx,1:mx),                        &
-              rbuf2(0:im,-hm:0,0:km,1:nx,1:mx) )
-    !
-    if(mpidown .ne. MPI_PROC_NULL) then
-      ! pack the upper send buffer
-      sbuf1(0:im,0:hm,0:km,:,:)=var(0:im,0:hm,0:km,:,:)
-    endif
-    if(mpiup .ne. MPI_PROC_NULL) then
-      ! pack the down send buffer
-      sbuf2(0:im,0:hm,0:km,:,:)=var(0:im,jm-hm:jm,0:km,:,:)
-    end if
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
-                      rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
-                      rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiup .ne. MPI_PROC_NULL) then
-      ! unpack the received the packet from up
-      var(0:im,jm+1:jm+hm,0:km,:,:)=rbuf1(0:im,1:hm,0:km,:,:)
+    if(jsize==1 .and. ljhomo) then
       !
-      var(0:im,jm,0:km,:,:)=0.5d0*( var(0:im,jm,0:km,:,:) +            &
-                                  rbuf1(0:im, 0,0:km,:,:) )
-    endif
-    !
-    if(mpidown .ne. MPI_PROC_NULL) then
-      ! unpack the received the packet from down
-      var(0:im,-hm:-1,0:km,:,:)=rbuf2(0:im,-hm:-1,0:km,:,:) 
+      if(ja==0) then 
+        do j=-hm,hm
+          var(0:im,j,0:km,:,:)=var(0:im,0,0:km,:,:)
+        enddo
+      else
+        var(0:im, -hm:-1   ,0:km,:,:)=var(0:im,jm-hm:jm-1,0:km,:,:)
+        var(0:im,jm+1:jm+hm,0:km,:,:)=var(0:im,    1:hm,  0:km,:,:)
+        !
+        var(0:im, 0,0:km,:,:)=0.5d0*(var(0:im,0,0:km,:,:)+var(0:im,jm,0:km,:,:))
+        var(0:im,jm,0:km,:,:)=var(0:im,0,0:km,:,:)
+      endif
+      !  
+    else
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*nx*mx*(hm+1)
       !
-      var(0:im,0,0:km,:,:)=0.5d0*( var(0:im, 0,0:km,:,:) +            &
-                                 rbuf2(0:im, 0,0:km,:,:) )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Finish message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate( sbuf1(0:im,0:hm, 0:km,1:nx,1:mx),                        &
+                sbuf2(0:im,0:hm, 0:km,1:nx,1:mx),                        &
+                rbuf1(0:im,0:hm, 0:km,1:nx,1:mx),                        &
+                rbuf2(0:im,-hm:0,0:km,1:nx,1:mx) )
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! pack the upper send buffer
+        sbuf1(0:im,0:hm,0:km,:,:)=var(0:im,0:hm,0:km,:,:)
+      endif
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! pack the down send buffer
+        sbuf2(0:im,0:hm,0:km,:,:)=var(0:im,jm-hm:jm,0:km,:,:)
+      end if
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
+                        rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
+                        rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from up
+        var(0:im,jm+1:jm+hm,0:km,:,:)=rbuf1(0:im,1:hm,0:km,:,:)
+        !
+        var(0:im,jm,0:km,:,:)=0.5d0*( var(0:im,jm,0:km,:,:) +            &
+                                    rbuf1(0:im, 0,0:km,:,:) )
+      endif
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from down
+        var(0:im,-hm:-1,0:km,:,:)=rbuf2(0:im,-hm:-1,0:km,:,:) 
+        !
+        var(0:im,0,0:km,:,:)=0.5d0*( var(0:im, 0,0:km,:,:) +            &
+                                   rbuf2(0:im, 0,0:km,:,:) )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
     !
     if(ksize==1 .and. lkhomo) then
       !
-      var(0:im,0:jm, -hm:-1   ,:,:)=var(0:im,0:jm,km-hm:km-1,:,:)
-      var(0:im,0:jm,km+1:km+hm,:,:)=var(0:im,0:jm,    1:hm,  :,:)
-      !
-      var(0:im,0:jm,0,:,:)=0.5d0*(var(0:im,0:jm,0,:,:)+var(0:im,0:jm,km,:,:))
-      var(0:im,0:jm,km,:,:)=var(0:im,0:jm,0,:,:)
+      if(ka==0) then
+        do k=-hm,hm
+          var(0:im,0:jm,k,:,:)=var(0:im,0:jm,0,:,:)
+        enddo
+      else
+        var(0:im,0:jm, -hm:-1   ,:,:)=var(0:im,0:jm,km-hm:km-1,:,:)
+        var(0:im,0:jm,km+1:km+hm,:,:)=var(0:im,0:jm,    1:hm,  :,:)
+        !
+        var(0:im,0:jm,0,:,:)=0.5d0*(var(0:im,0:jm,0,:,:)+var(0:im,0:jm,km,:,:))
+        var(0:im,0:jm,km,:,:)=var(0:im,0:jm,0,:,:)
+      endif
       !             
     else
       !
@@ -1837,7 +1954,7 @@ module parallel
     !
     ! local data
     integer :: ncou
-    integer :: ierr,k
+    integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
     !
@@ -1919,56 +2036,19 @@ module parallel
     ! Finish message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(im+1)*(km+1)*numq*(hm+1)
-    !
-    allocate( sbuf1(0:im,0:hm, 0:km,1:numq),                        &
-              sbuf2(0:im,0:hm, 0:km,1:numq),                        &
-              rbuf1(0:im,0:hm, 0:km,1:numq),                        &
-              rbuf2(0:im,-hm:0,0:km,1:numq) )
-    !
-    if(mpidown .ne. MPI_PROC_NULL) then
-      ! pack the upper send buffer
-      sbuf1(0:im,0:hm,0:km,:)=q(0:im,0:hm,0:km,:)
-    endif
-    if(mpiup .ne. MPI_PROC_NULL) then
-      ! pack the down send buffer
-      sbuf2(0:im,0:hm,0:km,:)=q(0:im,jm-hm:jm,0:km,:)
-    end if
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
-                      rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
-                      rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiup .ne. MPI_PROC_NULL) then
-      ! unpack the received the packet from up
-      q(0:im,jm+1:jm+hm,0:km,:)=rbuf1(0:im,1:hm,0:km,:)
+    if(jsize==1 .and. ljhomo) then
       !
-      q(0:im,jm,0:km,:)=0.5d0*( q(0:im,jm,0:km,:) +            &
-                                rbuf1(0:im, 0,0:km,:) )
-      !
-      call q2fvar(q=q(0:im,jm:jm+hm,0:km,:),                           &
-                                     density=rho(0:im,jm:jm+hm,0:km),  &
-                                    velocity=vel(0:im,jm:jm+hm,0:km,:),&
-                                    pressure=prs(0:im,jm:jm+hm,0:km),  &
-                                 temperature=tmp(0:im,jm:jm+hm,0:km),  &
-                                     species=spc(0:im,jm:jm+hm,0:km,:) )
-    endif
-    !
-    if(mpidown .ne. MPI_PROC_NULL) then
-      ! unpack the received the packet from down
-      q(0:im,-hm:-1,0:km,:)=rbuf2(0:im,-hm:-1,0:km,:) 
-      !
-      q(0:im,0,0:km,:)=0.5d0*( q(0:im, 0,0:km,:) +            &
-                               rbuf2(0:im, 0,0:km,:) )
+      if(jm==0) then
+        do j=-hm,hm
+          q(0:im,j,0:km,:)=q(0:im,0,0:km,:)
+        enddo
+      else
+        q(0:im, -hm:-1   ,0:km,:)=q(0:im,jm-hm:jm-1,0:km,:)
+        q(0:im,jm+1:jm+hm,0:km,:)=q(0:im,    1:hm,  0:km,:)
+        !
+        q(0:im, 0,0:km,:)=0.5d0*(q(0:im,0,0:km,:)+q(0:im,jm,0:km,:))
+        q(0:im,jm,0:km,:)=q(0:im,0,0:km,:)
+      endif
       !
       call q2fvar(q=q(0:im,-hm:0,0:km,:),                              &
                                      density=rho(0:im,-hm:0,0:km),     &
@@ -1976,16 +2056,83 @@ module parallel
                                     pressure=prs(0:im,-hm:0,0:km),     &
                                  temperature=tmp(0:im,-hm:0,0:km),     &
                                      species=spc(0:im,-hm:0,0:km,:)    )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Finish message pass in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      call q2fvar(q=q(0:im,jm:jm+hm,0:km,:),                           &
+                                density=rho(0:im,jm:jm+hm,0:km),       &
+                               velocity=vel(0:im,jm:jm+hm,0:km,:),     &
+                               pressure=prs(0:im,jm:jm+hm,0:km),       &
+                            temperature=tmp(0:im,jm:jm+hm,0:km),       &
+                                species=spc(0:im,jm:jm+hm,0:km,:)      )
+      !
+    else
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*numq*(hm+1)
+      !
+      allocate( sbuf1(0:im,0:hm, 0:km,1:numq),                        &
+                sbuf2(0:im,0:hm, 0:km,1:numq),                        &
+                rbuf1(0:im,0:hm, 0:km,1:numq),                        &
+                rbuf2(0:im,-hm:0,0:km,1:numq) )
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! pack the upper send buffer
+        sbuf1(0:im,0:hm,0:km,:)=q(0:im,0:hm,0:km,:)
+      endif
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! pack the down send buffer
+        sbuf2(0:im,0:hm,0:km,:)=q(0:im,jm-hm:jm,0:km,:)
+      end if
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpidown,mpitag,             &
+                        rbuf1,ncou,mpi_real8,mpiup,  mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiup,  mpitag,             &
+                        rbuf2,ncou,mpi_real8,mpidown,mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from up
+        q(0:im,jm+1:jm+hm,0:km,:)=rbuf1(0:im,1:hm,0:km,:)
+        !
+        q(0:im,jm,0:km,:)=0.5d0*( q(0:im,jm,0:km,:) +            &
+                                  rbuf1(0:im, 0,0:km,:) )
+        !
+        call q2fvar(q=q(0:im,jm:jm+hm,0:km,:),                           &
+                                       density=rho(0:im,jm:jm+hm,0:km),  &
+                                      velocity=vel(0:im,jm:jm+hm,0:km,:),&
+                                      pressure=prs(0:im,jm:jm+hm,0:km),  &
+                                   temperature=tmp(0:im,jm:jm+hm,0:km),  &
+                                       species=spc(0:im,jm:jm+hm,0:km,:) )
+      endif
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from down
+        q(0:im,-hm:-1,0:km,:)=rbuf2(0:im,-hm:-1,0:km,:) 
+        !
+        q(0:im,0,0:km,:)=0.5d0*( q(0:im, 0,0:km,:) +            &
+                                 rbuf2(0:im, 0,0:km,:) )
+        !
+        call q2fvar(q=q(0:im,-hm:0,0:km,:),                              &
+                                       density=rho(0:im,-hm:0,0:km),     &
+                                      velocity=vel(0:im,-hm:0,0:km,:),   &
+                                      pressure=prs(0:im,-hm:0,0:km),     &
+                                   temperature=tmp(0:im,-hm:0,0:km),     &
+                                       species=spc(0:im,-hm:0,0:km,:)    )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
     !
     if(ksize==1 .and. lkhomo) then
       !
-      if(km==0) then
+      if(ka==0) then
         do k=-hm,hm
           q(0:im,0:jm,k,:)=q(0:im,0:jm,0,:)
         enddo

@@ -10,7 +10,8 @@ module initialisation
   !
   use constdef
   use parallel,only: lio,mpistop,mpirank,mpirankname,bcast
-  use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,ndims,num_species
+  use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,tinf,ndims,         &
+                     num_species,xmin,xmax,ymin,ymax,zmin,zmax
   use tecio
   !
   implicit none
@@ -49,6 +50,10 @@ module initialisation
         call chanini
       case('tgv')
         call tgvini
+      case('jet')
+        call jetini
+      case('accutest')
+        call accini
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ flowinit'
@@ -68,6 +73,119 @@ module initialisation
   end subroutine flowinit
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowinit.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field test of      |
+  !| accuracy.                                                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-Mar-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine accini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
+    use fludyna,  only: thermal,fvar2q
+    !
+    ! local data
+    integer :: i,j,k,l
+    real(8) :: xc,yc,zc,radi2,rvor,cvor,var1
+    real(8) :: A,slow_wl,fast_wl,damper,randomv(32),gz,zl
+    !
+    ! if(ndims==1) then
+      !
+      xc=0.5d0*(xmax-xmin)
+      yc=0.5d0*(ymax-ymin)
+      zc=0.5d0*(zmax-zmin)
+      !
+      rvor=0.5d0 
+      cvor=0.1d0*rvor
+      !
+      A = 1.d0
+      slow_wl = 4.d0
+      fast_wl = 48.d0
+      !
+      allocate(acctest_ref(0:im))
+      !
+      if(mpirank==0) then
+        do l=1,32
+          call random_number(randomv(l))
+        end do
+      endif
+      !
+      call bcast(randomv)
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        ! radi2=((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2)/rvor/rvor
+        ! var1=cvor/rvor/rvor*exp(-0.5d0*radi2)
+        radi2=(x(i,j,k,1)-xc)**2
+        var1=exp(-5.d0*radi2)
+        !
+        rho(i,j,k)  =roinf
+        vel(i,j,k,1)=1.d0
+        vel(i,j,k,2)=0.d0
+        vel(i,j,k,3)=0.d0
+        prs(i,j,k)  =pinf
+        !
+        tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+        !
+        ! spc(i,j,k,1)=exp(-0.5d0*radi2)
+        ! spc(i,j,k,1)=cos(1.6d0*pi*(x(i,j,k,1)-xc))*var1
+        ! spc(i,j,k,1)=cos(1.6d0*pi*(x(i,j,k,1)-xc))*var1
+        damper=exp(-0.5d0*(x(i,j,k,1)-xc)**2)
+        !
+        gz=0.d0
+        do l=1,32
+          !
+          if(l==1) then
+            zl=0.2d0/(1.d0-0.95d0**32)
+          else
+            zl=zl*0.95d0
+          end if
+          !
+          gz=gz+zl*dsin(2.d0*pi*l*(x(i,j,k,1)/(xmax-xmin)+randomv(l)))
+          !
+        end do
+        !
+        ! var1= A*cos(abs(sqrt(x(i,j,k,1)-xc)**3)*slow_wl)
+        acctest_ref(i)=gz !*damper
+        spc(i,j,k,1)=acctest_ref(i)
+        !
+      enddo
+      enddo
+      enddo
+    !
+    ! else
+    !   stop ' !! error @ accini'
+    ! endif
+    !
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+    !
+    call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+                                      x(0:im,0:jm,0:km,1),'x',         &
+                                      x(0:im,0:jm,0:km,2),'y',         &
+                                      x(0:im,0:jm,0:km,3),'z',         &
+                                      q(0:im,0:jm,0:km,1),'q1',        &
+                                      q(0:im,0:jm,0:km,2),'q2',        &
+                                      q(0:im,0:jm,0:km,3),'q3',        &
+                                      q(0:im,0:jm,0:km,5),'q5',        &
+                                      q(0:im,0:jm,0:km,6),'q6' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** Gaussian pulse initialised.'
+    !
+    ! call mpistop
+    !
+  end subroutine accini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine accini.                                 |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -109,7 +227,8 @@ module initialisation
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
       !
-      if(num_species>1) spc(i,j,k,1)=exp(-0.5d0*radi2)
+      if(num_species>=1) spc(i,j,k,1)=exp(-0.5d0*radi2)
+      !
     enddo
     enddo
     enddo
@@ -141,7 +260,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 12-02-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !| 12-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
   subroutine tgvini
     !
@@ -306,6 +425,65 @@ module initialisation
   !| The end of the subroutine chanini.                                |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate a initial jet flow.           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine jetini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal,fvar2q,jetvel
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      rho(i,j,k)  = roinf
+      vel(i,j,k,:)= jetvel(x(i,j,k,2))
+      !
+      tmp(i,j,k)  = tinf
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>1) then
+        spc(i,j,k,1)=0.d0
+        !
+        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+    !
+    call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+                                      x(0:im,0:jm,0:km,1),'x',         &
+                                      x(0:im,0:jm,0:km,2),'y',         &
+                                      x(0:im,0:jm,0:km,3),'z',         &
+                                   rho(0:im,0:jm,0:km)  ,'ro',         &
+                                   vel(0:im,0:jm,0:km,1),'u',          &
+                                   vel(0:im,0:jm,0:km,2),'v',          &
+                                   prs(0:im,0:jm,0:km)  ,'p',          &
+                                   tmp(0:im,0:jm,0:km)  ,'t' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** 2-D jet flow initialised.'
+    !
+  end subroutine jetini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine jetini.                                 |
+  !+-------------------------------------------------------------------+
+  !
 end module initialisation
 !+---------------------------------------------------------------------+
 !| The end of the module initialisation.                               |

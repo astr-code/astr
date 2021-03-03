@@ -30,6 +30,7 @@ module commvar
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
   logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lavg,lfftk
+  character(len=3) :: rkscheme
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
   !|             nondimen| if the equation is non-dimensional          |
@@ -39,6 +40,7 @@ module commvar
   !|              lwrite | write samples or not.                       |
   !|                lavg | average the flow field or not .             |
   !|               lfftk | to use fft in the k direction.              |
+  !|            rkscheme | which rk method to use.                     |
   !+---------------------+---------------------------------------------+
   !
   integer :: npdci,npdcj,npdck
