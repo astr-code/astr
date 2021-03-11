@@ -105,6 +105,15 @@ module commvar
   !|               twall | wall temperature.                           |
   !|               force | body force.                                 |
   !+---------------------+---------------------------------------------+
+  logical :: lisponge,ljsponge,lksponge
+  integer :: spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
+  !+---------------------+---------------------------------------------+
+  !|   spg_imin,spg_imax |                                             |
+  !|   spg_jmin,spg_jmax | number of nodes in the sponge layer near    |
+  !|   spg_kmin,spg_kmax | each boundary                               |
+  !|               twall | wall temperature.                           |
+  !|               force | body force.                                 |
+  !+---------------------+---------------------------------------------+
   !
   parameter(hm=5)
   !

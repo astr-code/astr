@@ -54,6 +54,8 @@ module initialisation
         call jetini
       case('accutest')
         call accini
+      case('cylinder')
+        call cylinderini
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ flowinit'
@@ -73,6 +75,247 @@ module initialisation
   end subroutine flowinit
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowinit.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to initilise sponge layer.                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 11-03-2021  | Created by J. Fang @ Warrington                     |
+  !|             | (have not consider subdomain situation)             |
+  !+-------------------------------------------------------------------+
+  subroutine spongelayerini
+    !
+    use commvar, only : spg_imin,spg_imax,spg_jmin,spg_jmax,           &
+                        spg_kmin,spg_kmax,im,jm,km,ia,ja,ka,           &
+                        lisponge,ljsponge,lksponge
+    use commarray,only: lspg_imin,lspg_imax,lspg_jmin,lspg_jmax,       &
+                        lspg_kmin,lspg_kmax,x
+    use parallel,only : ig0,jg0,kg0
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    if(spg_imin>0 .or. spg_imax>0) then
+      lisponge=.true.
+    else
+      lisponge=.false.
+    endif
+    !
+    if(spg_jmin>0 .or. spg_jmax>0) then
+      ljsponge=.true.
+    else
+      ljsponge=.false.
+    endif
+    !
+    if(spg_kmin>0 .or. spg_kmax>0) then
+      lksponge=.true.
+    else
+      lksponge=.false.
+    endif
+    !
+    if(mpirank==0) then
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                        *** sponge layer ***'
+      if(lisponge) then
+        write(*,'(22X,3(A,I4))')'i direction:   0 ~',spg_imin,         &
+                                        ' ....... ',ia-spg_imax,' ~ ',ia
+      endif
+      if(ljsponge) then
+        write(*,'(22X,3(A,I4))')'j direction:   0 ~',spg_jmin,         &
+                                        ' ....... ',ja-spg_jmax,' ~ ',ja
+      endif
+      if(lksponge) then
+        write(*,'(22X,3(A,I4))')'k direction:   0 ~',spg_kmin,         &
+                                        ' ....... ',ka-spg_kmax,' ~ ',ka
+      endif
+      write(*,'(2X,62A)')('-',i=1,62)
+    endif
+    !
+    if(spg_imin>0) then
+      !
+      if(spg_imin<ig0) then
+        spg_imin=0
+      elseif(spg_imin>ig0+im) then
+        spg_imin=im
+      else
+        spg_imin=spg_imin-ig0
+      endif
+      !
+    endif
+    !
+    allocate(lspg_imin(0:jm,0:km))
+    lspg_imin=0.d0
+    if(spg_imin>0) then
+      do k=0,km
+      do j=0,jm
+        !
+        do i=1,spg_imin
+          lspg_imin(j,k)=lspg_imin(j,k)+                               &
+                                  sqrt((x(i,j,k,1)-x(i-1,j,k,1))**2+   &
+                                       (x(i,j,k,2)-x(i-1,j,k,2))**2+   &
+                                       (x(i,j,k,3)-x(i-1,j,k,3))**2)
+        enddo
+        !
+      enddo
+      enddo
+    endif
+    !
+    if(spg_imax>0) then
+      !
+      if(ia-spg_imax>ig0+im) then
+        spg_imax=0
+      elseif(ia-spg_imax<ig0) then
+        spg_imax=im
+      else
+        spg_imax=ig0+im-(ia-spg_imax)
+      endif
+      !
+    endif
+    !
+    allocate(lspg_imax(0:jm,0:km))
+    lspg_imax=0.d0
+    if(spg_imax>0) then
+      do k=0,km
+      do j=0,jm
+        !
+        do i=im-spg_imax,im-1
+          lspg_imax(j,k)=lspg_imax(j,k)+                               &
+                                  sqrt((x(i+1,j,k,1)-x(i,j,k,1))**2+   &
+                                       (x(i+1,j,k,2)-x(i,j,k,2))**2+   &
+                                       (x(i+1,j,k,3)-x(i,j,k,3))**2)
+        enddo
+        !
+      enddo
+      enddo
+    endif
+    !
+    if(spg_jmin>0) then
+      !
+      if(spg_jmin<jg0) then
+        spg_jmin=0
+      elseif(spg_jmin>jg0+jm) then
+        spg_jmin=jm
+      else
+        spg_jmin=spg_jmin-jg0
+      endif
+      !
+    endif
+    !
+    allocate(lspg_jmin(0:im,0:km))
+    lspg_jmin=0.d0
+    if(spg_jmin>0) then
+      do k=0,km
+      do i=0,im
+        !
+        do j=1,spg_jmin
+          lspg_jmin(i,k)=lspg_jmin(i,k)+                               &
+                                  sqrt((x(i,j,k,1)-x(i,j-1,k,1))**2+   &
+                                       (x(i,j,k,2)-x(i,j-1,k,2))**2+   &
+                                       (x(i,j,k,3)-x(i,j-1,k,3))**2)
+        enddo
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+    if(spg_jmax>0) then
+      !
+      if(ja-spg_jmax>jg0+jm) then
+        spg_jmax=0
+      elseif(ja-spg_jmax<jg0) then
+        spg_jmax=jm
+      else
+        spg_jmax=jg0+jm-(ja-spg_jmax)
+      endif
+      !
+    endif
+    !
+    allocate(lspg_jmax(0:im,0:km))
+    lspg_jmax=0.d0
+    if(spg_jmax>0) then
+      do k=0,km
+      do i=0,im
+        !
+        do j=jm-spg_jmax,jm-1
+          lspg_jmax(i,k)=lspg_jmax(i,k)+                               &
+                                  sqrt((x(i,j+1,k,1)-x(i,j,k,1))**2+   &
+                                       (x(i,j+1,k,2)-x(i,j,k,2))**2+   &
+                                       (x(i,j+1,k,3)-x(i,j,k,3))**2)
+        enddo
+        !
+      enddo
+      enddo
+    endif
+    !
+    if(spg_kmin>0) then
+      !
+      if(spg_kmin<kg0) then
+        spg_kmin=0
+      elseif(spg_kmin>kg0+km) then
+        spg_kmin=km
+      else
+        spg_kmin=spg_kmin-kg0
+      endif
+      !
+    endif
+    !
+    allocate(lspg_kmin(0:im,0:jm))
+    lspg_kmin=0.d0
+    if(spg_kmin>0) then
+      do j=0,jm
+      do i=0,im
+        !
+        do k=1,spg_kmin
+          lspg_kmin(i,j)=lspg_kmin(i,j)+                               &
+                                  sqrt((x(i,j,k,1)-x(i,j,k-1,1))**2+   &
+                                       (x(i,j,k,2)-x(i,j,k-1,2))**2+   &
+                                       (x(i,j,k,3)-x(i,j,k-1,3))**2)
+        enddo
+        !
+      enddo
+      enddo
+    endif
+    !
+    if(spg_kmax>0) then
+      !
+      if(ka-spg_kmax>kg0+km) then
+        spg_kmax=0
+      elseif(ka-spg_kmax<kg0) then
+        spg_kmax=km
+      else
+        spg_kmax=kg0+km-(ka-spg_kmax)
+      endif
+      !
+    endif
+    !
+    allocate(lspg_kmax(0:im,0:jm))
+    lspg_kmax=0.d0
+    if(spg_kmax>0) then
+      do j=0,jm
+      do i=0,im
+        !
+        do k=1,spg_kmax
+          lspg_kmax(i,j)=lspg_kmax(i,j)+                               &
+                                  sqrt((x(i,j,k,1)-x(i,j,k-1,1))**2+   &
+                                       (x(i,j,k,2)-x(i,j,k-1,2))**2+   &
+                                       (x(i,j,k,3)-x(i,j,k-1,3))**2)
+        enddo
+        !
+      enddo
+      enddo
+    endif
+    !
+    ! print*,mpirank,'|',lspg_imin(0,0),lspg_imax(0,0),'|',            &
+    !                    lspg_jmin(0,0),lspg_jmax(0,0)
+    ! !
+    ! call mpistop
+    !
+  end subroutine spongelayerini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine spongelayerini.                         |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -485,6 +728,65 @@ module initialisation
   end subroutine jetini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine jetini.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate initial field for flow past a |
+  !| cylinder flow.                                                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 11-03-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine cylinderini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal,fvar2q,jetvel
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      rho(i,j,k)  = roinf
+      vel(i,j,k,1)= uinf
+      vel(i,j,k,2)= 0.d0
+      vel(i,j,k,3)= 0.d0
+      !
+      tmp(i,j,k)  = tinf
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>=1) then
+        spc(i,j,k,1)=0.d0
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+    !
+    call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+                                      x(0:im,0:jm,0:km,1),'x',         &
+                                      x(0:im,0:jm,0:km,2),'y',         &
+                                      x(0:im,0:jm,0:km,3),'z',         &
+                                   rho(0:im,0:jm,0:km)  ,'ro',         &
+                                   vel(0:im,0:jm,0:km,1),'u',          &
+                                   vel(0:im,0:jm,0:km,2),'v',          &
+                                   prs(0:im,0:jm,0:km)  ,'p',          &
+                                   tmp(0:im,0:jm,0:km)  ,'t' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D jet flow initialised.'
+    !
+  end subroutine cylinderini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine cylinderini.                            |
   !+-------------------------------------------------------------------+
   !
 end module initialisation

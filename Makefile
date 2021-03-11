@@ -20,7 +20,7 @@ OPTIONS3 = -DHDF5 -Dcputime
 #OPTIONS3 = -DEULER
 #OPTIONS3=-O3
 
-EXE=astrr.exe
+EXE=astr
 
 # INCL=-I/home/fangjian/opt/fftw-3.3.9/include
 

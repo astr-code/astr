@@ -60,23 +60,33 @@ module gridgeneration
   subroutine gridjet
   !
     use commvar,  only : im,jm,km,gridfile,ia,ja,ka
-    use parallel, only : ig0,jg0,kg0,lio
+    use parallel, only : ig0,jg0,kg0,lio,irk,irkm
     use commarray,only : x
     use hdf5io
     !
     ! local data
     real(8) :: lx,ly,lz
-    integer :: i,j,k
+    integer :: i,j,k,in
+    real(8) :: x1d(0:im)
     !
     lx=50.d0
     ly=15.d0
     lz=15.d0
     !
+    do i=0,im
+      x1d(i)=lx/real(ia,8)*real(i+ig0,8)
+    enddo
+    !
+    if(irk==irkm) then
+      in=im-25
+      call spongstretch(im-in,lx+10.d0,x1d(in-2:im))
+    endif
+    !
     do k=0,km
     do j=0,jm
     do i=0,im
       !
-      x(i,j,k,1)=lx/real(ia,8)*real(i+ig0,8)
+      x(i,j,k,1)=x1d(i)
       x(i,j,k,2)=ly/real(ja,8)*real(j+jg0,8)-0.5d0*ly
       if(ka==0) then
         x(i,j,k,3)=0.d0 !lz/real(ka,8)*real(k+kg0,8)
@@ -94,6 +104,51 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gridjet.                                |
   !+-------------------------------------------------------------------+
+  !
+  subroutine spongstretch(dim,varmax,var)
+    !
+    integer :: dim,hh
+    real(8) :: var(-2:dim)
+    real(8) :: varmax
+    real(8) :: err,err2,dra,ddra,var1,var2,dde,ratio
+    !
+    dra=1.d0
+    !
+    ddra=0.001d0*dra
+    err=1.d10
+    err2=0.d0
+    !
+    do while( dabs(err)>1.d-9 )
+      !
+      ratio=1.d0
+      do hh=1,dim
+        !
+        dde=var(hh-1)-var(hh-2)
+        var(hh)=var(hh-1)+dde*ratio
+        ratio=ratio*dra
+        !
+      end do
+      !
+      err=varmax-var(dim)
+      !
+      if(err>0) then
+        dra=dra+ddra
+      else
+        dra=dra-ddra
+      end if
+      !
+      if(err*err2<0.d0) ddra=0.5d0*ddra
+      !
+      err2=err
+      !
+      !print*,err,ddra,dra,ratio
+      !
+    end do
+    !
+  end subroutine spongstretch
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine spongstretch
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to generate a cubic mesh.                      |

@@ -1290,6 +1290,91 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used for spatial filter the conservative variable
   ! for stabilizing the computation.
+  ! 2-order Explicit filter is incorporated.
+  ! Ref1: Datta V. Gaitonde and Miguel R. Visbal, AIAA JOURNAL Vol.38,
+  !      No.11, November 2000. 
+  ! Ref2: Xavier Gloerfelt and Philippe Lafon, Computers & Fluids, 2008,
+  !       37: 388-401.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine spongefilter
+    !
+    use commvar,  only : spg_imin,spg_imax,spg_jmin,spg_jmax,          &
+                         spg_kmin,spg_kmax,im,jm,km,ia,ja,ka,          &
+                         lisponge,ljsponge,lksponge,is,je,js,je,ks,ke, &
+                         numq
+    use commarray,only: lspg_imin,lspg_imax,lspg_jmin,lspg_jmax,       &
+                        lspg_kmin,lspg_kmax,x,q
+    use commfunc, only : spafilter10
+    !
+    real(8),parameter :: dampfac=0.05d0
+    !
+    integer :: i,j,k,n
+    real(8) :: dis,var1
+    real(8),allocatable :: qtemp(:,:,:,:)
+    !
+    if(lisponge) then
+      !
+      call dataswap(q,direction=1)
+      !
+      !
+      if(spg_imax>0) then
+        !
+        allocate(qtemp(im-spg_imax:im-1,js:je,ks:ke,1:numq))
+        !
+        do k=ks,ke
+        do j=js,je
+          !
+          dis=0.d0
+          do i=im-spg_imax,im-1
+            !
+            dis=dis+ sqrt( (x(i+1,j,k,1)-x(i,j,k,1))**2+               &
+                           (x(i+1,j,k,2)-x(i,j,k,2))**2+               &
+                           (x(i+1,j,k,3)-x(i,j,k,3))**2                )
+            var1=dampfac*(dis/lspg_imax(j,k))**2
+            !
+            do n=1,numq
+              qtemp(i,j,k,n)=(1.d0-var1)*q(i,j,k,n)+        &
+                             num1d6*var1*(q(i+1,j,k,n)+     &
+                                          q(i-1,j,k,n)+     &
+                                          q(i,j+1,k,n)+     &
+                                          q(i,j-1,k,n)+     &
+                                          q(i,j,k+1,n)+     &
+                                          q(i,j,k-1,n)      )
+            enddo
+            !
+          enddo
+          !
+        enddo
+        enddo
+        !
+        do k=ks,ke
+        do j=js,je
+          !
+          do i=im-spg_imax,im-1
+            !
+            do n=1,numq
+              q(i,j,k,n)=qtemp(i,j,k,n)
+            enddo
+            !
+          enddo
+          !
+        enddo
+        enddo
+        !
+        deallocate(qtemp)
+        !
+      endif
+      !
+    endif
+    !
+  end subroutine spongefilter
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine spongefilter.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used for spatial filter the conservative variable
+  ! for stabilizing the computation.
   ! 10-order filter is incorporated.
   ! for boundary filter: the high-order one side filter is used.
   ! the 0-6-6-6-8-10.............-10-8-6-6-6-0. boundary order is

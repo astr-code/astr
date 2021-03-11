@@ -40,6 +40,8 @@ program astrr
   !
   call geomcal
   !
+  call spongelayerini
+  !
   call solvrinit
   !
   call flowinit

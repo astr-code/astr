@@ -617,10 +617,10 @@ module bc
       i=0
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
-      do k=ks,ke
-      do j=js,je
-      ! do k=0,km
-      ! do j=0,jm
+      ! do k=ks,ke
+      ! do j=js,je
+      do k=0,km
+      do j=0,jm
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
                      vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.false.)
@@ -738,33 +738,33 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
-      do k=ks,ke
-        !
-        do j=-hm,jm+hm
-          !
-          uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
-             dxi(i,j,k,2,3)*vel(i,j,k,3)
-          fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
-          fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
-          fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
-          fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          do jspc=1,num_species
-            fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-          enddo
-          !
-        enddo
-        !
-        do n=1,numq
-          dfcs(:,n)=ddfc(fcs(:,n),'442e',npdcj,jm)
-        enddo
-        !
-        qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
-        !
-      enddo
-      !
-      deallocate(fcs,dfcs)
+      ! allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
+      ! do k=ks,ke
+      !   !
+      !   do j=-hm,jm+hm
+      !     !
+      !     uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
+      !        dxi(i,j,k,2,3)*vel(i,j,k,3)
+      !     fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+      !     fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+      !     fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+      !     fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+      !     fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+      !     do jspc=1,num_species
+      !       fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+      !     enddo
+      !     !
+      !   enddo
+      !   !
+      !   do n=1,numq
+      !     dfcs(:,n)=ddfc(fcs(:,n),'442e',npdcj,jm)
+      !   enddo
+      !   !
+      !   qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
+      !   !
+      ! enddo
+      ! !
+      ! deallocate(fcs,dfcs)
       !
     endif
     !
@@ -1131,14 +1131,11 @@ module bc
           rho(i,j,k)  =roe
           !
         elseif(ub<css .and. ub>=0.d0) then
-          ! subsonic inlet
-          vnb       =-0.5d0*(pinf-pe)/(rho(i,j,k)*css)+0.5d0*(uinf+vne)
-          vtb       = vte
-          prs(i,j,k)= 0.5d0*(pinf+pe)+0.5d0*rho(i,j,k)*css*(vne-uinf)
-          rho(i,j,k)= roe*(prs(i,j,k)/pe)**(1.d0/gamma)
-          !
-          vel(i,j,k,1)= vtb*bvec_im(j,k,2)+vnb*bvec_im(j,k,1) 
-          vel(i,j,k,2)=-vtb*bvec_im(j,k,1)+vnb*bvec_im(j,k,2) 
+          ! subsonic outlet
+          prs(i,j,k)= pinf
+          rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
+          vel(i,j,k,1)= ue + (pe-prs(i,j,k))/roe/csse
+          vel(i,j,k,2)= ve
         else
           stop ' !! velocity at outflow error !! @ outflow'
         endif
@@ -1335,13 +1332,13 @@ module bc
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         else
-          var1=1.d0/( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+             &
-                      dxi(i,j,k,2,3)**2 )
+          var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
+                          dxi(i,j,k,2,3)**2 )
           kin=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           LODi(1)=0.d0
           LODi(2)=kin*0.5d0*                                           &
-                            ( dxi(i,j,k,2,1)*var1*(vel(i,j,k,3)-winf)- &
-                              dxi(i,j,k,2,3)*var1*(vel(i,j,k,1)-uinf) )
+                            ( dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf)- &
+                              dxi(i,j,k,2,3)*var1*(vel(i,j,k,2)-vinf) )
           LODi(3)=kin*0.5d0*                                           &
                            (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
                              dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf) )
@@ -1519,13 +1516,13 @@ module bc
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         else
-          var1=1.d0/( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+             &
-                      dxi(i,j,k,2,3)**2 )
+          var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
+                          dxi(i,j,k,2,3)**2 )
           kin=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           LODi(1)=0.d0
           LODi(2)=kin*0.5d0*                                           &
-                            ( dxi(i,j,k,2,1)*var1*(vel(i,j,k,3)-winf)- &
-                              dxi(i,j,k,2,3)*var1*(vel(i,j,k,1)-uinf) )
+                            ( dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf)- &
+                              dxi(i,j,k,2,3)*var1*(vel(i,j,k,2)-vinf) )
           LODi(3)=kin*0.5d0*                                           &
                            (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
                              dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf) )
@@ -1551,33 +1548,33 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      ! allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
-      ! do k=ks,ke
-      !   !
-      !   do i=-hm,im+hm
-      !     !
-      !     uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
-      !        dxi(i,j,k,1,3)*vel(i,j,k,3)
-      !     fcs(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !     fcs(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-      !     fcs(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-      !     fcs(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-      !     fcs(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-      !     do jspc=1,num_species
-      !       fcs(i,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-      !     enddo
-      !     !
-      !   enddo
-      !   !
-      !   do n=1,numq
-      !     dfcs(:,n)=ddfc(fcs(:,n),'442e',npdci,im)
-      !   enddo
-      !   !
-      !   qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+mach*dfcs(is:ie,:)
-      !   !
-      ! enddo
-      ! !
-      ! deallocate(fcs,dfcs)
+      allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
+      do k=ks,ke
+        !
+        do i=-hm,im+hm
+          !
+          uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
+             dxi(i,j,k,1,3)*vel(i,j,k,3)
+          fcs(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fcs(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fcs(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fcs(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fcs(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          do jspc=1,num_species
+            fcs(i,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+          enddo
+          !
+        enddo
+        !
+        do n=1,numq
+          dfcs(:,n)=ddfc(fcs(:,n),'442e',npdci,im)
+        enddo
+        !
+        qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:)
+        !
+      enddo
+      !
+      deallocate(fcs,dfcs)
       ! !
       ! if(ndims==3) then
       !   !
@@ -1872,10 +1869,10 @@ module bc
       i=im
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
-      do k=ks,ke
-      do j=js,je
-      ! do k=0,km
-      ! do j=0,jm
+      ! do k=ks,ke
+      ! do j=js,je
+      do k=0,km
+      do j=0,jm
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
                      vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.false.)

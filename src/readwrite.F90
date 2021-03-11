@@ -111,7 +111,9 @@ module readwrite
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
                         flowtype,ndims,lfilter,alfa_filter,bctype,     &
-                        twall,lfftk,kcutoff,ninit,rkscheme
+                        twall,lfftk,kcutoff,ninit,rkscheme,            &
+                        spg_imin,spg_imax,spg_jmin,spg_jmax,           &
+                        spg_kmin,spg_kmax
     !
     ! local data
     character(len=42) :: typedefine
@@ -135,6 +137,8 @@ module readwrite
         typedefine='                                  Jet flow'
       case('accutest')
         typedefine='                             accuracy test'
+      case('cylinder')
+        typedefine='                      flow past a cylinder'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -286,7 +290,8 @@ module readwrite
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
-                        ninit,rkscheme
+                        ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
+                        spg_jmax,spg_kmin,spg_kmax
     use parallel,only : bcast
     !
     ! local data
@@ -336,6 +341,8 @@ module readwrite
       enddo
       read(11,'(/)')
       read(11,*)ninit
+      read(11,'(/)')
+      read(11,*)spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
       if(lreadgrid) then
         read(11,'(/)')
         read(11,'(A)')gridfile
@@ -377,6 +384,13 @@ module readwrite
     call bcast(bctype)
     call bcast(twall)
     call bcast(ninit)
+    !
+    call bcast(spg_imin)
+    call bcast(spg_imax)
+    call bcast(spg_jmin)
+    call bcast(spg_jmax)
+    call bcast(spg_kmin)
+    call bcast(spg_kmax)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+

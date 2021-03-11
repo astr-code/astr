@@ -150,7 +150,7 @@ module mainloop
                          ctime,hm,lavg,navg,nstep,nsamples
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
-    use solver,   only : rhscal,filterq
+    use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal
     use readwrite,only : output
     use bc,       only : boucon
@@ -258,6 +258,8 @@ module mainloop
       !
       if(lfilter) call filterq
       !
+      call spongefilter
+      !
       call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
                                      density=rho(0:im,0:jm,0:km),      &
                                     velocity=vel(0:im,0:jm,0:km,:),    &
@@ -309,7 +311,7 @@ module mainloop
                          ctime,hm,lavg,navg,nstep,nsamples
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
-    use solver,   only : rhscal,filterq
+    use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal
     use readwrite,only : output
     use bc,       only : boucon
@@ -429,12 +431,19 @@ module mainloop
       !
       if(lfilter) call filterq
       !
+      call spongefilter
+      !
       call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
                                      density=rho(0:im,0:jm,0:km),      &
                                     velocity=vel(0:im,0:jm,0:km,:),    &
                                     pressure=prs(0:im,0:jm,0:km),      &
                                  temperature=tmp(0:im,0:jm,0:km),      &
                                      species=spc(0:im,0:jm,0:km,:)     )
+      !
+      ! if(irk==0 .and. jrk==jrkm) then
+      !   print*,x(0,jm,0,1),x(0,jm,0,2),':',vel(0,jm,0,1)
+      !   print*,'-----------------------------'
+      ! endif
       !
       call crashcheck
       !
