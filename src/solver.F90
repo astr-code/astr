@@ -947,7 +947,7 @@ module solver
     !
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,reynolds,prandtl,  &
-                          const5
+                          const5,is,ie,js,je,ks,ke
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs
     use commfunc,  only : ddfc
     use fludyna,   only : miucal
@@ -1162,8 +1162,8 @@ module solver
     ncolm=4
     !
     allocate(ff(-hm:im+hm,1:ncolm),df(0:im,1:ncolm))
-    do k=0,km
-    do j=0,jm
+    do k=ks,ke
+    do j=js,je
       !
       ff(:,1)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                        &
                 sigma(:,j,k,2)*dxi(:,j,k,1,2) +                        &
@@ -1182,10 +1182,10 @@ module solver
         df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
       enddo
       !
-      qrhs(:,j,k,2)=qrhs(:,j,k,2)+df(:,1)
-      qrhs(:,j,k,3)=qrhs(:,j,k,3)+df(:,2)
-      qrhs(:,j,k,4)=qrhs(:,j,k,4)+df(:,3)
-      qrhs(:,j,k,5)=qrhs(:,j,k,5)+df(:,4)
+      qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(is:ie,1)
+      qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,2)
+      qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,3)
+      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,4)
       !
     enddo
     enddo
@@ -1198,8 +1198,8 @@ module solver
     ! Calculating along j direction.
     !
     allocate(ff(-hm:jm+hm,1:ncolm),df(0:jm,1:ncolm))
-    do k=0,km
-    do i=0,im
+    do k=ks,ke
+    do i=is,ie
       !
       ff(:,1)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
                 sigma(i,:,k,2)*dxi(i,:,k,2,2) +                        &
@@ -1218,10 +1218,10 @@ module solver
         df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
       enddo
       !
-      qrhs(i,:,k,2)=qrhs(i,:,k,2)+df(:,1)
-      qrhs(i,:,k,3)=qrhs(i,:,k,3)+df(:,2)
-      qrhs(i,:,k,4)=qrhs(i,:,k,4)+df(:,3)
-      qrhs(i,:,k,5)=qrhs(i,:,k,5)+df(:,4)
+      qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(js:je,1)
+      qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,2)
+      qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,3)
+      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,4)
       !
       !
     enddo
@@ -1236,8 +1236,8 @@ module solver
       ! Calculating along j direction.
       !
       allocate(ff(-hm:km+hm,1:ncolm),df(0:km,1:ncolm))
-      do j=0,jm
-      do i=0,im
+      do j=js,je
+      do i=is,ie
         !
         ff(:,1)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
                   sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &
@@ -1256,11 +1256,10 @@ module solver
           df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
         enddo
         !
-        qrhs(i,j,:,2)=qrhs(i,j,:,2)+df(:,1)
-        qrhs(i,j,:,3)=qrhs(i,j,:,3)+df(:,2)
-        qrhs(i,j,:,4)=qrhs(i,j,:,4)+df(:,3)
-        qrhs(i,j,:,5)=qrhs(i,j,:,5)+df(:,4)
-        !
+        qrhs(i,j,ks:ke,2)=qrhs(i,j,ks:ke,2)+df(ks:ke,1)
+        qrhs(i,j,ks:ke,3)=qrhs(i,j,ks:ke,3)+df(ks:ke,2)
+        qrhs(i,j,ks:ke,4)=qrhs(i,j,ks:ke,4)+df(ks:ke,3)
+        qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(ks:ke,4)
         !
       enddo
       enddo
@@ -1417,6 +1416,7 @@ module solver
                           alfa_filter,numq
     use commarray, only : x,q,dxi
     use commfunc,  only : ddfc,spafilter10
+    use bc,       only : boucon
     !
     ! local data
     integer :: i,j,k,n
@@ -1427,30 +1427,34 @@ module solver
     do i=0,im
       ! q(i,j,k,1)=sin(4.d0*x(1,1,k,3)) !+0.1d0*sin(pi*j+0.5d0*pi)
       do n=1,numq
-        q(i,j,k,n)=sin(10.d0*(x(1,1,k,3)-0.5*pi))*exp(-4.d0*(x(1,1,k,3)-0.5*pi)**2)+0.1d0*sin(pi*k+0.5d0*pi)
+        q(i,j,k,n)=sin(0.5d0*pi*x(i,j,k,2))
+        ! sin(10.d0*(x(1,1,k,3)-0.5*pi))*exp(-4.d0*(x(1,1,k,3)-0.5*pi)**2)+0.1d0*sin(pi*k+0.5d0*pi)
       enddo
       !
     enddo
     enddo
     enddo
     !
-    call dataswap(q)
-    ! !
+    call dataswap(q,debug=.true.)
+    !
+    call boucon
+    !
     ! allocate(dq(0:im))
     !
     ! dq=ddfc(q(:,1,1,1),conschm,npdci,im,alfa_con,cci)*dxi(:,1,1,1,1)
     
     ! dq=spafilter10(q(:,jm,0,2),npdci,im,alfa_filter,fci)
     !
-    ! allocate(dq(0:jm))
-    ! dq=ddfc(q(1,:,1,1),conschm,npdcj,jm,alfa_con,ccj)*dxi(1,0:jm,1,2,2)
+    allocate(dq(0:jm,1:1))
+    dq(:,1)=ddfc(q(0,:,0,2),conschm,npdcj,jm,alfa_con,ccj)*dxi(0,0:jm,0,2,2)
+    !
     ! dq=spafilter10(q(1,:,0,1),npdcj,jm,alfa_filter,fcj)
     !
-    allocate(dq(0:km,1:numq))
-    do n=1,numq
-      ! dq(:,n)=ddfc(q(1,1,:,n),conschm,npdck,km,alfa_con,cck,lfft=.true.)
-      dq(:,n)=spafilter10(q(1,1,:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
-    enddo
+    ! allocate(dq(0:km,1:numq))
+    ! do n=1,numq
+    !   ! dq(:,n)=ddfc(q(1,1,:,n),conschm,npdck,km,alfa_con,cck,lfft=.true.)
+    !   dq(:,n)=spafilter10(q(1,1,:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
+    ! enddo
     !
     ! do n=1,numq
     !   dq(:,n)=dq(:,n)*dxi(1,1,0:km,3,3)
@@ -1465,8 +1469,8 @@ module solver
     ! dq=ddfc(q(1,1,:,1),conschm,npdck,km,alfa_con,cck)/(x(1,1,1,3)-x(1,1,0,3))
     !
     open(18,file='testout/profile'//mpirankname//'.dat')
-    do k=0,km
-      write(18,*)x(1,1,k,3),q(1,1,k,5),dq(k,5)
+    do j=0,jm
+      write(18,*)x(0,j,0,2),q(0,j,0,2),dq(j,1)
     enddo
     close(18)
     print*,' << testout/profile',mpirankname,'.dat'

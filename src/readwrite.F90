@@ -7,7 +7,7 @@
 !+---------------------------------------------------------------------+
 module readwrite
   !
-  use parallel,only : mpirank,mpirankname,mpistop,lio
+  use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk
   use tecio
   !
   implicit none
@@ -234,12 +234,20 @@ module readwrite
         elseif(bctype(n)==41) then
           write(*,'(24X,I0,3(A),F6.3)')bctype(n),' isothermal wall at ',bcdir(n),&
                                                      ' Twall= ',twall(n)
+        elseif(bctype(n)==51) then
+          write(*,'(44X,I0,2(A))')bctype(n),' farfield at: ',bcdir(n)
+        elseif(bctype(n)==52) then
+          write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
+        elseif(bctype(n)==12) then
+          write(*,'(38X,I0,2(A))')bctype(n),' nscbc inflow  at: ',bcdir(n)
         elseif(bctype(n)==21) then
           write(*,'(45X,I0,2(A))')bctype(n),' outflow at: ',bcdir(n)
         elseif(bctype(n)==22) then
-          write(*,'(38X,I0,2(A))')bctype(n),' nscbcc outflow at: ',bcdir(n)
+          write(*,'(39X,I0,2(A))')bctype(n),' nscbc outflow at: ',bcdir(n)
+        elseif(bctype(n)==23) then
+          write(*,'(36X,I0,2(A))')bctype(n),' gc-nscbc outflow at: ',bcdir(n)
         else
           print*,n,bctype(n)
           stop ' !! BC not defined !!'
@@ -586,6 +594,12 @@ module readwrite
     enddo
     call h5io_end
     !
+    ! if(irk==0 .and. jrk==jrkm) then
+    !     print*,'------------------------------------'
+    !     print*,x(0,jm,0,1),prs(0,jm,0)
+    !     print*,'------------------------------------'
+    ! endif
+
     if(lavg .and. nsamples>0) then
       !
       call h5io_init('outdat/meanflow.h5',mode='write')

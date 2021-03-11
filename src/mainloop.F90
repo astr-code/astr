@@ -9,7 +9,7 @@ module mainloop
   !
   use constdef
   use parallel, only: lio,mpistop,mpirank,qswap,dataswap,mpirankname,  &
-                      pmax,ptime
+                      pmax,ptime,irk,jrk,irkm,jrkm
   use commvar,  only: im,jm,km,ia,ja,ka
   use tecio
   !
@@ -37,7 +37,7 @@ module mainloop
     !
     var1=ptime()
     !
-    do while(nstep<maxstep)
+    do while(nstep<=maxstep)
       !
       if(rkscheme=='rk3') then
         call rk3
@@ -65,7 +65,7 @@ module mainloop
     !
     ctime(1)=ptime()-var1
     !
-    call errest
+    ! call errest
     !
   end subroutine steploop
   !+-------------------------------------------------------------------+
@@ -194,9 +194,9 @@ module mainloop
       !
       qrhs=0.d0
       !
-      call boucon
-      !
       call qswap
+      !
+      call boucon
       !
 #ifdef cputime
       time_beg_rhs=ptime()
@@ -317,7 +317,7 @@ module mainloop
     ! logical data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(2,4)
-    integer :: irk,i,j,k,m
+    integer :: nrk,i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:),rhsav(:,:,:,:)
     !
@@ -348,13 +348,13 @@ module mainloop
       rhsav(0:im,0:jm,0:km,m)=0.d0
     enddo
     !
-    do irk=1,4
+    do nrk=1,4
       !
       qrhs=0.d0
       !
-      call boucon
-      !
       call qswap
+      !
+      call boucon
       !
 #ifdef cputime
       time_beg_rhs=ptime()
@@ -364,7 +364,7 @@ module mainloop
       ctime(4)=ctime(4)+ptime()-time_beg_rhs
 #endif
       !
-      if(irk==1) then
+      if(nrk==1) then
         !
 #ifdef cputime
         time_beg_sta=ptime()
@@ -405,20 +405,20 @@ module mainloop
         !
       endif
       !
-      if(irk<=3) then
+      if(nrk<=3) then
         do m=1,numq
           q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
-                              rkcoe(1,irk)*deltat*qrhs(0:im,0:jm,0:km,m)
+                              rkcoe(1,nrk)*deltat*qrhs(0:im,0:jm,0:km,m)
           !
           q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
           !
           rhsav(0:im,0:jm,0:km,m)=rhsav(0:im,0:jm,0:km,m)+             &
-                                  rkcoe(2,irk)*qrhs(0:im,0:jm,0:km,m)
+                                  rkcoe(2,nrk)*qrhs(0:im,0:jm,0:km,m)
         enddo
       else
         do m=1,numq
           q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
-                                  rkcoe(1,irk)*deltat*(                &
+                                  rkcoe(1,nrk)*deltat*(                &
                                  qrhs(0:im,0:jm,0:km,m)+               &
                                  rhsav(0:im,0:jm,0:km,m) )
           !

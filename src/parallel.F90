@@ -1463,11 +1463,12 @@ module parallel
   !| -------------                                                     |
   !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
   !+-------------------------------------------------------------------+
-  subroutine array4d_sendrecv(var,direction)
+  subroutine array4d_sendrecv(var,direction,debug)
     !
     ! arguments
     real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:)
     integer,intent(in),optional :: direction
+    logical,intent(in),optional :: debug
     !
     ! logical data
     integer :: ncou,nx,dir

@@ -70,7 +70,7 @@ module gridgeneration
     !
     lx=50.d0
     ly=15.d0
-    lz=1.d0
+    lz=15.d0
     !
     do k=0,km
     do j=0,jm
@@ -78,7 +78,11 @@ module gridgeneration
       !
       x(i,j,k,1)=lx/real(ia,8)*real(i+ig0,8)
       x(i,j,k,2)=ly/real(ja,8)*real(j+jg0,8)-0.5d0*ly
-      x(i,j,k,3)=lz !lz/real(ka,8)*real(k+kg0,8)
+      if(ka==0) then
+        x(i,j,k,3)=0.d0 !lz/real(ka,8)*real(k+kg0,8)
+      else
+        x(i,j,k,3)=lz/real(ka,8)*real(k+kg0,8)-0.5d0*lz
+      endif
       !
     enddo
     enddo

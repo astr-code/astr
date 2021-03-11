@@ -154,6 +154,8 @@ module commfunc
             ddfc=diff6ec(f,dim,nscheme,ntype)
           elseif(nscheme/100==4) then
             ddfc=diff4ec(f,dim,nscheme,ntype)
+          elseif(nscheme/100==2) then
+            ddfc=diff2ec(f,dim,nscheme,ntype)
           else
             print*,' !! nscheme',nscheme
             stop ' !! scheme not defined @ ddfc_basic'
@@ -505,6 +507,42 @@ module commfunc
     endif
     !
   end function diff4ec
+  !
+  function diff2ec(vin,dim,ns,ntype) result(vout)
+    !
+    integer,intent(in) :: dim,ns,ntype
+    real(8),intent(in) :: vin(-hm:dim+hm)
+    real(8) :: vout(0:dim)
+    !
+    ! local data
+    integer :: i
+    !
+    if(ntype==1) then
+      !
+      vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+      !
+      do i=1,dim
+        vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
+      enddo
+      !
+    elseif(ntype==2) then
+      !
+      do i=0,dim-1
+        vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
+      enddo
+      !
+      vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+      !
+    elseif(ntype==3) then
+      do i=0,dim
+        vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
+      enddo
+    else
+      print*,' !! ntype=',ntype
+      stop ' !! errpr 3 @ diff6c'
+    endif
+    !
+  end function diff2ec
   !+-------------------------------------------------------------------+
   !| The end of the diffcen ddf.                                       |
   !+-------------------------------------------------------------------+
@@ -1608,7 +1646,8 @@ module commfunc
         !
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
+        vout(0)=0.5d0*( vin(1)-vin(-1))
+        ! vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
         ! vout(0)=-1.5d0*vin(0)+2.d0*vin(1)-0.5d0*vin(2)
         vout(1)=0.75d0*( vin(2)-vin(0))
         !
@@ -1641,8 +1680,9 @@ module commfunc
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)=num2d3*( vin(dim+1)-vin(dim-1)) -                    &
-                  num1d12*( vin(dim+2)-vin(dim-2))
+        vout(dim)=0.5d0 *( vin(dim+1)-vin(dim-1))
+        ! vout(dim)=num2d3 *( vin(dim+1)-vin(dim-1)) -                   &
+        !           num1d12*( vin(dim+2)-vin(dim-2))
         
         ! vout(dim)=1.5d0*vin(dim)-2.d0*vin(dim-1)+0.5d0*vin(dim-2)
       end if

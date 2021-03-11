@@ -444,7 +444,10 @@ module initialisation
     do j=0,jm
     do i=0,im
       rho(i,j,k)  = roinf
-      vel(i,j,k,:)= jetvel(x(i,j,k,2))
+      ! vel(i,j,k,:)= jetvel(x(i,j,k,2))
+      vel(i,j,k,1)= uinf
+      vel(i,j,k,2)= 0.d0
+      vel(i,j,k,3)= 0.d0
       !
       tmp(i,j,k)  = tinf
       !
@@ -477,7 +480,7 @@ module initialisation
                                    prs(0:im,0:jm,0:km)  ,'p',          &
                                    tmp(0:im,0:jm,0:km)  ,'t' )
     !
-    if(lio)  write(*,'(A,I1,A)')'  ** 2-D jet flow initialised.'
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D jet flow initialised.'
     !
   end subroutine jetini
   !+-------------------------------------------------------------------+
