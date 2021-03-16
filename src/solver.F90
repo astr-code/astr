@@ -75,7 +75,7 @@ module solver
     const6=1.d0/(gamma-1.d0)
     const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
     !
-    uinf=1.d0
+    uinf=0.d0
     vinf=0.d0
     winf=0.d0
     tinf=1.d0

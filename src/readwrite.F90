@@ -637,15 +637,15 @@ module readwrite
       !
     endif
     !
-    call tecbin('testout/tecfield'//mpirankname//'.plt',               &
-                                              x(0:im,0:jm,0:km,1),'x', &
-                                              x(0:im,0:jm,0:km,2),'y', &
-                                              x(0:im,0:jm,0:km,3),'z', &
-                                            rho(0:im,0:jm,0:km),'ro',  &
-                                            vel(0:im,0:jm,0:km,1),'u', &
-                                            vel(0:im,0:jm,0:km,2),'v', &
-                                            prs(0:im,0:jm,0:km),'p',   &
-                                            spc(0:im,0:jm,0:km,1),'Y1' )
+    ! call tecbin('testout/tecfield'//mpirankname//'.plt',               &
+    !                                           x(0:im,0:jm,0:km,1),'x', &
+    !                                           x(0:im,0:jm,0:km,2),'y', &
+    !                                           x(0:im,0:jm,0:km,3),'z', &
+    !                                         rho(0:im,0:jm,0:km),'ro',  &
+    !                                         vel(0:im,0:jm,0:km,1),'u', &
+    !                                         vel(0:im,0:jm,0:km,2),'v', &
+    !                                         prs(0:im,0:jm,0:km),'p',   &
+    !                                         spc(0:im,0:jm,0:km,1),'Y1' )
     !
   end subroutine output
   !+-------------------------------------------------------------------+

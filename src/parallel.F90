@@ -1318,12 +1318,6 @@ module parallel
       endif
       !
     else
-      var(0:im,0:jm,-hm:-1)    =var(0:im,0:jm,km-hm:km-1)
-      var(0:im,0:jm,km+1:km+hm)=var(0:im,0:jm,1:hm)
-      !
-      var(0:im,0:jm,0) =0.5d0*(var(0:im,0:jm,0)+var(0:im,0:jm,km))
-      var(0:im,0:jm,km)=var(0:im,0:jm,0)
-      ! 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! Message pass in j direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

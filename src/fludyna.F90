@@ -333,13 +333,14 @@ module fludyna
     !+-----------------------------+
     !
     !
-    r0=0.5d0
+    r0=1.d0
     uc=1.67d0*uinf    ! ref: Reichert & Biringen, Mechanics Research
                       !      Communications 34 (2007) 249–259
     delta=0.05d0*r0   ! ref: Bogey
     !
     var1=0.5d0+0.5d0*tanh((r0-abs(r))/(2.d0*delta)) ! profile 0~1
-    ujet=var1*(uc-uinf)+uinf
+    ! ujet=var1*(uc-uinf)+uinf
+    ujet=var1
     !
     if(present(time)) then
       !

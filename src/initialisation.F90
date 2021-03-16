@@ -682,13 +682,17 @@ module initialisation
     !
     ! local data
     integer :: i,j,k
+    real(8) :: radi
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       rho(i,j,k)  = roinf
-      ! vel(i,j,k,:)= jetvel(x(i,j,k,2))
-      vel(i,j,k,1)= uinf
+      !
+      radi=sqrt(x(i,j,k,2)**2+x(i,j,k,3)**2)
+      ! radi=abs(x(i,j,k,2))
+      vel(i,j,k,:)= jetvel(radi)
+      ! vel(i,j,k,1)= 0.d0
       vel(i,j,k,2)= 0.d0
       vel(i,j,k,3)= 0.d0
       !
@@ -713,15 +717,15 @@ module initialisation
                    pressure=prs(0:im,0:jm,0:km),                       &
                     species=spc(0:im,0:jm,0:km,:)                      )
     !
-    call tecbin('testout/tecinit'//mpirankname//'.plt',                &
-                                      x(0:im,0:jm,0:km,1),'x',         &
-                                      x(0:im,0:jm,0:km,2),'y',         &
-                                      x(0:im,0:jm,0:km,3),'z',         &
-                                   rho(0:im,0:jm,0:km)  ,'ro',         &
-                                   vel(0:im,0:jm,0:km,1),'u',          &
-                                   vel(0:im,0:jm,0:km,2),'v',          &
-                                   prs(0:im,0:jm,0:km)  ,'p',          &
-                                   tmp(0:im,0:jm,0:km)  ,'t' )
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+    !                                prs(0:im,0:jm,0:km)  ,'p',          &
+    !                                tmp(0:im,0:jm,0:km)  ,'t' )
     !
     if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D jet flow initialised.'
     !

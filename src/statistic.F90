@@ -9,13 +9,14 @@ module statistic
   !
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
                        zmin,zmax,nstep,deltat,force,numq
-  use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop
+  use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,irk,jrk,jrkm
   !
   implicit none
   !
   integer :: nsamples
   logical :: lmeanallocated=.false.
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms
+  real(8) :: vel_incom,prs_incom,rho_incom
   real(8),allocatable :: max_q(:),min_q(:)
   !
   real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,u11,   &
@@ -144,7 +145,8 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statcal
     !
-    use commvar, only: flowtype
+    use commvar,  only : flowtype
+    use commarray,only : vel,prs,rho
     !
     ! local data
     !
@@ -167,6 +169,21 @@ module statistic
       force(1)=chanfoce(force(1),massflux,fbcx,massflux_target)
       !
       call bcast(force)
+    elseif(trim(flowtype)=='cylinder') then
+      vel_incom=0.d0
+      prs_incom=0.d0
+      rho_incom=0.d0
+      !
+      if(irk==0 .and. jrk==jrkm) then
+        vel_incom=vel(0,jm,0,1)
+        prs_incom=prs(0,jm,0)
+        rho_incom=rho(0,jm,0)
+      endif
+      !
+      vel_incom=psum(vel_incom)
+      prs_incom=psum(prs_incom)
+      rho_incom=psum(rho_incom)
+      !
     endif
     !
     call maxmincal
@@ -256,6 +273,9 @@ module statistic
       elseif(trim(flowtype)=='channel') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,     &
                                              massflux,fbcx,force(1),wrms
+      elseif(trim(flowtype)=='cylinder') then
+        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,     &
+                                          vel_incom,prs_incom,rho_incom
       else
         ! general flowstate
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,     &
@@ -270,6 +290,8 @@ module statistic
           elseif(trim(flowtype)=='channel') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
                                                   'fbcx','forcex','wrms'
+          elseif(trim(flowtype)=='cylinder') then
+            write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -282,6 +304,9 @@ module statistic
         elseif(trim(flowtype)=='channel') then
           write(*,"(2X,I7,5(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
                                           force(1),wrms
+        elseif(trim(flowtype)=='cylinder') then
+          write(*,"(2X,I7,4(1X,E13.6E2))")nstep,time,                  &
+                                          vel_incom,prs_incom,rho_incom
         else
           write(*,"(2X,I7,6(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
