@@ -8,14 +8,15 @@
 module solver
   !
   use constdef
-  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,ptime
+  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,ptime,irk,jrk,krk
   use commvar,  only : ndims,ks,ke,hm,ctime,hm,lfftk
   !
   implicit none
   !
-  real(8) :: alfa_con(3),alfa_dif(3)
+  real(8),allocatable :: alfa_con(:),alfa_dif(:)
   real(8), allocatable, dimension(:,:) :: cci,ccj,cck,dci,dcj,dck,     &
-                                          fci,fcj,fck
+                                          fci,fcj,fck,uci,ucj,uck,     &
+                                          bci,bcj,bck
   !
   contains
   !
@@ -103,7 +104,7 @@ module solver
     use commvar, only : im,jm,km,numq,npdci,npdcj,npdck,               &
                         conschm,difschm,lfilter,alfa_filter,hm
     use commfunc,only : coeffcompac,ptds_ini,ptdsfilter_ini,           &
-                        genfilt10coef
+                        ptds_aym_ini,genfilt10coef
     !
     ! local data
     integer :: nscheme,i
@@ -116,9 +117,21 @@ module solver
       !
       alfa_con=coeffcompac(nscheme)
       !
-      call ptds_ini(cci,alfa_con,nscheme,im,npdci)
-      call ptds_ini(ccj,alfa_con,nscheme,jm,npdcj)
-      call ptds_ini(cck,alfa_con,nscheme,km,npdck)
+      if(mod(nscheme/100,2)==0) then
+        ! symmetrical central scheme
+        call ptds_ini(cci,alfa_con,im,npdci)
+        call ptds_ini(ccj,alfa_con,jm,npdcj)
+        call ptds_ini(cck,alfa_con,km,npdck)
+      else
+        ! asymmetrical reconstruction upwind scheme
+        call ptds_aym_ini(uci,alfa_con,im,npdci,windir='+')
+        call ptds_aym_ini(ucj,alfa_con,jm,npdcj,windir='+')
+        call ptds_aym_ini(uck,alfa_con,km,npdck,windir='+')
+        !
+        call ptds_aym_ini(bci,alfa_con,im,npdci,windir='-')
+        call ptds_aym_ini(bcj,alfa_con,jm,npdcj,windir='-')
+        call ptds_aym_ini(bck,alfa_con,km,npdck,windir='-')
+      endif
       !
     endif
     !
@@ -130,9 +143,9 @@ module solver
       !
       alfa_dif=coeffcompac(nscheme)
       !
-      call ptds_ini(dci,alfa_dif,nscheme,im,npdci)
-      call ptds_ini(dcj,alfa_dif,nscheme,jm,npdcj)
-      call ptds_ini(dck,alfa_dif,nscheme,km,npdck)
+      call ptds_ini(dci,alfa_dif,im,npdci)
+      call ptds_ini(dcj,alfa_dif,jm,npdcj)
+      call ptds_ini(dck,alfa_dif,km,npdck)
       !
     endif
     !
@@ -194,9 +207,9 @@ module solver
       !
       alfa=coeffcompac(nscheme)
       !
-      call ptds_ini(gci,alfa,nscheme,im,npdci)
-      call ptds_ini(gcj,alfa,nscheme,jm,npdcj)
-      call ptds_ini(gck,alfa,nscheme,km,npdck)
+      call ptds_ini(gci,alfa,im,npdci)
+      call ptds_ini(gcj,alfa,jm,npdcj)
+      call ptds_ini(gck,alfa,km,npdck)
       !
     endif
     !
@@ -696,17 +709,32 @@ module solver
   subroutine rhscal
     !
     use commarray, only : qrhs,x,q
-    use commvar,   only : flowtype
+    use commvar,   only : flowtype,conschm,diffterm
     !
     integer :: j
+    integer :: nconv
+    !
 #ifdef cputime
     real(8) :: time_beg
     !
     time_beg=ptime() 
 #endif
     !
-    call convrsdcal6
-    ! call ConvRsdCal6_legc
+    read(conschm(1:1),*) nconv
+    !
+    if(mod(nconv,2)==0) then
+      call convrsdcal6
+    else
+      !
+      if(conschm(4:4)=='e') then
+        call convrsduwd
+      elseif(conschm(4:4)=='c') then
+        call convrsdcmp
+      else
+        stop ' !! error @ conschm'
+      endif
+      !
+    endif
     !
 #ifdef cputime
     ctime(9)=ctime(9)+ptime()-time_beg
@@ -718,7 +746,7 @@ module solver
     time_beg=ptime() 
 #endif
     !
-    call diffrsdcal6
+    if(diffterm) call diffrsdcal6
     !
     if(trim(flowtype)=='channel') then 
       call srcchan
@@ -803,7 +831,876 @@ module solver
   !+-------------------------------------------------------------------+
   !| The end of the subroutine source1.                                |
   !+-------------------------------------------------------------------+
-  !
+  !!
+  !+-------------------------------------------------------------------+
+  !| this subroutine is to solve the convectional term with upwind     |
+  !| biased schemes using Steger-Warming flux splitting scheme.        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-03-2021: Created by J. Fang @ Warrington.                      |
+  !+-------------------------------------------------------------------+
+  subroutine convrsduwd
+    !
+    use commvar,  only: im,jm,km,hm,numq,num_species,                  &
+                        npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
+                        recon_schem,lchardecomp,conschm
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+    use fludyna,  only: sos
+    use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+    !
+    ! local data
+    integer :: i,j,k,iss,iee
+    real(8) :: css,csa,uu
+    real(8) :: eps,gm2
+    integer :: m,n,jvar
+    real(8) :: var0,var1,var2,var3,lmach,fhi,jro
+    !
+    real(8) :: lmda(5),lmdap(5),lmdam(5),gpd(3),REV(5,5),LEV(5,5),     &
+               Pmult(5,5),Flcp(1:5,1:8),Flcm(1:5,1:8),Fhc(5),          &
+               fhcpc(5),fhcmc(5)
+    !
+    real(8), allocatable, dimension(:,:) :: fswp,fswm,Fh
+    !
+    eps=0.04d0
+    gm2=0.5d0/gamma
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate( fswp(-hm:im+hm,1:5),fswm(-hm:im+hm,1:5))
+    allocate( Fh(-1:im,1:5) )
+    !
+    if(npdci==1) then
+      iss=0
+      iee=im+hm
+    elseif(npdci==2) then
+      iss=-hm
+      iee=im
+    elseif(npdci==3) then
+      iss=-hm
+      iee=im+hm
+    else
+      stop ' !! error 1 @ subroutine convrsduwd'
+    endif
+    !
+    do k=ks,ke
+    do j=js,je
+      !
+      ! flux split by using Steger-Warming method
+      do i=iss,iee
+        !
+        uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
+           dxi(i,j,k,1,3)*vel(i,j,k,3)
+        var0=1.d0/sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
+        !
+        gpd(1)=dxi(i,j,k,1,1)*var0
+        gpd(2)=dxi(i,j,k,1,2)*var0
+        gpd(3)=dxi(i,j,k,1,3)*var0
+        !
+        css=sos(tmp(i,j,k))
+        csa=css/var0
+        lmach=uu/csa
+        !
+        lmda(1)=uu
+        lmda(2)=uu
+        lmda(3)=uu
+        lmda(4)=uu+csa
+        lmda(5)=uu-csa
+        !
+        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
+        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
+        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
+        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
+        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
+        !
+        lmdam(1)=lmda(1)-lmdap(1)
+        lmdam(2)=lmda(2)-lmdap(2)
+        lmdam(3)=lmda(3)-lmdap(3)
+        lmdam(4)=lmda(4)-lmdap(4)
+        lmdam(5)=lmda(5)-lmdap(5)
+        !
+        if(lmach>=1.d0) then
+          fswp(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fswp(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fswp(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fswp(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fswp(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          !
+          fswm(i,1)=0.d0
+          fswm(i,2)=0.d0
+          fswm(i,3)=0.d0
+          fswm(i,4)=0.d0
+          fswm(i,5)=0.d0  
+        elseif(lmach<=-1.d0) then
+          fswp(i,1)=0.d0
+          fswp(i,2)=0.d0
+          fswp(i,3)=0.d0
+          fswp(i,4)=0.d0
+          fswp(i,5)=0.d0
+          !
+          fswm(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fswm(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fswm(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fswm(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fswm(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+        else
+          !
+          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
+          !
+          var1=lmdap(1)
+          var2=lmdap(4)-lmdap(5)
+          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
+          !
+          jro=jacob(i,j,k)*rho(i,j,k)
+          !
+          fswp(i,1)=jro*(var1-var3*gm2)
+          fswp(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
+          fswp(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
+          fswp(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
+          fswp(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+          !
+          var1=lmdam(1)
+          var2=lmdam(4)-lmdam(5)
+          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
+          !
+          fswm(i,1)=jro*(var1-var3*gm2)                                                         
+          fswm(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
+          fswm(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
+          fswm(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
+          fswm(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+          !                 
+        end if
+        !
+      enddo
+      ! End of flux split by using Steger-Warming method
+      !
+      ! Calculating Matrix of Left and Right eigenvectors using Roe 
+      ! Average and flux split as well as i+1/2 construction.
+      do i=is-1,ie
+        !
+        if(lchardecomp) then
+          !
+          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
+                          vel(i,j,k,:),  dxi(i,j,k,1,:),               &
+                          rho(i+1,j,k),  prs(i+1,j,k),q(i+1,j,k,5),    &
+                          vel(i+1,j,k,:),dxi(i+1,j,k,1,:),REV,LEV)
+          !
+          ! if(irk==0) then
+          !   print*,'---------------------------------------------------------'
+          !   Pmult=MatMul(LEV,REV)
+          !   write(*,"(5(F7.4))")Pmult(1,:)
+          !   write(*,"(5(F7.4))")Pmult(2,:)
+          !   write(*,"(5(F7.4))")Pmult(3,:)
+          !   write(*,"(5(F7.4))")Pmult(4,:)
+          !   write(*,"(5(F7.4))")Pmult(5,:)
+          ! end if
+          !
+          ! Project to characteristic space using local eigenvector
+          do m=1,5
+            !
+            do n=1,8
+              ! plus flux
+              Flcp(m,n)=LEV(m,1)*Fswp(i+n-4,1)+                        &
+                        LEV(m,2)*Fswp(i+n-4,2)+                        &
+                        LEV(m,3)*Fswp(i+n-4,3)+                        &
+                        LEV(m,4)*Fswp(i+n-4,4)+                        &
+                        LEV(m,5)*Fswp(i+n-4,5)
+              !
+              ! minus flux
+              Flcm(m,n)=LEV(m,1)*Fswm(i+5-n,1)+                        &
+                        LEV(m,2)*Fswm(i+5-n,2)+                        &
+                        LEV(m,3)*Fswm(i+5-n,3)+                        &
+                        LEV(m,4)*Fswm(i+5-n,4)+                        &
+                        LEV(m,5)*Fswm(i+5-n,5)
+            end do
+            !
+          end do
+          ! End of characteristic decomposition.
+          !
+        else
+          ! No characteristic decomposition
+          !
+          do n=1,8
+            ! plus flux
+            Flcp(1:5,n)=Fswp(i+n-4,1:5)
+            !
+            ! minus flux
+            Flcm(1:5,n)=Fswm(i+5-n,1:5)
+          end do
+          !
+        endif
+        !
+        ! Calculating values at i+1/2 using shock-capturing scheme.
+
+        do m=1,5
+          !
+          if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
+            var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
+            var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+          elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
+            var1=SUW3(Flcp(m,3:5))
+            var2=SUW3(Flcm(m,3:5))
+          elseif((npdci==1 .and. i==2).or.(npdci==2 .and. i==im-3)) then
+            !
+            select case(recon_schem)
+            case(0)
+              var1=suw5(flcp(m,2:6))
+              var2=suw5(flcm(m,2:6))
+            case(1)
+              var1=weno5(flcp(m,2:6))
+              var2=weno5(flcm(m,2:6))
+            case(2)
+              var1=weno5z(flcp(m,2:6))
+              var2=weno5z(flcm(m,2:6))
+            case(3)
+              var1=mp5(flcp(m,2:6))
+              var2=mp5(flcm(m,2:6))
+            ! case(4)
+            !   call weno7sym(flcp(m,1:8),var1)
+            !   call weno7sym(flcm(m,1:8),var2)
+            ! case(5)
+            !   call mp7ld(flcp(m,1:8),var1,lsh)
+            !   call mp7ld(flcm(m,1:8),var2,lsh)
+            end select
+            !
+          else
+            !
+            select case(recon_schem)
+            case(0)
+              var1=suw5(flcp(m,2:6))
+              var2=suw5(flcm(m,2:6))
+            case(1)
+              var1=weno7(flcp(m,1:7))
+              var2=weno7(flcm(m,1:7))
+            case(2)
+              var1=weno7z(flcp(m,1:7))
+              var2=weno7z(flcm(m,1:7))
+            case(3)
+              var1=mp7(flcp(m,1:7))
+              var2=mp7(flcm(m,1:7))
+            ! case(4)
+            !   call weno7sym(flcp(m,1:8),var1)
+            !   call weno7sym(flcm(m,1:8),var2)
+            ! case(5)
+            !   call mp7ld(flcp(m,1:8),var1,lsh)
+            !   call mp7ld(flcm(m,1:8),var2,lsh)
+            stop
+            end select
+            !
+          endif
+          !
+          Fhc(m)=var1+var2
+          !
+        enddo
+        !
+        if(lchardecomp) then
+          do m=1,5
+            Fh(i,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
+                    REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
+          end do
+        else
+          Fh(i,1:5)=Fhc(1:5)
+        endif
+        !
+      enddo
+      
+      do i=is,ie
+        do m=1,5
+          qrhs(i,j,k,m)=qrhs(i,j,k,m)+Fh(i,m)-Fh(i-1,m)
+        enddo
+      enddo
+      !
+    enddo
+    enddo
+    deallocate( Fswp,Fswm,Fh )
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end of calculation at i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! ! calculating along j direction
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! allocate( Fswp(1:5,-hm:jm+hm),Fswm(1:5,-hm:jm+hm) )
+    ! allocate( Fh(1:5,-1:jm) )
+    ! !
+    ! do k=ks,ke
+    ! do i=is,ie
+    !   !
+    !   do j=-hm,jm+hm
+    !     !
+    !     uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2)+    &
+    !        dxi(i,j,k,2,3)*vel(i,j,k,3)
+    !     var0=1.d0/sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
+    !     !
+    !     gpd(1)=dxi(i,j,k,2,1)*var0
+    !     gpd(2)=dxi(i,j,k,2,2)*var0
+    !     gpd(3)=dxi(i,j,k,2,3)*var0
+    !     !
+    !     css=sos(tmp(i,j,k))
+    !     csa=css/var0
+    !     lmach=uu/csa
+    !     !
+    !     lmda(1)=uu
+    !     lmda(2)=uu
+    !     lmda(3)=uu
+    !     lmda(4)=uu+csa
+    !     lmda(5)=uu-csa
+    !     !
+    !     lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
+    !     lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
+    !     lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
+    !     lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
+    !     lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
+    !     !
+    !     lmdam(1)=lmda(1)-lmdap(1)
+    !     lmdam(2)=lmda(2)-lmdap(2)
+    !     lmdam(3)=lmda(3)-lmdap(3)
+    !     lmdam(4)=lmda(4)-lmdap(4)
+    !     lmdam(5)=lmda(5)-lmdap(5)
+    !     !
+    !     if(lmach>=1.d0) then
+    !       fswp(1,i)=jacob(i,j,k)*  q(i,j,k,1)*uu
+    !       fswp(2,i)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+    !       fswp(3,i)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+    !       fswp(4,i)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+    !       fswp(5,i)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+    !       !
+    !       fswm(1,i)=0.d0
+    !       fswm(2,i)=0.d0
+    !       fswm(3,i)=0.d0
+    !       fswm(4,i)=0.d0
+    !       fswm(5,i)=0.d0  
+    !     elseif(lmach<=-1.d0) then
+    !       fswp(1,i)=0.d0
+    !       fswp(2,i)=0.d0
+    !       fswp(3,i)=0.d0
+    !       fswp(4,i)=0.d0
+    !       fswp(5,i)=0.d0
+    !       !
+    !       fswm(1,i)=jacob(i,j,k)*  q(i,j,k,1)*uu
+    !       fswm(2,i)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+    !       fswm(3,i)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+    !       fswm(4,i)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+    !       fswm(5,i)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+    !     else
+    !       !
+    !       fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
+    !       !
+    !       var1=lmdap(1)
+    !       var2=lmdap(4)-lmdap(5)
+    !       var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
+    !       !
+    !       jro=jacob(i,j,k)*rho(i,j,k)
+    !       !
+    !       fswp(1,i)=jro*(var1-var3*gm2)
+    !       fswp(2,i)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
+    !       fswp(3,i)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
+    !       fswp(4,i)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
+    !       fswp(5,i)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+    !       !
+    !       var1=lmdam(1)
+    !       var2=lmdam(4)-lmdam(5)
+    !       var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
+    !       !
+    !       fswm(1,i)=jro*(var1-var3*gm2)                                                         
+    !       fswm(2,i)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
+    !       fswm(3,i)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
+    !       fswm(4,i)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
+    !       fswm(5,i)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+    !       !                 
+    !     end if
+    !     !
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! ! end of calculation at j direction
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  end subroutine convrsduwd
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine convrsduwd.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| this subroutine is to solve the convectional term with compact    |
+  !| MP schemes using Steger-Warming flux splitting scheme.            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-03-2021: Created by J. Fang @ Warrington.                      |
+  !+-------------------------------------------------------------------+
+  subroutine convrsdcmp
+    !
+    use commvar,  only: im,jm,km,hm,numq,num_species,                  &
+                        npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
+                        recon_schem,lchardecomp,conschm
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+    use fludyna,  only: sos
+    use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+    !
+    ! local data
+    integer :: i,j,k,iss,iee
+    real(8) :: css,csa,uu
+    real(8) :: eps,gm2
+    integer :: m,n,jvar
+    real(8) :: var0,var1,var2,var3,lmach,fhi,jro
+    !
+    real(8) :: lmda(5),lmdap(5),lmdam(5),gpd(3),REV(5,5),LEV(5,5),     &
+               Pmult(5,5),Flcp(1:5,1:5),Flcm(1:5,1:5),Fhc(5),          &
+               fhcpc(5),fhcmc(5)
+    !
+    real(8), allocatable, dimension(:,:) :: fswp,fswm,fhcp,fhcm,Fh
+    !
+    eps=0.04d0
+    gm2=0.5d0/gamma
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate( fswp(-hm:im+hm,1:5),fswm(-hm:im+hm,1:5),                 &
+              fhcp(is-1:ie,1:5),  fhcm(is-1:ie,1:5) )
+    allocate( Fh(-1:im,1:5) )
+    !
+    if(npdci==1) then
+      iss=0
+      iee=im+hm
+    elseif(npdci==2) then
+      iss=-hm
+      iee=im
+    elseif(npdci==3) then
+      iss=-hm
+      iee=im+hm
+    else
+      stop ' !! error 1 @ subroutine convrsdcmp'
+    endif
+    !
+    do k=ks,ke
+    do j=js,je
+      !
+      ! flux split by using Steger-Warming method
+      do i=iss,iee
+        !
+        uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
+           dxi(i,j,k,1,3)*vel(i,j,k,3)
+        var0=1.d0/sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
+        !
+        gpd(1)=dxi(i,j,k,1,1)*var0
+        gpd(2)=dxi(i,j,k,1,2)*var0
+        gpd(3)=dxi(i,j,k,1,3)*var0
+        !
+        css=sos(tmp(i,j,k))
+        csa=css/var0
+        lmach=uu/csa
+        !
+        lmda(1)=uu
+        lmda(2)=uu
+        lmda(3)=uu
+        lmda(4)=uu+csa
+        lmda(5)=uu-csa
+        !
+        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
+        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
+        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
+        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
+        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
+        !
+        lmdam(1)=lmda(1)-lmdap(1)
+        lmdam(2)=lmda(2)-lmdap(2)
+        lmdam(3)=lmda(3)-lmdap(3)
+        lmdam(4)=lmda(4)-lmdap(4)
+        lmdam(5)=lmda(5)-lmdap(5)
+        !
+        if(lmach>=1.d0) then
+          fswp(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fswp(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fswp(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fswp(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fswp(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          !
+          fswm(i,1)=0.d0
+          fswm(i,2)=0.d0
+          fswm(i,3)=0.d0
+          fswm(i,4)=0.d0
+          fswm(i,5)=0.d0  
+        elseif(lmach<=-1.d0) then
+          fswp(i,1)=0.d0
+          fswp(i,2)=0.d0
+          fswp(i,3)=0.d0
+          fswp(i,4)=0.d0
+          fswp(i,5)=0.d0
+          !
+          fswm(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fswm(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fswm(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fswm(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fswm(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+        else
+          !
+          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
+          !
+          var1=lmdap(1)
+          var2=lmdap(4)-lmdap(5)
+          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
+          !
+          jro=jacob(i,j,k)*rho(i,j,k)
+          !
+          fswp(i,1)=jro*(var1-var3*gm2)
+          fswp(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
+          fswp(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
+          fswp(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
+          fswp(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+          !
+          var1=lmdam(1)
+          var2=lmdam(4)-lmdam(5)
+          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
+          !
+          fswm(i,1)=jro*(var1-var3*gm2)                                                         
+          fswm(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
+          fswm(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
+          fswm(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
+          fswm(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+          !                 
+        end if
+        !
+      enddo
+      ! End of flux split by using Steger-Warming method
+      !
+      ! calculating interface flux using compact upwind scheme ay i+1/2
+      do jvar=1,5
+        fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdci,im,alfa_con,uci,windir='+')
+        fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdci,im,alfa_con,bci,windir='-')
+      enddo
+      !
+      ! Calculating Matrix of Left and Right eigenvectors using Roe 
+      ! Average and flux split as well as i+1/2 construction.
+      do i=is-1,ie
+        !
+        if(lchardecomp) then
+          !
+          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
+                          vel(i,j,k,:),  dxi(i,j,k,1,:),               &
+                          rho(i+1,j,k),  prs(i+1,j,k),q(i+1,j,k,5),    &
+                          vel(i+1,j,k,:),dxi(i+1,j,k,1,:),REV,LEV)
+          ! Project to characteristic space using local eigenvector
+          do m=1,5
+            !
+            do n=1,5
+              ! plus flux
+              flcp(m,n)=LEV(m,1)*Fswp(i+n-3,1)+                        &
+                        LEV(m,2)*Fswp(i+n-3,2)+                        &
+                        LEV(m,3)*Fswp(i+n-3,3)+                        &
+                        LEV(m,4)*Fswp(i+n-3,4)+                        &
+                        LEV(m,5)*Fswp(i+n-3,5)
+              !
+              ! minus flux
+              flcm(m,n)=LEV(m,1)*Fswm(i+4-n,1)+                        &
+                        LEV(m,2)*Fswm(i+4-n,2)+                        &
+                        LEV(m,3)*Fswm(i+4-n,3)+                        &
+                        LEV(m,4)*Fswm(i+4-n,4)+                        &
+                        LEV(m,5)*Fswm(i+4-n,5)
+            end do
+            !
+            fhcpc(m)=LEV(m,1)*fhcp(i,1)+                        &
+                     LEV(m,2)*fhcp(i,2)+                        &
+                     LEV(m,3)*fhcp(i,3)+                        &
+                     LEV(m,4)*fhcp(i,4)+                        &
+                     LEV(m,5)*fhcp(i,5)
+            !
+            fhcmc(m)=LEV(m,1)*fhcm(i,1)+                        &
+                     LEV(m,2)*fhcm(i,2)+                        &
+                     LEV(m,3)*fhcm(i,3)+                        &
+                     LEV(m,4)*fhcm(i,4)+                        &
+                     LEV(m,5)*fhcm(i,5)
+            !
+          end do
+          ! End of characteristic decomposition.
+          !
+        else
+          ! No characteristic decomposition
+          !
+          do n=1,5
+            ! plus flux
+            flcp(1:5,n)=Fswp(i+n-3,1:5)
+            !
+            ! minus flux
+            flcm(1:5,n)=Fswm(i+4-n,1:5)
+          end do
+          !
+          fhcpc(1:5)=fhcp(i,1:5)
+          fhcmc(1:5)=fhcm(i,1:5)
+          !
+        endif
+        !
+        ! Calculating values at i+1/2 using shock-capturing scheme.
+        !
+        do m=1,5
+          !
+          if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          else
+            !
+            var1=mp5(flcp(m,1:5),fhcpc(m))
+            var2=mp5(flcm(m,1:5),fhcmc(m))
+            !
+          endif
+          !
+          Fhc(m)=var1+var2
+          !
+        enddo
+        !
+        if(lchardecomp) then
+          do m=1,5
+            Fh(i,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
+                    REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
+          end do
+        else
+          Fh(i,1:5)=Fhc(1:5)
+        endif
+        !
+      enddo
+      
+      do i=is,ie
+        do m=1,5
+          qrhs(i,j,k,m)=qrhs(i,j,k,m)+Fh(i,m)-Fh(i-1,m)
+        enddo
+      enddo
+      !
+    enddo
+    enddo
+    deallocate( Fswp,Fswm,Fh )
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end of calculation at i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! ! calculating along j direction
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! allocate( Fswp(1:5,-hm:jm+hm),Fswm(1:5,-hm:jm+hm) )
+    ! allocate( Fh(1:5,-1:jm) )
+    ! !
+    ! do k=ks,ke
+    ! do i=is,ie
+    !   !
+    !   do j=-hm,jm+hm
+    !     !
+    !     uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2)+    &
+    !        dxi(i,j,k,2,3)*vel(i,j,k,3)
+    !     var0=1.d0/sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
+    !     !
+    !     gpd(1)=dxi(i,j,k,2,1)*var0
+    !     gpd(2)=dxi(i,j,k,2,2)*var0
+    !     gpd(3)=dxi(i,j,k,2,3)*var0
+    !     !
+    !     css=sos(tmp(i,j,k))
+    !     csa=css/var0
+    !     lmach=uu/csa
+    !     !
+    !     lmda(1)=uu
+    !     lmda(2)=uu
+    !     lmda(3)=uu
+    !     lmda(4)=uu+csa
+    !     lmda(5)=uu-csa
+    !     !
+    !     lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
+    !     lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
+    !     lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
+    !     lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
+    !     lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
+    !     !
+    !     lmdam(1)=lmda(1)-lmdap(1)
+    !     lmdam(2)=lmda(2)-lmdap(2)
+    !     lmdam(3)=lmda(3)-lmdap(3)
+    !     lmdam(4)=lmda(4)-lmdap(4)
+    !     lmdam(5)=lmda(5)-lmdap(5)
+    !     !
+    !     if(lmach>=1.d0) then
+    !       fswp(1,i)=jacob(i,j,k)*  q(i,j,k,1)*uu
+    !       fswp(2,i)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+    !       fswp(3,i)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+    !       fswp(4,i)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+    !       fswp(5,i)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+    !       !
+    !       fswm(1,i)=0.d0
+    !       fswm(2,i)=0.d0
+    !       fswm(3,i)=0.d0
+    !       fswm(4,i)=0.d0
+    !       fswm(5,i)=0.d0  
+    !     elseif(lmach<=-1.d0) then
+    !       fswp(1,i)=0.d0
+    !       fswp(2,i)=0.d0
+    !       fswp(3,i)=0.d0
+    !       fswp(4,i)=0.d0
+    !       fswp(5,i)=0.d0
+    !       !
+    !       fswm(1,i)=jacob(i,j,k)*  q(i,j,k,1)*uu
+    !       fswm(2,i)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+    !       fswm(3,i)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+    !       fswm(4,i)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+    !       fswm(5,i)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+    !     else
+    !       !
+    !       fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
+    !       !
+    !       var1=lmdap(1)
+    !       var2=lmdap(4)-lmdap(5)
+    !       var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
+    !       !
+    !       jro=jacob(i,j,k)*rho(i,j,k)
+    !       !
+    !       fswp(1,i)=jro*(var1-var3*gm2)
+    !       fswp(2,i)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
+    !       fswp(3,i)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
+    !       fswp(4,i)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
+    !       fswp(5,i)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+    !       !
+    !       var1=lmdam(1)
+    !       var2=lmdam(4)-lmdam(5)
+    !       var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
+    !       !
+    !       fswm(1,i)=jro*(var1-var3*gm2)                                                         
+    !       fswm(2,i)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
+    !       fswm(3,i)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
+    !       fswm(4,i)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
+    !       fswm(5,i)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+    !       !                 
+    !     end if
+    !     !
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! ! end of calculation at j direction
+    ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  end subroutine convrsdcmp
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine convrsdcmp.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| this subroutine is to return left or right matrix of              |
+  !| characteristc vectpr                                              |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-03-2021: Created by J. Fang @ Warrington.                      |
+  !+-------------------------------------------------------------------+
+  subroutine chardecomp(ro_l,p_l,E_l,vel_l,ddi_l,                      &
+                        ro_r,p_r,E_r,vel_r,ddi_r,REV,LEV)
+    !
+    use commvar, only: gamma
+    !
+    real(8),intent(in) :: ro_l,p_l,E_l,vel_l(3),ddi_l(3),              &
+                          ro_r,p_r,E_r,vel_r(3),ddi_r(3)
+    real(8),intent(out) :: REV(5,5),LEV(5,5)
+    !
+    ! local data
+    real(8) :: WRoe,WRoe1,u1Roe,u2Roe,u3Roe,HL,HR,HRoe,CssRoe,        &
+               KRoe,ugp,rcs,var1,var2,var3,var4,rgp,gpd(3),b1,b2
+    !
+    WRoe=sqrt(ro_l)/(sqrt(ro_l)+sqrt(ro_r))
+    WRoe1=1.d0-WRoe
+    u1Roe=WRoe*vel_l(1)+WRoe1*vel_r(1)
+    u2Roe=WRoe*vel_l(2)+WRoe1*vel_r(2)
+    u3Roe=WRoe*vel_l(3)+WRoe1*vel_r(3)
+    !
+    HL=(E_l+p_l)/ro_l
+    HR=(E_r+p_r)/ro_r
+    HRoe=WRoe*HL+WRoe1*HR
+    KRoe=0.5d0*(u1Roe*u1Roe+u2Roe*u2Roe+u3Roe*u3Roe)
+    CssRoe=sqrt((gamma-1.d0)*(HRoe-KRoe))
+    rcs=1.d0/CssRoe
+    !
+    var1=0.5d0*(ddi_l(1)+ddi_r(1))
+    var2=0.5d0*(ddi_l(2)+ddi_r(2))
+    var3=0.5d0*(ddi_l(3)+ddi_r(3))
+    if(abs(var1)<1d-30) var1=1d-30
+    var4=sqrt(var1*var1+var2*var2+var3*var3)
+    gpd(1)=var1/var4
+    gpd(2)=var2/var4
+    gpd(3)=var3/var4
+    ugp=u1Roe*gpd(1)+u2Roe*gpd(2)+u3Roe*gpd(3)
+    rgp=1.d0/gpd(1)
+    !
+    ! Calculating Left and Right eigenvectors
+    REV(1,1)=1.d0
+    REV(1,2)=0.d0
+    REV(1,3)=0.d0
+    REV(1,4)=1.d0
+    REV(1,5)=1.d0
+    !                          
+    REV(2,1)=u1Roe-CssRoe*gpd(1)
+    REV(2,2)=-gpd(2)
+    REV(2,3)=-gpd(3)
+    REV(2,4)=u1Roe
+    REV(2,5)=u1Roe+CssRoe*gpd(1)
+    !
+    REV(3,1)=u2Roe-CssRoe*gpd(2)
+    REV(3,2)=gpd(1)
+    REV(3,3)=0.d0
+    REV(3,4)=u2Roe
+    REV(3,5)=u2Roe+CssRoe*gpd(2)
+    !
+    REV(4,1)=u3Roe-CssRoe*gpd(3)
+    REV(4,2)=0.d0
+    REV(4,3)=gpd(1)
+    REV(4,4)=u3Roe
+    REV(4,5)=u3Roe+CssRoe*gpd(3)
+    !
+    REV(5,1)=HRoe-ugp*CssRoe
+    REV(5,2)=u2Roe*gpd(1)-u1Roe*gpd(2)
+    REV(5,3)=u3Roe*gpd(1)-u1Roe*gpd(3)
+    REV(5,4)=KRoe
+    REV(5,5)=HRoe+ugp*CssRoe
+    !
+    b1=(gamma-1.d0)/(CssRoe*CssRoe)
+    b2=b1*KRoe
+    !
+    LEV(1,1)= 0.5d0*(b2+ugp*rcs)
+    LEV(1,2)=-0.5d0*(b1*u1Roe+gpd(1)*rcs)
+    LEV(1,3)=-0.5d0*(b1*u2Roe+gpd(2)*rcs)
+    LEV(1,4)=-0.5d0*(b1*u3Roe+gpd(3)*rcs)
+    LEV(1,5)= 0.5d0*b1
+    !
+    LEV(2,1)=u1Roe*gpd(2)-u2Roe*(1.d0-gpd(2)**2)*rgp+u3Roe*gpd(2)*gpd(3)*rgp
+    LEV(2,2)=-gpd(2)
+    LEV(2,3)=(1.d0-gpd(2)**2)*rgp
+    LEV(2,4)=-gpd(2)*gpd(3)*rgp
+    LEV(2,5)=0.d0
+    !
+    LEV(3,1)=u1Roe*gpd(3)+u2Roe*gpd(2)*gpd(3)*rgp-u3Roe*(1.d0-gpd(3)**2)*rgp
+    LEV(3,2)=-gpd(3)
+    LEV(3,3)=-gpd(2)*gpd(3)*rgp
+    LEV(3,4)=(1.d0-gpd(3)**2)*rgp
+    LEV(3,5)=0.d0
+    !
+    LEV(4,1)=1.d0-b2
+    LEV(4,2)=b1*u1Roe
+    LEV(4,3)=b1*u2Roe
+    LEV(4,4)=b1*u3Roe
+    LEV(4,5)=-b1
+    
+    LEV(5,1)= 0.5d0*(b2-ugp*rcs)           
+    LEV(5,2)=-0.5d0*(b1*u1Roe-gpd(1)*rcs)  
+    LEV(5,3)=-0.5d0*(b1*u2Roe-gpd(2)*rcs)  
+    LEV(5,4)=-0.5d0*(b1*u3Roe-gpd(3)*rcs)  
+    LEV(5,5)= 0.5d0*b1 
+    !
+    return
+    !
+  end subroutine chardecomp
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine chardecomp.                             |
+  !+-------------------------------------------------------------------+
+  !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the convectional residual
   ! terms with compact six-order central scheme.
@@ -1498,21 +2395,22 @@ module solver
   subroutine gradcal
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq
+                          alfa_filter,numq,is,ie
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,spafilter10
+    use commfunc,  only : ddfc,recons,spafilter10
     use bc,       only : boucon
     !
     ! local data
     integer :: i,j,k,n
-    real(8),allocatable :: dq(:,:)
+    real(8) :: dx
+    real(8),allocatable :: dq(:,:),qhp(:),qhm(:)
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       ! q(i,j,k,1)=sin(4.d0*x(1,1,k,3)) !+0.1d0*sin(pi*j+0.5d0*pi)
       do n=1,numq
-        q(i,j,k,n)=sin(0.5d0*pi*x(i,j,k,2))
+        q(i,j,k,n)=sin(2.0*pi*x(i,j,k,1))
         ! sin(10.d0*(x(1,1,k,3)-0.5*pi))*exp(-4.d0*(x(1,1,k,3)-0.5*pi)**2)+0.1d0*sin(pi*k+0.5d0*pi)
       enddo
       !
@@ -1520,18 +2418,32 @@ module solver
     enddo
     enddo
     !
-    call dataswap(q,debug=.true.)
+    call dataswap(q)
+    ! !
+    ! call boucon
     !
-    call boucon
+    allocate(dq(0:im,1:2),qhp(is-1:ie),qhm(is-1:ie))
     !
-    ! allocate(dq(0:im))
+    qhp(:)=recons(q(:,0,0,1),conschm,npdci,im,alfa_con,uci,windir='+')
+    !
+    qhm(:)=recons(q(:,0,0,1),conschm,npdci,im,alfa_con,bci,windir='-')
+    !
+    dx=x(1,0,0,1)-x(0,0,0,1)
+    !
+    do i=is,ie
+      dq(i,1)=(qhp(i)-qhp(i-1))/dx
+    enddo
+    !
+    do i=is,ie
+      dq(i,2)=(qhm(i)-qhm(i-1))/dx
+    enddo
     !
     ! dq=ddfc(q(:,1,1,1),conschm,npdci,im,alfa_con,cci)*dxi(:,1,1,1,1)
     
     ! dq=spafilter10(q(:,jm,0,2),npdci,im,alfa_filter,fci)
     !
-    allocate(dq(0:jm,1:1))
-    dq(:,1)=ddfc(q(0,:,0,2),conschm,npdcj,jm,alfa_con,ccj)*dxi(0,0:jm,0,2,2)
+    ! allocate(dq(0:jm,1:1))
+    ! dq(:,1)=ddfc(q(0,:,0,2),conschm,npdcj,jm,alfa_con,ccj)*dxi(0,0:jm,0,2,2)
     !
     ! dq=spafilter10(q(1,:,0,1),npdcj,jm,alfa_filter,fcj)
     !
@@ -1554,8 +2466,8 @@ module solver
     ! dq=ddfc(q(1,1,:,1),conschm,npdck,km,alfa_con,cck)/(x(1,1,1,3)-x(1,1,0,3))
     !
     open(18,file='testout/profile'//mpirankname//'.dat')
-    do j=0,jm
-      write(18,*)x(0,j,0,2),q(0,j,0,2),dq(j,1)
+    do i=is,ie
+      write(18,'(4(1X,E15.7E3))')x(i,0,0,1),2.d0*pi*cos(2.d0*pi*x(i,0,0,1)),dq(i,1),dq(i,2)
     enddo
     close(18)
     print*,' << testout/profile',mpirankname,'.dat'

@@ -114,6 +114,13 @@ module commvar
   !|               twall | wall temperature.                           |
   !|               force | body force.                                 |
   !+---------------------+---------------------------------------------+
+  logical :: lchardecomp
+  integer :: recon_schem
+  !+---------------------+---------------------------------------------+
+  !|         lchardecomp | local character decomposition used to not   |
+  !|         recon_schem | scheme of reconstruction method.            |
+  !+---------------------+---------------------------------------------+
+  !
   !
   parameter(hm=5)
   !

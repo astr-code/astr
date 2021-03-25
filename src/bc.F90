@@ -20,6 +20,7 @@ module bc
   implicit none
   !
   real(8) :: pout
+  real(8) :: uinf_j0,uinf_jm
   real(8),allocatable :: rho_in(:,:),vel_in(:,:,:),tmp_in(:,:),        &
                          prs_in(:,:),spc_in(:,:,:)
   real(8),allocatable,dimension(:,:,:) :: bvec_i0,bvec_im,             &
@@ -428,6 +429,8 @@ module bc
         !
         if(trim(flowtype)=='jet') then
           call jetinflow
+        elseif(trim(flowtype)=='mixlayer') then
+          call mixlayerinflow
         else
           call freestreaminflow
         endif
@@ -1285,6 +1288,17 @@ module bc
     real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:)
     real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2
     !
+    logical,save :: lfirstcal=.true.
+    !
+    if(lfirstcal) then
+      !
+      uinf_j0=1.5d0
+      uinf_jm=3.5d0
+      !
+      lfirstcal=.false.
+      !
+    endif
+    !
     gmachmax2=0.d0
     if(ndir==3 .and. jrk==0) then
       j=0
@@ -1441,8 +1455,8 @@ module bc
                               dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf) )
           LODi(3)=kin*0.5d0*                                           &
                            (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
-                             dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf) )
-          LODi(4)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf)+        &
+                             dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf_j0) )
+          LODi(4)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf_j0)+        &
                        dxi(i,j,k,2,2)*var1*(vel(i,j,k,2)-vinf)+        &
                        dxi(i,j,k,2,3)*var1*(vel(i,j,k,3)-winf)+        &
                        (prs(i,j,k)-pinf)/rho(i,j,k)/css )
@@ -1463,64 +1477,64 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      ! allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
-      ! do k=ks,ke
-      !   !
-      !   do i=-hm,im+hm
-      !     !
-      !     uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
-      !        dxi(i,j,k,1,3)*vel(i,j,k,3)
-      !     fcs(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !     fcs(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-      !     fcs(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-      !     fcs(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-      !     fcs(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-      !     do jspc=1,num_species
-      !       fcs(i,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-      !     enddo
-      !     !
-      !   enddo
-      !   !
-      !   do n=1,numq
-      !     dfcs(:,n)=ddfc(fcs(:,n),'222e',npdci,im)
-      !   enddo
-      !   !
-      !   qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+mach*dfcs(is:ie,:)
-      !   !
-      ! enddo
+      allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
+      do k=ks,ke
+        !
+        do i=-hm,im+hm
+          !
+          uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
+             dxi(i,j,k,1,3)*vel(i,j,k,3)
+          fcs(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fcs(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fcs(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fcs(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fcs(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          do jspc=1,num_species
+            fcs(i,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+          enddo
+          !
+        enddo
+        !
+        do n=1,numq
+          dfcs(:,n)=ddfc(fcs(:,n),'222e',npdci,im)
+        enddo
+        !
+        qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:)
+        !
+      enddo
+      !
+      deallocate(fcs,dfcs)
       ! !
-      ! deallocate(fcs,dfcs)
-      ! ! !
-      ! if(ndims==3) then
-      !   !
-      !   allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
-      !   do i=is,ie
-      !     !
-      !     do k=-hm,km+hm
-      !       !
-      !       uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
-      !          dxi(i,j,k,3,3)*vel(i,j,k,3)
-      !       fcs(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !       fcs(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
-      !       fcs(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
-      !       fcs(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
-      !       fcs(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-      !       do jspc=1,num_species
-      !         fcs(k,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-      !       enddo
-      !       !
-      !     enddo
-      !     !
-      !     do n=1,numq
-      !       dfcs(:,n)=ddfc(fcs(:,n),'222e',npdck,km)
-      !     enddo
-      !     !
-      !     qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
-      !     !
-      !   enddo
-      !   !
-      !   deallocate(fcs,dfcs)
-      ! endif
+      if(ndims==3) then
+        !
+        allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
+        do i=is,ie
+          !
+          do k=-hm,km+hm
+            !
+            uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
+               dxi(i,j,k,3,3)*vel(i,j,k,3)
+            fcs(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+            fcs(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
+            fcs(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
+            fcs(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
+            fcs(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+            do jspc=1,num_species
+              fcs(k,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+            enddo
+            !
+          enddo
+          !
+          do n=1,numq
+            dfcs(:,n)=ddfc(fcs(:,n),'222e',npdck,km)
+          enddo
+          !
+          qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
+          !
+        enddo
+        !
+        deallocate(fcs,dfcs)
+      endif
       !
     endif
     !
@@ -1636,8 +1650,8 @@ module bc
                               dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf) )
           LODi(3)=kin*0.5d0*                                           &
                            (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
-                             dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf) )
-          LODi(5)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf)+        &
+                             dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf_jm) )
+          LODi(5)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf_jm)+     &
                        dxi(i,j,k,2,2)*var1*(vel(i,j,k,2)-vinf)+        &
                        dxi(i,j,k,2,3)*var1*(vel(i,j,k,3)-winf)+        &
                        (prs(i,j,k)-pinf)/rho(i,j,k)/css )
@@ -1669,65 +1683,65 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      ! allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
-      ! do k=ks,ke
-      !   !
-      !   do i=-hm,im+hm
-      !     !
-      !     uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
-      !        dxi(i,j,k,1,3)*vel(i,j,k,3)
-      !     fcs(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !     fcs(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-      !     fcs(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-      !     fcs(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-      !     fcs(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-      !     do jspc=1,num_species
-      !       fcs(i,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-      !     enddo
-      !     !
-      !   enddo
-      !   !
-      !   do n=1,numq
-      !     dfcs(:,n)=ddfc(fcs(:,n),'222e',npdci,im)
-      !   enddo
-      !   !
-      !   qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:)
-      !   !
-      ! enddo
-      ! !
-      ! deallocate(fcs,dfcs)
-      ! !
-      ! if(ndims==3) then
-      !   !
-      !   allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
-      !   do i=is,ie
-      !     !
-      !     do k=-hm,km+hm
-      !       !
-      !       uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
-      !          dxi(i,j,k,3,3)*vel(i,j,k,3)
-      !       fcs(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !       fcs(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
-      !       fcs(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
-      !       fcs(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
-      !       fcs(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-      !       do jspc=1,num_species
-      !         fcs(k,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-      !       enddo
-      !       !
-      !     enddo
-      !     !
-      !     do n=1,numq
-      !       dfcs(:,n)=ddfc(fcs(:,n),'222e',npdck,km)
-      !     enddo
-      !     !
-      !     qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
-      !     !
-      !   enddo
-      !   !
-      !   deallocate(fcs,dfcs)
-      !   !
-      ! endif
+      allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
+      do k=ks,ke
+        !
+        do i=-hm,im+hm
+          !
+          uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
+             dxi(i,j,k,1,3)*vel(i,j,k,3)
+          fcs(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fcs(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fcs(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fcs(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fcs(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          do jspc=1,num_species
+            fcs(i,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+          enddo
+          !
+        enddo
+        !
+        do n=1,numq
+          dfcs(:,n)=ddfc(fcs(:,n),'222e',npdci,im)
+        enddo
+        !
+        qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:)
+        !
+      enddo
+      !
+      deallocate(fcs,dfcs)
+      !
+      if(ndims==3) then
+        !
+        allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
+        do i=is,ie
+          !
+          do k=-hm,km+hm
+            !
+            uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
+               dxi(i,j,k,3,3)*vel(i,j,k,3)
+            fcs(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+            fcs(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
+            fcs(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
+            fcs(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
+            fcs(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+            do jspc=1,num_species
+              fcs(k,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+            enddo
+            !
+          enddo
+          !
+          do n=1,numq
+            dfcs(:,n)=ddfc(fcs(:,n),'222e',npdck,km)
+          enddo
+          !
+          qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
+          !
+        enddo
+        !
+        deallocate(fcs,dfcs)
+        !
+      endif
       !
     endif
     !
@@ -2278,65 +2292,65 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
-      do k=ks,ke
-        !
-        do j=-hm,jm+hm
-          !
-          uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
-             dxi(i,j,k,2,3)*vel(i,j,k,3)
-          fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
-          fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
-          fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
-          fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          do jspc=1,num_species
-            fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-          enddo
-          !
-        enddo
-        !
-        do n=1,numq
-          dfcs(:,n)=ddfc(fcs(:,n),'222e',npdcj,jm)
-        enddo
-        !
-        qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
-        !
-      enddo
-      !
-      deallocate(fcs,dfcs)
+      ! allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
+      ! do k=ks,ke
+      !   !
+      !   do j=-hm,jm+hm
+      !     !
+      !     uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
+      !        dxi(i,j,k,2,3)*vel(i,j,k,3)
+      !     fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+      !     fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+      !     fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+      !     fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+      !     fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+      !     do jspc=1,num_species
+      !       fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+      !     enddo
+      !     !
+      !   enddo
+      !   !
+      !   do n=1,numq
+      !     dfcs(:,n)=ddfc(fcs(:,n),'222e',npdcj,jm)
+      !   enddo
+      !   !
+      !   qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
+      !   !
+      ! enddo
       ! !
-      if(ndims==3) then
-        !
-        allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
-        do j=js,je
-          !
-          do k=-hm,km+hm
-            !
-            uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
-               dxi(i,j,k,3,3)*vel(i,j,k,3)
-            fcs(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-            fcs(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
-            fcs(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
-            fcs(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
-            fcs(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-            do jspc=1,num_species
-              fcs(k,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-            enddo
-            !
-          enddo
-          !
-          do n=1,numq
-            dfcs(:,n)=ddfc(fcs(:,n),'222e',npdck,km)
-          enddo
-          !
-          qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
-          !
-        enddo
-        !
-        deallocate(fcs,dfcs)
-        !
-      endif
+      ! deallocate(fcs,dfcs)
+      ! ! !
+      ! if(ndims==3) then
+      !   !
+      !   allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
+      !   do j=js,je
+      !     !
+      !     do k=-hm,km+hm
+      !       !
+      !       uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
+      !          dxi(i,j,k,3,3)*vel(i,j,k,3)
+      !       fcs(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+      !       fcs(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
+      !       fcs(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
+      !       fcs(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
+      !       fcs(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+      !       do jspc=1,num_species
+      !         fcs(k,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+      !       enddo
+      !       !
+      !     enddo
+      !     !
+      !     do n=1,numq
+      !       dfcs(:,n)=ddfc(fcs(:,n),'222e',npdck,km)
+      !     enddo
+      !     !
+      !     qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
+      !     !
+      !   enddo
+      !   !
+      !   deallocate(fcs,dfcs)
+      !   !
+      ! endif
       !
     endif
     !
@@ -3203,6 +3217,48 @@ module bc
   end subroutine jetinflow
   !+-------------------------------------------------------------------+
   !| The end of the subroutine jetinflow.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to obtain the inlet flow for mixing layer.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-03-2021: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine mixlayerinflow
+    !
+    use fludyna, only : mixinglayervel,thermal
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: radi
+    !
+    i=0
+    do k=0,km
+    do j=0,jm
+      !
+      rho_in(j,k)  =roinf
+      vel_in(j,k,:)=mixinglayervel(x(i,j,k,2))
+      tmp_in(j,k)  =tinf
+      prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+      !
+      if(num_species>0) then
+        if(vel_in(j,k,1)>(1.d0+1.d-10)*uinf) then
+          spc_in(j,k,1)=1.d0
+        else
+          spc_in(j,k,1)=0.d0
+        endif
+        !
+        spc_in(j,k,2)=1.d0-spc_in(j,k,1)
+      endif
+      !
+    enddo
+    enddo
+    !
+  end subroutine mixlayerinflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine mixlayerinflow.                         |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

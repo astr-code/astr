@@ -113,7 +113,7 @@ module readwrite
                         flowtype,ndims,lfilter,alfa_filter,bctype,     &
                         twall,lfftk,kcutoff,ninit,rkscheme,            &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
-                        spg_kmin,spg_kmax
+                        spg_kmin,spg_kmax,lchardecomp,recon_schem
     !
     ! local data
     character(len=42) :: typedefine
@@ -139,6 +139,10 @@ module readwrite
         typedefine='                             accuracy test'
       case('cylinder')
         typedefine='                      flow past a cylinder'
+      case('mixlayer')
+        typedefine='                              mixing layer'
+      case('shuosher')
+        typedefine='                         shu-osher problem'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -184,22 +188,64 @@ module readwrite
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                          *** sceheme ***'
-      write(*,'(19X,A)',advance='no')'  convection terms: '
+      write(*,'(11X,A)',advance='no')'  convection terms: '
       if(conschm(4:4)=='c') then
         write(*,'(A)',advance='no')' compact '
       elseif(conschm(4:4)=='e') then
-        write(*,'(A)',advance='no')' explicit '
+        write(*,'(A)',advance='no')'explicit '
       else
-        stop ' !! error: conschm not defined !!'
+        stop ' !! error: conschm not defined, only c & e allowed !!'
       endif
+      !
+      read(conschm(1:1),*) n
+      !
+      if(mod(n,2)==0) then
+        write(*,'(A)',advance='no')'central '
+      else
+        write(*,'(A)',advance='no')' upwind '
+      endif
+
+      !
       write(*,'(11A)')conschm(3:3),'-',conschm(2:2),'-',               &
                       conschm(1:1),'......',conschm(1:1),'-',          &
                       conschm(2:2),'-',conschm(3:3)
-      write(*,'(19X,A)',advance='no')'   diffusion terms: '
+      if(mod(n,2).ne.0) then
+        if(lchardecomp) then
+          write(*,'(25X,39A)')'local characteristic decomposition used'
+        else
+          write(*,'(28X,39A)')'    reconstruction in physical space'
+        endif
+        !
+        write(*,'(15X,A)',advance='no')' reconstruction method : '
+        !
+        if(conschm(4:4)=='e') then
+          select case(recon_schem)
+          case(0)
+            write(*,'(24A)')'    linear upwind scheme'
+          case(1)
+            write(*,'(24A)')'             WENO scheme'
+          case(2)
+            write(*,'(24A)')'           WENO-Z scheme'
+          case(3)
+            write(*,'(24A)')'               MP scheme'
+          case(4)
+            write(*,'(24A)')'         WENO-SYM scheme'
+          case(5)
+            write(*,'(24A)')'            MP-LD scheme'
+          case default
+            stop ' !! reconstruction scheme not defined !!' 
+          end select
+        elseif(conschm(4:4)=='c') then
+            write(*,'(24A)')'               MP scheme'
+        endif
+        !
+      endif
+      !
+      write(*,'(11X,A)',advance='no')'   diffusion terms: '
       if(difschm(4:4)=='c') then
-        write(*,'(A)',advance='no')' compact '
+        write(*,'(A)',advance='no')' compact central '
       elseif(difschm(4:4)=='e') then
-        write(*,'(A)',advance='no')' explicit '
+        write(*,'(A)',advance='no')'explicit central '
       else
         stop ' !! error: difschm not defined !!'
       endif
@@ -246,6 +292,8 @@ module readwrite
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
         elseif(bctype(n)==12) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc inflow  at: ',bcdir(n)
+        elseif(bctype(n)==13) then
+          write(*,'(44X,I0,2(A))')bctype(n),' fixed bc at: ',bcdir(n)
         elseif(bctype(n)==21) then
           write(*,'(45X,I0,2(A))')bctype(n),' outflow at: ',bcdir(n)
         elseif(bctype(n)==22) then
@@ -291,7 +339,8 @@ module readwrite
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
-                        spg_jmax,spg_kmin,spg_kmax
+                        spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
+                        recon_schem
     use parallel,only : bcast
     !
     ! local data
@@ -330,6 +379,8 @@ module readwrite
       read(11,'(/)')
       read(11,*)conschm,difschm,rkscheme
       read(11,'(/)')
+      read(11,*)recon_schem,lchardecomp
+      read(11,'(/)')
       read(11,*)num_species
       read(11,'(/)')
       do n=1,6
@@ -361,6 +412,7 @@ module readwrite
     call bcast(lkhomo)
     call bcast(lreadgrid)
     call bcast(lfftk)
+    call bcast(lchardecomp)
     !
     call bcast(flowtype)
     call bcast(conschm)
@@ -379,6 +431,7 @@ module readwrite
     call bcast(reynolds)
     call bcast(mach)
     !
+    call bcast(recon_schem)
     call bcast(num_species)
     !
     call bcast(bctype)
@@ -582,7 +635,7 @@ module readwrite
     character(len=4) :: stepname
     character(len=2) :: spname
     character(len=64) :: outfilename
-    integer :: jsp
+    integer :: jsp,i
     !
     if(lwrite) then
       write(stepname,'(i4.4)')filenumb
@@ -637,6 +690,13 @@ module readwrite
       !
     endif
     !
+    open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
+    write(18,"(5(1X,A15))")'x','ro','u','p','t'
+    write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
+                                prs(i,0,0),tmp(i,0,0),i=0,im)
+    close(18)
+    print*,' << outdat/profile',stepname,mpirankname,'.dat'
+    !
     ! call tecbin('testout/tecfield'//mpirankname//'.plt',               &
     !                                           x(0:im,0:jm,0:km,1),'x', &
     !                                           x(0:im,0:jm,0:km,2),'y', &
@@ -644,8 +704,7 @@ module readwrite
     !                                         rho(0:im,0:jm,0:km),'ro',  &
     !                                         vel(0:im,0:jm,0:km,1),'u', &
     !                                         vel(0:im,0:jm,0:km,2),'v', &
-    !                                         prs(0:im,0:jm,0:km),'p',   &
-    !                                         spc(0:im,0:jm,0:km,1),'Y1' )
+    !                                         prs(0:im,0:jm,0:km),'p' )
     !
   end subroutine output
   !+-------------------------------------------------------------------+

@@ -363,6 +363,45 @@ module fludyna
   !| The end of the function jetvel.                                   |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This function is used to assign velocity profile of mixing layer. |
+  !+-------------------------------------------------------------------+
+  !| ref: Li, Z., Jaberi, F. 2010. Numerical Investigations of         |
+  !|      Shock-Turbulence Interaction in a Planar Mixing Layer.       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-Mar-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  function mixinglayervel(y) result(u)
+    !
+    use constdef
+    use commvar, only: uinf,ymin,ymax
+    !
+    ! arguments
+    real(8) :: u(3)
+    real(8),intent(in) :: y
+    !
+    ! local data
+    real(8) :: u1,u2,delta
+    !+-----------------------------------+
+    !| delta: inflow vorticity thickness |
+    !+-----------------------------------+
+    u1=3.5d0
+    u2=1.5d0
+    delta=1.d0
+    !
+    u(1)=0.5d0*((u1+u2)+(u1-u2)*tanh(2.d0*y/delta))
+    u(2)=0.d0
+    u(3)=0.d0
+    !
+    return
+    !
+  end function mixinglayervel
+  !+-------------------------------------------------------------------+
+  !| The end of the function mixinglayervel.                           |
+  !+-------------------------------------------------------------------+
+  !
   !!
 end module fludyna
 !+---------------------------------------------------------------------+

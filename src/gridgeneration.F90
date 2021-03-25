@@ -36,6 +36,8 @@ module gridgeneration
         call gridcube(20.d0,10.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then
         call gridcube(10.d0,1.d0,1.d0)
+      elseif(trim(flowtype)=='shuosher') then
+        call grid1d(-5.d0,5.d0)
       else
         print*,trim(flowtype),'not defined @ gridgen'
         stop ' !! error at gridgen' 
@@ -157,6 +159,38 @@ module gridgeneration
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
+  subroutine grid1d(xmin,xmax)
+    !
+    use commvar,  only : im,jm,km,ia,ja,ka
+    use parallel, only : ig0,jg0,kg0,lio
+    use commarray,only : x
+    use hdf5io
+    !
+    ! arguments
+    real(8),intent(in) :: xmin,xmax
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1)=(xmax-xmin)/dble(ia)*dble(i+ig0)+xmin
+      if(ja==0) then
+        x(i,j,k,2)=0.d0
+      else
+        x(i,j,k,2)=1.d0/real(ja,8)*real(j+jg0,8)
+      endif
+      x(i,j,k,3)=0.d0
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio) print*,' ** 1-D grid generated'
+    !
+  end subroutine grid1d
+  !
   subroutine gridcube(lx,ly,lz)
     !
     use commvar,  only : im,jm,km,gridfile,ia,ja,ka

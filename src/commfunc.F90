@@ -48,6 +48,50 @@ module commfunc
   contains
   !
   !+-------------------------------------------------------------------+
+  !| This function is to return the reconstructed value of a input     |
+  !| function.                                                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 08-02-2021  | Created by J. Fang @ Warrington.                    |
+  !+-------------------------------------------------------------------+
+  function recons(f,stype,ntype,dim,af,cc,windir) result(fc)
+    !
+    ! arguments
+    character(len=4),intent(in) :: stype
+    integer,intent(in) :: ntype,dim
+    real(8),intent(in) :: f(-hm:dim+hm)
+    real(8),intent(in) :: af(1:5),cc(1:2,-2:dim+1)
+    character(len=1) :: windir
+    real(8) :: fc(-1:dim)
+    !
+    ! local data
+    integer :: nscheme,k
+    real(8) :: b(-2:dim+1)
+    ! integer(8),save :: plan_f,plan_b
+    !
+    complex(8),allocatable :: cf(:)
+    real(8),allocatable :: kama(:)
+    !
+    ! print*,mpirank,'|',dim,im
+    !
+    read(stype(1:3),*) nscheme
+    !
+    if(dim==0) then
+      fc=f(0)
+    else
+      b =ptds_recon_rhs(f,dim,nscheme,ntype,windir)
+      fc=ptds_recon_cal(b,af,cc,dim,ntype,windir)
+    endif
+    !
+    return
+    !
+  end function recons
+  !+-------------------------------------------------------------------+
+  !| The end of the function recons.                                   |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This function is to return the finite-difference value of a input |
   !| function.                                                         |
   !+-------------------------------------------------------------------+
@@ -557,16 +601,25 @@ module commfunc
   function coeffcompac(scheme) result(alfa)
     !
     integer,intent(in) :: scheme
-    real(8) :: alfa(1:3)
+    real(8),allocatable :: alfa(:)
     !
     if(scheme==642) then
+      allocate(alfa(3))
       alfa(3)=num1d3
       alfa(2)=0.25d0
       alfa(1)=1.d0
     elseif(scheme==644) then
+      allocate(alfa(3))
       alfa(3)=num1d3
       alfa(2)=0.25d0
       alfa(1)=0.d0
+    elseif(scheme==553) then
+      allocate(alfa(5))
+      alfa(1)=0.5d0
+      alfa(2)=0.5d0
+      alfa(3)=num1d6
+      alfa(4)=0.5d0
+      alfa(5)=num1d6
     else
       stop ' !! scheme not defined @ coef_diffcompac'
     endif
@@ -1398,6 +1451,341 @@ module commfunc
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to initial for solving the tridiagonal 
+  ! martix with two layer of boundary scheme:, considering asymmetry 
+  ! upwind scheme
+  ! A*x=b
+  !   |1,af1,...............|
+  !   |af2,1,af3,.... ......|
+  !   |..af4,1,af5,.........|
+  !   |.....................|
+  ! A=|...,af4,1,af5,.......|
+  !   |.....................|
+  !   |.........,af4,1,af5..|
+  !   |...........,af2,1,af3|
+  !   |...............,af1,1|
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2008-11-04.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine ptds_aym_ini(cc,af,dim,ntype,windir)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(1:5)
+    real(8),allocatable,intent(out) :: cc(:,:)
+    character(len=1),intent(in) :: windir
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(1),af2,af: input dat
+    ! cc: output array
+    ! dim: input dat
+    ! l: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    ! local data
+    integer :: l
+    !
+    allocate(cc(1:2,-2:dim+1))
+    !
+    if(dim==0) then
+      cc=0.d0
+      return
+    endif
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      cc(1,0)=1.d0
+      cc(2,0)=af(1)/cc(1,0)
+      !
+      if(windir=='+') then
+        cc(1,1)=1.d0-af(2)*cc(2,0)
+        cc(2,1)=af(3)/cc(1,1)
+        do l=2,dim+1
+          cc(1,l)=1.d0-af(4)*cc(2,l-1)
+          cc(2,l)=af(5)/cc(1,l)
+        end do
+      elseif(windir=='-') then
+        cc(1,1)=1.d0-af(3)*cc(2,0)
+        cc(2,1)=af(2)/cc(1,1)
+        do l=2,dim+1
+          cc(1,l)=1.d0-af(5)*cc(2,l-1)
+          cc(2,l)=af(4)/cc(1,l)
+        end do
+      endif
+      !
+      cc(1,dim+1)=1.d0
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      cc(1,-2)=1.d0
+      cc(2,-2)=0.d0
+      !
+      if(windir=='+') then
+        do l=-1,dim-3
+          cc(1,l)=1.d0-af(4)*cc(2,l-1)
+          cc(2,l)=af(5)/cc(1,l)
+        end do
+        l=dim-2
+        cc(1,l)=1.d0-af(2)*cc(2,l-1)
+        cc(2,l)=af(3)/cc(1,l)
+        l=dim-1
+        cc(1,l)=1.d0-af(1)*cc(2,l-1)
+      elseif(windir=='-') then
+        do l=-1,dim+1
+          cc(1,l)=1.d0-af(5)*cc(2,l-1)
+          cc(2,l)=af(4)/cc(1,l)
+        end do
+        l=dim-2
+        cc(1,l)=1.d0-af(3)*cc(2,l-1)
+        cc(2,l)=af(2)/cc(1,l)
+        l=dim-1
+        cc(1,l)=1.d0-af(1)*cc(2,l-1)
+      endif
+      !
+    elseif(ntype==3) then
+      ! inner block
+      !
+      cc(1,-2)=1.d0
+      cc(2,-2)=0.d0
+      !
+      if(windir=='+') then
+        do l=-1,dim+1
+          cc(1,l)=1.d0-af(4)*cc(2,l-1)
+          cc(2,l)=af(5)/cc(1,l)
+        end do
+      elseif(windir=='-') then
+        do l=-1,dim+1
+          cc(1,l)=1.d0-af(5)*cc(2,l-1)
+          cc(2,l)=af(4)/cc(1,l)
+        end do
+      endif
+      !
+      cc(1,dim+1)=1.d0
+      !
+    else
+      print*, ' !! error in subroutine ptds_aym_ini !'
+      stop
+    end if
+    !
+    cc(1,:)=1.d0/cc(1,:)
+    !
+    return
+    !
+  end subroutine ptds_aym_ini
+  !
+  function ptds_recon_rhs(vin,dim,ns,ntype,windir) result(vout)
+    !
+    integer,intent(in) :: dim,ns,ntype
+    real(8),intent(in) :: vin(-hm:dim+hm)
+    character(len=1),intent(in) :: windir
+    real(8) :: vout(-2:dim+1)
+    !
+    ! local data
+    integer :: l
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      if(ns==553) then
+        ! ns==553 3-5-5-...-5-5-3
+        l=0
+        vout(0)=0.25d0*vin(l)+1.25d0*vin(l+1)
+        if(windir=='+') then
+          do l=1,dim
+            vout(l)=num1d18*vin(l-1)+num19d18*vin(l)+num5d9*vin(l+1)
+          end do
+          l=dim+1
+          vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
+                   27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
+        elseif(windir=='-') then
+          do l=1,dim
+            vout(l)=num1d18*vin(l+2)+num19d18*vin(l+1)+num5d9*vin(l)
+          end do
+          l=dim+1
+          vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
+                   27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+        endif
+        !
+      end if
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      if(ns==553) then
+        ! ns==553 3-5-5-...-5-5-3
+        !
+        if(windir=='+') then
+          l=-2
+          vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
+                   27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
+          do l=-1,dim-2
+            vout(l)=num1d18*vin(l-1)+num19d18*vin(l)+num5d9*vin(l+1)
+          end do
+        elseif(windir=='-') then
+          l=-2
+          vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
+                   27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+          do l=-1,dim-2
+            vout(l)=num1d18*vin(l+2)+num19d18*vin(l+1)+num5d9*vin(l)
+          end do
+        endif
+        l=dim-1
+        vout(l)=0.25d0*vin(l+1)+1.25d0*vin(l)
+        !
+      endif
+      !
+    elseif(ntype==3) then
+      ! inner block
+      if(ns/100==5) then
+        !
+        if(windir=='+') then
+          l=-2
+          vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
+                   27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
+          do l=-1,dim
+            vout(l)=num1d18*vin(l-1)+num19d18*vin(l)+num5d9*vin(l+1)
+          end do
+          l=dim+1
+          vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
+                   27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
+        elseif(windir=='-') then
+          l=-2
+          vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
+                   27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+          do l=-1,dim
+            vout(l)=num1d18*vin(l+2)+num19d18*vin(l+1)+num5d9*vin(l)
+          end do
+          l=dim+1
+          vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
+                   27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+        endif
+        !
+      endif
+    else
+      print*,' ** ntype: ',ntype
+      print*, ' !! error in subroutine ptds_recon_rhs !'
+      stop
+    end if
+  end function ptds_recon_rhs
+  !
+  function ptds_recon_cal(bd,af,cc,dim,ntype,windir) result(xd)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(5),bd(-2:dim+1),cc(1:2,-2:dim)
+    character(len=1),intent(in) :: windir
+    real(8),allocatable :: xd(:)
+    !
+    ! local data
+    integer :: l
+    real(8),allocatable,dimension(:) :: yd,md
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(3): input dat
+    ! bd: input array
+    ! xd: output array
+    ! cc: input array
+    ! dim: input dat
+    ! l, yd: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate ( yd(-2:dim+1),md(-2:dim+1) )
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      ! inner block
+      allocate(xd(0:dim))
+      !
+      yd(0)=bd(0)*cc(1,0)
+      if(windir=='+') then
+        yd(1)=(bd(1)-af(2)*yd(0))*cc(1,1)
+        do l=2,dim
+          yd(l)=(bd(l)-af(4)*yd(l-1))*cc(1,l)
+        end do
+      elseif(windir=='-') then
+        yd(1)=(bd(1)-af(3)*yd(0))*cc(1,1)
+        do l=2,dim
+          yd(l)=(bd(l)-af(5)*yd(l-1))*cc(1,l)
+        end do
+      endif
+      yd(dim+1)=bd(dim+1)*cc(1,dim+1)
+      !
+      md(dim+1)=yd(dim+1)
+      do l=dim,-2,-1
+        md(l)=yd(l)-cc(2,l)*md(l+1)
+      end do
+      !
+      xd(0:dim)=md(0:dim)
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      allocate(xd(-1:dim-1))
+      !
+      yd(-2)=bd(-2)*cc(1,-2)
+      if(windir=='+') then
+        do l=-1,dim-3
+          yd(l)=(bd(l)-af(4)*yd(l-1))*cc(1,l)
+        end do
+        l=dim-2
+        yd(l)=(bd(l)-af(2)*yd(l-1))*cc(1,l)
+      elseif(windir=='-') then
+        do l=-1,dim-3
+          yd(l)=(bd(l)-af(5)*yd(l-1))*cc(1,l)
+        end do
+        l=dim-2
+        yd(l)=(bd(l)-af(3)*yd(l-1))*cc(1,l)
+      endif
+      l=dim-1
+      yd(l)=(bd(l)-af(1)*yd(l-1))*cc(1,l)
+      !
+      md(dim-1)=yd(dim-1)
+      do l=dim-2,-2,-1
+        md(l)=yd(l)-cc(2,l)*md(l+1)
+      end do
+      !
+      xd(-1:dim-1)=md(-1:dim-1)
+      !
+    elseif(ntype==3) then
+      !
+      ! inner block
+      allocate(xd(-1:dim))
+      !
+      yd(-2)=bd(-2)*cc(1,-2)
+      if(windir=='+') then
+        do l=-1,dim
+          yd(l)=(bd(l)-af(4)*yd(l-1))*cc(1,l)
+        end do
+      elseif(windir=='-') then
+        do l=-1,dim
+          yd(l)=(bd(l)-af(5)*yd(l-1))*cc(1,l)
+        end do
+      endif
+      yd(dim+1)=bd(dim+1)*cc(1,dim+1)
+      !
+      md(dim+1)=yd(dim+1)
+      do l=dim,-2,-1
+        md(l)=yd(l)-cc(2,l)*md(l+1)
+      end do
+      !
+      xd(-1:dim)=md(-1:dim)
+      !
+    else
+      print*,' ** ntype: ',ntype
+      print*, ' !! error in subroutine ptds_recon_cal !'
+      stop
+    end if
+    !
+    deallocate( yd )
+    !
+    return
+    !
+  end function ptds_recon_cal
+  !+-------------------------------------------------------------------+
+  !| The end of the function ptds_recon_.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to initial for solving the tridiagonal 
   ! martix with two layer of boundary scheme:
   ! A*x=b
   !   |1,af1,.............|
@@ -1414,9 +1802,9 @@ module commfunc
   ! Writen by Fang Jian, 2008-11-04.
   ! Ref: ÊýÖµ·ÖÎö ±±º½³ö°æ P41
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine ptds_ini(cc,af,scheme,dim,ntype)
+  subroutine ptds_ini(cc,af,dim,ntype)
     !
-    integer,intent(in) :: dim,ntype,scheme
+    integer,intent(in) :: dim,ntype
     real(8),intent(in) :: af(1:3)
     real(8),allocatable,intent(out) :: cc(:,:)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1617,8 +2005,7 @@ module commfunc
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! end of the subroutine ptds_ini.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !! 
-  !
+  !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the RHS of tridiagonal martix 
   ! for A*x=b.
@@ -2003,6 +2390,7 @@ module commfunc
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the function ptds_rhs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
   !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to solve the tridiagonal martix in the 
@@ -2662,6 +3050,513 @@ module commfunc
   !| The end of the function extrapolate.                              |
   !+-------------------------------------------------------------------+
 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine offers the interface's values with standard  upwind 
+  ! scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function suw3(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:3)
+    real(8) :: uh
+    !
+    uh=-num1d6*u(1)+num5d6*u(2)+num1d3*u(3) 
+    !
+    return
+    !
+  end function suw3
+  !
+  pure function suw5(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:5)
+    real(8) :: uh
+    !
+    uh=(2.d0*u(1)-13.d0*u(2)+47.d0*u(3)+27.d0*u(4)-3.d0*u(5))/60.d0
+    !
+    return
+    !
+  end function suw5
+  !
+  pure function suw7(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:7)
+    real(8) :: uh
+    !
+    uh=(-3.d0*u(1)+25.d0*u(2)-101.d0*u(3)+319.d0*u(4)+214.d0*u(5)-     &
+        38.d0*u(6)+ 4.d0*u(7))/420.d0
+    !
+    return
+    !
+  end function suw7
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! end of the subroutine suw7
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the values of cell's interface
+  ! using 5th-order Monotonicity-Preserving method.
+  ! Ref. 1 : Suresh A. and Huynh H. T., Accurate Monotonicity-Preserving 
+  ! Schemes with Runge¨CKutta Time Stepping, J. C. P., 1997, 136: 83¨C99
+  ! .
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function MP5(u,ul)  result(uh)
+    !
+    real(8),intent(in) :: u(1:5)
+    real(8),intent(in),optional :: ul
+    real(8) :: uh
+    !
+    real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
+    real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+    !
+    if(present(ul)) then
+      ulinear=ul
+    else
+      ulinear=(2.d0*u(1)-13.d0*u(2)+47.d0*u(3)+27.d0*u(4)-3.d0*u(5))/60.d0
+    endif
+    !
+    var1=u(4)-u(3)
+    var2=4.d0*(u(3)-u(2))
+    uMP=u(3)+minmod2(var1,var2)
+    !
+    var1=(ulinear-u(3))*(ulinear-uMP)
+    if(var1>=1.d-10) then
+    !if(switch(i)) then
+      dm1=u(1)-2.d0*u(2)+u(3)
+      d0= u(2)-2.d0*u(3)+u(4)
+      d1= u(3)-2.d0*u(4)+u(5)
+      !
+      dhm1=minmod4( 4.d0*dm1-d0,4.d0*d0-dm1,dm1,d0 )
+      dh0 =minmod4(  4.d0*d0-d1, 4.d0*d1-d0, d0,d1 )
+      !
+      uUL=u(3)+4.d0*(u(3)-u(2))
+      uAV=0.5d0*(u(3)+u(4))
+      uMD=uAV-0.5d0*dh0
+      uLC=u(3)+0.5d0*(u(3)-u(2))+1.333333333333333d0*dhm1
+      !
+      var1=min(u(3),u(4),uMD)
+      var2=min(u(3),uUL,uLC)
+      uMIN=max(var1,var2)
+      !
+      var1=max(u(3),u(4),uMD)
+      var2=max(u(3),uUL,uLC)
+      uMAX=min(var1,var2)
+      !
+      var1=uMIN-ulinear
+      var2=uMAX-ulinear
+      uh=ulinear+minmod2(var1,var2)
+    else
+      uh=ulinear
+      ! No limiter is needed
+    end if
+    !
+    return
+    !
+  end function MP5
+  !
+  pure function MP7(u,ul) result(uh)
+    !
+    real(8),intent(in) :: u(0:6)
+    real(8),intent(in),optional :: ul
+    real(8) :: uh
+    !
+    real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
+    real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+    !
+    if(present(ul)) then
+      ulinear=ul
+    else
+      ulinear=(-3.d0*u(0)+25.d0*u(1)-101.d0*u(2)+319.d0*u(3)+          &
+               214.d0*u(4)-38.d0*u(5)+ 4.d0*u(6))/420.d0
+    endif
+    !
+    var1=u(4)-u(3)
+    var2=4.d0*(u(3)-u(2))
+    uMP=u(3)+minmod2(var1,var2)
+    !
+    var1=(ulinear-u(3))*(ulinear-uMP)
+    if(var1>=1.d-10) then
+      dm1=u(1)-2.d0*u(2)+u(3)
+      d0= u(2)-2.d0*u(3)+u(4)
+      d1= u(3)-2.d0*u(4)+u(5)
+      !
+      dhm1=minmod4( 4.d0*dm1-d0,4.d0*d0-dm1,dm1,d0 )
+      dh0 =minmod4(  4.d0*d0-d1, 4.d0*d1-d0, d0,d1 )
+      !
+      uUL=u(3)+4.d0*(u(3)-u(2))
+      uAV=0.5d0*(u(3)+u(4))
+      uMD=uAV-0.5d0*dh0
+      uLC=u(3)+0.5d0*(u(3)-u(2))+1.333333333333333d0*dhm1
+      !
+      var1=min(u(3),u(4),uMD)
+      var2=min(u(3),uUL,uLC)
+      uMIN=max(var1,var2)
+      !
+      var1=max(u(3),u(4),uMD)
+      var2=max(u(3),uUL,uLC)
+      uMAX=min(var1,var2)
+      !
+      var1=uMIN-ulinear
+      var2=uMAX-ulinear
+      uh=ulinear+minmod2(var1,var2)
+    else
+      uh=ulinear
+    end if
+    !
+    return
+    !
+  end function MP7
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! end of the function MP
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this fuction is the 2-variable minmod() function.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function minmod2(var1,var2)
+    !
+    real(8),intent(in) :: var1,var2
+    real(8) :: minmod2
+    !
+    if(var1>0.d0 .and. var2>0.d0) then
+      minmod2=min(dabs(var1),dabs(var2))
+    elseif(var1<0.d0 .and. var2<0.d0) then
+      minmod2=-1.d0*min(dabs(var1),dabs(var2))
+    else
+      minmod2=0.d0
+    end if
+    !
+    return
+    !
+  end function minmod2
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function minmod2.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this fuction is the 4-variable minmod() function.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function minmod4(var1,var2,var3,var4)
+    !
+    real(8),intent(in) :: var1,var2,var3,var4
+    real(8) :: minmod4
+    !
+    if(var1>0.d0 .and. var2>0.d0 .and. var3>0.d0 .and. var4>0.d0) then
+      minmod4=min(dabs(var1),dabs(var2),dabs(var3),dabs(var4))
+    elseif(var1<0.d0 .and. var2<0.d0 .and. var3<0.d0 .and. var4<0.d0)&
+                                                                  then
+      minmod4=-1.d0*min(dabs(var1),dabs(var2),dabs(var3),dabs(var4))
+    else
+      minmod4=0.d0
+    end if
+    !
+    return
+    !
+  end function minmod4
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function minmod4.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this subroutine offers the interface's values with 5 point WENO
+  ! Scheme according the points' value you give.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function WENO5(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:5)
+    real(8) :: uh
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! u: 5 points grid value
+    ! uh: final interface value
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: uh1,uh2,uh3,beter1,beter2,beter3,alfa1,alfa2,alfa3,     &
+               WT1,WT2,WT3,C1,C2,C3,alfaS
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! uh1: i+1/2 value for stencil 1 
+    !      with 3 pints upwind shmeme
+    ! uh2: i+1/2 value for stencil 2 
+    !      with 3 pints upwind shmeme 
+    ! uh3: i+1/2 value for stencil 3 
+    !      with 3 pints upwind shmeme
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: eps
+    !
+    eps=1.d-6
+    !
+    uh1=0.333333333333333d0*u(1)-1.16666666666667d0*u(2)+            &
+        1.83333333333333d0*u(3)                                      
+    uh2=-0.166666666666667d0*u(2)+0.833333333333333d0*u(3)+          &
+         0.333333333333333d0*u(4)                                    
+    uh3=0.333333333333333d0*u(3)+0.833333333333333d0*u(4)           &
+        -0.166666666666667d0*u(5)                                    
+    !                                                                
+    beter1=1.08333333333333d0*(u(1)-2.d0*u(2)+u(3))**2+              &
+           0.25d0*(u(1)-4.d0*u(2)+3.d0*u(3))**2                      
+    beter2=1.08333333333333d0*(u(2)-2.d0*u(3)+u(4))**2+              &
+           0.25d0*(u(2)-u(4))**2                                     
+    beter3=1.08333333333333d0*(u(3)-2.d0*u(4)+u(5))**2+              &
+           0.25d0*(3.d0*u(3)-4.d0*u(4)+u(5))**2
+    !
+    C1=0.1d0
+    C2=0.6d0
+    C3=0.3d0
+    !
+    alfa1=C1/(beter1+eps)**2
+    alfa2=C2/(beter2+eps)**2
+    alfa3=C3/(beter3+eps)**2
+    !
+    alfaS=alfa1+alfa2+alfa3
+    !
+    WT1=alfa1/alfaS
+    WT2=alfa2/alfaS
+    WT3=alfa3/alfaS
+    !
+    uh=WT1*uh1+WT2*uh2+WT3*uh3
+    !
+    return
+    !
+  end function WENO5
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine WENO5.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this subroutine offers the interface's values with 7 point WENO
+  ! Scheme according the points' value you give.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function WENO7(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:7)
+    real(8) :: uh
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! dir=1: upwind
+    ! dir=-1: backwind
+    ! u: 5 points grid value
+    ! uh: final interface value
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: uh1,uh2,uh3,uh4
+    real(8) :: beter1,beter2,beter3,beter4,alfa1,alfa2,alfa3,alfa4,  &
+               WT1,WT2,WT3,WT4,C1,C2,C3,C4,alfaS
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! uh1: i+1/2 value for stencil 1 
+    !      with 3 pints upwind shmeme
+    ! uh2: i+1/2 value for stencil 2 
+    !      with 3 pints upwind shmeme 
+    ! uh3: i+1/2 value for stencil 3 
+    !      with 3 pints upwind shmeme
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: df1,df2,df3
+    real(8) :: eps
+    !
+    eps=1.d-6
+    !
+    uh1=-0.25d0              *u(1)+1.083333333333333d0 *u(2)       &
+        -1.916666666666667d0 *u(3)+2.083333333333333d0 *u(4)
+    uh2= 8.333333333333333d-2*u(2)-4.166666666666667d-1*u(3)       &
+        +1.083333333333333d0 *u(4)+0.25d0              *u(5)
+    uh3=-8.333333333333333d-2*u(3)+5.833333333333333d-1*u(4)       &
+        +5.833333333333333d-1*u(5)-8.333333333333333d-2*u(6)
+    uh4= 0.25d0              *u(4)+1.083333333333333d0 *u(5)       &
+        -4.166666666666667d-1*u(6)+8.333333333333333d-2*u(7)
+    !
+    df1=2.777777777777778d-2*(-2.d0*u(1)+9.d0*u(2)-18.d0*u(3)+11d0*u(4))**2
+    df2= 1.083333333333333d0*(-1.d0*u(1)+4.d0*u(2) -5.d0*u(3) +2d0*u(4))**2
+    df3= 1.084722222222222d0*(-1.d0*u(1)+3.d0*u(2) -3.d0*u(3) +1d0*u(4))**2
+    beter1=df1+df2+df3
+    !
+    df1=2.777777777777778d-2*(      u(2)-6.d0*u(3)+3.d0*u(4)+2.d0*u(5))**2
+    df2= 1.083333333333333d0*(                u(3)-2.d0*u(4)+     u(5))**2
+    df3= 1.084722222222222d0*(-1.d0*u(2)+3.d0*u(3)-3.d0*u(4)+1.d0*u(5))**2
+    beter2=df1+df2+df3
+    !
+    df1=2.777777777777778d-2*(-2.d0*u(3)-3.d0*u(4)+6.d0*u(5)-1.d0*u(6))**2
+    df2= 1.083333333333333d0*(      u(3)-2.d0*u(4)     +u(5)          )**2
+    df3= 1.084722222222222d0*(-1.d0*u(3)+3.d0*u(4)-3.d0*u(5)+1.d0*u(6))**2
+    beter3=df1+df2+df3
+    !
+    df1=2.777777777777778d-2*(-11.d0*u(4)+18.d0*u(5)-9.d0*u(6)+2.d0*u(7))**2
+    df2= 1.083333333333333d0*(  2.d0*u(4) -5.d0*u(5)+4.d0*u(6)     -u(7))**2
+    df3= 1.084722222222222d0*( -1.d0*u(4) +3.d0*u(5)-3.d0*u(6)+1.d0*u(7))**2
+    beter4=df1+df2+df3
+    !
+    C1=2.857142857142857d-2
+    C2=3.428571428571429d-1
+    C3=5.142857142857143d-1
+    C4=1.142857142857143d-1
+    !
+    alfa1=C1/(beter1+eps)**2
+    alfa2=C2/(beter2+eps)**2
+    alfa3=C3/(beter3+eps)**2
+    alfa4=C4/(beter4+eps)**2
+    !
+    alfaS=alfa1+alfa2+alfa3+alfa4
+    !
+    WT1=alfa1/alfaS
+    WT2=alfa2/alfaS
+    WT3=alfa3/alfaS
+    WT4=alfa4/alfaS
+    !
+    uh=WT1*uh1+WT2*uh2+WT3*uh3+WT4*uh4
+    !
+    return
+    !
+  end function WENO7
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !End of the subroutine WENO7.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this subroutine offers the interface's values with 5 order WENOZ 
+  ! scheme of Borges, 2008. that modified wight function.
+  ! Ref:  R. Borges, M. Carmona, B. Costa B and et al. An improved 
+  ! weighted essentially non-oscillatory scheme for hyperbolic 
+  ! conservation laws, J. Comput. Phys. 227 (2008) 3191¨C3211.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function WENO5Z(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:5)
+    real(8) :: uh
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! u: 5 points grid value
+    ! uh: final interface value
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: uh1,uh2,uh3,beter1,beter2,beter3,alfa1,alfa2,alfa3,     &
+               WT1,WT2,WT3,C1,C2,C3,alfaS,tau5
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! uh1: i+1/2 value for stencil 1 
+    !      with 3 pints upwind shmeme
+    ! uh2: i+1/2 value for stencil 2 
+    !      with 3 pints upwind shmeme 
+    ! uh3: i+1/2 value for stencil 3 
+    !      with 3 pints upwind shmeme
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: eps
+    !
+    eps=1.d-6
+    !
+    uh1=0.333333333333333d0*u(1)-1.16666666666667d0*u(2)+            &
+        1.83333333333333d0*u(3)                                      
+    uh2=-0.166666666666667d0*u(2)+0.833333333333333d0*u(3)+          &
+         0.333333333333333d0*u(4)                                    
+    uh3=0.333333333333333d0*u(3)+0.833333333333333d0*u(4)           &
+        -0.166666666666667d0*u(5)                                    
+    !                                                                
+    beter1=1.08333333333333d0*(u(1)-2.d0*u(2)+u(3))**2+              &
+           0.25d0*(u(1)-4.d0*u(2)+3.d0*u(3))**2                      
+    beter2=1.08333333333333d0*(u(2)-2.d0*u(3)+u(4))**2+              &
+           0.25d0*(u(2)-u(4))**2                                     
+    beter3=1.08333333333333d0*(u(3)-2.d0*u(4)+u(5))**2+              &
+           0.25d0*(3.d0*u(3)-4.d0*u(4)+u(5))**2
+    !
+    C1=0.1d0
+    C2=0.6d0
+    C3=0.3d0
+    !
+    tau5=dabs(beter3-beter1)
+    !
+    alfa1=C1+C1*(tau5/(beter1+eps)**2)
+    alfa2=C2+C2*(tau5/(beter2+eps)**2)
+    alfa3=C3+C3*(tau5/(beter3+eps)**2)
+    !
+    alfaS=alfa1+alfa2+alfa3
+    !
+    WT1=alfa1/alfaS
+    WT2=alfa2/alfaS
+    WT3=alfa3/alfaS
+    !
+    uh=WT1*uh1+WT2*uh2+WT3*uh3
+    !
+    return
+    !
+  end function WENO5Z
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine WENO5Z.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this subroutine offers the interface's values with 7 point WENO
+  ! Scheme according the points' value you give.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function WENO7Z(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:7)
+    real(8) :: uh
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! dir=1: upwind
+    ! dir=-1: backwind
+    ! u: 5 points grid value
+    ! uh: final interface value
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: beter1,beter2,beter3,beter4,alfa1,alfa2,alfa3,alfa4,  &
+               WT1,WT2,WT3,WT4,C1,C2,C3,C4,alfaS,tau7,uh1,uh2,uh3,uh4
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! uh1: i+1/2 value for stencil 1 
+    !      with 3 pints upwind shmeme
+    ! uh2: i+1/2 value for stencil 2 
+    !      with 3 pints upwind shmeme 
+    ! uh3: i+1/2 value for stencil 3 
+    !      with 3 pints upwind shmeme
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: df1,df2,df3
+    real(8) :: eps
+    !
+    eps=1.d-6
+    !
+    uh1=-0.25d0              *u(1)+1.083333333333333d0 *u(2)       &
+        -1.916666666666667d0 *u(3)+2.083333333333333d0 *u(4)
+    uh2= 8.333333333333333d-2*u(2)-4.166666666666667d-1*u(3)       &
+        +1.083333333333333d0 *u(4)+0.25d0              *u(5)
+    uh3=-8.333333333333333d-2*u(3)+5.833333333333333d-1*u(4)       &
+        +5.833333333333333d-1*u(5)-8.333333333333333d-2*u(6)
+    uh4= 0.25d0              *u(4)+1.083333333333333d0 *u(5)       &
+        -4.166666666666667d-1*u(6)+8.333333333333333d-2*u(7)
+    !
+    df1=2.777777777777778d-2*(-2.d0*u(1)+9.d0*u(2)-18.d0*u(3)+11d0*u(4))**2
+    df2= 1.083333333333333d0*(-1.d0*u(1)+4.d0*u(2) -5.d0*u(3) +2d0*u(4))**2
+    df3= 1.084722222222222d0*(-1.d0*u(1)+3.d0*u(2) -3.d0*u(3) +1d0*u(4))**2
+    beter1=df1+df2+df3
+    !
+    df1=2.777777777777778d-2*(      u(2)-6.d0*u(3)+3.d0*u(4)+2.d0*u(5))**2
+    df2= 1.083333333333333d0*(                u(3)-2.d0*u(4)+     u(5))**2
+    df3= 1.084722222222222d0*(-1.d0*u(2)+3.d0*u(3)-3.d0*u(4)+1.d0*u(5))**2
+    beter2=df1+df2+df3
+    !
+    df1=2.777777777777778d-2*(-2.d0*u(3)-3.d0*u(4)+6.d0*u(5)-1.d0*u(6))**2
+    df2= 1.083333333333333d0*(      u(3)-2.d0*u(4)     +u(5)          )**2
+    df3= 1.084722222222222d0*(-1.d0*u(3)+3.d0*u(4)-3.d0*u(5)+1.d0*u(6))**2
+    beter3=df1+df2+df3
+    !
+    df1=2.777777777777778d-2*(-11.d0*u(4)+18.d0*u(5)-9.d0*u(6)+2.d0*u(7))**2
+    df2= 1.083333333333333d0*(  2.d0*u(4) -5.d0*u(5)+4.d0*u(6)     -u(7))**2
+    df3= 1.084722222222222d0*( -1.d0*u(4) +3.d0*u(5)-3.d0*u(6)+1.d0*u(7))**2
+    beter4=df1+df2+df3
+    !
+    C1=2.857142857142857d-2
+    C2=3.428571428571429d-1
+    C3=5.142857142857143d-1
+    C4=1.142857142857143d-1
+    !
+    tau7=dabs(beter4-beter1)
+    !
+    alfa1=C1+C1*(tau7/(beter1+eps)**2)
+    alfa2=C2+C2*(tau7/(beter2+eps)**2)
+    alfa3=C3+C3*(tau7/(beter3+eps)**2)
+    alfa4=C4+C4*(tau7/(beter4+eps)**2)
+    !
+    alfaS=alfa1+alfa2+alfa3+alfa4
+    !
+    WT1=alfa1/alfaS
+    WT2=alfa2/alfaS
+    WT3=alfa3/alfaS
+    WT4=alfa4/alfaS
+    !
+    uh=WT1*uh1+WT2*uh2+WT3*uh3+WT4*uh4
+    !
+    return
+    !
+  end function WENO7Z
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !End of the subroutine WENO7Z.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
 end module commfunc
 !+---------------------------------------------------------------------+

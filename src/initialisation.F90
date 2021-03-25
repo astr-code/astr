@@ -56,6 +56,10 @@ module initialisation
         call accini
       case('cylinder')
         call cylinderini
+      case('mixlayer')
+        call mixlayerini
+      case('shuosher')
+        call shuosherini
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ flowinit'
@@ -432,6 +436,70 @@ module initialisation
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field test of      |
+  !| 1D Shu-Osher problem.                                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-Mar-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine shuosherini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
+    use fludyna,  only: thermal,fvar2q
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: xc
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      xc=x(i,j,k,1)
+      !
+      if(xc<-4.d0) then
+        rho(i,j,k)  =3.857143d0
+        vel(i,j,k,1)=2.629369d0
+        prs(i,j,k)  =10.33333d0
+      else
+        rho(i,j,k)  =1.d0+0.2d0*sin(5.d0*xc) 
+        vel(i,j,k,1)=0.d0
+        prs(i,j,k)  =1.d0
+      endif
+      vel(i,j,k,2)=0.d0
+      vel(i,j,k,3)=0.d0
+      !
+      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+    !
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   q(0:im,0:jm,0:km,1),'q1',        &
+    !                                   q(0:im,0:jm,0:km,2),'q2',        &
+    !                                   q(0:im,0:jm,0:km,3),'q3',        &
+    !                                   q(0:im,0:jm,0:km,5),'q5',        &
+    !                                   q(0:im,0:jm,0:km,6),'q6' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** shu-osher profile initialised.'
+    !
+    ! call mpistop
+    !
+  end subroutine shuosherini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine shuosherini.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to generate an initial field for the      |
   !| 2D vortex transport problem.                                      |
   !| ref: Visbal & Gaitonde, On the Use of Higher-Order Finite-        |
@@ -452,7 +520,7 @@ module initialisation
     real(8) :: xc,yc,radi2,rvor,cvor,var1
     !
     xc=10.d0
-    yc=5.d0
+    yc=10.d0
     rvor=0.7d0 
     cvor=0.1d0*rvor
     !
@@ -464,8 +532,8 @@ module initialisation
       !
       rho(i,j,k)  =roinf
       vel(i,j,k,1)=uinf-var1*(x(i,j,k,2)-yc)
-      vel(i,j,k,2)=vinf+var1*(x(i,j,k,1)-xc)
-      vel(i,j,k,3)=0.d0
+      if(ndims>=2) vel(i,j,k,2)=vinf+var1*(x(i,j,k,1)-xc)
+      if(ndims==3) vel(i,j,k,3)=0.d0
       prs(i,j,k)  =pinf-0.5d0*roinf*cvor**2/rvor**2*exp(-radi2)
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
@@ -724,7 +792,7 @@ module initialisation
     !                                rho(0:im,0:jm,0:km)  ,'ro',         &
     !                                vel(0:im,0:jm,0:km,1),'u',          &
     !                                vel(0:im,0:jm,0:km,2),'v',          &
-    !                                prs(0:im,0:jm,0:km)  ,'p',          &
+                                   ! prs(0:im,0:jm,0:km)  ,'p',          &
     !                                tmp(0:im,0:jm,0:km)  ,'t' )
     !
     if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D jet flow initialised.'
@@ -733,7 +801,71 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| The end of the subroutine jetini.                                 |
   !+-------------------------------------------------------------------+
-  !
+  
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate a initial mixing layer flow.  |
+  !+-------------------------------------------------------------------+
+  !| ref: Li, Z., Jaberi, F. 2010. Numerical Investigations of         |
+  !|      Shock-Turbulence Interaction in a Planar Mixing Layer.       | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine mixlayerini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal,fvar2q,mixinglayervel
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: radi
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      rho(i,j,k)  = roinf
+      !
+      vel(i,j,k,:)= mixinglayervel(x(i,j,k,2))
+      !
+      tmp(i,j,k)  = tinf
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>1) then
+        spc(i,j,k,1)=0.d0
+        !
+        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+    !
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+                                   ! prs(0:im,0:jm,0:km)  ,'p',          &
+    !                                tmp(0:im,0:jm,0:km)  ,'t' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D jet flow initialised.'
+    !
+  end subroutine mixlayerini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine mixlayerini.                            |
+  !+-------------------------------------------------------------------+
+  !  
   !+-------------------------------------------------------------------+
   !| This subroutine is used to generate initial field for flow past a |
   !| cylinder flow.                                                    |
