@@ -342,6 +342,7 @@ module readwrite
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem
     use parallel,only : bcast
+    use command, only : readkeyboad
     !
     ! local data
     character(len=64) :: inputfile
@@ -575,44 +576,6 @@ module readwrite
   end subroutine writegrid
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
-  !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine is used to input command from keyboard.           |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 11-02-2021  | Created by J. Fang @ Warrington                     |
-  !+-------------------------------------------------------------------+
-  subroutine readkeyboad(inputfile)
-    !
-    character(len=*),intent(out),optional :: inputfile
-    !
-    ! local data
-    integer :: ierr,cli_len,nkey,nlen,arg_count
-    character(len=128) :: keyin
-    !
-    nkey=0
-    cli_len=1
-    !
-    if(present(inputfile)) inputfile='.' ! default value
-    !
-    do while(cli_len>0) 
-      !
-      nkey=nkey+1
-      call get_command_argument(nkey,keyin,cli_len,ierr)
-      !
-      if(trim(keyin)=='-input') then
-        nkey=nkey+1
-        call get_command_argument(nkey,keyin,cli_len,ierr)
-        inputfile=trim(keyin)
-      endif
-      !
-    enddo
-    !
-  end subroutine readkeyboad
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine readkeyboad.                            |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

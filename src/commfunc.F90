@@ -3558,6 +3558,22 @@ module commfunc
   !End of the subroutine WENO7Z.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This function is the the inverse function of the function tanh(x).
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure real(8) function argtanh(var)
+    !
+    real(8),intent(in) :: var
+    !
+    argtanh=0.5d0*dlog((1.d0+var)/(1.d0-var))
+    !
+    return
+    !
+  end function argtanh
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function argtanh.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
 end module commfunc
 !+---------------------------------------------------------------------+
 !| The end of the module commfunc.                                     |

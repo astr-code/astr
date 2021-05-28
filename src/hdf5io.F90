@@ -30,6 +30,17 @@ module hdf5io
     !
   end Interface h5write
   !
+  Interface h5writearray
+    !
+    ! module procedure h5_write1int
+    ! module procedure h5_write1rl8
+    ! module procedure h5_writearray1dint
+    ! module procedure h5_writearray1d
+    ! module procedure h5_writearray2d
+    module procedure h5_writearray3d
+    !
+  end Interface h5writearray
+  !
 #ifdef HDF5
   integer(hid_t) :: h5file_id
 #endif
@@ -341,6 +352,73 @@ module hdf5io
   end function h5getdim3d
   !+-------------------------------------------------------------------+
   !| This end of the function h5getdim3d.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write a 3D array to a hdf-5 file in    |
+  !| the sequential mode.                                              |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-05-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine h5_writearray3d(varin,vname,fname,explicit,ierr)
+    !
+    real(8),intent(in) :: varin(:,:,:)
+    character(len=*),intent(in) :: vname,fname
+    logical,intent(in), optional:: explicit
+    integer,intent(out), optional:: ierr
+    !
+    integer :: dim1,dim2,dim3
+    logical :: lexplicit
+    logical :: lfilalive
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(3)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    !
+    dim1=size(varin,1)
+    dim2=size(varin,2)
+    dim3=size(varin,3)
+    !
+    call h5open_f(h5error)
+    !
+    inquire(file=fname, exist=lfilalive)
+    if(lfilalive) then
+      call h5fopen_f(fname,H5F_ACC_RDWR_F,file_id,h5error)
+    else
+      call h5fcreate_f(fname,H5F_ACC_TRUNC_F,file_id,h5error)
+    end if
+    if(h5error.ne.0)  stop ' !! error in h5_writearray3d 1'
+    !
+    dimt=(/dim1,dim2,dim3/)
+    !
+    ! write the dataset.
+    call h5ltmake_dataset_f(file_id,vname,3,dimt,h5t_native_double,varin,h5error)
+    if(h5error .ne. 0) stop 'h5 write error h5_writearray3d'
+    if(lexplicit) print*,' << ',vname,' to ',fname
+    if(present(ierr)) ierr=h5error
+    if(h5error.ne.0)  stop ' !! error in h5_writearray3d 2'
+    !
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_writearray3d 3'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_writearray3d 4'
+    !
+  end subroutine h5_writearray3d
+  !+-------------------------------------------------------------------+
+  !| This end of the subroutine h5_writearray3d.                       |
   !+-------------------------------------------------------------------+
   !
 end module hdf5io
