@@ -89,7 +89,7 @@ module pp
       write(16,*)'#  41 : isothermal wall, wall temperature input.                       #'
       write(16,*)'########################################################################'
       close(16)
-      print*,' <<',trim(folder),'datin/input.chl'
+      print*,' << ',trim(folder),'/datin/input.chl'
       !
       call gridchannel(128,128,128,trim(folder))
       !
@@ -107,13 +107,13 @@ module pp
       write(16,'(A)')'# deltat                    : time step'
       write(16,'(A)')'1.d-3'
       close(16)
-      print*,' <<',trim(folder),'datin/contr.dat'
+      print*,' << ',trim(folder),'/datin/contr.dat'
       !
       call system('cp -v ./bin/astr ./'//trim(folder))
       !
       print*,' ** An example case is generated.'
-      print*,' ** you can enter the folder',trim(folder)
-      print*,' ** and run a simulation of channel flow by : mpirun -np 8 ./astr -cmd run -input datin/input.chl'
+      print*,' ** you can now run a simulation of channel flow by : '
+      print*,' mpirun -np 8 ./astr -cmd run -input datin/input.chl'
       !
     endif
     !

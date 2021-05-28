@@ -342,7 +342,7 @@ module readwrite
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem
     use parallel,only : bcast
-    use command, only : readkeyboad
+    use cmdefne, only : readkeyboad
     !
     ! local data
     character(len=64) :: inputfile

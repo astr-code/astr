@@ -29,9 +29,15 @@ program astr
   call listcmd
   !
   if(trim(cmd)=='init') then
+    !
+    ! generate an example channel flow case
+    !
     call examplegen(casefolder)
+    !
   elseif(trim(cmd)=='run') then
-    ! normal computational loop
+    !
+    ! computational loop
+    !
     call readinput
     !
     call mpisizedis

@@ -28,8 +28,16 @@ module cmdefne
     integer :: ierr,cli_len,nkey,nlen,arg_count
     character(len=128) :: keyin
     !
-    nkey=0
-    cli_len=1
+    nkey=1
+    call get_command_argument(nkey,keyin,cli_len,ierr)
+    !
+    if(cli_len>0) cmd=trim(keyin)
+    !
+    if(trim(cmd)=='init') then
+      nkey=nkey+1
+      call get_command_argument(nkey,keyin,cli_len,ierr)
+      casename=trim(keyin)
+    endif
     !
     if(present(inputfile)) inputfile='.' ! default value
     !
@@ -42,19 +50,6 @@ module cmdefne
         nkey=nkey+1
         call get_command_argument(nkey,keyin,cli_len,ierr)
         inputfile=trim(keyin)
-      endif
-      !
-      if(trim(keyin)=='-cmd') then
-        nkey=nkey+1
-        call get_command_argument(nkey,keyin,cli_len,ierr)
-        cmd=trim(keyin)
-        !
-        if(trim(cmd)=='init') then
-          nkey=nkey+1
-          call get_command_argument(nkey,keyin,cli_len,ierr)
-          casename=trim(keyin)
-        endif
-        !
       endif
       !
     enddo
@@ -118,13 +113,13 @@ module cmdefne
       write(*,*)' +----------------+-------------------------------------------+'
       write(*,*)' |        command |                                  function |'
       write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |      -cmd list |               to list all functionalities |'
+      write(*,*)' |           list |               to list all functionalities |'
       write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |      -cmd help |                          the same as list |'
+      write(*,*)' |           help |                          the same as list |'
       write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |       -cmd run |                      to run a computation |'
+      write(*,*)' |            run |                      to run a computation |'
       write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |      -cmd init |             to generation an example case |'
+      write(*,*)' |           init |             to generation an example case |'
       write(*,*)' +----------------+-------------------------------------------+'
       write(*,*)' |     -input *** |                  to assign the input file |'
       write(*,*)' +----------------+-------------------------------------------+'
