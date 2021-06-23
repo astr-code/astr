@@ -1283,8 +1283,8 @@ module parallel
       ! unpack the received the packet from right
       var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
       !
-      var(im,0:jm,0:km)=0.5d0*( var(im,0:jm,0:km) +                    &
-                              rbuf1(0,0:jm,0:km) )
+      ! var(im,0:jm,0:km)=0.5d0*( var(im,0:jm,0:km) +                    &
+      !                         rbuf1(0,0:jm,0:km) )
       !
     end if
       !
@@ -1293,8 +1293,8 @@ module parallel
       ! unpack the received the packet from left
       var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
       !
-      var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
-                             rbuf2(0,0:jm,0:km) )
+      ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
+      !                        rbuf2(0,0:jm,0:km) )
     end if
     !
     deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
@@ -1349,16 +1349,16 @@ module parallel
         ! unpack the received the packet from up
         var(0:im,jm+1:jm+hm,0:km)=rbuf1(0:im,1:hm,0:km)
         !
-        var(0:im,jm,0:km)=0.5d0*( var(0:im,jm,0:km) +                    &
-                                rbuf1(0:im, 0,0:km) )
+        ! var(0:im,jm,0:km)=0.5d0*( var(0:im,jm,0:km) +                    &
+        !                         rbuf1(0:im, 0,0:km) )
       endif
       !
       if(mpidown .ne. MPI_PROC_NULL) then
         ! unpack the received the packet from down
         var(0:im,-hm:-1,0:km)=rbuf2(0:im,-hm:-1,0:km) 
         !
-        var(0:im,0,0:km)=0.5d0*( var(0:im, 0,0:km) +                     &
-                               rbuf2(0:im, 0,0:km) )
+        ! var(0:im,0,0:km)=0.5d0*( var(0:im, 0,0:km) +                     &
+        !                        rbuf2(0:im, 0,0:km) )
       end if
       !
       deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
@@ -1418,8 +1418,8 @@ module parallel
         ! unpack the received the packet from front
         var(0:im,0:jm,km+1:km+hm)=rbuf1(0:im,0:jm,1:hm)
         !
-        var(0:im,0:jm,km)=0.5d0*( var(0:im,0:jm,km) +                  &
-                                rbuf1(0:im,0:jm, 0) )
+        ! var(0:im,0:jm,km)=0.5d0*( var(0:im,0:jm,km) +                  &
+        !                         rbuf1(0:im,0:jm, 0) )
         !
       end if
       !
@@ -1428,8 +1428,8 @@ module parallel
         ! unpack the received the packet back
         var(0:im,0:jm,-hm:-1)=rbuf2(0:im,0:jm,-hm:-1)
         !
-        var(0:im,0:jm,0)=0.5d0*( var(0:im,0:jm,0) +                    &
-                               rbuf2(0:im,0:jm,0)  )
+        ! var(0:im,0:jm,0)=0.5d0*( var(0:im,0:jm,0) +                    &
+        !                        rbuf2(0:im,0:jm,0)  )
         !
       end if
       !
@@ -1523,8 +1523,8 @@ module parallel
         ! unpack the received the packet from right
         var(im+1:im+hm,0:jm,0:km,:)=rbuf1(1:hm,0:jm,0:km,:)
         !
-        var(im,0:jm,0:km,:)=0.5d0*( var(im,0:jm,0:km,:) +            &
-                                  rbuf1(0,0:jm,0:km,:) )
+        ! var(im,0:jm,0:km,:)=0.5d0*( var(im,0:jm,0:km,:) +            &
+        !                           rbuf1(0,0:jm,0:km,:) )
         !
       end if
         !
@@ -1533,8 +1533,8 @@ module parallel
         ! unpack the received the packet from left
         var(-hm:-1,0:jm,0:km,:)=rbuf2(-hm:-1,0:jm,0:km,:)
         !
-        var(0,0:jm,0:km,:)=0.5d0*( var(0,0:jm,0:km,:) +              &
-                                 rbuf2(0,0:jm,0:km,:) )
+        ! var(0,0:jm,0:km,:)=0.5d0*( var(0,0:jm,0:km,:) +              &
+        !                          rbuf2(0,0:jm,0:km,:) )
       end if
       !
       deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
@@ -1594,16 +1594,16 @@ module parallel
           ! unpack the received the packet from up
           var(0:im,jm+1:jm+hm,0:km,:)=rbuf1(0:im,1:hm,0:km,:)
           !
-          var(0:im,jm,0:km,:)=0.5d0*( var(0:im,jm,0:km,:) +            &
-                                    rbuf1(0:im, 0,0:km,:) )
+          ! var(0:im,jm,0:km,:)=0.5d0*( var(0:im,jm,0:km,:) +            &
+          !                           rbuf1(0:im, 0,0:km,:) )
         endif
         !
         if(mpidown .ne. MPI_PROC_NULL) then
           ! unpack the received the packet from down
           var(0:im,-hm:-1,0:km,:)=rbuf2(0:im,-hm:-1,0:km,:) 
           !
-          var(0:im,0,0:km,:)=0.5d0*( var(0:im, 0,0:km,:) +            &
-                                   rbuf2(0:im, 0,0:km,:) )
+          ! var(0:im,0,0:km,:)=0.5d0*( var(0:im, 0,0:km,:) +            &
+          !                          rbuf2(0:im, 0,0:km,:) )
         end if
         !
         deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
@@ -1668,8 +1668,8 @@ module parallel
           ! unpack the received the packet from front
           var(0:im,0:jm,km+1:km+hm,:)=rbuf1(0:im,0:jm,1:hm,:)
           !
-          var(0:im,0:jm,km,:)=0.5d0*( var(0:im,0:jm,km,:) +              &
-                                    rbuf1(0:im,0:jm, 0,:) )
+          ! var(0:im,0:jm,km,:)=0.5d0*( var(0:im,0:jm,km,:) +              &
+          !                           rbuf1(0:im,0:jm, 0,:) )
           !
         end if
         !
@@ -1678,8 +1678,8 @@ module parallel
           ! unpack the received the packet back
           var(0:im,0:jm,-hm:-1,:)=rbuf2(0:im,0:jm,-hm:-1,:)
           !
-          var(0:im,0:jm,0,:)=0.5d0*( var(0:im,0:jm,0,:) +                &
-                                   rbuf2(0:im,0:jm,0,:)  )
+          ! var(0:im,0:jm,0,:)=0.5d0*( var(0:im,0:jm,0,:) +                &
+          !                          rbuf2(0:im,0:jm,0,:)  )
           !
         end if
         !
@@ -1766,8 +1766,8 @@ module parallel
       ! unpack the received the packet from right
       var(im+1:im+hm,0:jm,0:km,:,:)=rbuf1(1:hm,0:jm,0:km,:,:)
       !
-      var(im,0:jm,0:km,:,:)=0.5d0*( var(im,0:jm,0:km,:,:) +            &
-                                   rbuf1(0,0:jm,0:km,:,:) )
+      ! var(im,0:jm,0:km,:,:)=0.5d0*( var(im,0:jm,0:km,:,:) +            &
+      !                              rbuf1(0,0:jm,0:km,:,:) )
       !
     end if
       !
@@ -1776,8 +1776,8 @@ module parallel
       ! unpack the received the packet from left
       var(-hm:-1,0:jm,0:km,:,:)=rbuf2(-hm:-1,0:jm,0:km,:,:)
       !
-      var(0,0:jm,0:km,:,:)=0.5d0*( var(0,0:jm,0:km,:,:) +              &
-                                 rbuf2(0,0:jm,0:km,:,:) )
+      ! var(0,0:jm,0:km,:,:)=0.5d0*( var(0,0:jm,0:km,:,:) +              &
+      !                            rbuf2(0,0:jm,0:km,:,:) )
     end if
     !
     deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
@@ -1834,16 +1834,16 @@ module parallel
         ! unpack the received the packet from up
         var(0:im,jm+1:jm+hm,0:km,:,:)=rbuf1(0:im,1:hm,0:km,:,:)
         !
-        var(0:im,jm,0:km,:,:)=0.5d0*( var(0:im,jm,0:km,:,:) +            &
-                                    rbuf1(0:im, 0,0:km,:,:) )
+        ! var(0:im,jm,0:km,:,:)=0.5d0*( var(0:im,jm,0:km,:,:) +            &
+        !                             rbuf1(0:im, 0,0:km,:,:) )
       endif
       !
       if(mpidown .ne. MPI_PROC_NULL) then
         ! unpack the received the packet from down
         var(0:im,-hm:-1,0:km,:,:)=rbuf2(0:im,-hm:-1,0:km,:,:) 
         !
-        var(0:im,0,0:km,:,:)=0.5d0*( var(0:im, 0,0:km,:,:) +            &
-                                   rbuf2(0:im, 0,0:km,:,:) )
+        ! var(0:im,0,0:km,:,:)=0.5d0*( var(0:im, 0,0:km,:,:) +            &
+        !                            rbuf2(0:im, 0,0:km,:,:) )
       end if
       !
       deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
@@ -1902,8 +1902,8 @@ module parallel
         ! unpack the received the packet from front
         var(0:im,0:jm,km+1:km+hm,:,:)=rbuf1(0:im,0:jm,1:hm,:,:)
         !
-        var(0:im,0:jm,km,:,:)=0.5d0*( var(0:im,0:jm,km,:,:) +          &
-                                    rbuf1(0:im,0:jm, 0,:,:) )
+        ! var(0:im,0:jm,km,:,:)=0.5d0*( var(0:im,0:jm,km,:,:) +          &
+        !                             rbuf1(0:im,0:jm, 0,:,:) )
         !
       end if
       !
@@ -1912,8 +1912,8 @@ module parallel
         ! unpack the received the packet back
         var(0:im,0:jm,-hm:-1,:,:)=rbuf2(0:im,0:jm,-hm:-1,:,:)
         !
-        var(0:im,0:jm,0,:,:)=0.5d0*( var(0:im,0:jm,0,:,:) +            &
-                                   rbuf2(0:im,0:jm,0,:,:)  )
+        ! var(0:im,0:jm,0,:,:)=0.5d0*( var(0:im,0:jm,0,:,:) +            &
+        !                            rbuf2(0:im,0:jm,0,:,:)  )
         !
       end if
       !

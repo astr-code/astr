@@ -653,12 +653,12 @@ module readwrite
       !
     endif
     !
-    open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
-    write(18,"(5(1X,A15))")'x','ro','u','p','t'
-    write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
-                                prs(i,0,0),tmp(i,0,0),i=0,im)
-    close(18)
-    print*,' << outdat/profile',stepname,mpirankname,'.dat'
+    ! open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
+    ! write(18,"(5(1X,A15))")'x','ro','u','p','t'
+    ! write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
+    !                             prs(i,0,0),tmp(i,0,0),i=0,im)
+    ! close(18)
+    ! print*,' << outdat/profile',stepname,mpirankname,'.dat'
     !
     ! call tecbin('testout/tecfield'//mpirankname//'.plt',               &
     !                                           x(0:im,0:jm,0:km,1),'x', &

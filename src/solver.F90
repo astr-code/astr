@@ -493,7 +493,6 @@ module solver
       dxi(0:im,0:jm,0:km,3,:)=0.d0
       !
     endif
-    
     !
     call dataswap(dxi)
     !
