@@ -49,6 +49,9 @@ module pp
       write(16,'(A)')'# nondimen,diffterm,lfilter,lreadgrid,lfftz             : Parameters'
       write(16,'(A)')'t,t,t,t,f'
       write(16,*)
+      write(16,'(A)')'# lrestar                                               : start mode'
+      write(16,'(A)')'f'
+      write(16,*)
       write(16,'(A)')'# alfa_filter, kcutoff                                  : Filter parameters'
       write(16,'(A)')'0.49d0, 48'
       write(16,*)
@@ -186,9 +189,9 @@ module pp
     !
     ! call writetecbin('Testout/tecgrid.plt',x,'x',y,'y',z,'z')
     !
-    call H5WriteArray(x,'x',folder//'/datin/grid.chl')
-    call H5WriteArray(y,'y',folder//'/datin/grid.chl')
-    call H5WriteArray(z,'z',folder//'/datin/grid.chl')
+    call h5srite(x,'x',folder//'/datin/grid.chl')
+    call h5srite(y,'y',folder//'/datin/grid.chl')
+    call h5srite(z,'z',folder//'/datin/grid.chl')
     !
     !
     deallocate(x,y,z)

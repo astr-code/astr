@@ -120,6 +120,10 @@ module commvar
   !|         lchardecomp | local character decomposition used to not   |
   !|         recon_schem | scheme of reconstruction method.            |
   !+---------------------+---------------------------------------------+
+  logical :: lrestart
+  !+---------------------+---------------------------------------------+
+  !|            lrestart | to assign the start mode. t=restart, f=new  |
+  !+---------------------+---------------------------------------------+
   !
   !
   parameter(hm=5)

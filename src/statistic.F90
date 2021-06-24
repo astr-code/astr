@@ -33,9 +33,6 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine allomeanflow
     !
-    use commarray, only : rom,u1m,u2m,u3m,pm,tm,u11,                   &
-                          u22,u33,u12,u13,u23,tt,pp
-    !
     ! local data
     integer :: lallo
     !
@@ -87,8 +84,6 @@ module statistic
     !
     use commvar,   only : nsamples
     use commarray, only : rho,vel,prs,tmp
-    use commarray, only : rom,u1m,u2m,u3m,pm,tm,u11,                   &
-                          u22,u33,u12,u13,u23,tt,pp
     !
     if(nsamples==0) then
       !
@@ -241,27 +236,54 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statout
     !
-    use commvar, only : flowtype,nstep,time,nlstep,maxstep,hand_fs
+    use commvar, only : flowtype,nstep,time,nlstep,maxstep,hand_fs,    &
+                        lrestart
     !
     ! local data
     logical,save :: linit=.true.
+    logical :: fex
     integer :: nprthead=10
-    integer :: i
+    integer :: i,ferr,ns
     ! 
     if(lio) then
       !
       if(linit) then
+        !
+        inquire(file='flowstate.dat',exist=fex)
         open(hand_fs,file='flowstate.dat')
         !
-        if(trim(flowtype)=='tgv') then
-          write(hand_fs,"(A7,1X,A13,2(1X,A20))")'nstep','time',        &
-                                                    'enstophy','kenergy'
-        elseif(trim(flowtype)=='channel') then
-          write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',        &
-                                       'massflux','fbcx','forcex','wrms'
+        if(lrestart .and. fex) then
+          ! resume flowstate.dat
+          ns=0
+          read(hand_fs,*)
+          do while(ns<nstep)
+            !
+            read(hand_fs,*,iostat=ferr)ns
+            !
+            if(ferr< 0) then
+              print*,' ** end of flowstate.dat is reached.'
+              exit
+            endif
+            !
+          enddo
+          !
+          backspace(hand_fs)
+          if(ns==nstep) print*,' ** flowstate.dat is resumed.'
+          !
         else
-          write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',        &
+          ! a new flowstat file
+          !
+          if(trim(flowtype)=='tgv') then
+            write(hand_fs,"(A7,1X,A13,2(1X,A20))")'nstep','time',      &
+                                                    'enstophy','kenergy'
+          elseif(trim(flowtype)=='channel') then
+            write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
+                                       'massflux','fbcx','forcex','wrms'
+          else
+            write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
+          endif
+          !
         endif
         !
         linit=.false.
@@ -590,6 +612,7 @@ module statistic
   !| 22-Mar-2019  | Created by J. Fang STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
   real(8) function chanfoce(force,massflux,friction,massfluxtarget)
+    !
     ! arguments
     real(8),intent(in) :: force,massflux,friction,massfluxtarget
     !

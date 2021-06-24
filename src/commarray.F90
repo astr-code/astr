@@ -12,8 +12,6 @@ module commarray
   real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp
   real(8),allocatable,dimension(:,:,:) :: jacob,celvol,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
-  real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,u11,   &
-                                          u22,u33,u12,u13,u23,tt,pp
   real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax

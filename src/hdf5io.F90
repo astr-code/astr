@@ -19,6 +19,9 @@ module hdf5io
   Interface h5read
     !
     module procedure h5ra3d_r8
+    module procedure h5r_int4
+    module procedure h5r_real8
+    module procedure h5r_real8_1d
     !
   end Interface h5read
   !
@@ -30,16 +33,15 @@ module hdf5io
     !
   end Interface h5write
   !
-  Interface h5writearray
+  Interface h5srite
     !
-    ! module procedure h5_write1int
-    ! module procedure h5_write1rl8
-    ! module procedure h5_writearray1dint
-    ! module procedure h5_writearray1d
-    ! module procedure h5_writearray2d
+    module procedure h5_write1int
+    module procedure h5_write1rl8
+    module procedure h5_writearray1dint
+    module procedure h5_writearray1d
     module procedure h5_writearray3d
     !
-  end Interface h5writearray
+  end Interface h5srite
   !
 #ifdef HDF5
   integer(hid_t) :: h5file_id
@@ -199,6 +201,83 @@ module hdf5io
 #endif
     !
   end subroutine h5ra3d_r8
+  !
+  subroutine h5r_int4(varname,var)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    integer,intent(out) :: var
+    !
+#ifdef HDF5
+    ! local data
+    integer :: nvar(1)
+    integer :: h5error
+    integer(hsize_t) :: dimt(1)=(/1/)
+    !
+    ! read the data
+    !
+    call h5ltread_dataset_f(h5file_id,varname,h5t_native_integer,nvar, &
+                                                           dimt,h5error)
+    var=nvar(1)
+    if(h5error.ne.0)  stop ' !! error in h5r_int4 call h5ltread_dataset_f'
+    !
+    if(lio) print*,' >> ',varname,' ',var
+    !
+#endif
+    !
+  end subroutine h5r_int4
+  !
+  subroutine h5r_real8(varname,var)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(out) :: var
+    !
+#ifdef HDF5
+    ! local data
+    real(8) :: rvar(1)
+    integer :: h5error
+    integer(hsize_t) :: dimt(1)=(/1/)
+    !
+    ! read the data
+    !
+    call h5ltread_dataset_f(h5file_id,varname,h5t_native_double,rvar,  &
+                                                           dimt,h5error)
+    var=rvar(1)
+    if(h5error.ne.0)  stop ' !! error in h5r_int4 call h5ltread_dataset_f'
+    !
+    if(lio) print*,' >> ',varname,' ',var
+    !
+#endif
+    !
+  end subroutine h5r_real8
+  !
+  subroutine h5r_real8_1d(varname,var,dim)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(out) :: var(:)
+    integer,intent(in) :: dim
+    !
+#ifdef HDF5
+    ! local data
+    real(8) :: rvar(dim)
+    integer :: h5error
+    integer(hsize_t) :: dimt(1)
+    !
+    ! read the data
+    dimt(1) =dim
+    !
+    call h5ltread_dataset_f(h5file_id,varname,h5t_native_double,rvar,  &
+                                                           dimt,h5error)
+    var=rvar
+    if(h5error.ne.0)  stop ' !! error in h5r_int4 call h5ltread_dataset_f'
+    !
+    if(lio) print*,' >> ',varname,' ',var
+    !
+#endif
+    !
+  end subroutine h5r_real8_1d
   !+-------------------------------------------------------------------+
   !| This end of the function h5ra3d_r8.                               |
   !+-------------------------------------------------------------------+
@@ -362,15 +441,236 @@ module hdf5io
   !| -------------                                                     |
   !| 28-05-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine h5_writearray3d(varin,vname,fname,explicit,ierr)
+  subroutine h5_write1int(var,varname,filename,explicit,newfile)
     !
-    real(8),intent(in) :: varin(:,:,:)
-    character(len=*),intent(in) :: vname,fname
-    logical,intent(in), optional:: explicit
-    integer,intent(out), optional:: ierr
+    integer,intent(in) :: var
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit,newfile
+    logical :: lexplicit,lnew
+    logical :: lfilalive
+    !
+    integer :: v(1)
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    if (present(newfile)) then
+       lnew      = newfile
+    else
+       lnew = .false. 
+    end if
+    !
+    v=var
+    !
+    call h5open_f(h5error)
+    !
+    if(lnew) then
+      call h5fcreate_f(filename,h5f_acc_trunc_f,file_id,h5error)
+    else
+      call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    endif
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_write1int 1'
+    !
+    dimt=(/1/)
+    !
+    ! write the dataset.
+    call h5ltmake_dataset_f(file_id,varname,1,dimt,h5t_native_integer,v,h5error)
+    if(h5error .ne. 0) stop 'h5 write error h5_write1int'
+    if(lexplicit) print*,' << ',varname,' to ',filename
+    !
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_write1int 2'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_write1int 3'
+    !
+  end subroutine h5_write1int
+  !
+  subroutine h5_writearray1dint(var,varname,filename,explicit,newfile)
+    !
+    integer,intent(in) :: var(:)
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit,newfile
+    logical :: lexplicit,lnew
+    logical :: lfilalive
+    integer :: dim1
+    !
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    if (present(newfile)) then
+       lnew      = newfile
+    else
+       lnew = .false. 
+    end if
+    !
+    call h5open_f(h5error)
+    !
+    if(lnew) then
+      call h5fcreate_f(filename,h5f_acc_trunc_f,file_id,h5error)
+    else
+      call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    endif
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_writearray1dint 1'
+    !
+    dim1=size(var)
+    dimt=(/dim1+1/)
+    !
+    ! write the dataset.
+    call h5ltmake_dataset_f(file_id,varname,1,dimt,h5t_native_integer,var,h5error)
+    if(h5error .ne. 0) stop 'h5 write error h5_writearray1dint'
+    if(lexplicit) print*,' << ',varname,' to ',filename
+    !
+    call h5fclose_f(file_id, h5error)
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_writearray1dint 2'
+    ! close fortran interface.
+    call h5close_f(h5error)
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_writearray1dint 3'
+    !
+  end subroutine h5_writearray1dint
+  !
+  subroutine h5_write1rl8(var,varname,filename,explicit,newfile)
+    !
+    real(8),intent(in) :: var
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit,newfile
+    logical :: lexplicit,lnew
+    logical :: lfilalive
+    !
+    real(8) :: v(1)
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    if (present(newfile)) then
+       lnew      = newfile
+    else
+       lnew = .false. 
+    end if
+    !
+    v=var
+    !
+    call h5open_f(h5error)
+    !
+    if(lnew) then
+      call h5fcreate_f(filename,h5f_acc_trunc_f,file_id,h5error)
+    else
+      call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    endif
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_write1rl8 1'
+    !
+    dimt=(/1/)
+    !
+    ! write the dataset.
+    call h5ltmake_dataset_f(file_id,varname,1,dimt,h5t_native_double,v,h5error)
+    if(h5error .ne. 0) stop 'h5 write error h5_write1rl8'
+    if(lexplicit) print*,' << ',varname,' to ',filename
+    !
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_write1rl8 2'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_write1rl8 3'
+    !
+  end subroutine h5_write1rl8
+  !
+  subroutine h5_writearray1d(var,varname,filename,explicit,newfile)
+    !
+    real(8),intent(in) :: var(:)
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit,newfile
+    logical :: lexplicit,lnew
+    logical :: lfilalive
+    integer :: dim1
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    if (present(newfile)) then
+       lnew      = newfile
+    else
+       lnew = .false. 
+    end if
+    !
+    call h5open_f(h5error)
+    !
+    if(lnew) then
+      call h5fcreate_f(filename,h5f_acc_trunc_f,file_id,h5error)
+    else
+      call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    endif
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_writearray1d 1'
+    !
+    dim1=size(var)
+    dimt=(/dim1/)
+    !
+    ! write the dataset.
+    call h5ltmake_dataset_f(file_id,varname,1,dimt,h5t_native_double,var,h5error)
+    if(h5error .ne. 0) stop 'h5 write error h5_writearray1d'
+    if(lexplicit) print*,' << ',varname,' to ',filename
+    !
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_writearray1d 2'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_writearray1d 3'
+    !
+  end subroutine h5_writearray1d
+  !
+  subroutine h5_writearray3d(var,varname,filename,explicit,newfile)
+    !
+    real(8),intent(in) :: var(:,:,:)
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit,newfile
     !
     integer :: dim1,dim2,dim3
-    logical :: lexplicit
+    logical :: lexplicit,lnew
     logical :: lfilalive
     !
     integer(hid_t) :: file_id
@@ -385,28 +685,32 @@ module hdf5io
     else
        lexplicit = .true.
     end if
+    if (present(newfile)) then
+       lnew      = newfile
+    else
+       lnew = .false. 
+    end if
     !
-    dim1=size(varin,1)
-    dim2=size(varin,2)
-    dim3=size(varin,3)
+    dim1=size(var,1)
+    dim2=size(var,2)
+    dim3=size(var,3)
     !
     call h5open_f(h5error)
     !
-    inquire(file=fname, exist=lfilalive)
-    if(lfilalive) then
-      call h5fopen_f(fname,H5F_ACC_RDWR_F,file_id,h5error)
+    if(lnew) then
+      call h5fcreate_f(filename,h5f_acc_trunc_f,file_id,h5error)
     else
-      call h5fcreate_f(fname,H5F_ACC_TRUNC_F,file_id,h5error)
-    end if
+      call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    endif
+    !
     if(h5error.ne.0)  stop ' !! error in h5_writearray3d 1'
     !
     dimt=(/dim1,dim2,dim3/)
     !
     ! write the dataset.
-    call h5ltmake_dataset_f(file_id,vname,3,dimt,h5t_native_double,varin,h5error)
+    call h5ltmake_dataset_f(file_id,varname,3,dimt,h5t_native_double,var,h5error)
     if(h5error .ne. 0) stop 'h5 write error h5_writearray3d'
-    if(lexplicit) print*,' << ',vname,' to ',fname
-    if(present(ierr)) ierr=h5error
+    if(lexplicit) print*,' << ',varname,' to ',filename
     if(h5error.ne.0)  stop ' !! error in h5_writearray3d 2'
     !
     call h5fclose_f(file_id, h5error)

@@ -31,6 +31,7 @@ module mainloop
     use commvar,  only: maxstep,time,deltat,nstep,nwrite,ctime,        &
                         nlstep,rkscheme
     use readwrite,only: readcont,timerept
+    use commcal,  only: cflcal
     !
     ! local data
     real(8) :: var1
@@ -48,6 +49,8 @@ module mainloop
       if(loop_counter==nwrite .or. loop_counter==0) then
         !
         call readcont
+        !
+        call cflcal(deltat)
         !
         ctime(2)=ptime()-var1
         !

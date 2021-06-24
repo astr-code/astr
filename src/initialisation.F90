@@ -27,51 +27,59 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine flowinit
     !
-    use commvar,  only: flowtype,nstep,time,filenumb,ninit
+    use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart
     use commarray,only: vel,rho,prs,spc,tmp,q
-    use readwrite,only: readcont,readflowini3d
+    use readwrite,only: readcont,readflowini3d,readcheckpoint
     use fludyna,  only: fvar2q
     !
-    if(ninit==3) then
+    if(lrestart) then
       !
-      call readflowini3d
+      call readcheckpoint
       !
-      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     else
       !
-      select case(trim(flowtype))
-      case('2dvort')
-        call vortini
-      case('channel')
-        call chanini
-      case('tgv')
-        call tgvini
-      case('jet')
-        call jetini
-      case('accutest')
-        call accini
-      case('cylinder')
-        call cylinderini
-      case('mixlayer')
-        call mixlayerini
-      case('shuosher')
-        call shuosherini
-      case default
-        print*,trim(flowtype)
-        stop ' !! flowtype not defined @ flowinit'
-      end select
-    !
+      if(ninit==3) then
+        !
+        call readflowini3d
+        !
+      else
+        !
+        select case(trim(flowtype))
+        case('2dvort')
+          call vortini
+        case('channel')
+          call chanini
+        case('tgv')
+          call tgvini
+        case('jet')
+          call jetini
+        case('accutest')
+          call accini
+        case('cylinder')
+          call cylinderini
+        case('mixlayer')
+          call mixlayerini
+        case('shuosher')
+          call shuosherini
+        case default
+          print*,trim(flowtype)
+          stop ' !! flowtype not defined @ flowinit'
+        end select
+        !
+      endif
+      !
+      nstep=0
+      time=0.d0
+      !
+      filenumb=0
+      !
     endif
     !
-    nstep=0
-    time=0.d0
-    !
-    filenumb=0
-    !
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                  density=rho(0:im,0:jm,0:km),                       &
+                 velocity=vel(0:im,0:jm,0:km,:),                     &
+                 pressure=prs(0:im,0:jm,0:km),                       &
+                  species=spc(0:im,0:jm,0:km,:)                      )
     call readcont
     !
     if(lio) print*,' ** flowfield initialised.'
@@ -333,7 +341,7 @@ module initialisation
   subroutine accini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
-    use fludyna,  only: thermal,fvar2q
+    use fludyna,  only: thermal
     !
     ! local data
     integer :: i,j,k,l
@@ -410,11 +418,6 @@ module initialisation
     !   stop ' !! error @ accini'
     ! endif
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     call tecbin('testout/tecinit'//mpirankname//'.plt',                &
                                       x(0:im,0:jm,0:km,1),'x',         &
@@ -446,7 +449,7 @@ module initialisation
   subroutine shuosherini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
-    use fludyna,  only: thermal,fvar2q
+    use fludyna,  only: thermal
     !
     ! local data
     integer :: i,j,k
@@ -475,12 +478,6 @@ module initialisation
     enddo
     enddo
     enddo
-    !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -513,7 +510,7 @@ module initialisation
   subroutine vortini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal,fvar2q
+    use fludyna,  only: thermal
     !
     ! local data
     integer :: i,j,k
@@ -544,11 +541,6 @@ module initialisation
     enddo
     enddo
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -576,7 +568,7 @@ module initialisation
   subroutine tgvini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal,fvar2q
+    use fludyna,  only: thermal
     !
     ! local data
     integer :: i,j,k
@@ -599,11 +591,6 @@ module initialisation
     enddo
     enddo
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -634,11 +621,11 @@ module initialisation
     !
     use commvar,  only: prandtl,mach,gamma,xmin,xmax,ymin,ymax,zmin,zmax
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal,fvar2q
+    use fludyna,  only: thermal
     !
     ! local data
     integer :: i,j,k,l
-    real(8) :: theta,theter,fx,gz,zl,randomv(15)
+    real(8) :: theta,theter,fx,gz,zl,randomv(15),ran
     !
     theta=0.1d0
     !
@@ -678,6 +665,9 @@ module initialisation
       do j=0,jm
       do i=0,im
         !
+        call random_number(ran)
+        ran=ran*2.d0-1.d0
+        !
         theter=x(i,0,k,1)/(xmax-xmin)*2.d0*pi
         fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*0.192450089729875d0
         !
@@ -695,7 +685,7 @@ module initialisation
         end do
         !
         rho(i,j,k)  =roinf
-        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)*(1.d0+0.3d0*fx*gz)
+        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)*(1.d0+0.3d0*fx*gz+0.1d0*ran)
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
         tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
@@ -714,11 +704,6 @@ module initialisation
       !
     endif
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -746,7 +731,7 @@ module initialisation
   subroutine jetini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal,fvar2q,jetvel
+    use fludyna,  only: thermal,jetvel
     !
     ! local data
     integer :: i,j,k
@@ -779,11 +764,6 @@ module initialisation
     enddo
     enddo
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -815,7 +795,7 @@ module initialisation
   subroutine mixlayerini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal,fvar2q,mixinglayervel
+    use fludyna,  only: thermal,mixinglayervel
     !
     ! local data
     integer :: i,j,k
@@ -843,11 +823,6 @@ module initialisation
     enddo
     enddo
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -877,7 +852,7 @@ module initialisation
   subroutine cylinderini
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal,fvar2q,jetvel
+    use fludyna,  only: thermal,jetvel
     !
     ! local data
     integer :: i,j,k
@@ -902,11 +877,6 @@ module initialisation
     enddo
     enddo
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                     &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
     !
     call tecbin('testout/tecinit'//mpirankname//'.plt',                &
                                       x(0:im,0:jm,0:km,1),'x',         &

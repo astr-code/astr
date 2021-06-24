@@ -3359,9 +3359,11 @@ module bc
         drho   =-deriv(rho(i-1,j,k),rho(i-2,j,k) )/dx
         dtmp   =-deriv(tmp(i-1,j,k),tmp(i-2,j,k) )/dx
         !
-        do jspc=1,num_species
-          dspc(jspc)=-deriv(spc(i-1,j,k,jspc),spc(i-2,j,k,jspc) )/dx
-        enddo
+        if(num_species>0) then
+          do jspc=1,num_species
+            dspc(jspc)=-deriv(spc(i-1,j,k,jspc),spc(i-2,j,k,jspc) )/dx
+          enddo
+        endif
         !
         ! if(jrk==0 .and. j==0) then
         !   dy=x(i-1,j+1,k,2)-x(i-1,j,k,2)
@@ -3387,9 +3389,11 @@ module bc
         lodi(4) = lambda(4) *dvel(3)
         lodi(5) = lambda(5) *(dprs+rho(i-1,j,k)*css*dvel(1))
         !
-        do jspc=1,num_species
-          lodi(5+jspc)=lambda(5+jspc)*dspc(jspc)
-        enddo
+        if(num_species>0) then
+          do jspc=1,num_species
+            lodi(5+jspc)=lambda(5+jspc)*dspc(jspc)
+          enddo
+        endif
         !
         ! soft outflow condition
         sigma=0.25d0
@@ -3464,9 +3468,11 @@ module bc
         drho   =-deriv(rho(i,j-1,k),rho(i,j-2,k) )/dy
         dtmp   =-deriv(tmp(i,j-1,k),tmp(i,j-2,k) )/dy
         !
-        do jspc=1,num_species
-          dspc(jspc)=-deriv(spc(i,j-1,k,jspc),spc(i,j-2,k,jspc) )/dy
-        enddo
+        if(num_species>0) then
+          do jspc=1,num_species
+            dspc(jspc)=-deriv(spc(i,j-1,k,jspc),spc(i,j-2,k,jspc) )/dy
+          enddo
+        endif
         !
         ! LODI with 1-side difference
         lodi(1) = lambda(1) *(dprs-rho(i,j-1,k)*css*dvel(2))
@@ -3475,9 +3481,11 @@ module bc
         lodi(4) = lambda(4) *dvel(3)
         lodi(5) = lambda(5) *(dprs+rho(i,j-1,k)*css*dvel(2))
         !
-        do jspc=1,num_species
-          lodi(5+jspc)=lambda(5+jspc)*dspc(jspc)
-        enddo
+        if(num_species>0) then
+          do jspc=1,num_species
+            lodi(5+jspc)=lambda(5+jspc)*dspc(jspc)
+          enddo
+        endif
         !
         ! soft outflow condition
         ! tran(1)=vel(i-1,j,k,2)*(dpdy-rho(i-1,j,k)*css*dudy)+           &

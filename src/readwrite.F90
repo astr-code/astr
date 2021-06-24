@@ -85,6 +85,7 @@ module readwrite
     use commvar, only : hand_fs,hand_rp
     !
     if(lio) then
+      !
       call system('mkdir testout/')
       call system('mkdir outdat/')
       !
@@ -113,7 +114,8 @@ module readwrite
                         flowtype,ndims,lfilter,alfa_filter,bctype,     &
                         twall,lfftk,kcutoff,ninit,rkscheme,            &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
-                        spg_kmin,spg_kmax,lchardecomp,recon_schem
+                        spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
+                        lrestart
     !
     ! local data
     character(len=42) :: typedefine
@@ -308,12 +310,16 @@ module readwrite
       enddo
       write(*,'(2X,62A)')('-',i=1,62)
       !
-      if(ninit==2) then
-        write(*,'(2X,A62)')' initialise by rading a flowini2d file'
-      elseif(ninit==3) then
-        write(*,'(2X,A62)')' initialise by rading a flowini3d file'
+      if(lrestart) then
+        write(*,'(2X,A62)')' restart a previous computation'
       else
-        write(*,'(2X,A62)')' initialise by a user defined way'
+        if(ninit==2) then
+          write(*,'(2X,A62)')' initialise by rading a flowini2d file'
+        elseif(ninit==3) then
+          write(*,'(2X,A62)')' initialise by rading a flowini3d file'
+        else
+          write(*,'(2X,A62)')' initialise by a user defined way'
+        endif
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       !
@@ -340,7 +346,7 @@ module readwrite
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
-                        recon_schem
+                        recon_schem,lrestart
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     !
@@ -367,6 +373,8 @@ module readwrite
       if(lkhomo) write(*,'(A)')' k'
       read(11,'(/)')
       read(11,*)nondimen,diffterm,lfilter,lreadgrid,lfftk
+      read(11,'(/)')
+      read(11,*)lrestart
       read(11,'(/)')
       read(11,*)alfa_filter,kcutoff
       !
@@ -414,6 +422,8 @@ module readwrite
     call bcast(lreadgrid)
     call bcast(lfftk)
     call bcast(lchardecomp)
+    !
+    call bcast(lrestart)
     !
     call bcast(flowtype)
     call bcast(conschm)
@@ -555,6 +565,63 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to read a checkpoint file for restarting. |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-06-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readcheckpoint
+    !
+    use commvar, only: nstep,time,flowtype,num_species,im,jm,km,force
+    use commarray, only : rho,vel,prs,tmp,spc
+    use statistic,only : massflux,massflux_target
+    use hdf5io
+    !
+    ! local data
+    integer :: nstep_1,jsp
+    character(len=2) :: spname
+    !
+    call h5io_init(filename='checkpoint/auxiliary.h5',mode='read')
+    call h5read(varname='nstep',var=nstep)
+    call h5read(varname='filenumb',var=rho(0:im,0:jm,0:km))
+    if(flowtype=='channel') then
+      call h5read(varname='massflux',var=massflux)
+      call h5read(varname='massflux_target',var=massflux_target)
+      call h5read(varname='force',var=force,dim=3)
+    endif
+    call h5io_end
+    !
+    call h5io_init(filename='checkpoint/flowfield.h5',mode='read')
+    call h5read(varname='nstep',var=nstep_1)
+    !
+    if(nstep_1==nstep) then
+      call h5read(varname='time',var=time)
+      call h5read(varname='ro',  var=rho(0:im,0:jm,0:km))
+      call h5read(varname='u1',  var=vel(0:im,0:jm,0:km,1))
+      call h5read(varname='u2',  var=vel(0:im,0:jm,0:km,2))
+      call h5read(varname='u3',  var=vel(0:im,0:jm,0:km,3))
+      call h5read(varname='p',   var=prs(0:im,0:jm,0:km))
+      call h5read(varname='t',   var=tmp(0:im,0:jm,0:km))
+      do jsp=1,num_species
+         write(spname,'(i2.2)')jsp
+        call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+      enddo
+    else
+      if(lio)  print*,' !! flowfield.h5 NOT consistent with auxiliary.h5'
+      if(lio)  print*,' nstep =',nstep,' in auxiliary.h5 '
+      if(lio)  print*,' nstep =',nstep_1,' in flowfield.h5 '
+      call mpistop
+    endif
+    !
+    if(lio)  print*,' ** checkpoint file read. '
+    !
+  end subroutine readcheckpoint
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readcheckpoint.                         |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to write a grid file for postprocess.     |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -588,9 +655,11 @@ module readwrite
   subroutine output
     !
     use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
-                       lwrite,lavg,nsamples
-    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs,rom,u1m,u2m,u3m,   &
-                         pm,tm,u11,u22,u33,u12,u13,u23,tt,pp
+                       lwrite,lavg,nsamples,force
+    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
+    use statistic,only : rom,u1m,u2m,u3m,pm,tm,                        &
+                         u11,u22,u33,u12,u13,u23,tt,pp,                &
+                         massflux,massflux_target
     !
     use hdf5io
     !
@@ -610,8 +679,6 @@ module readwrite
     endif
     !
     call h5io_init(trim(outfilename),mode='write')
-    call h5write(varname='nstep',var=nstep)
-    call h5write(varname='time',var=time)
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
     call h5write(varname='u1', var=vel(0:im,0:jm,0:km,1))
     call h5write(varname='u2', var=vel(0:im,0:jm,0:km,2))
@@ -623,6 +690,22 @@ module readwrite
       call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
     enddo
     call h5io_end
+    !
+    if(lio) then
+      call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
+      call h5srite(varname='time',var=time,filename=trim(outfilename))
+      !
+      call h5srite(varname='nstep',var=nstep,                          &
+                          filename='outdat/auxiliary.h5',newfile=.true.)
+      call h5srite(varname='filenumb',var=filenumb,                    &
+                                         filename='outdat/auxiliary.h5')
+      call h5srite(varname='massflux',var=massflux,                    &
+                                         filename='outdat/auxiliary.h5')
+      call h5srite(varname='massflux_target',var=massflux_target,      &
+                                         filename='outdat/auxiliary.h5')
+      call h5srite(varname='force',var=force,                          &
+                                         filename='outdat/auxiliary.h5')
+    endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
     !     print*,'------------------------------------'
