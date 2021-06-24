@@ -573,7 +573,8 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readcheckpoint
     !
-    use commvar, only: nstep,time,flowtype,num_species,im,jm,km,force
+    use commvar, only: nstep,filenumb,time,flowtype,num_species,       &
+                       im,jm,km,force
     use commarray, only : rho,vel,prs,tmp,spc
     use statistic,only : massflux,massflux_target
     use hdf5io
@@ -584,7 +585,7 @@ module readwrite
     !
     call h5io_init(filename='checkpoint/auxiliary.h5',mode='read')
     call h5read(varname='nstep',var=nstep)
-    call h5read(varname='filenumb',var=rho(0:im,0:jm,0:km))
+    call h5read(varname='filenumb',var=filenumb)
     if(flowtype=='channel') then
       call h5read(varname='massflux',var=massflux)
       call h5read(varname='massflux_target',var=massflux_target)
@@ -605,7 +606,7 @@ module readwrite
       call h5read(varname='t',   var=tmp(0:im,0:jm,0:km))
       do jsp=1,num_species
          write(spname,'(i2.2)')jsp
-        call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+        call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
       enddo
     else
       if(lio)  print*,' !! flowfield.h5 NOT consistent with auxiliary.h5'

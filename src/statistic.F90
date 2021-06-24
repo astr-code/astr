@@ -268,7 +268,7 @@ module statistic
           enddo
           !
           backspace(hand_fs)
-          if(ns==nstep) print*,' ** flowstate.dat is resumed.'
+          if(ns==nstep) print*,' ** flowstate.dat resumed'
           !
         else
           ! a new flowstat file
