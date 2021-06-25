@@ -7,7 +7,7 @@
 !+---------------------------------------------------------------------+
 module readwrite
   !
-  use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk
+  use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,ptime
   use tecio
   !
   implicit none
@@ -653,7 +653,7 @@ module readwrite
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine output
+  subroutine output(subtime)
     !
     use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
                        lwrite,lavg,nsamples,force
@@ -664,11 +664,18 @@ module readwrite
     !
     use hdf5io
     !
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
     ! local data
     character(len=4) :: stepname
     character(len=2) :: spname
     character(len=64) :: outfilename
     integer :: jsp,i
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     if(lwrite) then
       write(stepname,'(i4.4)')filenumb
@@ -753,6 +760,11 @@ module readwrite
     !                                         vel(0:im,0:jm,0:km,2),'v', &
     !                                         prs(0:im,0:jm,0:km),'p' )
     !
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg 
+    !
+    return
+    !
   end subroutine output
   !+-------------------------------------------------------------------+
   !| The end of the subroutine output.                                 |
@@ -792,7 +804,6 @@ module readwrite
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'total time cost : ',    &
                             ctime(2),' - ',100.d0*ctime(2)/ctime(2),' %'
       !
-#ifdef cputime
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - rk          : ',    &
                             ctime(3),' - ',100.d0*ctime(3)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - rhs       : ',    &
@@ -809,7 +820,6 @@ module readwrite
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
-#endif
       !
       flush(hand_rp)
       !

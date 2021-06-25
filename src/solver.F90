@@ -8,8 +8,9 @@
 module solver
   !
   use constdef
-  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,ptime,irk,jrk,krk
-  use commvar,  only : ndims,ks,ke,hm,ctime,hm,lfftk
+  use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
+                       datasync,ptime,irk,jrk,krk
+  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime
   !
   implicit none
   !
@@ -300,7 +301,7 @@ module solver
     ! end of cal d<x,y,z>/d<i,j,k>
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    call dataswap(dx)
+    call dataswap(dx,subtime=ctime(7))
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Calculating geometrical 
@@ -337,7 +338,9 @@ module solver
       stop ' !! ndimes not defined at jacob calculation.'
     endif
     !
-    call dataswap(jacob)
+    call dataswap(jacob,subtime=ctime(7))
+    !
+    call datasync(jacob(0:im,0:jm,0:km),subtime=ctime(7))
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! End of Calculating 
@@ -494,7 +497,7 @@ module solver
       !
     endif
     !
-    call dataswap(dxi)
+    call dataswap(dxi,subtime=ctime(7))
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Calculating geometrical
@@ -624,7 +627,13 @@ module solver
     ! geometrical vector.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    call dataswap(dxi)
+    call dataswap(dxi,subtime=ctime(7))
+    !
+    do j=1,3
+    do i=1,3
+      call datasync(dxi(0:im,0:jm,0:km,i,j),subtime=ctime(7))
+    enddo
+    enddo
     !
     call geombc
     !
@@ -643,7 +652,6 @@ module solver
     xmin=pmin(xmin)
     ymin=pmin(ymin)
     zmin=pmin(zmin)
-    !
     !
     if(lio) then
       !
@@ -687,6 +695,7 @@ module solver
     ! ! ! 
     deallocate(dx,can)
     !
+    !
     if(allocated(gci)) deallocate(gci)
     if(allocated(gcj)) deallocate(gcj)
     if(allocated(gck)) deallocate(gck)
@@ -705,55 +714,49 @@ module solver
   !| -------------                                                     |
   !| 09-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine rhscal
+  subroutine rhscal(subtime)
     !
     use commarray, only : qrhs,x,q
     use commvar,   only : flowtype,conschm,diffterm
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
+    ! local data
     integer :: j
     integer :: nconv
     !
-#ifdef cputime
     real(8) :: time_beg
     !
-    time_beg=ptime() 
-#endif
+    if(present(subtime)) time_beg=ptime() 
     !
     read(conschm(1:1),*) nconv
     !
     if(mod(nconv,2)==0) then
-      call convrsdcal6
+      call convrsdcal6(subtime=ctime(9))
     else
       !
       if(conschm(4:4)=='e') then
-        call convrsduwd
+        call convrsduwd(subtime=ctime(9))
       elseif(conschm(4:4)=='c') then
-        call convrsdcmp
+        call convrsdcmp(subtime=ctime(9))
       else
         stop ' !! error @ conschm'
       endif
       !
     endif
     !
-#ifdef cputime
-    ctime(9)=ctime(9)+ptime()-time_beg
-#endif
-    !
     qrhs=-qrhs
     !
-#ifdef cputime
-    time_beg=ptime() 
-#endif
-    !
-    if(diffterm) call diffrsdcal6
+    if(diffterm) call diffrsdcal6(subtime=ctime(10))
     !
     if(trim(flowtype)=='channel') then 
       call srcchan
     endif
     !
-#ifdef cputime
-    ctime(10)=ctime(10)+ptime()-time_beg
-#endif
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
     !
   end subroutine rhscal
   !+-------------------------------------------------------------------+
@@ -839,7 +842,7 @@ module solver
   !| -------------                                                     |
   !| 22-03-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine convrsduwd
+  subroutine convrsduwd(subtime)
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,                  &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
@@ -847,6 +850,9 @@ module solver
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use fludyna,  only: sos
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k,iss,iee
@@ -860,6 +866,10 @@ module solver
                fhcpc(5),fhcmc(5)
     !
     real(8), allocatable, dimension(:,:) :: fswp,fswm,Fh
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     eps=0.04d0
     gm2=0.5d0/gamma
@@ -1218,6 +1228,11 @@ module solver
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! ! end of calculation at j direction
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
   end subroutine convrsduwd
   !+-------------------------------------------------------------------+
   !| The end of the subroutine convrsduwd.                             |
@@ -1231,7 +1246,7 @@ module solver
   !| -------------                                                     |
   !| 22-03-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine convrsdcmp
+  subroutine convrsdcmp(subtime)
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,                  &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
@@ -1239,6 +1254,9 @@ module solver
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use fludyna,  only: sos
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k,iss,iee
@@ -1252,6 +1270,10 @@ module solver
                fhcpc(5),fhcmc(5)
     !
     real(8), allocatable, dimension(:,:) :: fswp,fswm,fhcp,fhcm,Fh
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     eps=0.04d0
     gm2=0.5d0/gamma
@@ -1579,6 +1601,11 @@ module solver
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! ! end of calculation at j direction
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
   end subroutine convrsdcmp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine convrsdcmp.                             |
@@ -1706,16 +1733,23 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2009-06-03.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine convrsdcal6
+  subroutine convrsdcal6(subtime)
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,conschm,          &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use commfunc, only: ddfc
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
     ! local data
     integer :: i,j,k,jspc,n
-    real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:) 
+    real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:)
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along i direction
@@ -1827,6 +1861,10 @@ module solver
       !
     endif
     !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
   end subroutine convrsdcal6
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine ConvRsdCal6.
@@ -1839,7 +1877,7 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2009-06-09.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine diffrsdcal6
+  subroutine diffrsdcal6(subtime)
     !
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,reynolds,prandtl,  &
@@ -1849,11 +1887,18 @@ module solver
     use fludyna,   only : miucal
     use tecio
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
     ! local data
     integer :: i,j,k,n,ncolm
     real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux
     real(8) :: miu,miu2,hcc,s11,s12,s13,s22,s23,s33,skk
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     dvel=0.d0
     dtmp=0.d0
@@ -2049,9 +2094,9 @@ module solver
     enddo
     enddo
     !
-    call dataswap(sigma)
+    call dataswap(sigma,subtime=ctime(7))
     !
-    call dataswap(qflux)
+    call dataswap(qflux,subtime=ctime(7))
     !
     ! Calculating along i direction.
     !
@@ -2178,6 +2223,10 @@ module solver
     !
     deallocate(sigma,qflux)
     !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
   end subroutine diffrsdcal6
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine diffrsdcal6.
@@ -2210,7 +2259,7 @@ module solver
     !
     if(lisponge) then
       !
-      call dataswap(q,direction=1)
+      call dataswap(q,direction=1,subtime=ctime(7))
       !
       !
       if(spg_imax>0) then
@@ -2280,25 +2329,26 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2008-11-03.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine filterq
+  subroutine filterq(subtime)
     !
     use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
                          alfa_filter,ndims
     use commarray,only : q
     use commfunc, only : spafilter10
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
     ! local data
     integer :: i,j,k,n,m
     real(8),allocatable :: phi(:,:),fph(:,:)
     !
-#ifdef cputime
     real(8) :: time_beg
     !
-    time_beg=ptime()
-#endif
+    if(present(subtime)) time_beg=ptime() 
     !
     ! filtering in i direction
-    call dataswap(q,direction=1)
+    call dataswap(q,direction=1,subtime=ctime(7))
     !
     allocate(phi(-hm:im+hm,1:numq),fph(0:im,1:numq))
     !
@@ -2323,7 +2373,7 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
     ! filtering in j direction
-    call dataswap(q,direction=2)
+    call dataswap(q,direction=2,subtime=ctime(7))
     !
     allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
     !
@@ -2349,7 +2399,7 @@ module solver
     !
     if(ndims==3) then
       !
-      call dataswap(q,direction=3)
+      call dataswap(q,direction=3,subtime=ctime(7))
       !
       !
       allocate(phi(-hm:km+hm,1:numq),fph(0:km,1:numq))
@@ -2376,11 +2426,7 @@ module solver
     ! end filter in k direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-#ifdef cputime
-    !
-    ctime(8)=ctime(8)+ptime()-time_beg
-    !
-#endif
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
     !
@@ -2417,7 +2463,7 @@ module solver
     enddo
     enddo
     !
-    call dataswap(q)
+    call dataswap(q,subtime=ctime(7))
     ! !
     ! call boucon
     !

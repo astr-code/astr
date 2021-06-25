@@ -9,7 +9,8 @@ module statistic
   !
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
                        zmin,zmax,nstep,deltat,force,numq
-  use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,irk,jrk,jrkm
+  use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
+                       irk,jrk,jrkm,ptime
   !
   implicit none
   !
@@ -138,12 +139,18 @@ module statistic
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine statcal
+  subroutine statcal(subtime)
     !
     use commvar,  only : flowtype
     use commarray,only : vel,prs,rho
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
     ! local data
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     if(trim(flowtype)=='tgv') then
       enstophy=enstophycal()
@@ -182,6 +189,8 @@ module statistic
     endif
     !
     call maxmincal
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
   end subroutine statcal
   !+-------------------------------------------------------------------+
@@ -242,7 +251,7 @@ module statistic
     ! local data
     logical,save :: linit=.true.
     logical :: fex
-    integer :: nprthead=10
+    integer :: nprthead=200
     integer :: i,ferr,ns
     ! 
     if(lio) then
@@ -313,7 +322,8 @@ module statistic
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
                                                   'fbcx','forcex','wrms'
           elseif(trim(flowtype)=='cylinder') then
-            write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
+            write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf',        &
+                                                        'p_inf','ro_inf'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
                                  'q1max','q2max','q3max','q4max','q5max'

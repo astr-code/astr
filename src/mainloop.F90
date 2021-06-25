@@ -8,8 +8,8 @@
 module mainloop
   !
   use constdef
-  use parallel, only: lio,mpistop,mpirank,qswap,dataswap,mpirankname,  &
-                      pmax,ptime,irk,jrk,irkm,jrkm
+  use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
+                      ptime,irk,jrk,irkm,jrkm
   use commvar,  only: im,jm,km,ia,ja,ka
   use tecio
   !
@@ -165,9 +165,7 @@ module mainloop
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
     !
-#ifdef cputime
     time_beg=ptime()
-#endif
     !
     if(firstcall) then
       !
@@ -197,25 +195,16 @@ module mainloop
       !
       qrhs=0.d0
       !
-      call qswap
+      call qswap(ctime(7))
       !
       call boucon
       !
-#ifdef cputime
-      time_beg_rhs=ptime()
-#endif
-      call rhscal
-#ifdef cputime
-      ctime(4)=ctime(4)+ptime()-time_beg_rhs
-#endif
+      call rhscal(ctime(4))
       !
       if(irk==1) then
         !
-#ifdef cputime
-        time_beg_sta=ptime()
-#endif
         !
-        call statcal
+        call statcal(ctime(5))
         !
         call statout
         !
@@ -231,20 +220,10 @@ module mainloop
           nsamples=0
         endif
         !
-#ifdef cputime
-        ctime(5)=ctime(5)+ptime()-time_beg_sta
-#endif
         !
         if(loop_counter==nwrite .or. loop_counter==0) then
-#ifdef cputime
-          time_beg_io=ptime()
-#endif
           !
-          call output
-          !
-#ifdef cputime
-          ctime(6)=ctime(6)+ptime()-time_beg_io
-#endif
+          call output(ctime(6))
           !
         endif
         !
@@ -319,6 +298,7 @@ module mainloop
     use readwrite,only : output
     use bc,       only : boucon
     !
+    !
     ! logical data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(2,4)
@@ -326,9 +306,7 @@ module mainloop
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:),rhsav(:,:,:,:)
     !
-#ifdef cputime
-    time_beg=ptime()
-#endif
+    time_beg=ptime() 
     !
     if(firstcall) then
       !
@@ -357,25 +335,15 @@ module mainloop
       !
       qrhs=0.d0
       !
-      call qswap
+      call qswap(ctime(7))
       !
       call boucon
       !
-#ifdef cputime
-      time_beg_rhs=ptime()
-#endif
-      call rhscal
-#ifdef cputime
-      ctime(4)=ctime(4)+ptime()-time_beg_rhs
-#endif
+      call rhscal(ctime(4))
       !
       if(nrk==1) then
         !
-#ifdef cputime
-        time_beg_sta=ptime()
-#endif
-        !
-        call statcal
+        call statcal(ctime(5))
         !
         call statout
         !
@@ -391,20 +359,9 @@ module mainloop
           nsamples=0
         endif
         !
-#ifdef cputime
-        ctime(5)=ctime(5)+ptime()-time_beg_sta
-#endif
-        !
         if(loop_counter==nwrite .or. loop_counter==0) then
-#ifdef cputime
-          time_beg_io=ptime()
-#endif
           !
-          call output
-          !
-#ifdef cputime
-          ctime(6)=ctime(6)+ptime()-time_beg_io
-#endif
+          call output(ctime(6))
           !
         endif
         !

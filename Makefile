@@ -13,7 +13,7 @@ FCFLAGS= -O3
 
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
-OPTIONS3 = -DHDF5 -Dcputime
+OPTIONS3 = -DHDF5
 # OMP = -fopenmp
 # OPTIONS1 = -D__GFORTRAN__ -ffree-line-length-none
 #OPTIONS2 = -fno-range-check -fcheck=all
