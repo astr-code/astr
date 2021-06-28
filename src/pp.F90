@@ -94,7 +94,7 @@ module pp
       close(16)
       print*,' << ',trim(folder),'/datin/input.chl'
       !
-      call gridchannel(128,128,128,trim(folder))
+      call gridchannel(128,128,0,trim(folder))
       !
       open(16,file=trim(folder)//'/datin/contr.dat',form='formatted')
       write(16,'(A)')'############################################################'
@@ -189,7 +189,7 @@ module pp
     !
     ! call writetecbin('Testout/tecgrid.plt',x,'x',y,'y',z,'z')
     !
-    call h5srite(x,'x',folder//'/datin/grid.chl')
+    call h5srite(x,'x',folder//'/datin/grid.chl',newfile=.true.)
     call h5srite(y,'y',folder//'/datin/grid.chl')
     call h5srite(z,'z',folder//'/datin/grid.chl')
     !

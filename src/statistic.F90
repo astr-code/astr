@@ -156,11 +156,15 @@ module statistic
       enstophy=enstophycal()
       kenergy =kenergycal()
     elseif(trim(flowtype)=='channel') then
+      !
       fbcx=fbcxchan()
+      !
       massflux=massfluxchan()
+      !
       wrms=wrmscal()
       !
       if(nstep==0) then
+        !
         massflux_target=massflux
         force=0.d0
         !
@@ -171,6 +175,7 @@ module statistic
       force(1)=chanfoce(force(1),massflux,fbcx,massflux_target)
       !
       call bcast(force)
+      !
     elseif(trim(flowtype)=='cylinder') then
       vel_incom=0.d0
       prs_incom=0.d0
@@ -270,6 +275,7 @@ module statistic
             read(hand_fs,*,iostat=ferr)ns
             !
             if(ferr< 0) then
+              print*,' ** nstep=',ns,nstep
               print*,' ** end of flowstate.dat is reached.'
               exit
             endif
@@ -328,7 +334,7 @@ module statistic
             write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
                                  'q1max','q2max','q3max','q4max','q5max'
           endif
-          write(*,'(2X,76A)')('-',i=1,76)
+          write(*,'(2X,77A)')('-',i=1,76)
         endif
         !
         if(trim(flowtype)=='tgv') then
@@ -567,7 +573,7 @@ module statistic
   !+-------------------------------------------------------------------+
   real(8) function massfluxchan()
     !
-    use commarray,only : x,q
+    use commarray,only : x,q,rho
     !
     ! local data
     integer :: i,j,k,k1,k2
@@ -595,6 +601,7 @@ module statistic
       var1=0.5d0*(q(i,j,k,2)+q(i,j-1,k,2))
       !
       massfluxchan=massfluxchan+var1*dy
+      !
     enddo
     enddo
     enddo
@@ -628,6 +635,7 @@ module statistic
     !
     ! local data
     real(8) :: gn,qn1,ly
+    logical,save :: linit=.true.
     !
     ly=(ymax-ymin)
     !
@@ -640,7 +648,8 @@ module statistic
                0.2d0*(massflux-massfluxtarget))/ly
     endif
     !
-    ! if(lio) print*,massflux,massfluxtarget,'|',qn1,force,chanfoce
+    ! if(lio) write(*,"(I7,5(1X,E20.13E2))")                             &
+    !                           nstep,massflux,qn1,force,chanfoce,friction
     !
   end function chanfoce
   !+-------------------------------------------------------------------+

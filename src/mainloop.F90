@@ -34,9 +34,9 @@ module mainloop
     use commcal,  only: cflcal
     !
     ! local data
-    real(8) :: var1
+    real(8) :: time_beg
     !
-    var1=ptime()
+    time_beg=ptime()
     !
     do while(nstep<=maxstep)
       !
@@ -52,7 +52,7 @@ module mainloop
         !
         call cflcal(deltat)
         !
-        ctime(2)=ptime()-var1
+        ctime(2)=ptime()-time_beg
         !
         call timerept
         !
@@ -66,7 +66,7 @@ module mainloop
       !
     enddo
     !
-    ctime(1)=ptime()-var1
+    ctime(1)=ptime()-time_beg
     !
     ! call errest
     !
@@ -187,10 +187,6 @@ module mainloop
     !
     allocate(qsave(0:im,0:jm,0:km,1:numq))
     !
-    do m=1,numq
-      qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
-    enddo
-    !
     do irk=1,3
       !
       qrhs=0.d0
@@ -203,12 +199,15 @@ module mainloop
       !
       if(irk==1) then
         !
-        !
-        call statcal(ctime(5))
-        !
-        call statout
+        do m=1,numq
+          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
+        enddo
         !
         if(loop_counter.ne.0) then
+          !
+          call statcal(ctime(5))
+          !
+          call statout
           !
           if(lavg) then
             if(mod(nstep,navg)==0) call meanflowcal
@@ -216,8 +215,6 @@ module mainloop
             nsamples=0
           endif
           !
-        else
-          nsamples=0
         endif
         !
         !
@@ -326,11 +323,6 @@ module mainloop
     !
     allocate(qsave(0:im,0:jm,0:km,1:numq),rhsav(0:im,0:jm,0:km,1:numq))
     !
-    do m=1,numq
-      qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
-      rhsav(0:im,0:jm,0:km,m)=0.d0
-    enddo
-    !
     do nrk=1,4
       !
       qrhs=0.d0
@@ -343,11 +335,16 @@ module mainloop
       !
       if(nrk==1) then
         !
-        call statcal(ctime(5))
+        do m=1,numq
+          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
+          rhsav(0:im,0:jm,0:km,m)=0.d0
+        enddo
         !
-        call statout
-        !
-        if(loop_counter.ne.0) then
+        if(nstep==0 .or. loop_counter.ne.0) then
+          !
+          call statcal(ctime(5))
+          !
+          call statout
           !
           if(lavg) then
             if(mod(nstep,navg)==0) call meanflowcal
@@ -356,10 +353,11 @@ module mainloop
           endif
           !
         else
-          nsamples=0
+          ! call statcal(ctime(5))
+          ! call statout
         endif
         !
-        if(loop_counter==nwrite .or. loop_counter==0) then
+        if(loop_counter==nwrite) then
           !
           call output(ctime(6))
           !

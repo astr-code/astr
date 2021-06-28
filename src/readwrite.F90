@@ -574,14 +574,15 @@ module readwrite
   subroutine readcheckpoint
     !
     use commvar, only: nstep,filenumb,time,flowtype,num_species,       &
-                       im,jm,km,force
-    use commarray, only : rho,vel,prs,tmp,spc
+                       im,jm,km,force,numq
+    use commarray, only : rho,vel,prs,tmp,spc,q
     use statistic,only : massflux,massflux_target
     use hdf5io
     !
     ! local data
     integer :: nstep_1,jsp
-    character(len=2) :: spname
+    character(len=2) :: spname,qname
+    character(len=128) :: infilename
     !
     call h5io_init(filename='checkpoint/auxiliary.h5',mode='read')
     call h5read(varname='nstep',var=nstep)
@@ -608,12 +609,43 @@ module readwrite
          write(spname,'(i2.2)')jsp
         call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
       enddo
+      !
+      ! call h5io_init('checkpoint/qdata.h5',mode='read')
+      ! do jsp=1,numq
+      !   write(qname,'(i2.2)')jsp
+      !   call h5read(varname='q'//qname,var=q(0:im,0:jm,0:km,jsp))
+      ! enddo
+      ! call h5io_end
+      !
     else
       if(lio)  print*,' !! flowfield.h5 NOT consistent with auxiliary.h5'
       if(lio)  print*,' nstep =',nstep,' in auxiliary.h5 '
       if(lio)  print*,' nstep =',nstep_1,' in flowfield.h5 '
       call mpistop
     endif
+    !
+    ! infilename='checkpoint/flowfield'//mpirankname
+    ! open(16,file=trim(infilename),form='unformatted')
+    ! read(16)nstep,time
+    ! read(16)rho,vel,prs,tmp
+    ! read(16)spc
+    ! close(16)
+    ! if(lio) print*,' >> ',trim(infilename)
+    ! !
+    ! infilename='checkpoint/qdata'//mpirankname
+    ! open(16,file=trim(infilename),form='unformatted')
+    ! read(16)nstep
+    ! read(16)q
+    ! close(16)
+    ! if(lio) print*,' >> ',trim(infilename)
+    ! !
+    ! infilename='checkpoint/auxiliary'//mpirankname
+    ! open(16,file=trim(infilename),form='unformatted')
+    ! read(16)nstep,filenumb
+    ! read(16)massflux,massflux_target
+    ! read(16)force
+    ! close(16)
+    ! if(lio) print*,' >> ',trim(infilename)
     !
     if(lio)  print*,' ** checkpoint file read. '
     !
@@ -656,8 +688,8 @@ module readwrite
   subroutine output(subtime)
     !
     use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
-                       lwrite,lavg,nsamples,force
-    use commarray,only : x,rho,vel,prs,tmp,spc,qrhs
+                       lwrite,lavg,nsamples,force,numq
+    use commarray,only : x,rho,vel,prs,tmp,spc,q
     use statistic,only : rom,u1m,u2m,u3m,pm,tm,                        &
                          u11,u22,u33,u12,u13,u23,tt,pp,                &
                          massflux,massflux_target
@@ -670,7 +702,7 @@ module readwrite
     !
     ! local data
     character(len=4) :: stepname
-    character(len=2) :: spname
+    character(len=2) :: spname,qname
     character(len=64) :: outfilename
     integer :: jsp,i
     real(8) :: time_beg
@@ -686,6 +718,30 @@ module readwrite
       outfilename='outdat/flowfield.h5'
     endif
     !
+    ! outfilename='outdat/flowfield'//mpirankname
+    ! open(21,file=trim(outfilename),form='unformatted')
+    ! write(21)nstep,time
+    ! write(21)rho,vel,prs,tmp
+    ! write(21)spc
+    ! close(21)
+    ! if(lio) print*,' << ',trim(outfilename)
+    ! !
+    ! outfilename='outdat/qdata'//mpirankname
+    ! open(21,file=trim(outfilename),form='unformatted')
+    ! write(21)nstep
+    ! write(21)q
+    ! close(21)
+    ! if(lio) print*,' << ',trim(outfilename)
+    ! !
+    ! outfilename='outdat/auxiliary'//mpirankname
+    ! open(21,file=trim(outfilename),form='unformatted')
+    ! write(21)nstep,filenumb
+    ! write(21)massflux,massflux_target
+    ! write(21)force
+    ! close(21)
+    ! if(lio) print*,' << ',trim(outfilename)
+    ! !
+    ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
     call h5write(varname='u1', var=vel(0:im,0:jm,0:km,1))
@@ -698,11 +754,19 @@ module readwrite
       call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
     enddo
     call h5io_end
-    !
     if(lio) then
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
       call h5srite(varname='time',var=time,filename=trim(outfilename))
-      !
+    endif
+    !
+    ! call h5io_init('outdat/qdata.h5',mode='write')
+    ! do jsp=1,numq
+    !    write(qname,'(i2.2)')jsp
+    !   call h5write(varname='q'//qname,var=q(0:im,0:jm,0:km,jsp))
+    ! enddo
+    ! call h5io_end
+    !
+    if(lio) then
       call h5srite(varname='nstep',var=nstep,                          &
                           filename='outdat/auxiliary.h5',newfile=.true.)
       call h5srite(varname='filenumb',var=filenumb,                    &
@@ -743,7 +807,7 @@ module readwrite
       call h5io_end
       !
     endif
-    !
+    
     ! open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
     ! write(18,"(5(1X,A15))")'x','ro','u','p','t'
     ! write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &

@@ -29,12 +29,19 @@ module initialisation
     !
     use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart
     use commarray,only: vel,rho,prs,spc,tmp,q
-    use readwrite,only: readcont,readflowini3d,readcheckpoint
+    use readwrite,only: readcont,readflowini3d,readcheckpoint,output
     use fludyna,  only: fvar2q
+    use statistic,only : statcal,statout
     !
     if(lrestart) then
       !
       call readcheckpoint
+      !
+      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
       !
     else
       !
@@ -68,6 +75,12 @@ module initialisation
         !
       endif
       !
+      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                    density=rho(0:im,0:jm,0:km),                       &
+                   velocity=vel(0:im,0:jm,0:km,:),                     &
+                   pressure=prs(0:im,0:jm,0:km),                       &
+                    species=spc(0:im,0:jm,0:km,:)                      )
+      !
       nstep=0
       time=0.d0
       !
@@ -75,11 +88,6 @@ module initialisation
       !
     endif
     !
-    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
-                  density=rho(0:im,0:jm,0:km),                       &
-                 velocity=vel(0:im,0:jm,0:km,:),                     &
-                 pressure=prs(0:im,0:jm,0:km),                       &
-                  species=spc(0:im,0:jm,0:km,:)                      )
     call readcont
     !
     if(lio) print*,' ** flowfield initialised.'
