@@ -112,7 +112,7 @@ module parallel
     !
     logical :: lallo
     integer :: nfactor(1:30)
-    integer :: i,j,k,n,n1,n2,n3,nsize
+    integer :: i,j,k,n,n1,n2,n3,nsize,kaa
     integer(8) :: nvar1,nvar2,nvar3
     !
     integer :: ndims
@@ -133,6 +133,12 @@ module parallel
       ndims=2
     else
       ndims=3
+    endif
+    !
+    if(ka==0) then 
+      kaa=ka+1
+    else
+      kaa=ka
     endif
     !
     if(mpirank==0) then
@@ -178,6 +184,7 @@ module parallel
           if(nfactor(n2) == 1) cycle
           !
         else
+          !
           if(nfactor(n3)>1 .and. nfactor(n2)>1 .and. nfactor(n1)>1) then
             nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
           else
@@ -190,19 +197,13 @@ module parallel
         !
         if(nsize .eq. mpisize) then
           !
-          nvar3=ja*ka
-          nvar3=nvar3*nfactor(n1)
-          nvar1=nvar3
+          nvar1=ja*kaa*nfactor(n1)
           !
-          nvar3=ia*ka
-          nvar3=nvar3*nfactor(n2)
-          nvar1=nvar1+nvar3
+          nvar1=nvar1+ia*kaa*nfactor(n2)
           !
-          nvar3=ia*ja
-          nvar3=nvar3*nfactor(n3)
-          nvar1=nvar1+nvar3
+          nvar1=nvar1+ia*ja*nfactor(n3)
           !
-          ! print*,n1,n2,n3,'-',nfactor(n1),nfactor(n2),nfactor(n3)
+          ! print*,nvar1,nvar2,'-',nfactor(n1),nfactor(n2),nfactor(n3)
           !
           if(nvar1<nvar2) then
             !

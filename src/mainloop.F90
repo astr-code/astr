@@ -391,7 +391,7 @@ module mainloop
         enddo
       endif
       !
-      if(lfilter) call filterq
+      if(lfilter) call filterq(ctime(8))
       !
       call spongefilter
       !
