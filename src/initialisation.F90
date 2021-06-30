@@ -27,11 +27,13 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine flowinit
     !
-    use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart
-    use commarray,only: vel,rho,prs,spc,tmp,q
-    use readwrite,only: readcont,readflowini3d,readcheckpoint,output
+    use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart,   &
+                        lavg
+    use commarray,only: vel,rho,prs,spc,q
+    use readwrite,only: readcont,readflowini3d,readcheckpoint,         &
+                        readmeanflow
     use fludyna,  only: fvar2q
-    use statistic,only : statcal,statout
+    use statistic,only: nsamples
     !
     if(lrestart) then
       !
@@ -89,6 +91,14 @@ module initialisation
     endif
     !
     call readcont
+    !
+    if(lavg) then
+      !
+      if(nsamples>0) then
+        call readmeanflow
+      endif
+      !
+    endif
     !
     if(lio) print*,' ** flowfield initialised.'
     !

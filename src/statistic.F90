@@ -14,14 +14,24 @@ module statistic
   !
   implicit none
   !
-  integer :: nsamples
+  integer :: nsamples,nstep_sbeg
   logical :: lmeanallocated=.false.
+  logical :: liosta=.false.
+  real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8),allocatable :: max_q(:),min_q(:)
   !
-  real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,u11,   &
-                                          u22,u33,u12,u13,u23,tt,pp
+  real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,       &
+                                          u11,u22,u33,u12,u13,u23,pp,  &
+                                          tt,tu1,tu2,tu3,              &
+                                          u111,u222,u333,u112,u113,    &
+                                          u122,u133,u223,u233,u123,    &
+                                          u1rem,u2rem,u3rem,pu1,pu2,   &
+                                          pu3,sgmam11,sgmam22,sgmam33, &
+                                          sgmam12,sgmam13,sgmam23,     &
+                                          disspa,predil,               &
+                                          visdif1,visdif2,visdif3
   !
   contains
   !
@@ -62,10 +72,45 @@ module statistic
     if(lallo.ne.0) stop ' !! error at allocating u13'
     allocate(u23(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating u23'
-    allocate( tt(0:im,0:jm,0:km),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating tt'
     allocate( pp(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating pp'
+    allocate( tt(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tt'
+    allocate( tu1(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tu1'
+    allocate( tu2(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tu2'
+    allocate( tu3(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tu3'
+    !
+    allocate( u111(0:im,0:jm,0:km),stat=lallo)
+    allocate( u222(0:im,0:jm,0:km),stat=lallo)
+    allocate( u333(0:im,0:jm,0:km),stat=lallo)
+    allocate( u112(0:im,0:jm,0:km),stat=lallo)
+    allocate( u113(0:im,0:jm,0:km),stat=lallo)
+    allocate( u122(0:im,0:jm,0:km),stat=lallo)
+    allocate( u133(0:im,0:jm,0:km),stat=lallo)
+    allocate( u223(0:im,0:jm,0:km),stat=lallo)
+    allocate( u233(0:im,0:jm,0:km),stat=lallo)
+    allocate( u123(0:im,0:jm,0:km),stat=lallo)
+    !
+    allocate( disspa(0:im,0:jm,0:km),stat=lallo)
+    allocate( predil(0:im,0:jm,0:km),stat=lallo)
+    allocate( pu1(0:im,0:jm,0:km),stat=lallo)
+    allocate( pu2(0:im,0:jm,0:km),stat=lallo)
+    allocate( pu3(0:im,0:jm,0:km),stat=lallo)
+    allocate( u1rem(0:im,0:jm,0:km),stat=lallo)
+    allocate( u2rem(0:im,0:jm,0:km),stat=lallo)
+    allocate( u3rem(0:im,0:jm,0:km),stat=lallo)
+    allocate( visdif1(0:im,0:jm,0:km),stat=lallo)
+    allocate( visdif2(0:im,0:jm,0:km),stat=lallo)
+    allocate( visdif3(0:im,0:jm,0:km),stat=lallo)
+    allocate( sgmam11(0:im,0:jm,0:km),stat=lallo)
+    allocate( sgmam22(0:im,0:jm,0:km),stat=lallo)
+    allocate( sgmam33(0:im,0:jm,0:km),stat=lallo)
+    allocate( sgmam12(0:im,0:jm,0:km),stat=lallo)
+    allocate( sgmam13(0:im,0:jm,0:km),stat=lallo)
+    allocate( sgmam23(0:im,0:jm,0:km),stat=lallo)
     !
     lmeanallocated=.true.
     !
@@ -81,10 +126,25 @@ module statistic
   !| -------------                                                     |
   !| 19-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine meanflowcal
+  subroutine meanflowcal(subtime)
     !
-    use commvar,   only : nsamples
-    use commarray, only : rho,vel,prs,tmp
+    use commvar,   only : reynolds,nstep,time
+    use commarray, only : rho,vel,prs,tmp,dvel
+    use fludyna,   only : miucal
+    use constdef
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
+    ! local data
+    real(8) :: rho_t,prs_t,tmp_t,u,v,w
+    integer :: i,j,k
+    real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,s11,s12,s13,s22,    &
+               s23,s33,skk,miu,div
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     if(nsamples==0) then
       !
@@ -96,40 +156,159 @@ module statistic
       u3m=0.d0
       pm =0.d0
       tm =0.d0
+      !
       u11=0.d0
       u22=0.d0
       u33=0.d0
       u12=0.d0
       u13=0.d0
       u23=0.d0
-      tt =0.d0
+      !
       pp =0.d0
+      tt =0.d0
+      tu1=0.d0
+      tu2=0.d0
+      tu3=0.d0
+      !
+      u111=0.d0
+      u222=0.d0 
+      u333=0.d0
+      u112=0.d0
+      u113=0.d0
+      u122=0.d0
+      u133=0.d0
+      u223=0.d0
+      u233=0.d0
+      u123=0.d0
+      !
+      u1rem=0.d0
+      u2rem=0.d0
+      u3rem=0.d0
+      !
+      pu1=0.d0
+      pu2=0.d0
+      pu3=0.d0
+      !
+      sgmam11=0.d0
+      sgmam12=0.d0
+      sgmam13=0.d0
+      sgmam22=0.d0
+      sgmam13=0.d0
+      sgmam33=0.d0
+      !
+      disspa=0.d0
+      predil=0.d0
+      !
+      visdif1=0.d0
+      visdif2=0.d0
+      visdif3=0.d0
       !
       if(lio) print*,' ** meanflow initilised, nsamples=',nsamples
       !
+      nstep_sbeg=nstep
+      time_sbeg=time
     endif
     !
-    rom=rom + rho(0:im,0:jm,0:km)
-    u1m=u1m + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)
-    u2m=u2m + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,2)
-    u3m=u3m + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,3)
-    pm =pm  + prs(0:im,0:jm,0:km)
-    tm =tm  + rho(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)
-    u11=u11 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)*vel(0:im,0:jm,0:km,1)
-    u22=u22 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,2)*vel(0:im,0:jm,0:km,2)
-    u33=u33 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,3)*vel(0:im,0:jm,0:km,3)
-    u12=u12 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)*vel(0:im,0:jm,0:km,2)
-    u13=u13 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,1)*vel(0:im,0:jm,0:km,3)
-    u23=u23 + rho(0:im,0:jm,0:km)*vel(0:im,0:jm,0:km,2)*vel(0:im,0:jm,0:km,3)
-    tt =tt  + rho(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)
-    pp =pp  + prs(0:im,0:jm,0:km)*prs(0:im,0:jm,0:km)
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho_t=rho(i,j,k)
+      prs_t=prs(i,j,k)
+      tmp_t=tmp(i,j,k)
+      u=vel(i,j,k,1)
+      v=vel(i,j,k,1)
+      w=vel(i,j,k,1)
+      !
+      rom(i,j,k)=rom(i,j,k) + rho_t
+      u1m(i,j,k)=u1m(i,j,k) + rho_t*u
+      u2m(i,j,k)=u2m(i,j,k) + rho_t*v
+      u3m(i,j,k)=u3m(i,j,k) + rho_t*w
+      pm(i,j,k) =pm(i,j,k)  + prs(i,j,k)
+      tm(i,j,k) =tm(i,j,k)  + rho_t*tmp(i,j,k)
+      !
+      u11(i,j,k)=u11(i,j,k) + rho_t*u*u
+      u22(i,j,k)=u22(i,j,k) + rho_t*v*v
+      u33(i,j,k)=u33(i,j,k) + rho_t*w*w
+      u12(i,j,k)=u12(i,j,k) + rho_t*u*v
+      u13(i,j,k)=u13(i,j,k) + rho_t*u*w
+      u23(i,j,k)=u23(i,j,k) + rho_t*v*w
+      pp(i,j,k) =pp(i,j,k)  + prs_t*prs_t
+      !
+      tt(i,j,k) =tt(i,j,k)  + rho_t*tmp_t*tmp_t
+      tu1(i,j,k)=tu1(i,j,k) + rho_t*u*tmp_t
+      tu2(i,j,k)=tu2(i,j,k) + rho_t*v*tmp_t
+      tu3(i,j,k)=tu3(i,j,k) + rho_t*w*tmp_t
+      !
+      u111(i,j,k)=u111(i,j,k)+rho_t*u**3
+      u222(i,j,k)=u222(i,j,k)+rho_t*v**3
+      u333(i,j,k)=u333(i,j,k)+rho_t*w**3
+      u112(i,j,k)=u112(i,j,k)+rho_t*u*u*v
+      u113(i,j,k)=u113(i,j,k)+rho_t*u*u*w
+      u122(i,j,k)=u122(i,j,k)+rho_t*u*v*v
+      u133(i,j,k)=u133(i,j,k)+rho_t*u*w*w
+      u223(i,j,k)=u223(i,j,k)+rho_t*v*v*w
+      u233(i,j,k)=u233(i,j,k)+rho_t*v*w*w
+      u123(i,j,k)=u123(i,j,k)+rho_t*u*v*w
+      !
+      u1rem(i,j,k)=u1rem(i,j,k)+u
+      u2rem(i,j,k)=u2rem(i,j,k)+v
+      u3rem(i,j,k)=u3rem(i,j,k)+w
+      !
+      pu1(i,j,k)=pu1(i,j,k)+prs_t*u
+      pu2(i,j,k)=pu2(i,j,k)+prs_t*v
+      pu3(i,j,k)=pu3(i,j,k)+prs_t*w
+      !
+      d11=dvel(i,j,k,1,1); d12=dvel(i,j,k,1,2); d13=dvel(i,j,k,1,3)
+      d21=dvel(i,j,k,2,1); d22=dvel(i,j,k,2,2); d23=dvel(i,j,k,2,3)
+      d31=dvel(i,j,k,3,1); d32=dvel(i,j,k,3,2); d33=dvel(i,j,k,3,3)
+      !
+      miu=miucal(tmp_t)/reynolds
+      !
+      skk=num1d3*(d11+d22+d33)
+      !
+      s11=2.d0*miu*(d11-skk)
+      s22=2.d0*miu*(d22-skk)
+      s33=2.d0*miu*(d33-skk)
+      !
+      s12=miu*(d12+d21)
+      s13=miu*(d13+d31)
+      s23=miu*(d23+d32)
+      !
+      sgmam11(i,j,k)=sgmam11(i,j,k)+s11
+      sgmam22(i,j,k)=sgmam22(i,j,k)+s22
+      sgmam33(i,j,k)=sgmam33(i,j,k)+s33
+      sgmam12(i,j,k)=sgmam12(i,j,k)+s12
+      sgmam13(i,j,k)=sgmam13(i,j,k)+s13
+      sgmam23(i,j,k)=sgmam23(i,j,k)+s23
+      !
+      visdif1(i,j,k)=visdif1(i,j,k)+s11*u+s12*v+s13*w
+      visdif1(i,j,k)=visdif1(i,j,k)+s12*u+s22*v+s23*w
+      visdif1(i,j,k)=visdif1(i,j,k)+s13*u+s23*v+s33*w
+      !
+      disspa(i,j,k)=disspa(i,j,k)+s11*d11+s12*d12+s13*d13+           &
+                                  s12*d21+s22*d22+s23*d23+           &
+                                  s13*d31+s23*d32+s33*d33
+      !
+      predil(i,j,k)=predil(i,j,k)+prs_t*(d11+d22+d33)
+      !
+    enddo
+    enddo
+    enddo
     !
     nsamples=nsamples+1
+    !
+    liosta=.true.
+    !
     if(lio) print*,' ** meanflow calculated, nsamples=',nsamples
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
     !
   end subroutine meanflowcal
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine allomeanflow.                           |
+  !| The end of the subroutine meanflowcal.                            |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

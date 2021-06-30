@@ -576,7 +576,7 @@ module readwrite
     use commvar, only: nstep,filenumb,time,flowtype,num_species,       &
                        im,jm,km,force,numq
     use commarray, only : rho,vel,prs,tmp,spc,q
-    use statistic,only : massflux,massflux_target
+    use statistic,only : massflux,massflux_target,nsamples
     use hdf5io
     !
     ! local data
@@ -592,6 +592,7 @@ module readwrite
       call h5read(varname='massflux_target',var=massflux_target)
       call h5read(varname='force',var=force,dim=3)
     endif
+    ! call h5read(varname='nsamples',var=nsamples)
     call h5io_end
     !
     call h5io_init(filename='checkpoint/flowfield.h5',mode='read')
@@ -655,6 +656,125 @@ module readwrite
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to read mean flow statistics.             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-06-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readmeanflow
+    !
+    use commvar, only: nstep,im,jm,km
+    use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
+                         rom,u1m,u2m,u3m,pm,tm,                        &
+                         u11,u22,u33,u12,u13,u23,pp,tt,tu1,tu2,tu3,    &
+                         u111,u222,u333,u112,u113,                     &
+                         u122,u133,u223,u233,u123,                     &
+                         u1rem,u2rem,u3rem,pu1,pu2,pu3,                &
+                         sgmam11,sgmam22,sgmam33,                      &
+                         sgmam12,sgmam13,sgmam23,                      &
+                         disspa,predil,visdif1,visdif2,visdif3,        &
+                         allomeanflow,lmeanallocated
+    use hdf5io
+    !
+    ! local data
+    integer :: nstep_1,nsamples_1
+    !
+    call allomeanflow
+    lmeanallocated=.true.
+    !
+    call h5io_init('outdat/meanflow.h5',mode='read')
+    call h5read(varname='nstep',     var=nstep_1)
+    if(nstep_1 .ne. nstep) then
+      print*,' !! meanflow.h5 is NOT consistent with flowfield.h5'
+      print*,' !! nstep:',nstep,'nstep_1:',nstep_1
+      stop 
+    endif
+    call h5read(varname='nsamples',  var=nsamples_1)
+    if(nsamples_1 .ne. nsamples) then
+      print*,' !! meanflow.h5 is NOT consistent with auxiliary.h5'
+      print*,' !! nsamples:',nsamples,'nsamples_1:',nsamples_1
+      stop 
+    endif
+    call h5read(varname='nstep_sbeg',var=nstep_sbeg)
+    call h5read(varname='time_sbeg', var=time_sbeg)
+    call h5read(varname='rom',var=rom(0:im,0:jm,0:km))
+    call h5read(varname='u1m',var=u1m(0:im,0:jm,0:km))
+    call h5read(varname='u2m',var=u2m(0:im,0:jm,0:km))
+    call h5read(varname='u3m',var=u3m(0:im,0:jm,0:km))
+    call h5read(varname='pm ',var=pm (0:im,0:jm,0:km))
+    call h5read(varname='tm ',var=tm (0:im,0:jm,0:km))
+    call h5io_end
+    !
+    call h5io_init('outdat/2ndsta.h5',mode='read')
+    call h5read(varname='nstep',var=nstep_1)
+    if(nstep_1 .ne. nstep) then
+      print*,' !! 2ndsta.h5 is NOT consistent with flowfield.h5'
+      stop 
+    endif
+    call h5read(varname='u11',var=u11(0:im,0:jm,0:km))
+    call h5read(varname='u22',var=u22(0:im,0:jm,0:km))
+    call h5read(varname='u33',var=u33(0:im,0:jm,0:km))
+    call h5read(varname='u12',var=u12(0:im,0:jm,0:km))
+    call h5read(varname='u13',var=u13(0:im,0:jm,0:km))
+    call h5read(varname='u23',var=u23(0:im,0:jm,0:km))
+    !
+    call h5read(varname='pp', var=pp(0:im,0:jm,0:km))
+    call h5read(varname='tt', var=tt(0:im,0:jm,0:km))
+    call h5read(varname='tu1',var=tu1(0:im,0:jm,0:km))
+    call h5read(varname='tu2',var=tu2(0:im,0:jm,0:km))
+    call h5read(varname='tu3',var=tu2(0:im,0:jm,0:km))
+    call h5io_end
+    !
+    call h5io_init('outdat/3rdsta.h5',mode='read')
+    call h5read(varname='nstep',     var=nstep_1)
+    if(nstep_1 .ne. nstep) then
+      print*,' !! 3rdsta.h5 is NOT consistent with flowfield.h5'
+      stop 
+    endif
+    call h5read(varname='u111',var=u111(0:im,0:jm,0:km))
+    call h5read(varname='u222',var=u222(0:im,0:jm,0:km))
+    call h5read(varname='u333',var=u333(0:im,0:jm,0:km))
+    call h5read(varname='u112',var=u112(0:im,0:jm,0:km))
+    call h5read(varname='u113',var=u113(0:im,0:jm,0:km))
+    call h5read(varname='u122',var=u122(0:im,0:jm,0:km))
+    call h5read(varname='u133',var=u133(0:im,0:jm,0:km))
+    call h5read(varname='u223',var=u223(0:im,0:jm,0:km))
+    call h5read(varname='u233',var=u233(0:im,0:jm,0:km))
+    call h5read(varname='u123',var=u123(0:im,0:jm,0:km))
+    call h5io_end
+    !
+    call h5io_init('outdat/budget.h5',mode='read')
+    call h5read(varname='nstep',   var=nstep_1)
+    if(nstep_1 .ne. nstep) then
+      print*,' !! budget.h5 is NOT consistent with flowfield.h5'
+      stop 
+    endif
+    call h5read(varname='disspa', var=disspa(0:im,0:jm,0:km))
+    call h5read(varname='predil', var=predil(0:im,0:jm,0:km))
+    call h5read(varname='pu1',    var=pu1(0:im,0:jm,0:km))
+    call h5read(varname='pu2',    var=pu2(0:im,0:jm,0:km))
+    call h5read(varname='pu3',    var=pu3(0:im,0:jm,0:km))
+    call h5read(varname='u1rem',  var=u1rem(0:im,0:jm,0:km))
+    call h5read(varname='u2rem',  var=u2rem(0:im,0:jm,0:km))
+    call h5read(varname='u3rem',  var=u3rem(0:im,0:jm,0:km))
+    call h5read(varname='visdif1',var=visdif1(0:im,0:jm,0:km))
+    call h5read(varname='visdif2',var=visdif2(0:im,0:jm,0:km))
+    call h5read(varname='visdif3',var=visdif3(0:im,0:jm,0:km))
+    call h5read(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km))
+    call h5read(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km))
+    call h5read(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km))
+    call h5read(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km))
+    call h5read(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km))
+    call h5read(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km))
+    call h5io_end
+    !
+  end subroutine readmeanflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readmeanflow.                           |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to write a grid file for postprocess.     |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -688,10 +808,17 @@ module readwrite
   subroutine output(subtime)
     !
     use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
-                       lwrite,lavg,nsamples,force,numq
+                       lwrite,lavg,force,numq
     use commarray,only : x,rho,vel,prs,tmp,spc,q
-    use statistic,only : rom,u1m,u2m,u3m,pm,tm,                        &
-                         u11,u22,u33,u12,u13,u23,tt,pp,                &
+    use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
+                         rom,u1m,u2m,u3m,pm,tm,                        &
+                         u11,u22,u33,u12,u13,u23,pp,tt,tu1,tu2,tu3,    &
+                         u111,u222,u333,u112,u113,                     &
+                         u122,u133,u223,u233,u123,                     &
+                         u1rem,u2rem,u3rem,pu1,pu2,pu3,                &
+                         sgmam11,sgmam22,sgmam33,                      &
+                         sgmam12,sgmam13,sgmam23,                      &
+                         disspa,predil,visdif1,visdif2,visdif3,        &
                          massflux,massflux_target
     !
     use hdf5io
@@ -767,6 +894,7 @@ module readwrite
     ! call h5io_end
     !
     if(lio) then
+      !
       call h5srite(varname='nstep',var=nstep,                          &
                           filename='outdat/auxiliary.h5',newfile=.true.)
       call h5srite(varname='filenumb',var=filenumb,                    &
@@ -777,6 +905,8 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
       call h5srite(varname='force',var=force,                          &
                                          filename='outdat/auxiliary.h5')
+      call h5srite(varname='nsamples',var=nsamples,                    &
+                                         filename='outdat/auxiliary.h5')
     endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
@@ -785,26 +915,83 @@ module readwrite
     !     print*,'------------------------------------'
     ! endif
 
-    if(lavg .and. nsamples>0) then
+    if(liosta) then
       !
       call h5io_init('outdat/meanflow.h5',mode='write')
-      call h5write(varname='nstep',var=nstep)
-      call h5write(varname='nsamples',var=nsamples)
       call h5write(varname='rom',var=rom(0:im,0:jm,0:km))
       call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km))
       call h5write(varname='u2m',var=u2m(0:im,0:jm,0:km))
       call h5write(varname='u3m',var=u3m(0:im,0:jm,0:km))
       call h5write(varname='pm ',var=pm (0:im,0:jm,0:km))
       call h5write(varname='tm ',var=tm (0:im,0:jm,0:km))
+      call h5io_end
+      !
+      call h5io_init('outdat/2ndsta.h5',mode='write')
       call h5write(varname='u11',var=u11(0:im,0:jm,0:km))
       call h5write(varname='u22',var=u22(0:im,0:jm,0:km))
       call h5write(varname='u33',var=u33(0:im,0:jm,0:km))
       call h5write(varname='u12',var=u12(0:im,0:jm,0:km))
       call h5write(varname='u13',var=u13(0:im,0:jm,0:km))
       call h5write(varname='u23',var=u23(0:im,0:jm,0:km))
-      call h5write(varname='tt ',var=tt (0:im,0:jm,0:km))
-      call h5write(varname='pp ',var=pp (0:im,0:jm,0:km))
+      !
+      call h5write(varname='pp', var=pp(0:im,0:jm,0:km))
+      call h5write(varname='tt', var=tt(0:im,0:jm,0:km))
+      call h5write(varname='tu1',var=tu1(0:im,0:jm,0:km))
+      call h5write(varname='tu2',var=tu2(0:im,0:jm,0:km))
+      call h5write(varname='tu3',var=tu2(0:im,0:jm,0:km))
       call h5io_end
+      !
+      call h5io_init('outdat/3rdsta.h5',mode='write')
+      call h5write(varname='u111',var=u111(0:im,0:jm,0:km))
+      call h5write(varname='u222',var=u222(0:im,0:jm,0:km))
+      call h5write(varname='u333',var=u333(0:im,0:jm,0:km))
+      call h5write(varname='u112',var=u112(0:im,0:jm,0:km))
+      call h5write(varname='u113',var=u113(0:im,0:jm,0:km))
+      call h5write(varname='u122',var=u122(0:im,0:jm,0:km))
+      call h5write(varname='u133',var=u133(0:im,0:jm,0:km))
+      call h5write(varname='u223',var=u223(0:im,0:jm,0:km))
+      call h5write(varname='u233',var=u233(0:im,0:jm,0:km))
+      call h5write(varname='u123',var=u123(0:im,0:jm,0:km))
+      call h5io_end
+      !
+      call h5io_init('outdat/budget.h5',mode='write')
+      call h5write(varname='disspa', var=disspa(0:im,0:jm,0:km))
+      call h5write(varname='predil', var=predil(0:im,0:jm,0:km))
+      call h5write(varname='pu1',    var=pu1(0:im,0:jm,0:km))
+      call h5write(varname='pu2',    var=pu2(0:im,0:jm,0:km))
+      call h5write(varname='pu3',    var=pu3(0:im,0:jm,0:km))
+      call h5write(varname='u1rem',  var=u1rem(0:im,0:jm,0:km))
+      call h5write(varname='u2rem',  var=u2rem(0:im,0:jm,0:km))
+      call h5write(varname='u3rem',  var=u3rem(0:im,0:jm,0:km))
+      call h5write(varname='visdif1',var=visdif1(0:im,0:jm,0:km))
+      call h5write(varname='visdif2',var=visdif2(0:im,0:jm,0:km))
+      call h5write(varname='visdif3',var=visdif3(0:im,0:jm,0:km))
+      call h5write(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km))
+      call h5write(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km))
+      call h5write(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km))
+      call h5write(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km))
+      call h5write(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km))
+      call h5write(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km))
+      call h5io_end
+      !
+      if(lio) then
+        call h5srite(varname='nstep',   var=nstep,   filename='outdat/meanflow.h5')
+        call h5srite(varname='nsamples',var=nsamples,filename='outdat/meanflow.h5')
+        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/meanflow.h5')
+        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/meanflow.h5')
+        call h5srite(varname='nstep',   var=nstep,   filename='outdat/2ndsta.h5')
+        call h5srite(varname='nsamples',var=nsamples,filename='outdat/2ndsta.h5')
+        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/2ndsta.h5')
+        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/2ndsta.h5')
+        call h5srite(varname='nstep',   var=nstep,   filename='outdat/3rdsta.h5')
+        call h5srite(varname='nsamples',var=nsamples,filename='outdat/3rdsta.h5')
+        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/3rdsta.h5')
+        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/3rdsta.h5')
+        call h5srite(varname='nstep',   var=nstep,   filename='outdat/budget.h5')
+        call h5srite(varname='nsamples',var=nsamples,filename='outdat/budget.h5')
+        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/budget.h5')
+        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/budget.h5')
+      endif
       !
     endif
     
@@ -843,7 +1030,9 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine timerept
     !
-    use commvar, only : hand_rp,nstep,maxstep,ctime
+    use commvar, only : hand_rp,nstep,maxstep,ctime,flowtype,conschm,  &
+                        difschm,rkscheme,ia,ja,ka
+    use parallel,only : mpirankmax
     !
     ! local data
     logical,save :: linit=.true.
@@ -858,7 +1047,27 @@ module readwrite
         !
         if(lexist) call system('mv -v report.txt report.bak')
         !
-        open(hand_rp,file='report.txt')
+        call system('echo "----------------------------------------------------------------" > report.txt')
+        call system('echo "CPU infomation" >> report.txt')
+        call system('echo "----------------------------------------------------------------" >> report.txt')
+        call system('lscpu | grep "Model name" >> report.txt')
+        call system('lscpu | grep "CPU MHz" >> report.txt')
+        call system('lscpu | grep "Socket(s):" >> report.txt')
+        call system('lscpu | grep "Core(s) per socket:" >> report.txt')
+        call system('lscpu | grep "Thread(s) per core:" >> report.txt')
+        call system('lscpu | grep "cache" >> report.txt')
+        call system('echo "----------------------------------------------------------------" >> report.txt')
+        !
+        open(hand_rp,file='report.txt',position="append")
+        write(hand_rp,'(A)')'  statistic of computing time'
+        write(hand_rp,'(A,A)')'     flowtype: ',trim(flowtype)
+        write(hand_rp,'(A,A)')'  conv scheme: ',trim(conschm)
+        write(hand_rp,'(A,A)')'  diff scheme: ',trim(difschm)
+        write(hand_rp,'(A,A)')'    rk scheme: ',trim(rkscheme)
+        write(hand_rp,'(4(A,I0))')'    grid size: ',ia,' x ',ja,' x ', &
+                                           ka,' = ',(ia+1)*(ja+1)*(ka+1)
+        write(hand_rp,'(1(A,I0))')'     mpi size: ',mpirankmax+1
+        !
         linit=.false.
       endif
       !
@@ -893,6 +1102,8 @@ module readwrite
       endif
       !
     endif
+    !
+    ctime=0.d0
     !
   end subroutine timerept
   !+-------------------------------------------------------------------+

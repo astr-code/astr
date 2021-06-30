@@ -34,11 +34,13 @@ module mainloop
     use commcal,  only: cflcal
     !
     ! local data
-    real(8) :: time_beg
+    real(8) :: time_start,time_beg
     !
-    time_beg=ptime()
+    time_start=ptime()
     !
     do while(nstep<=maxstep)
+      !
+      time_beg=ptime()
       !
       if(rkscheme=='rk3') then
         call rk3
@@ -46,13 +48,13 @@ module mainloop
         call rk4
       endif
       !
+      ctime(2)=ctime(2)+ptime()-time_beg
+      !
       if(loop_counter==nwrite .or. loop_counter==0) then
         !
         call readcont
         !
         call cflcal(deltat)
-        !
-        ctime(2)=ptime()-time_beg
         !
         call timerept
         !
@@ -66,7 +68,7 @@ module mainloop
       !
     enddo
     !
-    ctime(1)=ptime()-time_beg
+    ctime(1)=ptime()-time_start
     !
     ! call errest
     !
@@ -150,11 +152,11 @@ module mainloop
   subroutine rk3
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep,nsamples
+                         ctime,hm,lavg,navg,nstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq,spongefilter
-    use statistic,only : statcal,statout,meanflowcal
+    use statistic,only : statcal,statout,meanflowcal,nsamples,liosta
     use readwrite,only : output
     use bc,       only : boucon
     !
@@ -210,9 +212,10 @@ module mainloop
           call statout
           !
           if(lavg) then
-            if(mod(nstep,navg)==0) call meanflowcal
+            if(mod(nstep,navg)==0) call meanflowcal(ctime(5))
           else
             nsamples=0
+            liosta=.false.
           endif
           !
         endif
@@ -287,11 +290,11 @@ module mainloop
   subroutine rk4
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep,nsamples
+                         ctime,hm,lavg,navg,nstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq,spongefilter
-    use statistic,only : statcal,statout,meanflowcal
+    use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
     use readwrite,only : output
     use bc,       only : boucon
     !
@@ -347,9 +350,10 @@ module mainloop
           call statout
           !
           if(lavg) then
-            if(mod(nstep,navg)==0) call meanflowcal
+            if(mod(nstep,navg)==0) call meanflowcal(ctime(5))
           else
             nsamples=0
+            liosta=.false.
           endif
           !
         else
