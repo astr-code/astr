@@ -238,7 +238,7 @@ module mainloop
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
       enddo
       !
-      if(lfilter) call filterq
+      if(lfilter) call filterq(ctime(8))
       !
       call spongefilter
       !

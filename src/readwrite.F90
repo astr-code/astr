@@ -592,7 +592,7 @@ module readwrite
       call h5read(varname='massflux_target',var=massflux_target)
       call h5read(varname='force',var=force,dim=3)
     endif
-    ! call h5read(varname='nsamples',var=nsamples)
+    call h5read(varname='nsamples',var=nsamples)
     call h5io_end
     !
     call h5io_init(filename='checkpoint/flowfield.h5',mode='read')
@@ -1086,7 +1086,7 @@ module readwrite
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
                           ctime(10),' - ',100.d0*ctime(10)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - filter    : ',    &
-                            ctime(8),' - ',100.d0*ctime(9)/ctime(2),' %'
+                            ctime(8),' - ',100.d0*ctime(8)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io        : ',    &
                             ctime(6),' - ',100.d0*ctime(6)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - sta       : ',    &
