@@ -257,6 +257,7 @@ module bc
       !
     enddo
     !
+    call immbody
     ! call corner4nscbc
     !
   end subroutine boucon
@@ -264,6 +265,50 @@ module bc
   !| The end of the subroutine boucon.                                 |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to apply a immersed boundary condition to the  |
+  !| sloid body nodes.                                                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-06-2021: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine immbody
+    !
+    use commvar,   only : twall,pinf
+    use commarray, only : ns,vel
+    use fludyna,   only : fvar2q,q2fvar,thermal
+    !
+    ! local data
+    integer :: i,j,k,n,jspec
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(ns(i,j,k)==1) then
+        !
+        vel(i,j,k,1)=0.d0
+        vel(i,j,k,2)=0.d0
+        vel(i,j,k,3)=0.d0
+        tmp(i,j,k)  =twall(3)
+        prs(i,j,k)  =pinf
+        rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine immbody
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine boucon.                                 |
+  !+-------------------------------------------------------------------+
+  !!
   !+-------------------------------------------------------------------+
   !| This subroutine is to apply corner bc.                            |
   !+-------------------------------------------------------------------+

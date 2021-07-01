@@ -516,13 +516,14 @@ module readwrite
   subroutine readgrid
     !
     use commvar,   only : im,jm,km,gridfile
-    use commarray, only : x
+    use commarray, only : x,ns
     use hdf5io
     !
     call h5io_init(filename=trim(gridfile),mode='read')
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1))
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2))
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3))
+    call h5read(varname='ns',var=ns)
     call h5io_end
     !
   end subroutine readgrid
