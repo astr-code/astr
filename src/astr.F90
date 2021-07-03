@@ -15,6 +15,7 @@ program astr
   use gridgeneration
   use cmdefne
   use pp
+  use geom
   !
   implicit none
   !
@@ -57,6 +58,8 @@ program astr
     call gridgen
     !
     call geomcal
+    !
+    call mpistop
     !
     call spongelayerini
     !

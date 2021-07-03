@@ -115,7 +115,7 @@ module readwrite
                         twall,lfftk,kcutoff,ninit,rkscheme,            &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
-                        lrestart
+                        lrestart,limmbou,solidfile
     !
     ! local data
     character(len=42) :: typedefine
@@ -310,6 +310,13 @@ module readwrite
       enddo
       write(*,'(2X,62A)')('-',i=1,62)
       !
+      if(limmbou) then
+        write(*,'(2X,A)')'                    *** Solid Body Immersed ***'
+        write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
+        write(*,'(2X,62A)')('-',i=1,62)
+      endif
+
+      !
       if(lrestart) then
         write(*,'(2X,A62)')' restart a previous computation'
       else
@@ -346,7 +353,7 @@ module readwrite
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
-                        recon_schem,lrestart
+                        recon_schem,lrestart,limmbou,solidfile
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     !
@@ -372,7 +379,7 @@ module readwrite
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
       read(11,'(/)')
-      read(11,*)nondimen,diffterm,lfilter,lreadgrid,lfftk
+      read(11,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
       read(11,'(/)')
       read(11,*)lrestart
       read(11,'(/)')
@@ -407,6 +414,10 @@ module readwrite
         read(11,'(/)')
         read(11,'(A)')gridfile
       endif
+      if(limmbou) then
+        read(11,'(/)')
+        read(11,'(A)')solidfile
+      endif
       close(11)
       print*,' >> ',trim(inputfile),' ... done'
       !
@@ -421,6 +432,7 @@ module readwrite
     call bcast(lkhomo)
     call bcast(lreadgrid)
     call bcast(lfftk)
+    call bcast(limmbou)
     call bcast(lchardecomp)
     !
     call bcast(lrestart)
@@ -429,6 +441,7 @@ module readwrite
     call bcast(conschm)
     call bcast(difschm)
     call bcast(gridfile)
+    call bcast(solidfile)
     !
     call bcast(nondimen)
     call bcast(diffterm)
@@ -516,17 +529,76 @@ module readwrite
   subroutine readgrid
     !
     use commvar,   only : im,jm,km,gridfile
-    use commarray, only : x,ns
+    use commarray, only : x
     use hdf5io
     !
     call h5io_init(filename=trim(gridfile),mode='read')
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1))
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2))
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3))
-    call h5read(varname='ns',var=ns)
     call h5io_end
     !
+    return
+    !
   end subroutine readgrid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readinput.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to read STL file that defines a solid body!
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readsolid
+    !
+    use commtype,  only : solid,triangle
+    use commvar,   only : limmbou,solidfile,immbody,nsolid
+    use stlaio
+    !
+    ! local data
+    logical :: lstl
+    integer :: solid_num,node_num,face_num,text_num,jso
+    !
+    if(limmbou) then
+      !
+      if(lio) then
+        !
+        print*,' >> solid body: '
+        !
+        nsolid=num_solid(trim(solidfile))
+        !
+        allocate(immbody(1:nsolid))
+        !
+        write(*,'(A,I0)')'    ** number of solids : ',nsolid
+        !
+        do jso=1,nsolid
+          immbody(jso)%num_face=num_face_in_solid(trim(solidfile),jso)
+          call immbody(jso)%alloface()
+          write(*,'(2(A,I0))')'    ** number of faces for solid ',jso, &
+                                            ' : ',immbody(jso)%num_face
+        enddo
+        !
+        call stla_read(trim(solidfile),immbody)
+        !
+        ! print*,' face num for solde 1: ',num_face_in_solid(trim(solidfile),1)
+        ! print*,' face num for solde 2: ',num_face_in_solid(trim(solidfile),2)
+        ! call stla_size(trim(solidfile),nsolid,node_num,face_num,text_num)
+        ! call stla_size_print(trim(solidfile),nsolid,node_num,face_num,text_num)
+        ! print*,'      file: ',trim(solidfile)
+        ! print*,' solid num: ',solid_num
+        ! print*,'  node num: ',node_num
+        ! print*,'  face num: ',face_num
+        ! print*,'  text num: ',text_num
+      endif
+      !
+    endif
+    !
+    return
+    !
+  end subroutine readsolid
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
   !+-------------------------------------------------------------------+

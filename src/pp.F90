@@ -46,8 +46,8 @@ module pp
       write(16,'(A)')'# lihomo,ljhomo,lkhomo                                  : The homogeneous directions'
       write(16,'(A)')'t,f,t'
       write(16,*)
-      write(16,'(A)')'# nondimen,diffterm,lfilter,lreadgrid,lfftz             : Parameters'
-      write(16,'(A)')'t,t,t,t,f'
+      write(16,'(A)')'# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou     : Parameters'
+      write(16,'(A)')'t,t,t,t,f,f'
       write(16,*)
       write(16,'(A)')'# lrestar                                               : start mode'
       write(16,'(A)')'f'
@@ -94,7 +94,7 @@ module pp
       close(16)
       print*,' << ',trim(folder),'/datin/input.chl'
       !
-      call gridchannel(128,128,0,trim(folder))
+      call gridchannel(128,128,128,trim(folder))
       !
       open(16,file=trim(folder)//'/datin/contr.dat',form='formatted')
       write(16,'(A)')'############################################################'

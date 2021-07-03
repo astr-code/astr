@@ -22,8 +22,8 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   subroutine gridgen
     !
-    use commvar,  only : flowtype,lreadgrid
-    use readwrite,only : readgrid,writegrid
+    use commvar,  only : flowtype,lreadgrid,limmbou
+    use readwrite,only : readgrid,writegrid,readsolid
     !
     if(lreadgrid) then
       call readgrid
@@ -45,6 +45,10 @@ module gridgeneration
       !
       call writegrid
       !
+    endif
+    !
+    if(limmbou) then
+      call readsolid
     endif
     !
   end subroutine gridgen

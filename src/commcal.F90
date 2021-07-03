@@ -7,6 +7,8 @@
 !+---------------------------------------------------------------------+
 module commcal
   !
+  use parallel, only: mpirank,mpistop
+  !
   implicit none
   !
   contains
@@ -26,7 +28,7 @@ module commcal
     use commvar,  only: im,jm,km
     use commarray,only: vel,rho,prs,tmp,dxi,jacob
     use fludyna,  only: sos
-    use parallel, only: pmax,mpirank
+    use parallel, only: pmax
     !
     ! arguments
     real(8),intent(in) :: deltat

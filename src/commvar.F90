@@ -7,13 +7,15 @@
 !+---------------------------------------------------------------------+
 module commvar
   !
+  use commtype
+  !
   implicit none
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
   integer :: hm
   integer :: numq,num_species,ndims,navg,ninit
   character(len=4) :: conschm,difschm
-  character(len=64) :: gridfile 
+  character(len=64) :: gridfile,solidfile
   !+---------------------+---------------------------------------------+
   !|            ia,ja,ka | the dimension of the entire domain          | 
   !|            im,jm,km | the dimension of the local domain           | 
@@ -27,9 +29,11 @@ module commvar
   !|                navg | frequency of averaging.                     |
   !|               ninit | initialisation method.                      |
   !|            gridfile | the gridfile.                               |
+  !|       solidbodyfile | the file contains solid body geometry .     |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lavg,lfftk
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lavg,lfftk,    &
+             limmbou
   character(len=3) :: rkscheme
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
@@ -40,6 +44,7 @@ module commvar
   !|              lwrite | write samples or not.                       |
   !|                lavg | average the flow field or not .             |
   !|               lfftk | to use fft in the k direction.              |
+  !|             limmbou | to use immersed boundary method             |
   !|            rkscheme | which rk method to use.                     |
   !+---------------------+---------------------------------------------+
   !
@@ -124,7 +129,12 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|            lrestart | to assign the start mode. t=restart, f=new  |
   !+---------------------+---------------------------------------------+
-  !
+  integer :: nsolid
+  type(solid),allocatable,target :: immbody(:)
+  !+---------------------+---------------------------------------------+
+  !|           num_solid | number of solid bodies                      |
+  !|             immbody | the immersed body.                          |
+  !+---------------------+---------------------------------------------+
   !
   parameter(hm=5)
   !

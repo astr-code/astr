@@ -24,6 +24,8 @@ module parallel
     module procedure bcast_r8_ary
     module procedure bcast_r8_ary2
     module procedure bcast_r8_ary3
+    !
+    module procedure bcast_solid_ary
   end interface
   !
   interface dataswap
@@ -874,6 +876,61 @@ module parallel
   end subroutine bcast_log
   !+-------------------------------------------------------------------+
   !| The end of the subroutine bcast.                                  |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to broadcase solid array.                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 02-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine bcast_solid_ary(vario)
+    !
+    use commtype,  only : solid,triangle
+    !
+    ! arguments
+    type(solid),allocatable,intent(inout) :: vario(:)
+    !
+    ! local data
+    integer :: nsize,ierr,js,jf
+    !
+    nsize=size(vario)
+    !
+    call bcast_int(nsize)
+    !
+    if(mpirank.ne.0) then
+      if(allocated(vario)) deallocate(vario)
+      allocate(vario(1:nsize))
+    endif
+    !
+    do js=1,nsize
+      !
+      call bcast_cha(vario(js)%name)
+      call bcast_r8_ary(vario(js)%xmin)
+      call bcast_r8_ary(vario(js)%xmax)
+      call bcast_r8_ary(vario(js)%xref)
+      call bcast_r8_ary(vario(js)%xcen)
+      call bcast_int(vario(js)%num_face)
+      !
+      if(mpirank.ne.0) then
+        call vario(js)%alloface()
+      endif
+      !
+      do jf=1,vario(js)%num_face
+        call bcast_r8_ary(vario(js)%face(jf)%a)
+        call bcast_r8_ary(vario(js)%face(jf)%b)
+        call bcast_r8_ary(vario(js)%face(jf)%c)
+        call bcast_r8_ary(vario(js)%face(jf)%normdir)
+        call bcast_r8(vario(js)%face(jf)%area)
+      enddo
+      !
+    enddo
+    !
+    !
+  end subroutine bcast_solid_ary
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine bcast_solid_ary.                        |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
