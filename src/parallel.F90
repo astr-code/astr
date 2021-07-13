@@ -10,6 +10,7 @@ module parallel
   use mpi
   use commvar,   only : im,jm,km,hm,ia,ja,ka,lihomo,ljhomo,lkhomo,     &
                         npdci,npdcj,npdck,lfftk
+  use stlaio,  only: get_unit
   !
   implicit none
   !
@@ -255,7 +256,7 @@ module parallel
     integer, allocatable, dimension(:,:,:) :: imp,jmp,kmp
     integer :: ierr,nproc
     integer :: n,n1,n2
-    integer :: nsi,nsj,nsk
+    integer :: nsi,nsj,nsk,fh
     ! integer :: n,n1,n2,ns,i2,j2,k2,nar1,nsi,nsj,nsk,ina,jna,kna
     ! integer :: ispa,jspa,kspa
     ! real(8) :: var1
@@ -327,11 +328,12 @@ module parallel
         !
       end if
       !
+      fh=get_unit()
       !
-      open(13,file='datin/parallel.info',form='formatted')
-      write(13,"(3(A9,1x))")'isize','jsize','ksize'
-      write(13,"(3(I9,1x))")isize,jsize,ksize
-      write(13,"(10(A9,1x))")'Rank','Irk','Jrk','Krk','IM','JM','KM',  &
+      open(fh,file='datin/parallel.info',form='formatted')
+      write(fh,"(3(A9,1x))")'isize','jsize','ksize'
+      write(fh,"(3(I9,1x))")isize,jsize,ksize
+      write(fh,"(10(A9,1x))")'Rank','Irk','Jrk','Krk','IM','JM','KM',  &
                                                       'I0','J0','K0'
       nsi=0
       nsj=0
@@ -343,7 +345,7 @@ module parallel
         n=krk*(isize*jsize)+jrk*isize+irk
         !
         ! Output file of rank information.
-        write(13,"(10(I9,1x))")n,irk,jrk,krk,imp(irk,jrk,krk),       &
+        write(fh,"(10(I9,1x))")n,irk,jrk,krk,imp(irk,jrk,krk),       &
                             jmp(irk,jrk,krk),kmp(irk,jrk,krk),       &
                             nsi,nsj,nsk
         !
@@ -357,7 +359,7 @@ module parallel
         nsk=nsk+kmp(0,0,krk)
       enddo
       !
-      close(13)
+      close(fh)
       print*,' << parallel.info ... done !'
       !
     endif
@@ -391,7 +393,7 @@ module parallel
     use commvar,   only : is,ie,js,je,ks,ke
     !
     ! local data
-    integer :: n,nn,nsize1,nsize,ierr
+    integer :: n,nn,nsize1,nsize,ierr,fh
     integer,allocatable:: ntemp(:,:),nrank(:,:,:)
     integer,allocatable,dimension(:) :: nrect,irkg,jrkg,krkg,          &
                                         img,jmg,kmg,i0g,j0g,k0g
@@ -429,11 +431,12 @@ module parallel
                 i0g(0:mpirankmax),j0g(0:mpirankmax),                   &
                 k0g(0:mpirankmax)                                     )
       !
-      open(12,file='datin/parallel.info',form='formatted')
-      read(12,"(//)")
+      fh=get_unit()
+      open(fh,file='datin/parallel.info',form='formatted')
+      read(fh,"(//)")
       do n=0,mpirankmax
         !
-        read(12,*)ntemp(1,n),ntemp(2,n),ntemp(3,n),ntemp(4,n),         &
+        read(fh,*)ntemp(1,n),ntemp(2,n),ntemp(3,n),ntemp(4,n),         &
                   ntemp(5,n),ntemp(6,n),ntemp(7,n),ntemp(8,n),         &
                   ntemp(9,n),ntemp(10,n)
         !
@@ -450,7 +453,7 @@ module parallel
         nrank(irkg(n),jrkg(n),krkg(n))=n
         !
       end do
-      close(12)
+      close(fh)
       print*,' >> parallel.info ...done.'
       !
       ntemp(11,:)=0
@@ -912,9 +915,11 @@ module parallel
       call bcast_r8_ary(vario(js)%xref)
       call bcast_r8_ary(vario(js)%xcen)
       call bcast_int(vario(js)%num_face)
+      call bcast_int(vario(js)%num_edge)
       !
       if(mpirank.ne.0) then
         call vario(js)%alloface()
+        call vario(js)%alloedge()
       endif
       !
       do jf=1,vario(js)%num_face
@@ -923,6 +928,12 @@ module parallel
         call bcast_r8_ary(vario(js)%face(jf)%c)
         call bcast_r8_ary(vario(js)%face(jf)%normdir)
         call bcast_r8(vario(js)%face(jf)%area)
+      enddo
+      !
+      do jf=1,vario(js)%num_edge
+        call bcast_r8_ary(vario(js)%edge(jf)%a)
+        call bcast_r8_ary(vario(js)%edge(jf)%b)
+        call bcast_r8_ary(vario(js)%edge(jf)%normdir)
       enddo
       !
     enddo

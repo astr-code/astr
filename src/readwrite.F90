@@ -7,8 +7,10 @@
 !+---------------------------------------------------------------------+
 module readwrite
   !
-  use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,ptime
+  use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
+                      ptime,bcast
   use tecio
+  use stlaio,  only: get_unit
   !
   implicit none
   !
@@ -83,14 +85,15 @@ module readwrite
   subroutine fileini
     !
     use commvar, only : hand_fs,hand_rp
+    use stlaio,  only : get_unit
     !
     if(lio) then
       !
       call system('mkdir testout/')
       call system('mkdir outdat/')
       !
-      hand_fs=13
-      hand_rp=14
+      hand_fs=get_unit()
+      hand_rp=get_unit()
       !
     endif
     !
@@ -145,6 +148,8 @@ module readwrite
         typedefine='                              mixing layer'
       case('shuosher')
         typedefine='                         shu-osher problem'
+      case('windtunn')
+        typedefine='                   a numerical wind tunnel'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -359,66 +364,68 @@ module readwrite
     !
     ! local data
     character(len=64) :: inputfile
-    integer :: n
+    integer :: n,fh
     !
     if(mpirank==0) then
       !
-      call readkeyboad(inputfile=inputfile)
+      call readkeyboad(name1=inputfile)
       !
       if(trim(inputfile)=='.') inputfile='datin/input.dat'
       !
-      open(11,file=trim(inputfile),action='read')
-      read(11,'(////)')
-      read(11,*)flowtype
-      read(11,'(/)')
-      read(11,*)ia,ja,ka
-      read(11,'(/)')
-      read(11,*)lihomo,ljhomo,lkhomo
+      fh=get_unit()
+      !
+      open(fh,file=trim(inputfile),action='read')
+      read(fh,'(////)')
+      read(fh,*)flowtype
+      read(fh,'(/)')
+      read(fh,*)ia,ja,ka
+      read(fh,'(/)')
+      read(fh,*)lihomo,ljhomo,lkhomo
       write(*,'(A)',advance='no')'  ** homogeneous direction: '
       if(lihomo) write(*,'(A)',advance='no')'i,'
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
-      read(11,'(/)')
-      read(11,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
-      read(11,'(/)')
-      read(11,*)lrestart
-      read(11,'(/)')
-      read(11,*)alfa_filter,kcutoff
+      read(fh,'(/)')
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
+      read(fh,'(/)')
+      read(fh,*)lrestart
+      read(fh,'(/)')
+      read(fh,*)alfa_filter,kcutoff
       !
       if(nondimen) then
-        read(11,'(/)')
-        read(11,*)ref_t,reynolds,mach
+        read(fh,'(/)')
+        read(fh,*)ref_t,reynolds,mach
       else
-        read(11,'(///)')
+        read(fh,'(///)')
       endif
       !
-      read(11,'(/)')
-      read(11,*)conschm,difschm,rkscheme
-      read(11,'(/)')
-      read(11,*)recon_schem,lchardecomp
-      read(11,'(/)')
-      read(11,*)num_species
-      read(11,'(/)')
+      read(fh,'(/)')
+      read(fh,*)conschm,difschm,rkscheme
+      read(fh,'(/)')
+      read(fh,*)recon_schem,lchardecomp
+      read(fh,'(/)')
+      read(fh,*)num_species
+      read(fh,'(/)')
       do n=1,6
-        read(11,*)bctype(n)
+        read(fh,*)bctype(n)
         if(bctype(n)==41) then
-          backspace(11)
-          read(11,*)bctype(n),twall(n)
+          backspace(fh)
+          read(fh,*)bctype(n),twall(n)
         endif
       enddo
-      read(11,'(/)')
-      read(11,*)ninit
-      read(11,'(/)')
-      read(11,*)spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
+      read(fh,'(/)')
+      read(fh,*)ninit
+      read(fh,'(/)')
+      read(fh,*)spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
       if(lreadgrid) then
-        read(11,'(/)')
-        read(11,'(A)')gridfile
+        read(fh,'(/)')
+        read(fh,'(A)')gridfile
       endif
       if(limmbou) then
-        read(11,'(/)')
-        read(11,'(A)')solidfile
+        read(fh,'(/)')
+        read(fh,'(A)')solidfile
       endif
-      close(11)
+      close(fh)
       print*,' >> ',trim(inputfile),' ... done'
       !
     endif
@@ -489,19 +496,22 @@ module readwrite
     !
     ! local data
     character(len=64) :: inputfile
+    integer :: fh
     !
     inputfile='datin/contr.dat'
     !
     if(mpirank==0) then
       !
-      open(11,file=trim(inputfile),action='read')
-      read(11,'(////)')
-      read(11,*)lwrite,lavg
-      read(11,'(/)')
-      read(11,*)maxstep,nwrite,nlstep,navg
-      read(11,'(/)')
-      read(11,*)deltat
-      close(11)
+      fh=get_unit()
+      !
+      open(fh,file=trim(inputfile),action='read')
+      read(fh,'(////)')
+      read(fh,*)lwrite,lavg
+      read(fh,'(/)')
+      read(fh,*)maxstep,nwrite,nlstep,navg
+      read(fh,'(/)')
+      read(fh,*)deltat
+      close(fh)
       print*,' >> ',trim(inputfile),' ... done'
       !
     endif
@@ -517,6 +527,189 @@ module readwrite
   end subroutine readcont
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readcont.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to read a file that defines monitors.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readmonc
+    !
+    use commvar, only : nmonitor,imon
+    use parallel,only : bcast
+    use commcal, only : monitorsearch
+    !
+    ! local data
+    character(len=64) :: inputfile
+    character(len=32) :: c1,c2,c3
+    logical :: lexist
+    integer :: ios,bignum,ncou,i,n,fh
+    integer,allocatable :: ijk(:,:)
+    real(8),allocatable :: xyz(:,:)
+    !
+    bignum=1024
+    allocate(ijk(1:bignum,4),xyz(1:bignum,4))
+    !
+    ijk=-1
+    !
+    !
+    if(mpirank==0) then
+      !
+      inputfile='datin/monitor.dat'
+      inquire(file=trim(inputfile), exist=lexist)
+      !
+      ncou=0
+      !
+      if(lexist) then
+        !
+        fh=get_unit()
+        !
+        open(fh,file=trim(inputfile),action='read')
+        read(fh,*,iostat=ios)
+        if(ios.ne.0) then
+          nmonitor=0
+        endif
+        write(*,'(2X,62A)')('-',i=1,62)
+        write(*,'(2X,A)')'                     *** monitor points ***'
+        do while(ios==0)
+          !
+          read(fh,*,iostat=ios)c1,c2,c3
+          if(ios==0) then
+            !
+            ncou=ncou+1
+            !
+            if(isnum(c1)==1) then
+              !
+              read(c1,*)ijk(ncou,1)
+              read(c2,*)ijk(ncou,2)
+              read(c3,*)ijk(ncou,3)
+              ijk(ncou,4)=ncou
+              !
+              write(*,'(24X,I3,A,3(I12))')ijk(ncou,4),':',ijk(ncou,1:3)
+              !
+            elseif(isnum(c1)==2 .or. isnum(c1)==3 .or. isnum(c1)==4) then
+              !
+              read(c1,*)xyz(ncou,1)
+              read(c2,*)xyz(ncou,2)
+              read(c3,*)xyz(ncou,3)
+              xyz(ncou,4)=dble(ncou)
+              !
+              write(*,'(24X,I3,A,3(F12.6))')ncou,':',xyz(ncou,:)
+            else
+              print*,'ncou=',ncou
+              stop ' !! ERROR 1 @ readmon'
+            endif
+            !
+          else
+            exit
+          endif
+          !
+        enddo
+        write(*,'(2X,62A)')('-',i=1,62)
+        close(fh)
+        print*,' >> ',trim(inputfile),' ... done'
+        !
+      endif
+      !
+    endif
+    !
+    call bcast(ncou)
+    !
+    if(ncou>0) then
+      !
+      call bcast(ijk(1:ncou,:))
+      call bcast(xyz(1:ncou,:))
+      !
+      call monitorsearch(ijk(1:ncou,:),xyz(1:ncou,:),imon,nmonitor)
+      !
+      ! if(nmonitor>0) then
+      !   do n=1,nmonitor
+      !     print*,mpirank,'|',n,':',imon(n,:)
+      !   enddo
+      ! endif
+      !
+    else
+      nmonitor=0
+    endif
+    !
+  end subroutine readmonc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readmonc.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to output monitor files.                  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 07-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine writemon
+    !
+    use commvar, only: nmonitor,imon,nstep,time,pinf
+    use parallel,only : ig0,jg0,kg0
+    use commarray, only : x,rho,vel,prs,tmp
+    !
+    ! local data
+    integer :: n,i,j,k
+    integer,allocatable,save :: fh(:)
+    logical,save :: firstcall = .true.
+    character(len=4) :: moname
+    character(len=64) :: filename
+    !
+    if(nmonitor>0) then
+      !
+      if(firstcall) then
+        !
+        allocate(fh(nmonitor))
+        !
+        do n=1,nmonitor
+          !
+          i=imon(n,1)
+          j=imon(n,2)
+          k=imon(n,3)
+          !
+          write(moname,'(i4.4)')imon(n,4)
+          filename='monitor'//moname//'.dat'
+          !
+          print*,mpirank,'|',trim(filename)
+          !
+          fh(n)=get_unit()
+          !
+          open(fh(n),file=trim(filename))
+          print*,' ** open file ',trim(filename),' using handle',fh(n)
+          write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,imon(n,2)+jg0,  &
+                                         imon(n,3)+kg0
+          write(fh(n),'(A,3(1X,E15.7E3))')'#',x(i,j,k,1:3)
+          write(fh(n),"(A7,1X,A13,6(1X,A20))")'nstep','time',          &
+                                                'u','v','w','ro','p','t'
+          !
+        enddo
+        !
+        firstcall=.false.
+        !
+      else
+        do n=1,nmonitor
+          i=imon(n,1)
+          j=imon(n,2)
+          k=imon(n,3)
+          write(fh(n),"(I7,1X,E13.6E2,6(1X,E20.13E2))")nstep,time,     &
+                    vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k)
+        enddo
+      endif
+      !
+    else
+      return
+    endif
+    !
+    return
+    !
+  end subroutine writemon
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine writemon.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -552,49 +745,45 @@ module readwrite
   !| -------------                                                     |
   !| 01-07-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readsolid
+  subroutine readsolid(inputfile)
     !
     use commtype,  only : solid,triangle
-    use commvar,   only : limmbou,solidfile,immbody,nsolid
+    use commvar,   only : immbody,nsolid
     use stlaio
+    !
+    ! arguments
+    character(len=*),intent(in) :: inputfile
     !
     ! local data
     logical :: lstl
     integer :: solid_num,node_num,face_num,text_num,jso
     !
-    if(limmbou) then
-      !
-      if(lio) then
-        !
-        print*,' >> solid body: '
-        !
-        nsolid=num_solid(trim(solidfile))
-        !
-        allocate(immbody(1:nsolid))
-        !
-        write(*,'(A,I0)')'    ** number of solids : ',nsolid
-        !
-        do jso=1,nsolid
-          immbody(jso)%num_face=num_face_in_solid(trim(solidfile),jso)
-          call immbody(jso)%alloface()
-          write(*,'(2(A,I0))')'    ** number of faces for solid ',jso, &
-                                            ' : ',immbody(jso)%num_face
-        enddo
-        !
-        call stla_read(trim(solidfile),immbody)
-        !
-        ! print*,' face num for solde 1: ',num_face_in_solid(trim(solidfile),1)
-        ! print*,' face num for solde 2: ',num_face_in_solid(trim(solidfile),2)
-        ! call stla_size(trim(solidfile),nsolid,node_num,face_num,text_num)
-        ! call stla_size_print(trim(solidfile),nsolid,node_num,face_num,text_num)
-        ! print*,'      file: ',trim(solidfile)
-        ! print*,' solid num: ',solid_num
-        ! print*,'  node num: ',node_num
-        ! print*,'  face num: ',face_num
-        ! print*,'  text num: ',text_num
-      endif
-      !
-    endif
+    print*,' >> solid body: '
+    !
+    nsolid=num_solid(trim(inputfile))
+    !
+    allocate(immbody(1:nsolid))
+    !
+    write(*,'(A,I0)')'    ** number of solids : ',nsolid
+    !
+    do jso=1,nsolid
+      immbody(jso)%num_face=num_face_in_solid(trim(inputfile),jso)
+      call immbody(jso)%alloface()
+      write(*,'(2(A,I0))')'    ** number of faces for solid ',jso, &
+                                        ' : ',immbody(jso)%num_face
+    enddo
+    !
+    call stla_read(trim(inputfile),immbody)
+    !
+    ! print*,' face num for solde 1: ',num_face_in_solid(trim(solidfile),1)
+    ! print*,' face num for solde 2: ',num_face_in_solid(trim(solidfile),2)
+    ! call stla_size(trim(solidfile),nsolid,node_num,face_num,text_num)
+    ! call stla_size_print(trim(solidfile),nsolid,node_num,face_num,text_num)
+    ! print*,'      file: ',trim(solidfile)
+    ! print*,' solid num: ',solid_num
+    ! print*,'  node num: ',node_num
+    ! print*,'  face num: ',face_num
+    ! print*,'  text num: ',text_num
     !
     return
     !
@@ -1167,8 +1356,6 @@ module readwrite
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
       !
-      flush(hand_rp)
-      !
       if(nstep==maxstep) then
         close(hand_rp)
         print*,' << report.txt'
@@ -1183,6 +1370,154 @@ module readwrite
   !| The end of the subroutine timerept.                               |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This function Verifies that a character string represents a       |
+  !|  numerical value                                                  |
+  !+-------------------------------------------------------------------+
+  ! ref: http://fcode.cn/code_gen-115-1.html
+  !+-------------------------------------------------------------------+
+  Integer Function IsNum(zval)
+    ! 确定字符是否是数值类型：
+    ! 0-非数值的字符串
+    ! 1-整数(integer)
+    ! 2-小数(fixed point real)
+    ! 3-指数类型实数(exponent type real)
+    ! 4-双精度实数指数形式(exponent type double)
+    Character (Len=*), Intent (In) :: zval
+    !
+    Integer :: num, nmts, nexp, kmts, ifexp, ichr
+    !
+    Integer, Parameter :: kint = 1 ! integer
+    Integer, Parameter :: kfix = 2 ! fixed point real
+    Integer, Parameter :: kexp = 3 ! exponent type real
+    Integer, Parameter :: kdbl = 4 ! exponent type double
+    !
+    ! initialise
+    num = 0  ! 数字的格式，最后传递给ISNUM返回
+    nmts = 0 ! 整数或浮点数的数字个数
+    nexp = 0 ! 指数形式的数字个数
+    kmts = 0 ! 有+-号为1，否则为0
+    ifexp = 0! 似乎没用
+    ! loop over characters
+    ichr = 0
+    !
+    Do
+    
+      If (ichr>=len(zval)) Then
+    
+        ! last check
+    
+        If (nmts==0) Exit
+    
+        If (num>=kexp .And. nexp==0) Exit
+    
+        isnum = num
+    
+        Return
+    
+      End If
+    
+      ichr = ichr + 1
+    
+      Select Case (zval(ichr:ichr))
+    
+        ! process blanks
+    
+      Case (' ')
+    
+        Continue
+    
+        ! process digits
+    
+      Case ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+    
+        If (num==0) num = kint
+    
+        If (num<kexp) Then
+    
+          nmts = nmts + 1
+    
+          ! 整数或浮点数+1
+    
+        Else
+    
+          nexp = nexp + 1
+    
+          ! 指数形式+1
+    
+        End If
+    
+        ! process signs
+    
+      Case ('+', '-')
+    
+        If (num==0) Then
+    
+          If (kmts>0) Exit
+    
+          ! 出现2个符号，非数字
+    
+          kmts = 1
+    
+          num = kint
+    
+        Else
+    
+          If (num<kexp) Exit
+    
+          If (ifexp>0) Exit
+    
+          ifexp = 1
+    
+        End If
+    
+        ! process decimal point
+    
+      Case ('.')
+    
+        If (num/=kint .And. ichr/=1) Exit
+    
+        ! 前面不是整数，小数点也不是第一个字符，则非数字
+    
+        num = kfix
+    
+        ! process exponent
+    
+      Case ('e', 'E')
+    
+        If (num>=kexp) Exit
+    
+        If (nmts==0) Exit
+    
+        num = kexp
+      Case ('d', 'D')
+    
+        If (num>=kexp) Exit
+    
+        If (nmts==0) Exit
+    
+        num = kdbl
+    
+        ! any other character means the string is non-numeric
+    
+      Case Default
+    
+        Exit
+    
+      End Select
+    
+    End Do
+    
+    ! if this point is reached, the string is non-numeric
+    
+    isnum = 0
+    
+    Return
+    
+  End Function IsNum
+  !+-------------------------------------------------------------------+
+  !| The end of the Function IsNum.                                    |
+  !+-------------------------------------------------------------------+
   !
 end module readwrite
 !+---------------------------------------------------------------------+

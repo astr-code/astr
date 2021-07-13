@@ -22,7 +22,8 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   subroutine gridgen
     !
-    use commvar,  only : flowtype,lreadgrid,limmbou
+    use parallel, only : mpirank
+    use commvar,  only : flowtype,lreadgrid,limmbou,solidfile
     use readwrite,only : readgrid,writegrid,readsolid
     !
     if(lreadgrid) then
@@ -48,7 +49,7 @@ module gridgeneration
     endif
     !
     if(limmbou) then
-      call readsolid
+      if(mpirank==0) call readsolid(solidfile)
     endif
     !
   end subroutine gridgen

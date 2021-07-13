@@ -14,16 +14,19 @@ module fludyna
   !
   interface thermal
      module procedure thermal_scar
+     module procedure thermal_1d
      module procedure thermal_3d
   end interface
   !
   interface fvar2q
      module procedure fvar2q_sca
+     module procedure fvar2q_1da
      module procedure fvar2q_3da
   end interface
   !
   interface q2fvar
      module procedure q2fvar_sca
+     module procedure q2fvar_1da
      module procedure q2fvar_3da
   end interface
   !
@@ -56,6 +59,28 @@ module fludyna
     endif
     !
   end function thermal_scar
+  !
+  function thermal_1d(density,pressure,temperature,dim) result(vout)
+    !
+    use commvar,only : const2
+    !
+    ! arguments
+    integer,intent(in) :: dim
+    real(8) :: vout(dim)
+    real(8),intent(in),optional :: density(:),pressure(:),        &
+                                   temperature(:)
+    !
+    if(present(density) .and. present(temperature)) then
+      vout=density*temperature/const2
+    elseif(present(density) .and. present(pressure)) then
+      vout=pressure/density*const2
+    elseif(present(temperature) .and. present(pressure)) then
+      vout=pressure/temperature*const2
+    else
+      stop ' !! unable to get thermal variable  @ thermal !!'
+    endif
+    !
+  end function thermal_1d
   !
   function thermal_3d(density,pressure,temperature,dim) result(vout)
     !
@@ -127,6 +152,48 @@ module fludyna
     endif
     !
   end subroutine fvar2q_sca
+  !
+  subroutine fvar2q_1da(q,density,velocity,pressure,temperature,species)
+    !
+    use commvar, only: numq,ndims,num_species,const1,const6
+    !
+    real(8),intent(in) :: density(:),velocity(:,:)
+    real(8),intent(in),optional :: pressure(:),temperature(:), &
+                                   species(:,:)
+    real(8),intent(out) :: q(:,:)
+    !
+    ! local data
+    integer :: jspec
+    !
+    q(:,1)=density(:)
+    q(:,2)=density(:)*velocity(:,1)
+    q(:,3)=density(:)*velocity(:,2)
+    q(:,4)=density(:)*velocity(:,3)
+    !
+    if(present(temperature)) then
+        q(:,5)=density(:)*( temperature(:)*const1 +        &
+                             0.5d0*(velocity(:,1)**2 +             &
+                                    velocity(:,2)**2 +             &
+                                    velocity(:,3)**2) )
+    elseif(present(pressure)) then
+        q(:,5)=pressure(:)*const6+0.5d0*density(:)*(       &
+                                    velocity(:,1)**2 +             &
+                                    velocity(:,2)**2 +             &
+                                    velocity(:,3)**2 )
+    else
+      print*,' !! pressure or temperature required !!'
+      stop ' !! error @ fvar2q'
+    endif
+    !
+    if(num_species>0) then
+      !
+      do jspec=1,num_species
+        q(:,5+jspec)=density(:)*species(:,jspec)
+      enddo
+      !
+    endif
+    !
+  end subroutine fvar2q_1da
   !
   subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species)
     !
@@ -220,6 +287,45 @@ module fludyna
     endif
     !
   end subroutine q2fvar_3da
+  !
+  subroutine q2fvar_1da(q,density,velocity,pressure,temperature,species)
+    !
+    use commvar, only: numq,ndims,num_species,const1,const6
+    !
+    real(8),intent(in) :: q(:,:)
+    real(8),intent(out) :: density(:),velocity(:,:),           &
+                           pressure(:),temperature(:) 
+    real(8),intent(out),optional :: species(:,:)
+    !
+    ! local data
+    integer :: jspec
+    integer :: dim
+    !
+    density(:)   =q(:,1)
+    !
+    velocity(:,1)=q(:,2)/density
+    velocity(:,2)=q(:,3)/density
+    velocity(:,3)=q(:,4)/density
+    !
+    pressure(:)  =( q(:,5)-0.5d0*density(:)*(              &
+                                         velocity(:,1)**2+         &
+                                         velocity(:,2)**2+         &
+                                         velocity(:,3)**2) )/const6
+    ! !
+    !
+    dim=size(q,1)
+    !
+    temperature=thermal(pressure=pressure,density=density,dim=dim)
+    !
+    if(num_species>0 .and. present(species)) then
+      !
+      do jspec=1,num_species
+        species(:,jspec)=q(:,5+jspec)/density(:)
+      enddo
+      !
+    endif
+    !
+  end subroutine q2fvar_1da
   !
   subroutine q2fvar_sca(q,density,velocity,pressure,temperature,species)
     !

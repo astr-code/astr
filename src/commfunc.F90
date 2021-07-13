@@ -41,8 +41,9 @@ module commfunc
     module procedure deriv_4o
   end interface
   !
-  real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),     &
-                         coef10i(:),coefb(:,:)
+  real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),      &
+                         coef10i(:),coefb(:,:),                        &
+                         coef8e(:),coef6e(:),coef4e(:),coef4be(:,:)
   complex(8) :: ci=(0.d0,1.d0)
   !
   contains
@@ -632,7 +633,7 @@ module commfunc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This function is to apply compact low-pass filter to a input array|
+  !| This function is to apply 6th-order low-pass filter to a  array   |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -657,7 +658,101 @@ module commfunc
     enddo 
     !
   end function filter8exp
+  !+-------------------------------------------------------------------+
+  !| The end of the function filter8exp.                               |
+  !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This function is to apply 6th-order low-pass filter to a  array   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 06-07-2021  | Created by J. Fang @ Warrington.                    |
+  !+-------------------------------------------------------------------+
+  function spafilter6exp(f,ntype,dim) result(ff)
+    !
+    integer,intent(in) :: ntype,dim
+    real(8),intent(in) :: f(-hm:dim+hm)
+    real(8) :: ff(0:dim)
+    !
+    real(8) :: coef(0:4)
+    integer :: ii,m
+    !
+    ff=0.d0
+    !
+    select case(ntype)
+    case(1)
+      !
+      ii=0
+      do m=0,4
+        ff(ii)=ff(ii)+coef4be(0,m)*f(m)
+      enddo
+      ii=1
+      do m=0,4
+        ff(ii)=ff(ii)+coef4be(1,m)*f(m)
+      enddo
+      ii=2
+      do m=0,2
+        ff(ii)=ff(ii)+coef4e(m)*(f(ii-m)+f(ii+m))
+      enddo
+      do ii=3,dim
+        !
+        do m=0,3
+          ff(ii)=ff(ii)+coef6e(m)*(f(ii-m)+f(ii+m))
+        enddo
+        !
+      enddo
+      !
+    case(2)
+      !
+      do ii=0,dim-3
+        !
+        do m=0,3
+          ff(ii)=ff(ii)+coef6e(m)*(f(ii-m)+f(ii+m))
+        enddo
+        !
+      enddo
+      ii=dim-2
+      do m=0,2
+        ff(ii)=ff(ii)+coef4e(m)*(f(ii-m)+f(ii+m))
+      enddo
+      ii=dim-1
+      do m=0,4
+        ff(ii)=ff(ii)+coef4be(1,m)*f(dim-m)
+      enddo
+      ii=dim
+      do m=0,4
+        ff(ii)=ff(ii)+coef4be(0,m)*f(dim-m)
+      enddo
+      !
+    case(3)
+      !
+      do ii=0,dim
+        !
+        do m=0,3
+          ff(ii)=ff(ii)+coef6e(m)*(f(ii-m)+f(ii+m))
+        enddo
+        !
+      enddo
+      !
+    case default
+      stop '!! ERROR @ spafilter6exp'
+    end select
+    !
+    return
+    !
+  end function spafilter6exp
+  !+-------------------------------------------------------------------+
+  !| The end of the function spafilter6exp.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to apply compact low-pass filter to a input array|
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 10-02-2021  | Created by J. Fang @ Warrington.                    |
+  !+-------------------------------------------------------------------+
   function spafilter10_basic(f,ntype,dim,af,fc,lfft) result(ff)
     !
     use singleton
@@ -1366,6 +1461,7 @@ module commfunc
     !
     allocate(coef2i(0:1),coef4i(0:2),coef6i(0:3),coef8i(0:4),coef10i(0:5))
     allocate(coefb(0:4,0:8))
+    allocate(coef8e(0:4),coef6e(0:3),coef4e(0:2),coef4be(0:1,0:4))
     !
     ! inernal coefficent
     ! 2nd-order
@@ -1411,7 +1507,7 @@ module commfunc
     coefb(3,7)=( -1.d0 + 2.d0*alfa)  /32.d0
     coefb(3,8)=(  1.d0 - 2.d0*alfa)  /256.d0
     !
-    ! 6-order asymmetry scheme for point 32
+    ! 6-order asymmetry scheme for point 2
     coefb(2,0)=( -1.d0 + 2.d0*alfa)  /64.d0
     coefb(2,1)=(  3.d0 +26.d0*alfa)  /32.d0
     coefb(2,2)=( 49.d0 +30.d0*alfa)  /64.d0
@@ -1443,6 +1539,37 @@ module commfunc
     coefb(0,6)=( -1.d0 + 1.d0*alfa)  /64.d0
     coefb(0,7)=0.d0
     coefb(0,8)=0.d0
+    !
+    ! explicit filter
+    coef4be(0,0)=(15.d0 )/16.d0
+    coef4be(0,1)=( 1.d0 )/4.d0
+    coef4be(0,2)=(-3.d0 )/8.d0
+    coef4be(0,3)=( 1.d0 )/4.d0
+    coef4be(0,4)=(-1.d0 )/16.d0
+    !
+    coef4be(1,0)=( 1.d0 )/16.d0
+    coef4be(1,1)=( 3.d0 )/4.d0
+    coef4be(1,2)=( 3.d0 )/8.d0
+    coef4be(1,3)=(-1.d0 )/4.d0
+    coef4be(1,4)=( 1.d0 )/16.d0
+    !
+    ! 4th-order
+    coef4e(0)=( 5.d0 )/16.d0
+    coef4e(1)=( 1.d0 )/4.d0
+    coef4e(2)=(-1.d0 )/16.d0
+    !
+    ! 6th-order
+    coef6e(0)=(11.d0) /32.d0
+    coef6e(1)=(15.d0) /64.d0
+    coef6e(2)=(-3.d0) /32.d0
+    coef6e(3)=( 1.d0) /64.d0
+    !
+    ! 8th-order
+    coef8e(0)=(93.d0) /256.d0
+    coef8e(1)=( 7.d0) /32.d0
+    coef8e(2)=(-7.d0) /64.d0
+    coef8e(3)=( 1.d0) /32.d0
+    coef8e(4)=(-1.d0) /256.d0
     !
   end subroutine genfilt10coef
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3573,7 +3700,115 @@ module commfunc
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the function argtanh.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to do the cross product for a 3-D vector.        | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure function cross_product(a,b)
+    !
+    real(8) :: cross_product(3)
+    real(8),dimension(3),intent(in) :: a(3), b(3)
+  
+    cross_product(1) = a(2) * b(3) - a(3) * b(2)
+    cross_product(2) = a(3) * b(1) - a(1) * b(3)
+    cross_product(3) = a(1) * b(2) - a(2) * b(1)
+    !
+    return
+    !
+  end function cross_product
+  !+-------------------------------------------------------------------+
+  !| The end of the function cross_product.                            |
+  !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This function is to calculate the distance between 2 points.      | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure real(8) function dis2point(p1,p2)
+    !
+    ! arguments
+    real(8),intent(in) :: p1(3),p2(3)
+    !
+    dis2point=(p1(1)-p2(1))**2+(p1(2)-p2(2))**2+(p1(3)-p2(3))**2
+    !
+    dis2point=sqrt(dis2point)
+    !
+    return
+    !
+  end function dis2point
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine dis2point.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to calculate the area of a triangle using        |
+  !| Heron's formula.                                                  | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure real(8) function areatriangle(p1,p2,p3)
+    !
+    ! arguments
+    real(8),intent(in) :: p1(3),p2(3),p3(3)
+    !
+    ! local data
+    real(8) :: a,b,c,var1
+    !
+    a=dis2point(p1,p2)
+    b=dis2point(p2,p3)
+    c=dis2point(p1,p3)
+    !
+    var1=0.5d0*(a+b+c)
+    !
+    areatriangle=sqrt(var1*(var1-a)*(var1-b)*(var1-c))
+    !
+    return
+    !
+  end function areatriangle
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine areatriangle.                           |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to determin if two points the same.            | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure logical function samepoint(p1,p2)
+    !
+    ! arguments
+    real(8),intent(in) :: p1(3),p2(3)
+    !
+    ! local data
+    real(8) :: epsilon
+    !
+    epsilon=1.d-16
+    !
+    if(abs(p1(1)-p2(1))<=epsilon .and. abs(p1(2)-p2(2))<=epsilon .and. &
+       abs(p1(3)-p2(3))<=epsilon) then
+      samepoint=.true.
+    else
+      samepoint=.false.
+    endif
+    !
+    return
+    !
+  end function samepoint
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine areatriangle.                           |
+  !+-------------------------------------------------------------------+
+  !!
 end module commfunc
 !+---------------------------------------------------------------------+
 !| The end of the module commfunc.                                     |

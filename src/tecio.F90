@@ -7,6 +7,8 @@
 !+---------------------------------------------------------------------+
 module tecio
   !
+  use stlaio,  only: get_unit
+  !
   implicit none
   !
   real(4) :: eohmarker         = 357.0,                                &
@@ -83,9 +85,9 @@ module tecio
     vname(2)=var2name
     vname(3)=var3name
     !
-    unitf=18
+    unitf=get_unit()
     !
-    open(18,file=filename,form='unformatted',access='stream')
+    open(unitf,file=filename,form='unformatted',access='stream')
     !
       !i. header section
     ! i. magic number, version number
@@ -200,23 +202,23 @@ module tecio
     !                    4=shortint, 5=byte,   6=bit
     do n=1,nbrvar
       int32=1
-      write(18)int32
+      write(unitf)int32
     enddo
     ! +------------+
     ! | int32      | has passive variables: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | has variable sharing: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
     ! +------------+
     int32=-1
-    write(18)int32
+    write(unitf)int32
     !
     do n=1,nbrvar
       !+------------+
@@ -224,26 +226,26 @@ module tecio
       !+------------+
       float32=minval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
       !+------------+
       !| float64    | max value
       !+------------+
       float32=maxval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
     enddo
     ! +------------+
     ! | xxxxxxxxxx | zone data
     ! +------------+
-    write(18)var
+    write(unitf)var
     !
-    !write(18)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
     !do n=1,nbrvar
-    !write(18)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
       
     !end do
       !
-    close(18)
+    close(unitf)
     !
     print*,' << ',filename
     !
@@ -301,9 +303,9 @@ module tecio
     vname(3)=var3name
     vname(4)=var4name
     !
-    unitf=18
+    unitf=get_unit()
     !
-    open(18,file=filename,form='unformatted',access='stream')
+    open(unitf,file=filename,form='unformatted',access='stream')
     !
       !i. header section
     ! i. magic number, version number
@@ -418,23 +420,23 @@ module tecio
     !                    4=shortint, 5=byte,   6=bit
     do n=1,nbrvar
       int32=1
-      write(18)int32
+      write(unitf)int32
     enddo
     ! +------------+
     ! | int32      | has passive variables: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | has variable sharing: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
     ! +------------+
     int32=-1
-    write(18)int32
+    write(unitf)int32
     !
     do n=1,nbrvar
       !+------------+
@@ -442,26 +444,26 @@ module tecio
       !+------------+
       float32=minval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
       !+------------+
       !| float64    | max value
       !+------------+
       float32=maxval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
     enddo
     ! +------------+
     ! | xxxxxxxxxx | zone data
     ! +------------+
-    write(18)var
+    write(unitf)var
     !
-    !write(18)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
     !do n=1,nbrvar
-    !write(18)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
       
     !end do
       !
-    close(18)
+    close(unitf)
     !
     print*,' << ',filename
     !
@@ -521,9 +523,9 @@ module tecio
     vname(4)=var4name
     vname(5)=var5name
     !
-    unitf=18
+    unitf=get_unit()
     !
-    open(18,file=filename,form='unformatted',access='stream')
+    open(unitf,file=filename,form='unformatted',access='stream')
     !
       !i. header section
     ! i. magic number, version number
@@ -638,23 +640,23 @@ module tecio
     !                    4=shortint, 5=byte,   6=bit
     do n=1,nbrvar
       int32=1
-      write(18)int32
+      write(unitf)int32
     enddo
     ! +------------+
     ! | int32      | has passive variables: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | has variable sharing: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
     ! +------------+
     int32=-1
-    write(18)int32
+    write(unitf)int32
     !
     do n=1,nbrvar
       !+------------+
@@ -662,26 +664,26 @@ module tecio
       !+------------+
       float32=minval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
       !+------------+
       !| float64    | max value
       !+------------+
       float32=maxval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
     enddo
     ! +------------+
     ! | xxxxxxxxxx | zone data
     ! +------------+
-    write(18)var
+    write(unitf)var
     !
-    !write(18)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
     !do n=1,nbrvar
-    !write(18)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
       
     !end do
       !
-    close(18)
+    close(unitf)
     !
     print*,' << ',filename
     !
@@ -743,9 +745,9 @@ module tecio
     vname(5)=var5name
     vname(6)=var6name
     !
-    unitf=18
+    unitf=get_unit()
     !
-    open(18,file=filename,form='unformatted',access='stream')
+    open(unitf,file=filename,form='unformatted',access='stream')
     !
       !i. header section
     ! i. magic number, version number
@@ -860,23 +862,23 @@ module tecio
     !                    4=shortint, 5=byte,   6=bit
     do n=1,nbrvar
       int32=1
-      write(18)int32
+      write(unitf)int32
     enddo
     ! +------------+
     ! | int32      | has passive variables: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | has variable sharing: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
     ! +------------+
     int32=-1
-    write(18)int32
+    write(unitf)int32
     !
     do n=1,nbrvar
       !+------------+
@@ -884,26 +886,26 @@ module tecio
       !+------------+
       float32=minval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
       !+------------+
       !| float64    | max value
       !+------------+
       float32=maxval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
     enddo
     ! +------------+
     ! | xxxxxxxxxx | zone data
     ! +------------+
-    write(18)var
+    write(unitf)var
     !
-    !write(18)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
     !do n=1,nbrvar
-    !write(18)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
       
     !end do
       !
-    close(18)
+    close(unitf)
     !
     print*,' << ',filename
     !
@@ -970,9 +972,9 @@ module tecio
     vname(6)=var6name
     vname(7)=var7name
     !
-    unitf=18
+    unitf=get_unit()
     !
-    open(18,file=filename,form='unformatted',access='stream')
+    open(unitf,file=filename,form='unformatted',access='stream')
     !
       !i. header section
     ! i. magic number, version number
@@ -1087,23 +1089,23 @@ module tecio
     !                    4=shortint, 5=byte,   6=bit
     do n=1,nbrvar
       int32=1
-      write(18)int32
+      write(unitf)int32
     enddo
     ! +------------+
     ! | int32      | has passive variables: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | has variable sharing: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
     ! +------------+
     int32=-1
-    write(18)int32
+    write(unitf)int32
     !
     do n=1,nbrvar
       !+------------+
@@ -1111,26 +1113,26 @@ module tecio
       !+------------+
       float32=minval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
       !+------------+
       !| float64    | max value
       !+------------+
       float32=maxval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
     enddo
     ! +------------+
     ! | xxxxxxxxxx | zone data
     ! +------------+
-    write(18)var
+    write(unitf)var
     !
-    !write(18)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
     !do n=1,nbrvar
-    !write(18)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
       
     !end do
       !
-    close(18)
+    close(unitf)
     !
     print*,' << ',filename
     !
@@ -1199,9 +1201,9 @@ module tecio
     vname(7)=var7name
     vname(8)=var8name
     !
-    unitf=18
+    unitf=get_unit()
     !
-    open(18,file=filename,form='unformatted',access='stream')
+    open(unitf,file=filename,form='unformatted',access='stream')
     !
       !i. header section
     ! i. magic number, version number
@@ -1316,23 +1318,23 @@ module tecio
     !                    4=shortint, 5=byte,   6=bit
     do n=1,nbrvar
       int32=1
-      write(18)int32
+      write(unitf)int32
     enddo
     ! +------------+
     ! | int32      | has passive variables: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | has variable sharing: 0=no, 1=yes
     ! +------------+
     int32=0
-    write(18)int32
+    write(unitf)int32
     ! +------------+
     ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
     ! +------------+
     int32=-1
-    write(18)int32
+    write(unitf)int32
     !
     do n=1,nbrvar
       !+------------+
@@ -1340,26 +1342,26 @@ module tecio
       !+------------+
       float32=minval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
       !+------------+
       !| float64    | max value
       !+------------+
       float32=maxval(var(:,:,:,n))
       float64=real(float32,8)
-      write(18)float64
+      write(unitf)float64
     enddo
     ! +------------+
     ! | xxxxxxxxxx | zone data
     ! +------------+
-    write(18)var
+    write(unitf)var
     !
-    !write(18)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
     !do n=1,nbrvar
-    !write(18)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
       
     !end do
       !
-    close(18)
+    close(unitf)
     !
     print*,' << ',filename
     !
@@ -1381,6 +1383,100 @@ module tecio
     write(unitf)0
     !
   end subroutine ecrirebin
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to FE-Volume Tetrahedral Data.            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine tecsolid(filename,asolid,dim)
+    !
+    use commtype,  only : solid
+    !
+    type(solid),intent(in) :: asolid(:)
+    character(len=*),intent(in) :: filename
+    integer,intent(in),optional :: dim
+    !
+    integer :: nsolid,jsolid,j,ndim,unitf
+    !
+    nsolid=size(asolid)
+    !
+    if(present(dim)) then
+      ndim=dim
+    else
+      ndim=3
+    endif
+    !
+    if(ndim==2) then
+      !
+      unitf=get_unit()
+      open(unitf,file=filename,form='formatted')
+      write(unitf,'(A)')'TITLE = "FE-Volume TRIANGLE Data"'
+      do jsolid=1,nsolid
+        write(unitf,'(a)')'variables = "x", "y", "nx", "ny"'
+        write(unitf,'(3(A,I0),A)')'ZONE T="P_',jsolid,                    &
+                          '", DATAPACKING=BLOCK, NODES=',              &
+                         asolid(jsolid)%num_edge*2,', ELEMENTS=',      &
+                         asolid(jsolid)%num_edge,', ZONETYPE=FELINESEG'
+        write(unitf,'(A)')'VarLocation=([3-4]=CellCentered)'
+        write(unitf,'(2(1X,E15.7E3))')(asolid(jsolid)%edge(j)%a(1),       &
+                                    asolid(jsolid)%edge(j)%b(1),       &
+                                    j=1,asolid(jsolid)%num_edge)
+        write(unitf,'(2(1X,E15.7E3))')(asolid(jsolid)%edge(j)%a(2),       &
+                                    asolid(jsolid)%edge(j)%b(2),       &
+                                    j=1,asolid(jsolid)%num_edge)
+        write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%edge(j)%normdir(1), &
+                                            j=1,asolid(jsolid)%num_edge)
+        write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%edge(j)%normdir(2), &
+                                            j=1,asolid(jsolid)%num_edge)
+        write(unitf,'(2(1X,I8))')(j,j=1,asolid(jsolid)%num_edge*2)
+        !
+      enddo
+      close(unitf)
+      print*,' << ',filename
+      !
+    elseif(ndim==3) then
+      open(unitf,file=filename,form='formatted')
+      write(unitf,'(A)')'TITLE = "FE-Volume TRIANGLE Data"'
+      do jsolid=1,nsolid
+        write(unitf,'(a)')'variables = "x", "y", "z", "nx", "ny", "nz"'
+        write(unitf,'(3(A,I0),A)')'ZONE T="P_',jsolid,                    &
+                          '", DATAPACKING=BLOCK, NODES=',              &
+                         asolid(jsolid)%num_face*3,', ELEMENTS=',      &
+                         asolid(jsolid)%num_face,', ZONETYPE=FETRIANGLE'
+        write(unitf,'(A)')'VarLocation=([4-6]=CellCentered)'
+        write(unitf,'(3(1X,E15.7E3))')(asolid(jsolid)%face(j)%a(1),       &
+                                    asolid(jsolid)%face(j)%b(1),       &
+                                    asolid(jsolid)%face(j)%c(1),       &
+                                    j=1,asolid(jsolid)%num_face)
+        write(unitf,'(3(1X,E15.7E3))')(asolid(jsolid)%face(j)%a(2),       &
+                                    asolid(jsolid)%face(j)%b(2),       &
+                                    asolid(jsolid)%face(j)%c(2),       &
+                                    j=1,asolid(jsolid)%num_face)
+        write(unitf,'(3(1X,E15.7E3))')(asolid(jsolid)%face(j)%a(3),       &
+                                    asolid(jsolid)%face(j)%b(3),       &
+                                    asolid(jsolid)%face(j)%c(3),       &
+                                    j=1,asolid(jsolid)%num_face)
+        write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%face(j)%normdir(1), &
+                                            j=1,asolid(jsolid)%num_face)
+        write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%face(j)%normdir(2), &
+                                            j=1,asolid(jsolid)%num_face)
+        write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%face(j)%normdir(3), &
+                                            j=1,asolid(jsolid)%num_face)
+        write(unitf,'(3(1X,I8))')(j,j=1,asolid(jsolid)%num_face*3)
+        !
+      enddo
+      close(unitf)
+      print*,' << ',filename
+      !
+    endif
+    !
+  end subroutine tecsolid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine tecsolid.                               |
+  !+-------------------------------------------------------------------+
   !
 end module tecio
 !+---------------------------------------------------------------------+

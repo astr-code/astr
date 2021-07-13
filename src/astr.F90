@@ -19,21 +19,21 @@ program astr
   !
   implicit none
   !
-  character(len=16) :: cmd,casefolder
+  character(len=16) :: cmd
   !
   call mpiinitial
   !
   call statement
   !
-  call getcmd(cmd,casefolder)
+  call getcmd(cmd)
   !
   call listcmd
   !
-  if(trim(cmd)=='init') then
+  if(trim(cmd)=='pp') then
     !
     ! generate an example channel flow case
     !
-    call examplegen(casefolder)
+    call ppentrance
     !
   elseif(trim(cmd)=='run') then
     !
@@ -58,8 +58,6 @@ program astr
     call gridgen
     !
     call geomcal
-    !
-    call mpistop
     !
     call spongelayerini
     !

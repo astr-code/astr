@@ -12,6 +12,7 @@ module mainloop
                       ptime,irk,jrk,irkm,jrkm
   use commvar,  only: im,jm,km,ia,ja,ka
   use tecio
+  use stlaio,  only: get_unit
   !
   implicit none
   !
@@ -94,7 +95,7 @@ module mainloop
     !
     real(8) :: l1error,l2error,lineror
     !
-    integer :: i,j,k
+    integer :: i,j,k,fh
     real(8) :: xc,yc,zc,rvor,radi2,var1
     !
     if(trim(flowtype)=='accutest') then
@@ -127,11 +128,12 @@ module mainloop
         write(*,'(2X,I7,3(1X,E13.6E2))')ia,l1error,l2error,lineror
       endif
       !
-      open(18,file='prof'//mpirankname//'.dat')
+      fh=get_unit()
+      open(fh,file='prof'//mpirankname//'.dat')
       do i=0,im
-        write(18,*)x(i,0,0,1),acctest_ref(i),spc(i,0,0,1)
+        write(fh,*)x(i,0,0,1),acctest_ref(i),spc(i,0,0,1)
       enddo
-      close(18)
+      close(fh)
       print*,' << prof',mpirankname,'.dat ... done.'
       !
     endif
@@ -295,7 +297,7 @@ module mainloop
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
-    use readwrite,only : output
+    use readwrite,only : output,writemon
     use bc,       only : boucon
     !
     !
@@ -348,6 +350,8 @@ module mainloop
           call statcal(ctime(5))
           !
           call statout
+          !
+          call writemon
           !
           if(lavg) then
             if(mod(nstep,navg)==0) call meanflowcal(ctime(5))

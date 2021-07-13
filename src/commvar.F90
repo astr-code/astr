@@ -62,7 +62,8 @@ module commvar
   !|             kcutoff | cutoff wavenumber when fft used.            |
   !|              voldom | total volume of the domain.                 |
   !+---------------------+---------------------------------------------+
-  integer :: nstep,maxstep,nwrite,nlstep,filenumb
+  integer :: nstep,maxstep,nwrite,nlstep,filenumb,nmonitor
+  integer,allocatable :: imon(:,:)
   real(8) :: time,deltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
   real(8) :: ref_t,reynolds,mach,rgas,gamma,prandtl
@@ -73,6 +74,8 @@ module commvar
   !|             maxstep | the max step to run.                        |
   !|              nwrite | frequency of output                         |
   !|              nlstep | frequency of list flowstate.                |
+  !|            nmonitor | number of montors                           |
+  !|                imon | monitor coordinates                         |
   !|            filenumb | filenumber                                  |
   !|                time | total time of computation.                  |
   !|              deltat | time step.                                  |

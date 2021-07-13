@@ -83,6 +83,100 @@ module commcal
   !| The end of the subroutine cflcal.                                 |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to search monitor points.                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-07-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine monitorsearch(ijk,xyz,ijkmon,nmon)
+    !
+    use commvar,   only : im,jm,km
+    use commarray, only : x
+    use parallel,  only : ig0,jg0,kg0,irk,jrk,krk
+    !
+    ! arguments 
+    integer,intent(in) :: ijk(:,:)
+    real(8),intent(in) :: xyz(:,:)
+    integer,allocatable,intent(out) :: ijkmon(:,:)
+    integer,intent(out) :: nmon
+    !
+    ! local data
+    integer :: i,j,k,nsize,n
+    integer :: is,js,ks,ig,jg,kg
+    integer,allocatable :: ijktemp(:,:)
+    !
+    nsize=size(ijk,1)
+    allocate(ijktemp(nsize,4))
+    !
+    if(irk==0) then
+      is=0
+    else
+      is=1
+    endif
+    !
+    if(jrk==0) then
+      js=0
+    else
+      js=1
+    endif
+    !
+    if(krk==0) then
+      ks=0
+    else
+      ks=1
+    endif
+    !
+    nmon=0
+    !
+    do k=ks,km
+    do j=js,jm
+    do i=is,im
+      !
+      ig=ig0+i
+      jg=jg0+j
+      kg=kg0+k
+      !
+      do n=1,nsize
+        !
+        if(ijk(n,1)==-1) then
+          !
+          ! xyz(n,1)
+          ! xyz(n,2)
+          ! xyz(n,3)
+          !
+        else
+          !
+          if(ig==ijk(n,1) .and. jg==ijk(n,2) .and. kg==ijk(n,3)) then
+            !
+            nmon=nmon+1
+            !
+            ijktemp(nmon,1)=i
+            ijktemp(nmon,2)=j
+            ijktemp(nmon,3)=k
+            ijktemp(nmon,4)=ijk(n,4) 
+            !
+          endif
+          !
+        endif
+        !
+      enddo
+      !
+    enddo
+    enddo
+    enddo
+    !
+    allocate(ijkmon(nmon,4))
+    ijkmon(1:nmon,1:4)=ijktemp(1:nmon,1:4)
+    !
+    deallocate(ijktemp)
+    !
+  end subroutine monitorsearch
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine monitorsearch.                          |
+  !+-------------------------------------------------------------------+
+  !
 end module commcal
 !+---------------------------------------------------------------------+
 !| The end of the module commcal.                                      |

@@ -15,7 +15,7 @@ module commarray
   real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax
-  integer,allocatable,dimension(:,:,:) :: ns
+  character(len=2),allocatable,dimension(:,:,:) :: cns
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
   !|               jacob | geometrical Jacobian.                       |
@@ -28,7 +28,7 @@ module commarray
   !|                 vel | velocity.                                   |
   !|                 spc | species.                                    |
   !|              lspg_* | length of sponge layer                      |
-  !|                  ns | node status: fluid or solid                 |
+  !|                 cns | node status: fluid or solid                 |
   !+---------------------+---------------------------------------------+
   real(8),allocatable :: acctest_ref(:)
   !
@@ -51,8 +51,8 @@ module commarray
     allocate( x(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating x'
     !
-    allocate( ns(0:im,0:jm,0:km),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating ns'
+    allocate( cns(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating cns'
     !
     allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating jacob'

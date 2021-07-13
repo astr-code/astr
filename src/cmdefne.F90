@@ -10,6 +10,8 @@ module cmdefne
   !
   implicit none
   !
+  integer :: nkey=0
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -20,39 +22,31 @@ module cmdefne
   !| 11-02-2021  | Created by J. Fang @ Warrington                     |
   !| 28-05-2021  | Moved to the module command by J. Fang @ Warrington |
   !+-------------------------------------------------------------------+
-  subroutine readkeyboad(inputfile,cmd,casename)
+  subroutine readkeyboad(cmd,name1)
     !
-    character(len=*),intent(out),optional :: inputfile,cmd,casename
+    character(len=*),intent(out),optional :: cmd,name1
     !
     ! local data
-    integer :: ierr,cli_len,nkey,nlen,arg_count
+    integer :: ierr,cli_len,nlen,arg_count
     character(len=128) :: keyin
     !
-    nkey=1
+    if(present(name1)) name1='.' ! default value
+    !
+    nkey=nkey+1
     call get_command_argument(nkey,keyin,cli_len,ierr)
     !
-    if(cli_len>0) cmd=trim(keyin)
-    !
-    if(trim(cmd)=='init') then
+    if(trim(keyin)=='init' .or. trim(keyin)=='solid') then
+      cmd=trim(keyin)
       nkey=nkey+1
       call get_command_argument(nkey,keyin,cli_len,ierr)
-      casename=trim(keyin)
+      name1=trim(keyin)
+    elseif(trim(keyin)=='-input') then
+      nkey=nkey+1
+      call get_command_argument(nkey,keyin,cli_len,ierr)
+      name1=trim(keyin)
+    else
+      cmd=trim(keyin)
     endif
-    !
-    if(present(inputfile)) inputfile='.' ! default value
-    !
-    do while(cli_len>0) 
-      !
-      nkey=nkey+1
-      call get_command_argument(nkey,keyin,cli_len,ierr)
-      !
-      if(trim(keyin)=='-input') then
-        nkey=nkey+1
-        call get_command_argument(nkey,keyin,cli_len,ierr)
-        inputfile=trim(keyin)
-      endif
-      !
-    enddo
     !
   end subroutine readkeyboad
   !+-------------------------------------------------------------------+
@@ -78,7 +72,7 @@ module cmdefne
     !
     if(mpirank==0) then
       !
-      call readkeyboad(cmd=cmd,casename=casename)
+      call readkeyboad(cmd=cmd,name1=casename)
       !
       if(cmd=='list' .or. cmd=='help') then
         call listcmd

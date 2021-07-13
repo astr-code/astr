@@ -77,7 +77,7 @@ module solver
     const6=1.d0/(gamma-1.d0)
     const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
     !
-    uinf=0.d0
+    uinf=1.d0
     vinf=0.d0
     winf=0.d0
     tinf=1.d0
@@ -156,9 +156,9 @@ module solver
       call ptdsfilter_ini(fcj,alfa_filter,jm,npdcj)
       call ptdsfilter_ini(fck,alfa_filter,km,npdck)
       !
-      call genfilt10coef(alfa_filter)
-      !
     endif
+    !
+    call genfilt10coef(alfa_filter)
     !
     if(lio) print*,' ** numerical solver initilised.'
     !
@@ -2112,7 +2112,6 @@ module solver
       !
       call dataswap(q,direction=1,subtime=ctime(7))
       !
-      !
       if(spg_imax>0) then
         !
         allocate(qtemp(im-spg_imax:im-1,js:je,ks:ke,1:numq))
@@ -2361,12 +2360,12 @@ module solver
     !
     ! dq=ddfc(q(1,1,:,1),conschm,npdck,km,alfa_con,cck)/(x(1,1,1,3)-x(1,1,0,3))
     !
-    open(18,file='testout/profile'//mpirankname//'.dat')
-    do i=is,ie
-      write(18,'(4(1X,E15.7E3))')x(i,0,0,1),2.d0*pi*cos(2.d0*pi*x(i,0,0,1)),dq(i,1),dq(i,2)
-    enddo
-    close(18)
-    print*,' << testout/profile',mpirankname,'.dat'
+    ! open(18,file='testout/profile'//mpirankname//'.dat')
+    ! do i=is,ie
+    !   write(18,'(4(1X,E15.7E3))')x(i,0,0,1),2.d0*pi*cos(2.d0*pi*x(i,0,0,1)),dq(i,1),dq(i,2)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/profile',mpirankname,'.dat'
     !
     deallocate(dq)
     !

@@ -233,6 +233,8 @@ module bc
       !
     enddo
     !
+    ! call mpistop
+    !
     do n=1,6
       !
       if(bctype(n)==41) then
@@ -276,7 +278,7 @@ module bc
   subroutine immbody
     !
     use commvar,   only : twall,pinf
-    use commarray, only : ns,vel
+    use commarray, only : cns,vel
     use fludyna,   only : fvar2q,q2fvar,thermal
     !
     ! local data
@@ -286,12 +288,13 @@ module bc
     do j=0,jm
     do i=0,im
       !
-      if(ns(i,j,k)==1) then
+      if(cns(i,j,k)=='so' .or. cns(i,j,k)=='s1') then
         !
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-        tmp(i,j,k)  =twall(3)
+        ! tmp(i,j,k)  =twall(3)
+        tmp(i,j,k)  =tinf
         prs(i,j,k)  =pinf
         rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
         !
@@ -1321,24 +1324,24 @@ module bc
     !
     use commvar,   only : xmin,xmax,ymin,ymax,mach
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
-    use commfunc,  only : deriv,ddfc
+    use commfunc,  only : deriv,ddfc,spafilter6exp
     !
     ! arguments
     integer,intent(in) :: ndir
     !
     ! local data
-    integer :: i,j,k,l,jspc,ii,n,m
+    integer :: i,j,k,l,jspc,ii,n,m,jq
     real(8) :: pinv(5,5),pnor(5,5),Pmult(5,5),E(5),F(5),G(5),Rest(5),  &
                jcbi(3),LODi1(5),LODi(5)
-    real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:)
+    real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:),qfilt(:,:)
     real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2
     !
     logical,save :: lfirstcal=.true.
     !
     if(lfirstcal) then
       !
-      uinf_j0=1.5d0
-      uinf_jm=3.5d0
+      uinf_j0=uinf
+      uinf_jm=uinf
       !
       lfirstcal=.false.
       !
@@ -1403,6 +1406,23 @@ module bc
       !
       j=0
       !
+      allocate(qfilt(0:im,1:numq))
+      do k=0,km
+        !
+        do jq=1,numq
+          qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
+          q(0:im,j,k,jq)=qfilt(:,jq)
+        enddo
+        call q2fvar(      q=  q(0:im,j,k,:),                   &
+                    density=rho(0:im,j,k),                     &
+                   velocity=vel(0:im,j,k,:),                   &
+                   pressure=prs(0:im,j,k),                     &
+                temperature=tmp(0:im,j,k),                     &
+                    species=spc(0:im,j,k,:)                    )
+        !
+      enddo
+      deallocate(qfilt)
+      !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
       ! do i=is,ie
@@ -1440,7 +1460,7 @@ module bc
         enddo
         !
         do n=1,numq
-          dEcs(n)= deriv( Ecs(0,n),Ecs(1,n) ) !,Ecs(2,n) )
+          dEcs(n)= deriv( Ecs(0,n),Ecs(1,n),Ecs(2,n) )
         enddo
         !
         E(1)= q(i,j,k,2)
@@ -1462,11 +1482,14 @@ module bc
         G(5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
         !
         jcbi(1)= deriv( dxi(i,j,k,2,1)  *jacob(i,j,k),                 &
-                        dxi(i,j+1,k,2,1)*jacob(i,j+1,k) )
+                        dxi(i,j+1,k,2,1)*jacob(i,j+1,k),                 &
+                        dxi(i,j+2,k,2,1)*jacob(i,j+2,k) )
         jcbi(2)= deriv( dxi(i,j,k,2,2)  *jacob(i,j,k),                 &
-                        dxi(i,j+1,k,2,2)*jacob(i,j+1,k) )
+                        dxi(i,j+1,k,2,2)*jacob(i,j+1,k),                 &
+                        dxi(i,j+2,k,2,2)*jacob(i,j+2,k) )
         jcbi(3)= deriv( dxi(i,j,k,2,3)  *jacob(i,j,k),                 &
-                        dxi(i,j+1,k,2,3)*jacob(i,j+1,k) )
+                        dxi(i,j+1,k,2,3)*jacob(i,j+1,k),                 &
+                        dxi(i,j+3,k,2,3)*jacob(i,j+3,k) )
         !
         Rest(1)=E(1)*Jcbi(1)+F(1)*Jcbi(2)+G(1)*Jcbi(3)
         Rest(2)=E(2)*Jcbi(1)+F(2)*Jcbi(2)+G(2)*Jcbi(3)
@@ -1487,25 +1510,25 @@ module bc
         uu=-(dxi(i,j,k,2,1)*vel(i,j,k,1) +                            &
              dxi(i,j,k,2,2)*vel(i,j,k,2) +                            &
              dxi(i,j,k,2,3)*vel(i,j,k,3))
-        if(uu>=0.d0) then
+        ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
-        else
-          var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
-                          dxi(i,j,k,2,3)**2 )
-          kin=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
-          LODi(1)=0.d0
-          LODi(2)=kin*0.5d0*                                           &
-                            ( dxi(i,j,k,2,3)*var1*(vel(i,j,k,2)-vinf)- &
-                              dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf) )
-          LODi(3)=kin*0.5d0*                                           &
-                           (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
-                             dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf_j0) )
-          LODi(4)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf_j0)+        &
-                       dxi(i,j,k,2,2)*var1*(vel(i,j,k,2)-vinf)+        &
-                       dxi(i,j,k,2,3)*var1*(vel(i,j,k,3)-winf)+        &
-                       (prs(i,j,k)-pinf)/rho(i,j,k)/css )
-        endif
+        ! else
+        !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
+        !                   dxi(i,j,k,2,3)**2 )
+        !   kin=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+        !   LODi(1)=0.d0
+        !   LODi(2)=kin*0.5d0*                                           &
+        !                     ( dxi(i,j,k,2,3)*var1*(vel(i,j,k,2)-vinf)- &
+        !                       dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf) )
+        !   LODi(3)=kin*0.5d0*                                           &
+        !                    (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
+        !                      dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf_j0) )
+        !   LODi(4)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf_j0)+        &
+        !                dxi(i,j,k,2,2)*var1*(vel(i,j,k,2)-vinf)+        &
+        !                dxi(i,j,k,2,3)*var1*(vel(i,j,k,3)-winf)+        &
+        !                (prs(i,j,k)-pinf)/rho(i,j,k)/css )
+        ! endif
         !
         LODi1=MatMul(pnor,LODi)*jacob(i,j,k)
         !
@@ -1586,6 +1609,23 @@ module bc
     if(ndir==4 .and. jrk==jrkm) then
       !
       j=jm
+      !
+      allocate(qfilt(0:im,1:numq))
+      do k=0,km
+        !
+        do jq=1,numq
+          qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
+          q(0:im,j,k,jq)=qfilt(:,jq)
+        enddo
+        call q2fvar(      q=  q(0:im,j,k,:),                   &
+                    density=rho(0:im,j,k),                     &
+                   velocity=vel(0:im,j,k,:),                   &
+                   pressure=prs(0:im,j,k),                     &
+                temperature=tmp(0:im,j,k),                     &
+                    species=spc(0:im,j,k,:)                    )
+        !
+      enddo
+      deallocate(qfilt)
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
@@ -1675,36 +1715,36 @@ module bc
         !
         css=sos(tmp(i,j,k))
         !
-        uu=dxi(i,j,k,2,1)*vel(i,j,k,1) +                       &
-           dxi(i,j,k,2,2)*vel(i,j,k,2) +                       &
-           dxi(i,j,k,2,3)*vel(i,j,k,3)
-        if(uu>=0.d0) then
+        ! uu=dxi(i,j,k,2,1)*vel(i,j,k,1) +                       &
+        !    dxi(i,j,k,2,2)*vel(i,j,k,2) +                       &
+        !    dxi(i,j,k,2,3)*vel(i,j,k,3)
+        ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
-        else
-          var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
-                          dxi(i,j,k,2,3)**2 )
-          kin=-0.250*(1.d0-gmachmax2)*css/(ymax-ymin)
-          !
-          ! kin=1.d0
-          !
-          LODi(1)=0.d0 !0.25d0*rho(i,j,k)*css*css/gamma/(ymax-ymin)*(tmp(i,j,k)-tinf)
-          !
-          LODi(2)=kin*0.5d0*                                           &
-                            ( dxi(i,j,k,2,3)*var1*(vel(i,j,k,2)-vinf)- &
-                              dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf) )
-          LODi(3)=kin*0.5d0*                                           &
-                           (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
-                             dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf_jm) )
-          LODi(5)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf_jm)+     &
-                       dxi(i,j,k,2,2)*var1*(vel(i,j,k,2)-vinf)+        &
-                       dxi(i,j,k,2,3)*var1*(vel(i,j,k,3)-winf)+        &
-                       (prs(i,j,k)-pinf)/rho(i,j,k)/css )
-          ! if(irk==0 .and. i==0) then
-          !   print*,dxi(i,j,k,2,1)*var1,gmachmax2
-          ! endif
-          !
-        endif
+        ! else
+        !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
+        !                   dxi(i,j,k,2,3)**2 )
+        !   kin=-0.250*(1.d0-gmachmax2)*css/(ymax-ymin)
+        !   !
+        !   ! kin=1.d0
+        !   !
+        !   LODi(1)=0.d0 !0.25d0*rho(i,j,k)*css*css/gamma/(ymax-ymin)*(tmp(i,j,k)-tinf)
+        !   !
+        !   LODi(2)=kin*0.5d0*                                           &
+        !                     ( dxi(i,j,k,2,3)*var1*(vel(i,j,k,2)-vinf)- &
+        !                       dxi(i,j,k,2,2)*var1*(vel(i,j,k,3)-winf) )
+        !   LODi(3)=kin*0.5d0*                                           &
+        !                    (-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+  &
+        !                      dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf_jm) )
+        !   LODi(5)=kin*(dxi(i,j,k,2,1)*var1*(vel(i,j,k,1)-uinf_jm)+     &
+        !                dxi(i,j,k,2,2)*var1*(vel(i,j,k,2)-vinf)+        &
+        !                dxi(i,j,k,2,3)*var1*(vel(i,j,k,3)-winf)+        &
+        !                (prs(i,j,k)-pinf)/rho(i,j,k)/css )
+        !   ! if(irk==0 .and. i==0) then
+        !   !   print*,dxi(i,j,k,2,1)*var1,gmachmax2
+        !   ! endif
+        !   !
+        ! endif
         ! LODi(5)=0.d0
         !
         LODi1=MatMul(pnor,LODi)*jacob(i,j,k)
@@ -2171,26 +2211,29 @@ module bc
     !
     use commvar,   only : xmin,xmax,mach
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
-    use commfunc,  only : deriv,ddfc
+    use commfunc,  only : deriv,ddfc,spafilter6exp
     !
     ! arguments
     integer,intent(in) :: ndir
     !
     ! local data
-    integer :: i,j,k,l,jspc,ii,n,m
+    integer :: i,j,k,l,jspc,jq,ii,n,m
     real(8) :: pinv(5,5),pnor(5,5),Pmult(5,5),E(5),F(5),G(5),Rest(5),  &
                jcbi(3),LODi1(5),LODi(5)
-    real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:)
-    real(8) :: uu,css,gmachmax2,kinout,kin,var1
+    real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:),qfilt(:,:)
+    real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2
     !
     gmachmax2=0.d0
     if(ndir==2 .and. irk==irkm) then
       i=im
       do k=0,km
       do j=0,jm
-        var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
-        css=sos(tmp(i,j,k))
-        gmachmax2=max(gmachmax2,var1/css/css)
+        css=sos(tmp(i,j,k)) 
+        var1=1.d0/( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+               &
+                    dxi(i,j,k,1,3)**2 )
+        var2=vel(i,j,k,1)*dxi(i,j,k,1,1)+vel(i,j,k,2)*dxi(i,j,k,1,2)+  &
+             vel(i,j,k,3)*dxi(i,j,k,1,3)
+        gmachmax2=max(gmachmax2,var2*var2/(var1*css*css))
       enddo
       enddo
     endif
@@ -2199,6 +2242,29 @@ module bc
     if(ndir==2 .and. irk==irkm) then
       !
       i=im
+      !
+      allocate(qfilt(0:jm,1:numq))
+      do k=0,km
+        !
+        do jq=1,numq
+          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+          q(i,0:jm,k,jq)=qfilt(:,jq)
+        enddo
+        !
+        ! open(18,file='profileq'//mpirankname//'.dat')
+        ! write(18,"(3(1X,A15))")'y','q1','q1f'
+        ! write(18,"(3(1X,E15.7E3))")(x(i,j,k,2),q(i,j,k,1),qfilt(j,1),j=0,jm)
+        ! close(18)
+        ! print*,' << profileq',mpirankname,'.dat'
+        !
+        call q2fvar(      q=  q(i,0:jm,k,:),                   &
+                    density=rho(i,0:jm,k),                     &
+                   velocity=vel(i,0:jm,k,:),                   &
+                   pressure=prs(i,0:jm,k),                     &
+                temperature=tmp(i,0:jm,k),                     &
+                    species=spc(i,0:jm,k,:)                    )
+      enddo
+      deallocate(qfilt)
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
@@ -2211,14 +2277,14 @@ module bc
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
                      vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.true.)
         !
-        ! Pmult=MatMul(Pinv,pnor)
+        ! Pmult=MatMul(pnor,Pinv)
         ! if(jrk==0) then
         !   print*,'---------------------------------------------------------'
-        !   write(*,"(5(F7.4))")Pmult(1,:)
-        !   write(*,"(5(F7.4))")Pmult(2,:)
-        !   write(*,"(5(F7.4))")Pmult(3,:)
-        !   write(*,"(5(F7.4))")Pmult(4,:)
-        !   write(*,"(5(F7.4))")Pmult(5,:)
+        !   write(*,"(5(1X,E15.7E3))")Pmult(1,:)
+        !   write(*,"(5(1X,E15.7E3))")Pmult(2,:)
+        !   write(*,"(5(1X,E15.7E3))")Pmult(3,:)
+        !   write(*,"(5(1X,E15.7E3))")Pmult(4,:)
+        !   write(*,"(5(1X,E15.7E3))")Pmult(5,:)
         ! end if
         !
         do ii=0,2
@@ -2337,34 +2403,34 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      ! allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
-      ! do k=ks,ke
-      !   !
-      !   do j=-hm,jm+hm
-      !     !
-      !     uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
-      !        dxi(i,j,k,2,3)*vel(i,j,k,3)
-      !     fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !     fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
-      !     fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
-      !     fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
-      !     fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-      !     do jspc=1,num_species
-      !       fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
-      !     enddo
-      !     !
-      !   enddo
-      !   !
-      !   do n=1,numq
-      !     dfcs(:,n)=ddfc(fcs(:,n),'222e',npdcj,jm)
-      !   enddo
-      !   !
-      !   qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
-      !   !
-      ! enddo
-      ! !
-      ! deallocate(fcs,dfcs)
-      ! ! !
+      allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
+      do k=ks,ke
+        !
+        do j=-hm,jm+hm
+          !
+          uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
+             dxi(i,j,k,2,3)*vel(i,j,k,3)
+          fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+          fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+          fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+          fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          do jspc=1,num_species
+            fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+          enddo
+          !
+        enddo
+        !
+        do n=1,numq
+          dfcs(:,n)=ddfc(fcs(:,n),'222e',npdcj,jm)
+        enddo
+        !
+        qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
+        !
+      enddo
+      !
+      deallocate(fcs,dfcs)
+      !
       ! if(ndims==3) then
       !   !
       !   allocate(fcs(-hm:km+hm,1:numq),dfcs(0:km,1:numq))
@@ -2412,115 +2478,212 @@ module bc
     real(8),intent(in) :: rho,u,v,w,t,ddi(3)
     !
     ! local data
-    real(8) :: ke,ma2,css,cs2,b0(3),lxi(3),vlxi(3),cplus(3),cminu(3),  &
-               b(3)
-    real(8) :: var1,gamm1,rhi,h,cvlxi
+    real(8) :: var1,nx,ny,nz,a1,a2,a3,a4,a5,a6,c,VV,phi
     !
-    gamm1=gamma-1.d0
-    rhi  =1.d0/rho
-    !
-    ke=(u**2+v**2+w**2)
-    css=sos(t)
-    cs2=css*css
-    ma2=ke/cs2
-    !
+    c=sos(t)
     var1=1.d0/sqrt(ddi(1)*ddi(1)+ddi(2)*ddi(2)+ddi(3)*ddi(3))
-    lxi(1)=ddi(1)*var1
-    lxi(2)=ddi(2)*var1
-    lxi(3)=ddi(3)*var1
+    nx=ddi(1)*var1
+    ny=ddi(2)*var1
+    nz=ddi(3)*var1
+    phi=0.5d0*(gamma-1.d0)*(u*u+v*v+w*w)
+    VV=nx*u+ny*v+nz*w
+    a1=gamma-1.d0
+    a2=1.d0/(sqrt(2.d0)*rho*c)
+    a3=rho/(c*sqrt(2.d0))
+    a4=(phi+c*c)/(gamma-1.d0)
+    a5=1.d0-phi/(c*c)
+    a6=phi/(gamma-1.d0)
     !
-    vlxi(1)=lxi(3)*v-lxi(2)*w
-    vlxi(2)=lxi(1)*w-lxi(3)*u
-    vlxi(3)=lxi(2)*u-lxi(1)*v
-    !
-    pmatrix=0.d0
+    ! pmatrix=0.d0
     !
     if(inv) then
       !
-      b0(1)=(1.d0-0.5d0*gamm1*ma2)*lxi(1)-vlxi(1)*rhi
-      b0(2)=(1.d0-0.5d0*gamm1*ma2)*lxi(2)-vlxi(2)*rhi
-      b0(3)=(1.d0-0.5d0*gamm1*ma2)*lxi(3)-vlxi(3)*rhi
-      !
-      cplus(1)=(lxi(1)-gamm1/css*u)*rhi
-      cplus(2)=(lxi(2)-gamm1/css*v)*rhi
-      cplus(3)=(lxi(3)-gamm1/css*w)*rhi
-      !
-      cminu(1)=(-lxi(1)-gamm1/css*u)*rhi
-      cminu(2)=(-lxi(2)-gamm1/css*v)*rhi
-      cminu(3)=(-lxi(3)-gamm1/css*w)*rhi
-      !
-      pmatrix(1,1)= b0(1)
-      pmatrix(1,2)= gamm1*u/cs2*lxi(1)
-      pmatrix(1,3)= gamm1*v/cs2*lxi(1)+lxi(3)*rhi
-      pmatrix(1,4)= gamm1*w/cs2*lxi(1)-lxi(2)*rhi
-      pmatrix(1,5)=-gamm1/cs2*lxi(1)
-      !
-      pmatrix(2,1)= b0(2)
-      pmatrix(2,2)= gamm1*u/cs2*lxi(2)-lxi(3)*rhi
-      pmatrix(2,3)= gamm1*v/cs2*lxi(2)
-      pmatrix(2,4)= gamm1*w/cs2*lxi(2)+lxi(1)*rhi
-      pmatrix(2,5)=-gamm1/cs2*lxi(2)
-      !
-      pmatrix(3,1)= b0(3)
-      pmatrix(3,2)= gamm1*u/cs2*lxi(3)+lxi(2)*rhi
-      pmatrix(3,3)= gamm1*v/cs2*lxi(3)-lxi(1)*rhi
-      pmatrix(3,4)= gamm1*w/cs2*lxi(3)
-      pmatrix(3,5)=-gamm1/cs2*lxi(3)
-      !
-      pmatrix(4,1)= css*rhi*(0.5d0*gamm1*ma2-(u*lxi(1)+v*lxi(2)+w*lxi(3))/css)
-      pmatrix(4,2)= cplus(1)
-      pmatrix(4,3)= cplus(2)
-      pmatrix(4,4)= cplus(3)
-      pmatrix(4,5)= gamm1/css*rhi
-      !
-      pmatrix(5,1)= css*rhi*(0.5d0*gamm1*ma2+(u*lxi(1)+v*lxi(2)+w*lxi(3))/css)
-      pmatrix(5,2)= cminu(1)
-      pmatrix(5,3)= cminu(2)
-      pmatrix(5,4)= cminu(3)
-      pmatrix(5,5)= gamm1/css*rhi
-      !
+      pmatrix(1,1)= nx*a5-(nz*v-ny*w)/rho
+      pmatrix(1,2)= nx*a1*u/(c*c)
+      pmatrix(1,3)= nx*a1*v/(c*c)+nz/rho
+      pmatrix(1,4)= nx*a1*w/(c*c)-ny/rho
+      pmatrix(1,5)=-nx*a1/(c*c)
+      ! 
+      pmatrix(2,1)= ny*a5-(nx*w-nz*u)/rho
+      pmatrix(2,2)= ny*a1*u/(c*c)-nz/rho
+      pmatrix(2,3)= ny*a1*v/(c*c)
+      pmatrix(2,4)= ny*a1*w/(c*c)+nx/rho
+      pmatrix(2,5)=-ny*a1/(c*c)
+      ! 
+      pmatrix(3,1)= nz*a5-(ny*u-nx*v)/rho
+      pmatrix(3,2)= nz*a1*u/(c*c)+ny/rho
+      pmatrix(3,3)= nz*a1*v/(c*c)-nx/rho
+      pmatrix(3,4)= nz*a1*w/(c*c)
+      pmatrix(3,5)=-nz*a1/(c*c)
+      ! 
+      pmatrix(4,1)= a2*(phi-c*VV)
+      pmatrix(4,2)=-a2*(a1*u-nx*c)
+      pmatrix(4,3)=-a2*(a1*v-ny*c)
+      pmatrix(4,4)=-a2*(a1*w-nz*c)
+      pmatrix(4,5)= a1*a2
+      ! 
+      pmatrix(5,1)= a2*(phi+c*VV)
+      pmatrix(5,2)=-a2*(a1*u+nx*c)
+      pmatrix(5,3)=-a2*(a1*v+ny*c)
+      pmatrix(5,4)=-a2*(a1*w+nz*c)
+      pmatrix(5,5)= a1*a2
+      ! 
     else
       !
-      pmatrix(1,1)=lxi(1)
-      pmatrix(1,2)=lxi(2)
-      pmatrix(1,3)=lxi(3)
-      pmatrix(1,4)=0.5d0*rho/css
-      pmatrix(1,5)=0.5d0*rho/css
+      pmatrix(1,1)=nx
+      pmatrix(1,2)=ny
+      pmatrix(1,3)=nz
+      pmatrix(1,4)=a3
+      pmatrix(1,5)=a3
       !
-      pmatrix(2,1)=lxi(1)*u
-      pmatrix(2,2)=lxi(2)*u-lxi(3)*rho
-      pmatrix(2,3)=lxi(3)*u+lxi(2)*rho
-      pmatrix(2,4)=0.5d0*rho/css*(u+lxi(1)*css)
-      pmatrix(2,5)=0.5d0*rho/css*(u-lxi(1)*css)
+      pmatrix(2,1)=nx*u
+      pmatrix(2,2)=ny*u-nz*rho
+      pmatrix(2,3)=nz*u+ny*rho
+      pmatrix(2,4)=a3*(u+nx*c)
+      pmatrix(2,5)=a3*(u-nx*c)
+      ! 
+      pmatrix(3,1)=nx*v+nz*rho
+      pmatrix(3,2)=ny*v
+      pmatrix(3,3)=nz*v-nx*rho
+      pmatrix(3,4)=a3*(v+ny*c)
+      pmatrix(3,5)=a3*(v-ny*c)
       !
-      pmatrix(3,1)=lxi(1)*v+lxi(3)*rho
-      pmatrix(3,2)=lxi(2)*v
-      pmatrix(3,3)=lxi(3)*v-lxi(1)*rho
-      pmatrix(3,4)=0.5d0*rho/css*(v+lxi(2)*css)
-      pmatrix(3,5)=0.5d0*rho/css*(v-lxi(2)*css)
+      pmatrix(4,1)=nx*w-ny*rho
+      pmatrix(4,2)=ny*w+nx*rho
+      pmatrix(4,3)=nz*w
+      pmatrix(4,4)=a3*(w+nz*c)
+      pmatrix(4,5)=a3*(w-nz*c)
       !
-      pmatrix(4,1)=lxi(1)*w-lxi(2)*rho
-      pmatrix(4,2)=lxi(2)*w+lxi(1)*rho
-      pmatrix(4,3)=lxi(3)*w
-      pmatrix(4,4)=0.5d0*rho/css*(w+lxi(3)*css)
-      pmatrix(4,5)=0.5d0*rho/css*(w-lxi(3)*css)
-      !
-      b(1)=0.5d0*ke*lxi(1)+rho*vlxi(1)
-      b(2)=0.5d0*ke*lxi(2)+rho*vlxi(2)
-      b(3)=0.5d0*ke*lxi(3)+rho*vlxi(3)
-      !
-      h=0.5d0*ke+css*css/gamm1
-      cvlxi=css*(lxi(1)*u+lxi(2)*v+lxi(3)*w)
-      !
-      pmatrix(5,1)=b(1)
-      pmatrix(5,2)=b(2)
-      pmatrix(5,3)=b(3)
-      pmatrix(5,4)=0.5d0*rho/css*(h+cvlxi)
-      pmatrix(5,5)=0.5d0*rho/css*(h-cvlxi)
+      pmatrix(5,1)=nx*a6+rho*(nz*v-ny*w)
+      pmatrix(5,2)=ny*a6+rho*(nx*w-nz*u)
+      pmatrix(5,3)=nz*a6+rho*(ny*u-nx*v)
+      pmatrix(5,4)=a3*(a4+c*VV)
+      pmatrix(5,5)=a3*(a4-c*VV)
       !
     endif
     !
   end function pmatrix
+  !
+  ! function pmatrix2(rho,u,v,w,t,ddi,inv) result(pmatrix)
+  !   !
+  !   use commvar, only : gamma
+  !   use fludyna, only : sos
+  !   !
+  !   ! arguments
+  !   real(8) :: pmatrix(5,5)
+  !   logical,intent(in) :: inv
+  !   real(8),intent(in) :: rho,u,v,w,t,ddi(3)
+  !   !
+  !   ! local data
+  !   real(8) :: ke,ma2,css,cs2,b0(3),lxi(3),vlxi(3),cplus(3),cminu(3),  &
+  !              b(3)
+  !   real(8) :: var1,gamm1,rhi,h,cvlxi
+  !   !
+  !   gamm1=gamma-1.d0
+  !   rhi  =1.d0/rho
+  !   !
+  !   ke=(u**2+v**2+w**2)
+  !   css=sos(t)
+  !   cs2=css*css
+  !   ma2=ke/cs2
+  !   !
+  !   var1=1.d0/sqrt(ddi(1)*ddi(1)+ddi(2)*ddi(2)+ddi(3)*ddi(3))
+  !   lxi(1)=ddi(1)*var1
+  !   lxi(2)=ddi(2)*var1
+  !   lxi(3)=ddi(3)*var1
+  !   !
+  !   vlxi(1)=lxi(3)*v-lxi(2)*w
+  !   vlxi(2)=lxi(1)*w-lxi(3)*u
+  !   vlxi(3)=lxi(2)*u-lxi(1)*v
+  !   !
+  !   pmatrix=0.d0
+  !   !
+  !   if(inv) then
+  !     !
+  !     b0(1)=(1.d0-0.5d0*gamm1*ma2)*lxi(1)-vlxi(1)*rhi
+  !     b0(2)=(1.d0-0.5d0*gamm1*ma2)*lxi(2)-vlxi(2)*rhi
+  !     b0(3)=(1.d0-0.5d0*gamm1*ma2)*lxi(3)-vlxi(3)*rhi
+  !     !
+  !     cplus(1)=(lxi(1)-gamm1/css*u)*rhi
+  !     cplus(2)=(lxi(2)-gamm1/css*v)*rhi
+  !     cplus(3)=(lxi(3)-gamm1/css*w)*rhi
+  !     !
+  !     cminu(1)=(-lxi(1)-gamm1/css*u)*rhi
+  !     cminu(2)=(-lxi(2)-gamm1/css*v)*rhi
+  !     cminu(3)=(-lxi(3)-gamm1/css*w)*rhi
+  !     !
+  !     pmatrix(1,1)= b0(1)
+  !     pmatrix(1,2)= gamm1*u/cs2*lxi(1)
+  !     pmatrix(1,3)= gamm1*v/cs2*lxi(1)+lxi(3)*rhi
+  !     pmatrix(1,4)= gamm1*w/cs2*lxi(1)-lxi(2)*rhi
+  !     pmatrix(1,5)=-gamm1/cs2*lxi(1)
+  !     !
+  !     pmatrix(2,1)= b0(2)
+  !     pmatrix(2,2)= gamm1*u/cs2*lxi(2)-lxi(3)*rhi
+  !     pmatrix(2,3)= gamm1*v/cs2*lxi(2)
+  !     pmatrix(2,4)= gamm1*w/cs2*lxi(2)+lxi(1)*rhi
+  !     pmatrix(2,5)=-gamm1/cs2*lxi(2)
+  !     !
+  !     pmatrix(3,1)= b0(3)
+  !     pmatrix(3,2)= gamm1*u/cs2*lxi(3)+lxi(2)*rhi
+  !     pmatrix(3,3)= gamm1*v/cs2*lxi(3)-lxi(1)*rhi
+  !     pmatrix(3,4)= gamm1*w/cs2*lxi(3)
+  !     pmatrix(3,5)=-gamm1/cs2*lxi(3)
+  !     !
+  !     pmatrix(4,1)= css*rhi*(0.5d0*gamm1*ma2-(u*lxi(1)+v*lxi(2)+w*lxi(3))/css)
+  !     pmatrix(4,2)= cplus(1)
+  !     pmatrix(4,3)= cplus(2)
+  !     pmatrix(4,4)= cplus(3)
+  !     pmatrix(4,5)= gamm1/css*rhi
+  !     !
+  !     pmatrix(5,1)= css*rhi*(0.5d0*gamm1*ma2+(u*lxi(1)+v*lxi(2)+w*lxi(3))/css)
+  !     pmatrix(5,2)= cminu(1)
+  !     pmatrix(5,3)= cminu(2)
+  !     pmatrix(5,4)= cminu(3)
+  !     pmatrix(5,5)= gamm1/css*rhi
+  !     !
+  !   else
+  !     !
+  !     pmatrix(1,1)=lxi(1)
+  !     pmatrix(1,2)=lxi(2)
+  !     pmatrix(1,3)=lxi(3)
+  !     pmatrix(1,4)=0.5d0*rho/css
+  !     pmatrix(1,5)=0.5d0*rho/css
+  !     !
+  !     pmatrix(2,1)=lxi(1)*u
+  !     pmatrix(2,2)=lxi(2)*u-lxi(3)*rho
+  !     pmatrix(2,3)=lxi(3)*u+lxi(2)*rho
+  !     pmatrix(2,4)=0.5d0*rho/css*(u+lxi(1)*css)
+  !     pmatrix(2,5)=0.5d0*rho/css*(u-lxi(1)*css)
+  !     !
+  !     pmatrix(3,1)=lxi(1)*v+lxi(3)*rho
+  !     pmatrix(3,2)=lxi(2)*v
+  !     pmatrix(3,3)=lxi(3)*v-lxi(1)*rho
+  !     pmatrix(3,4)=0.5d0*rho/css*(v+lxi(2)*css)
+  !     pmatrix(3,5)=0.5d0*rho/css*(v-lxi(2)*css)
+  !     !
+  !     pmatrix(4,1)=lxi(1)*w-lxi(2)*rho
+  !     pmatrix(4,2)=lxi(2)*w+lxi(1)*rho
+  !     pmatrix(4,3)=lxi(3)*w
+  !     pmatrix(4,4)=0.5d0*rho/css*(w+lxi(3)*css)
+  !     pmatrix(4,5)=0.5d0*rho/css*(w-lxi(3)*css)
+  !     !
+  !     b(1)=0.5d0*ke*lxi(1)+rho*vlxi(1)
+  !     b(2)=0.5d0*ke*lxi(2)+rho*vlxi(2)
+  !     b(3)=0.5d0*ke*lxi(3)+rho*vlxi(3)
+  !     !
+  !     h=0.5d0*ke+css*css/gamm1
+  !     cvlxi=css*(lxi(1)*u+lxi(2)*v+lxi(3)*w)
+  !     !
+  !     pmatrix(5,1)=b(1)
+  !     pmatrix(5,2)=b(2)
+  !     pmatrix(5,3)=b(3)
+  !     pmatrix(5,4)=0.5d0*rho/css*(h+cvlxi)
+  !     pmatrix(5,5)=0.5d0*rho/css*(h-cvlxi)
+  !     !
+  !   endif
+  !   !
+  ! end function pmatrix2
   !
   ! subroutine outflow_nscbc(ndir)
   !   !

@@ -10,7 +10,7 @@ module initialisation
   !
   use constdef
   use parallel,only: lio,mpistop,mpirank,mpirankname,bcast
-  use commvar, only: im,jm,km,uinf,vinf,pinf,roinf,tinf,ndims,         &
+  use commvar, only: im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims,    &
                      num_species,xmin,xmax,ymin,ymax,zmin,zmax
   use tecio
   !
@@ -31,7 +31,7 @@ module initialisation
                         lavg
     use commarray,only: vel,rho,prs,spc,q
     use readwrite,only: readcont,readflowini3d,readcheckpoint,         &
-                        readmeanflow
+                        readmeanflow,readmonc
     use fludyna,  only: fvar2q
     use statistic,only: nsamples
     !
@@ -70,6 +70,8 @@ module initialisation
           call mixlayerini
         case('shuosher')
           call shuosherini
+        case('windtunn')
+          call wtini
         case default
           print*,trim(flowtype)
           stop ' !! flowtype not defined @ flowinit'
@@ -91,6 +93,8 @@ module initialisation
     endif
     !
     call readcont
+    !
+    call readmonc
     !
     if(lavg) then
       !
@@ -857,6 +861,67 @@ module initialisation
   end subroutine mixlayerini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine mixlayerini.                            |
+  !+-------------------------------------------------------------------+
+  !  
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate a initial mixing layer flow.  |
+  !+-------------------------------------------------------------------+
+  !| ref: Li, Z., Jaberi, F. 2010. Numerical Investigations of         |
+  !|      Shock-Turbulence Interaction in a Planar Mixing Layer.       | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine wtini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal,mixinglayervel
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: radi
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      rho(i,j,k)  = roinf
+      !
+      vel(i,j,k,1)= uinf
+      vel(i,j,k,2)= vinf
+      vel(i,j,k,3)= winf
+      !
+      tmp(i,j,k)  = tinf
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>1) then
+        spc(i,j,k,1)=0.d0
+        !
+        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    !
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+                                   ! prs(0:im,0:jm,0:km)  ,'p',          &
+    !                                tmp(0:im,0:jm,0:km)  ,'t' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D wind tunnel initialised.'
+    !
+  end subroutine wtini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine wtini.                                 |
   !+-------------------------------------------------------------------+
   !  
   !+-------------------------------------------------------------------+
