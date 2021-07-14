@@ -100,11 +100,6 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|             cputime | computational time statistics.              |
   !+---------------------+---------------------------------------------+
-  integer :: hand_fs,hand_rp
-  !+---------------------+---------------------------------------------+
-  !|             hand_fs | file handle for flowstate.                  |
-  !|             hand_rp | file handle for report.                     |
-  !+---------------------+---------------------------------------------+
   integer :: bctype(6)
   real(8) :: twall(6)
   real(8) :: force(3)

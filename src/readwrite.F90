@@ -84,16 +84,10 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine fileini
     !
-    use commvar, only : hand_fs,hand_rp
-    use stlaio,  only : get_unit
-    !
     if(lio) then
       !
       call system('mkdir testout/')
       call system('mkdir outdat/')
-      !
-      hand_fs=get_unit()
-      hand_rp=get_unit()
       !
     endif
     !
@@ -1312,7 +1306,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine timerept
     !
-    use commvar, only : hand_rp,nstep,maxstep,ctime,flowtype,conschm,  &
+    use commvar, only : nstep,maxstep,ctime,flowtype,conschm,          &
                         difschm,rkscheme,ia,ja,ka
     use parallel,only : mpirankmax
     !
@@ -1320,6 +1314,7 @@ module readwrite
     logical,save :: linit=.true.
     logical :: lexist
     integer :: i
+    integer,save :: hand_rp
     !
     if(lio) then
       !
@@ -1340,6 +1335,8 @@ module readwrite
         call system('lscpu | grep "cache" >> report.txt')
         call system('echo "----------------------------------------------------------------" >> report.txt')
         !
+        hand_rp=get_unit()
+        !
         open(hand_rp,file='report.txt',position="append")
         write(hand_rp,'(A)')'  statistic of computing time'
         write(hand_rp,'(A,A)')'     flowtype: ',trim(flowtype)
@@ -1351,6 +1348,7 @@ module readwrite
         write(hand_rp,'(1(A,I0))')'     mpi size: ',mpirankmax+1
         !
         linit=.false.
+        !
       endif
       !
       write(hand_rp,'(2X,62A)')('-',i=1,62)

@@ -11,6 +11,7 @@ module statistic
                        zmin,zmax,nstep,deltat,force,numq
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
                        irk,jrk,jrkm,ptime
+  use stlaio,  only: get_unit
   !
   implicit none
   !
@@ -429,20 +430,21 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statout
     !
-    use commvar, only : flowtype,nstep,time,nlstep,maxstep,hand_fs,    &
-                        lrestart
+    use commvar, only : flowtype,nstep,time,nlstep,maxstep,lrestart
     !
     ! local data
     logical,save :: linit=.true.
     logical :: fex
     integer :: nprthead=200
     integer :: i,ferr,ns
+    integer,save :: hand_fs
     ! 
     if(lio) then
       !
       if(linit) then
         !
         inquire(file='flowstate.dat',exist=fex)
+        hand_fs=get_unit()
         open(hand_fs,file='flowstate.dat')
         !
         if(lrestart .and. fex) then
@@ -462,7 +464,7 @@ module statistic
           enddo
           !
           backspace(hand_fs)
-          if(ns==nstep) print*,' ** flowstate.dat resumed'
+          write(*,'(A,I0)')'   ** resume flowstate.dat at step: ',ns
           !
         else
           ! a new flowstat file
@@ -477,6 +479,7 @@ module statistic
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
           endif
+          write(*,'(A)')'   ** create new flowstate.dat'
           !
         endif
         !
