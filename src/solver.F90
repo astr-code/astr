@@ -9,7 +9,7 @@ module solver
   !
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
-                       datasync,ptime,irk,jrk,krk
+                       datasync,ptime,irk,jrk,krk,irkm,jrkm,krkm
   use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime
   !
   implicit none
@@ -177,7 +177,7 @@ module solver
   subroutine rhscal(subtime)
     !
     use commarray, only : qrhs,x,q
-    use commvar,   only : flowtype,conschm,diffterm
+    use commvar,   only : flowtype,conschm,diffterm,im,jm
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -586,7 +586,6 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end of calculation at i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along j direction
@@ -1954,8 +1953,8 @@ module solver
     ncolm=4
     !
     allocate(ff(-hm:im+hm,1:ncolm),df(0:im,1:ncolm))
-    do k=ks,ke
-    do j=js,je
+    do k=0,km
+    do j=0,jm
       !
       ff(:,1)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                        &
                 sigma(:,j,k,2)*dxi(:,j,k,1,2) +                        &
@@ -1990,8 +1989,8 @@ module solver
     ! Calculating along j direction.
     !
     allocate(ff(-hm:jm+hm,1:ncolm),df(0:jm,1:ncolm))
-    do k=ks,ke
-    do i=is,ie
+    do k=0,km
+    do i=0,im
       !
       ff(:,1)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
                 sigma(i,:,k,2)*dxi(i,:,k,2,2) +                        &
@@ -2025,11 +2024,11 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!
     !
     if(ndims==3) then
-      ! Calculating along j direction.
+      ! Calculating along k direction.
       !
       allocate(ff(-hm:km+hm,1:ncolm),df(0:km,1:ncolm))
-      do j=js,je
-      do i=is,ie
+      do j=0,jm
+      do i=0,im
         !
         ff(:,1)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
                   sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &

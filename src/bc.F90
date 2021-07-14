@@ -2362,7 +2362,7 @@ module bc
         !
         if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
-          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
         else
           ! back flow
           var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &
@@ -2379,16 +2379,9 @@ module bc
                        dxi(i,j,k,1,2)*var1*(vel(i,j,k,2)-vinf)+        &
                        dxi(i,j,k,1,3)*var1*(vel(i,j,k,3)-winf)+        &
                        (prs(i,j,k)-pinf)/rho(i,j,k)/css )
-        endif
+        endif  
         !
         LODi1=MatMul(pnor,LODi)*jacob(i,j,k)
-        ! do m=1,5
-        !   LODi1(m)=0.d0
-        !   do n=1,5
-        !     LODi1(m)=pnor(m,n)*LODi1(n)
-        !   enddo
-        ! enddo
-        ! LODi1=LODi1*jacob(i,j,k)
         !
         dEcs(1)=LODi1(1)+Rest(1)
         dEcs(2)=LODi1(2)+Rest(2)

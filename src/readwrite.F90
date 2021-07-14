@@ -654,11 +654,13 @@ module readwrite
     use commarray, only : x,rho,vel,prs,tmp
     !
     ! local data
-    integer :: n,i,j,k
+    integer :: n,i,j,k,ios,ns
     integer,allocatable,save :: fh(:)
     logical,save :: firstcall = .true.
+    logical :: lexist
     character(len=4) :: moname
     character(len=64) :: filename
+    character(len=32) :: c1
     !
     if(nmonitor>0) then
       !
@@ -675,17 +677,35 @@ module readwrite
           write(moname,'(i4.4)')imon(n,4)
           filename='monitor'//moname//'.dat'
           !
-          print*,mpirank,'|',trim(filename)
-          !
           fh(n)=get_unit()
           !
+          inquire(file=trim(filename), exist=lexist)
           open(fh(n),file=trim(filename))
-          print*,' ** open file ',trim(filename),' using handle',fh(n)
-          write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,imon(n,2)+jg0,  &
-                                         imon(n,3)+kg0
-          write(fh(n),'(A,3(1X,E15.7E3))')'#',x(i,j,k,1:3)
-          write(fh(n),"(A7,1X,A13,6(1X,A20))")'nstep','time',          &
+          read(fh(n),*,iostat=ios)
+          if(nstep==0 .or. (.not.lexist) .or. (ios.ne.0)) then
+            ! create new monitor files
+            write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,              &
+                                           imon(n,2)+jg0,imon(n,3)+kg0
+            write(fh(n),'(A,3(1X,E15.7E3))')'#',x(i,j,k,1:3)
+            write(fh(n),"(A7,1X,A13,6(1X,A20))")'nstep','time',        &
                                                 'u','v','w','ro','p','t'
+            write(*,'(3(A),I0)')'   ** create monitor file ',          &
+                                  trim(filename),' using handle: ',fh(n)
+          else
+            !
+            do while(ios==0)
+              read(fh(n),*,iostat=ios)c1
+              !
+              if(IsNum(c1)==1) then
+                read(c1,*)ns
+                if(ns==nstep) exit
+              endif
+              !
+            enddo
+            write(*,'(3(A),I0)')'   ** resume monitor file ',          &
+                                  trim(filename),' at step: ',ns
+            !
+          endif
           !
         enddo
         !
