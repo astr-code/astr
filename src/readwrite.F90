@@ -675,8 +675,7 @@ module readwrite
           !
           inquire(file=trim(filename), exist=lexist)
           open(fh(n),file=trim(filename))
-          read(fh(n),*,iostat=ios)
-          if(nstep==0 .or. (.not.lexist) .or. (ios.ne.0)) then
+          if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
             write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,              &
                                            imon(n,2)+jg0,imon(n,3)+kg0
@@ -687,6 +686,7 @@ module readwrite
                                   trim(filename),' using handle: ',fh(n)
           else
             !
+            ios=0
             do while(ios==0)
               read(fh(n),*,iostat=ios)c1
               !

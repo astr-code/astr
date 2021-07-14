@@ -1512,6 +1512,7 @@ module bc
              dxi(i,j,k,2,3)*vel(i,j,k,3))
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+          ! LODi(4)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
           LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
@@ -1720,6 +1721,7 @@ module bc
         !    dxi(i,j,k,2,3)*vel(i,j,k,3)
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+          ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
           LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
@@ -2171,7 +2173,7 @@ module bc
       !     uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2) + &
       !        dxi(i,j,k,3,3)*vel(i,j,k,3)
       !     fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-      !     fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
+      !     fcs(j,2)=jacob(i,j,k)AA*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
       !     fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
       !     fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
       !     fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
