@@ -448,9 +448,13 @@ module mainloop
     !
     use commvar,   only : hm
     use commarray, only : q,rho,tmp,prs,x
+    use parallel, only : por
     !
     ! local data
     integer :: i,j,k,l
+    logical :: ltocrash
+    !
+    ltocrash=.false.
     !
     do k=0,km
     do j=0,jm
@@ -463,7 +467,7 @@ module mainloop
         write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
                            mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
         write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        stop ' !! computational crashed' 
+        ltocrash=.true.
       endif
       !
       if(tmp(i,j,k)>=0.d0) then
@@ -476,7 +480,7 @@ module mainloop
         do l=-hm,hm
           print*,l,x(i,j+l,k,2),q(i,j+l,k,5),tmp(i,j+l,k)
         enddo
-        stop ' !! computational crashed' 
+        ltocrash=.true.
       endif
       !
       if(prs(i,j,k)>=0.d0) then
@@ -486,7 +490,7 @@ module mainloop
         write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
                            mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
         write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        stop ' !! computational crashed' 
+        ltocrash=.true.
       endif
       !
       if(q(i,j,k,5)>=0.d0) then
@@ -496,12 +500,19 @@ module mainloop
         write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
                            mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
         write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        stop ' !! computational crashed' 
+        ltocrash=.true.
       endif
       !
     enddo
     enddo
     enddo
+    !
+    ltocrash=por(ltocrash)
+    !
+    if(ltocrash) then
+      if(lio) print*,' !! COMPUTATION CRASHED !!'
+      call mpistop
+    endif
     !
     return
     !

@@ -153,53 +153,67 @@ module bc
   !
   subroutine xyzbc
     !
-    use commvar,  only : bctype
+    use commvar,  only : bctype,npdci,npdcj,npdck
     use commfunc, only : gradextrp
     !
     ! local data
     integer :: i,j,k,l
     real(8) :: fex(4,3)
     !
-    if(jrk==0) then
-      !
-      j=0
-      !
-      if(bctype(3)==41) then
-        do k=0,km
-        do i=0,im
-          !
-          fex(:,1) =gradextrp(qbou=x(i,0,k,1),q1st=x(i,1,k,1))
-          fex(:,2) =gradextrp(qbou=x(i,0,k,2),q1st=x(i,1,k,2))
-          fex(:,3) =gradextrp(qbou=x(i,0,k,3),q1st=x(i,1,k,3))
-          !
-          do l=1,4
-            x(i,-l,k,1)=fex(l,1) 
-            x(i,-l,k,2)=fex(l,2) 
-            x(i,-l,k,3)=fex(l,3) 
-          enddo
-          !
+    if(npdci==1) then
+      do k=0,km
+      do j=0,jm
+        !
+        fex(:,1) =gradextrp(qbou=x(0,j,k,1),q1st=x(1,j,k,1))
+        fex(:,2) =gradextrp(qbou=x(0,j,k,2),q1st=x(1,j,k,2))
+        fex(:,3) =gradextrp(qbou=x(0,j,k,3),q1st=x(1,j,k,3))
+        !
+        do l=1,4
+          x(-l,j,k,1)=fex(l,1) 
+          x(-l,j,k,2)=fex(l,2) 
+          x(-l,j,k,3)=fex(l,3) 
         enddo
-        enddo
-      endif
-      !
+        !
+      enddo
+      enddo
+    elseif(npdci==2) then
+      do k=0,km
+      do j=0,jm
+        !
+        x(im+1:im+4,j,k,1)=gradextrp(qbou=x(im,j,k,1),q1st=x(im-1,j,k,1))
+        x(im+1:im+4,j,k,2)=gradextrp(qbou=x(im,j,k,2),q1st=x(im-1,j,k,2))
+        x(im+1:im+4,j,k,3)=gradextrp(qbou=x(im,j,k,3),q1st=x(im-1,j,k,3))
+        !
+      enddo
+      enddo
     endif
     !
-    if(jrk==jrkm) then
-      !
-      j=0
-      !
-      if(bctype(4)==41) then
-        do k=0,km
-        do i=0,im
-          !
-          x(i,jm+1:jm+4,k,1)=gradextrp(qbou=x(i,jm,k,1),q1st=x(i,jm-1,k,1))
-          x(i,jm+1:jm+4,k,2)=gradextrp(qbou=x(i,jm,k,2),q1st=x(i,jm-1,k,2))
-          x(i,jm+1:jm+4,k,3)=gradextrp(qbou=x(i,jm,k,3),q1st=x(i,jm-1,k,3))
-          !
+    if(npdcj==1) then
+      do k=0,km
+      do i=0,im
+        !
+        fex(:,1) =gradextrp(qbou=x(i,0,k,1),q1st=x(i,1,k,1))
+        fex(:,2) =gradextrp(qbou=x(i,0,k,2),q1st=x(i,1,k,2))
+        fex(:,3) =gradextrp(qbou=x(i,0,k,3),q1st=x(i,1,k,3))
+        !
+        do l=1,4
+          x(i,-l,k,1)=fex(l,1) 
+          x(i,-l,k,2)=fex(l,2) 
+          x(i,-l,k,3)=fex(l,3) 
         enddo
-        enddo
-      endif
-      !
+        !
+      enddo
+      enddo
+    elseif(npdcj==2) then
+      do k=0,km
+      do i=0,im
+        !
+        x(i,jm+1:jm+4,k,1)=gradextrp(qbou=x(i,jm,k,1),q1st=x(i,jm-1,k,1))
+        x(i,jm+1:jm+4,k,2)=gradextrp(qbou=x(i,jm,k,2),q1st=x(i,jm-1,k,2))
+        x(i,jm+1:jm+4,k,3)=gradextrp(qbou=x(i,jm,k,3),q1st=x(i,jm-1,k,3))
+        !
+      enddo
+      enddo
     endif
     !
   end subroutine xyzbc
@@ -212,7 +226,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine boucon
     !
-    use commvar, only : bctype,twall
+    use commvar, only : bctype,twall,limmbou
     !
     ! local data
     integer :: n
@@ -259,7 +273,7 @@ module bc
       !
     enddo
     !
-    call immbody
+    if(limmbou) call immbody
     ! call corner4nscbc
     !
   end subroutine boucon
@@ -277,18 +291,241 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine immbody
     !
-    use commvar,   only : twall,pinf
-    use commarray, only : cns,vel
+    use commtype,  only : sboun
+    !
+    use commvar,   only : twall,pinf,immbnod,num_species
+    use commarray, only : nodestat,vel
     use fludyna,   only : fvar2q,q2fvar,thermal
+    use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck
     !
     ! local data
-    integer :: i,j,k,n,jspec
+    integer :: i,j,k,m,kb,iss,jss,kss,n,jspec,jq,jb,jsup
+    real(8) :: var_ro,var_u(3),var_t,var_p,var_sp(num_species)
+    real(8) :: vel_bou(3),prs_bou,rho_bou,tmp_bou,spc_bou(num_species)
+    real(8) :: vel_icell(4,3),tmp_icell(4),prs_icell(4),coef(4)
+    real(8) :: vel_image(3),tmp_image,prs_image,rho_image,spc_image(num_species)
+    type(sboun),pointer :: pb
+    !
+    if(npdci==1) then
+      iss=0
+    else
+      iss=1
+    endif
+    if(npdcj==1) then
+      jss=0
+    else
+      jss=1
+    endif
+    if(npdck==1 .or. ndims==2) then
+      kss=0
+    else
+      kss=1
+    endif
+    !
+    ! go over the boundary nodes
+    !
+    do jb=1,size(immbnod)
+      !
+      pb=>immbnod(jb)
+      !
+      if(.not. allocated(pb%qimag)) allocate(pb%qimag(numq))
+      pb%qimag=0.d0
+      !
+      if(.not. pb%localin) cycle
+      !
+      i=pb%icell(1)-ig0
+      j=pb%icell(2)-jg0
+      k=pb%icell(3)-kg0
+      !
+      if(i>=1 .and. i<=im .and. &
+         j>=1 .and. j<=jm  ) then
+        !
+        do m=1,4
+          !
+          if(pb%icell_ijk(m,1)>=0) then
+            !
+            i=pb%icell_ijk(m,1)
+            j=pb%icell_ijk(m,2)
+            k=pb%icell_ijk(m,3)
+            !
+            vel_icell(m,:)=vel(i,j,k,:)
+            tmp_icell(m)  =tmp(i,j,k)
+            prs_icell(m)  =prs(i,j,k)
+            !
+          elseif(pb%icell_bnode(m)>0) then
+            kb=pb%icell_bnode(m)
+            !
+            vel_icell(m,:)=0.d0
+            tmp_icell(m)  =tinf
+            prs_icell(m)  =0.d0
+            !
+          else
+            stop ' !! ERROR in determining interpolation coefficient'
+          endif
+          !
+        enddo
+        !
+        do m=1,4
+          coef(m)=pb%coef_dirichlet(m,1)*vel_icell(1,1) + &
+                  pb%coef_dirichlet(m,2)*vel_icell(2,1) + &
+                  pb%coef_dirichlet(m,3)*vel_icell(3,1) + &
+                  pb%coef_dirichlet(m,4)*vel_icell(4,1)
+        enddo
+        !
+        vel_image(1)=coef(1)*pb%ximag(1)*pb%ximag(2) + &
+                     coef(2)*pb%ximag(1)                      + &
+                     coef(3)*pb%ximag(2)                      + &
+                     coef(4)
+        do m=1,4
+          coef(m)=pb%coef_dirichlet(m,1)*vel_icell(1,2) + &
+                  pb%coef_dirichlet(m,2)*vel_icell(2,2) + &
+                  pb%coef_dirichlet(m,3)*vel_icell(3,2) + &
+                  pb%coef_dirichlet(m,4)*vel_icell(4,2)
+        enddo
+        !
+        vel_image(2)=coef(1)*pb%ximag(1)*pb%ximag(2) + &
+                     coef(2)*pb%ximag(1)                      + &
+                     coef(3)*pb%ximag(2)                      + &
+                     coef(4)
+        !
+        vel_image(3)=0.d0
+        !
+        do m=1,4
+          coef(m)=pb%coef_dirichlet(m,1)*tmp_icell(1) + &
+                  pb%coef_dirichlet(m,2)*tmp_icell(2) + &
+                  pb%coef_dirichlet(m,3)*tmp_icell(3) + &
+                  pb%coef_dirichlet(m,4)*tmp_icell(4)
+        enddo
+        !
+        tmp_image=coef(1)*pb%ximag(1)*pb%ximag(2) + &
+                  coef(2)*pb%ximag(1)                      + &
+                  coef(3)*pb%ximag(2)                      + &
+                  coef(4)
+        !
+        do m=1,4
+          coef(m)=pb%coef_neumann(m,1)*prs_icell(1) + &
+                  pb%coef_neumann(m,2)*prs_icell(2) + &
+                  pb%coef_neumann(m,3)*prs_icell(3) + &
+                  pb%coef_neumann(m,4)*prs_icell(4)
+        enddo
+        !
+        prs_image=coef(1)*pb%ximag(1)*pb%ximag(2) + &
+                  coef(2)*pb%ximag(1)                      + &
+                  coef(3)*pb%ximag(2)                      + &
+                  coef(4)
+        !
+        rho_image=thermal(pressure=prs_image,temperature=tmp_image)
+        !
+        spc_image=1.d0
+        !
+        call fvar2q(     q=pb%qimag,   density=rho_image,        &
+                   velocity=vel_image, pressure=prs_image,       &
+                    species=spc_image                            )
+        !
+      endif
+      !
+    enddo
+    !
+    call syncqimag(immbnod)
+    !
+    do jb=1,size(immbnod)
+      !
+      pb=>immbnod(jb)
+      !
+      if(.not. allocated(pb%q)) allocate(pb%q(numq))
+      !
+      ! now get the value for ghost nodes
+      !
+      call q2fvar(      q=  pb%qimag,                   &
+                    density=var_ro,                     &
+                   velocity=var_u(:),                   &
+                   pressure=var_p,                      &
+                temperature=var_t,                      &
+                    species=var_sp                      )
+      !
+      vel_bou=0.d0
+      prs_bou=var_p
+      tmp_bou=tinf
+      rho_bou=thermal(pressure=prs_bou,temperature=tmp_bou)
+      spc_bou=var_sp
+      !
+      call fvar2q(       q=  pb%q,   density=rho_bou,        &
+                 velocity=vel_bou,  pressure=prs_bou,        &
+                  species=spc_bou                            )
+      !
+      if(.not. pb%localin) cycle
+      !
+      i=pb%igh(1)-ig0
+      j=pb%igh(2)-jg0
+      k=pb%igh(3)-kg0
+      !
+      if(i>=0 .and. i<=im .and. &
+         j>=0 .and. j<=jm .and. &
+         k>=0 .and. k<=km ) then
+        !
+        if(pb%nodetype=='g') then
+          ! for ghost nodes
+          !
+          vel(i,j,k,:)=-1.d0*var_u(:)
+            tmp(i,j,k)=2.d0*tinf-var_t
+            prs(i,j,k)=var_p
+            rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          spc(i,j,k,:)=1.d0
+        elseif(pb%nodetype=='b') then
+          ! for boundary nodes
+          !
+          vel(i,j,k,:)=0.d0
+            tmp(i,j,k)=tinf
+            prs(i,j,k)=var_p
+            rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          spc(i,j,k,:)=1.d0
+          !
+          ! if(mpirank==103 .and. i==9 .and. j==16) then
+          !   ! print*,vel(i,j,k,:)
+          !   print*,mpirank,'|','jb=',jb
+          !   print*,x(i,j,k,:)
+          !   print*,pb%ximag
+          !   print*,'----------------------------------'
+          ! endif
+          ! if(mpirank==135 .and. i==9 .and. j==0) then
+          !   ! print*,vel(i,j,k,:)
+          !   print*,mpirank,'|','jb=',jb
+          !   print*,x(i,j,k,:)
+          !   print*,pb%ximag
+          !   print*,'----------------------------------'
+          ! endif
+          !
+        ! elseif(pb%nodetype=='f') then
+        !   ! for force nodes
+        !   vel(i,j,k,:)=0.5d0*var_u(:)
+        !     tmp(i,j,k)=0.5d0*(tinf+var_t)
+        !     prs(i,j,k)=var_p
+        !   rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        !   !
+        !   spc(i,j,k,:)=1.d0
+        !   !
+        ! else
+        !   stop ' ERROR @ immbody'
+        endif
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+        !
+      endif
+      !
+    enddo
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       !
-      if(cns(i,j,k)=='so' .or. cns(i,j,k)=='s1') then
+      if(nodestat(i,j,k)==5) then
+        ! inner solid
+      ! if(nodestat(i,j,k)>0) then
+        ! all solid nodes
         !
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
@@ -312,6 +549,49 @@ module bc
   !| The end of the subroutine boucon.                                 |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to synconize immbnod(jb)%qimag            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 16-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine syncqimag(asboun)
+    !
+    use commtype, only : sboun
+    use parallel, only : psum
+    !
+    ! arguments
+    type(sboun),intent(inout) :: asboun(:)
+    !
+    ! local data
+    integer :: nsize,jb
+    real(8),allocatable :: buf(:,:)
+    real(8) :: epslion=1.d-10
+    !
+    nsize=size(asboun)
+    !
+    allocate(buf(1:numq,1:nsize))
+    !
+    do jb=1,nsize
+      buf(1:numq,jb)=asboun(jb)%qimag(1:numq)
+    enddo
+    !
+    buf=psum(buf)
+    !
+    do jb=1,nsize
+      asboun(jb)%qimag(1:numq)=buf(1:numq,jb)
+    enddo
+    !
+    deallocate(buf)
+    !
+    return
+    !
+  end subroutine syncqimag
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine syncisup.                               |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is to apply corner bc.                            |
   !+-------------------------------------------------------------------+

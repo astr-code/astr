@@ -7,7 +7,7 @@
 !+---------------------------------------------------------------------+
 module commcal
   !
-  use parallel, only: mpirank,mpistop
+  use parallel, only: mpirank,mpistop,mpirankname
   !
   implicit none
   !
@@ -176,6 +176,149 @@ module commcal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine monitorsearch.                          |
   !+-------------------------------------------------------------------+
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to be a shock senor to control the nonlinear
+  ! shock-capturing schemes with Jameson's approach.
+  ! Ref1: F. Ducros, J. Comp. Phys. 1999, 152:517-549.
+  ! Ref2: S. C. Lo, Int. J. Num. Meth. Fluid., 2009.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2010-04-20.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine ShockSolid
+    !
+    use parallel, only : npdci,npdcj,npdck,dataswap
+    use commvar,  only : im,jm,km,hm
+    use commarray,only : nodestat,lsolid,x
+    use tecio
+    !
+    ! local data
+    integer :: i,j,k,m,i1,j1,k1
+    logical,allocatable :: lss(:,:,:)
+    real(8),allocatable :: rss(:,:,:)
+    !
+    ! set the shock area 
+    allocate(lss(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    !
+    lss=.false.
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(nodestat(i,j,k)>0 .or. nodestat(i,j,k)==-1) then
+        lss(i,j,k)=.true.
+      endif
+      !
+    end do
+    end do
+    end do
+    !
+    call dataswap(lss)
+    !
+    lsolid=lss
+    !
+    ! expand the solid area 
+    lsolid=.false.
+    do k=-hm,km+hm
+    do j=-hm,jm+hm
+    do i=-hm,im+hm
+      !
+      if(lss(i,j,k)) then
+        !
+        do m=-4,4
+          !
+          i1=i+m
+          !
+          if(i1>im+hm) i1=im+hm
+          if(i1<-hm)   i1=-hm
+          !
+          lsolid(i1,j,k)=.true.
+          !
+          j1=j+m
+          !
+          if(j1>jm+hm) j1=jm+hm
+          if(j1<-hm)   j1=-hm
+          !
+          lsolid(i,j1,k)=.true.
+          !
+          k1=k+m
+          !
+          if(k1>km+hm) k1=km+hm
+          if(k1<-hm)   k1=-hm
+          !
+          lsolid(i,j,k1)=.true.
+          !
+        enddo
+        !
+      endif
+      !
+    end do
+    end do
+    end do
+    !
+    call dataswap(lsolid)
+    !
+    deallocate(lss)
+    !
+    ! allocate(rss(0:im,0:jm,0:km))
+    ! !
+    ! do k=0,km
+    ! do j=0,jm
+    ! do i=0,im
+    !   !
+    !   if(lsolid(i,j,k)) then
+    !     rss(i,j,k)=1.d0
+    !   else
+    !     rss(i,j,k)=0.d0
+    !   endif
+    !   !
+    ! end do
+    ! end do
+    ! end do
+    ! !
+    ! call tecbin('testout/tec_solid_sensor'//mpirankname//'.plt',      &
+    !                                   x(0:im,0:jm,0:km,1),'x',    &
+    !                                   x(0:im,0:jm,0:km,2),'y',    &
+    !                                   x(0:im,0:jm,0:km,3),'z',    &
+    !                                                   rss,'ss' )
+    ! !
+    ! deallocate(rss)
+    !
+    ! call mpistop
+    !
+    return
+    !
+  end subroutine ShockSolid
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine ShockSolid
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to determin is a i,j,k is in the domain          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure logical function ijkin(i,j,k)
+    !
+    use commvar, only : im,jm,km
+    !
+    integer,intent(in) :: i,j,k
+    !
+    if(i<0 .or. j<0 .or. k<0 .or. i>im .or. j>jm .or. k>km) then
+      ijkin=.false.
+    else
+      ijkin=.true.
+    endif
+    !
+    return
+    !
+  end function ijkin
+  !+-------------------------------------------------------------------+
+  !| The end of the function ijkin.                                    |
+  !+-------------------------------------------------------------------+
+
   !
 end module commcal
 !+---------------------------------------------------------------------+

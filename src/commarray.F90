@@ -7,15 +7,19 @@
 !+---------------------------------------------------------------------+
 module commarray
   !
+  use commtype, only : nodcel
+  !
   implicit none
   !
   real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp
-  real(8),allocatable,dimension(:,:,:) :: jacob,celvol,rho,prs,tmp
+  real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
   real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax
-  character(len=2),allocatable,dimension(:,:,:) :: cns
+  integer,allocatable,dimension(:,:,:) :: nodestat
+  logical,allocatable,dimension(:,:,:) :: lsolid
+  type(nodcel),allocatable,dimension(:,:,:) :: cell
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
   !|               jacob | geometrical Jacobian.                       |
@@ -28,7 +32,7 @@ module commarray
   !|                 vel | velocity.                                   |
   !|                 spc | species.                                    |
   !|              lspg_* | length of sponge layer                      |
-  !|                 cns | node status: fluid or solid                 |
+  !|            nodestat | node status: fluid or solid                 |
   !+---------------------+---------------------------------------------+
   real(8),allocatable :: acctest_ref(:)
   !
@@ -51,20 +55,11 @@ module commarray
     allocate( x(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating x'
     !
-    allocate( cns(0:im,0:jm,0:km),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating cns'
+    allocate( nodestat(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating nodestat'
     !
     allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating jacob'
-    !
-    if(ndims==1) then
-      allocate( celvol(1:im,0:0,0:0),stat=lallo)
-    elseif(ndims==2) then
-      allocate( celvol(1:im,1:jm,0:0),stat=lallo)
-    elseif(ndims==3) then
-      allocate( celvol(1:im,1:jm,1:km),stat=lallo)
-    endif
-    if(lallo.ne.0) stop ' !! error at allocating celvol'
     !
     allocate( dxi(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating dxi'
@@ -98,6 +93,18 @@ module commarray
     !
     allocate(dtmp(0:im,0:jm,0:km,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating dvel'
+    !
+    allocate(lsolid(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating lsolid'
+    !
+    if(ndims==1) then
+      allocate( cell(1:im,0:0,0:0),stat=lallo)
+    elseif(ndims==2) then
+      allocate( cell(1:im,1:jm,0:0),stat=lallo)
+    elseif(ndims==3) then
+      allocate( cell(1:im,1:jm,1:km),stat=lallo)
+    endif
+    if(lallo.ne.0) stop ' !! error at allocating cell'
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+

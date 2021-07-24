@@ -30,6 +30,8 @@ module parallel
   end interface
   !
   interface dataswap
+    module procedure  array3d_sendrecv_log
+    module procedure array3d_sendrecv_int
     module procedure array3d_sendrecv
     module procedure array4d_sendrecv
     module procedure array5d_sendrecv
@@ -39,9 +41,16 @@ module parallel
     module procedure array3d_sync
   end interface
   !
+  interface pmerg
+    module procedure pmerg_sbou
+  end interface
+  !
   interface psum
     module procedure psum_int
+    module procedure psum_int_ary
     module procedure psum_r8
+    module procedure psum_r8_ary
+    module procedure psum_r8_ary_2d
   end interface
   !
   interface pmax
@@ -52,6 +61,28 @@ module parallel
   interface pmin
     module procedure pmin_int
     module procedure pmin_r8
+  end interface
+  !
+  interface por
+    module procedure por_log
+  end interface
+  !
+  interface ptabupd
+    module procedure updatable_int
+    module procedure updatable_int_a2a_v
+    module procedure updatable_rel_a2a_v
+    module procedure updatable_rel2d_a2a_v
+  end interface
+  !
+  interface pgather
+    module procedure pgather_rel2d_array
+    module procedure pgather_int2d_array
+    module procedure pgather_cha1_array
+  end interface
+  !
+  interface rmdup
+     module procedure rmdup_i4
+     module procedure rmdup_i4_2d
   end interface
   !
   integer :: mpirank,mpisize,mpirankmax
@@ -945,6 +976,407 @@ module parallel
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to update and synchronise the table.      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-September-2019: Created by J. Fang @ STFC Daresbury Laboratory |
+  !+-------------------------------------------------------------------+
+  subroutine updatable_int(var,table,offset,debug)
+    !
+    ! arguments
+    integer,intent(in) :: var
+    integer,optional,intent(out) :: table(0:mpirankmax)
+    integer,optional,intent(out) :: offset
+    logical,intent(in),optional :: debug
+    !
+    ! local data
+    integer :: ierr,i
+    integer :: vta(0:mpirankmax)
+    logical :: ldebug
+    !
+    if(present(debug)) then
+      ldebug=debug
+    else
+      ldebug=.false.
+    endif
+    !
+    call mpi_allgather(var,1,mpi_integer,                              &
+                       vta,1,mpi_integer,mpi_comm_world,ierr)
+    !
+    if(present(table)) then
+      table=vta
+    endif
+    !
+    if(present(offset)) then
+      !
+      if(mpirank==0) then
+        offset=0
+      else
+        !
+        offset=0
+        do i=0,mpirank-1
+          offset=offset+vta(i)
+        enddo
+        !
+      endif
+      !
+    endif
+    !
+  end subroutine updatable_int
+  !
+  subroutine updatable_int_a2a_v(datasend,datarecv,                    &
+                                 sendtabl,recvtabl)
+    !
+    ! arguments
+    integer,intent(in) :: datasend(:)
+    integer,allocatable,intent(out) :: datarecv(:)
+    integer,intent(in) :: sendtabl(0:),recvtabl(0:)
+    !
+    ! local data
+    integer :: nvar,ierr,incode,jrank,recvsize
+    integer,allocatable :: senddispls(:),recvdispls(:)
+    !
+    ! start
+    !
+    nvar=1
+    !
+    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax))
+    !
+    senddispls=0
+    recvdispls=0
+    do jrank=1,mpirankmax
+      senddispls(jrank)=senddispls(jrank-1)+sendtabl(jrank-1)
+      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl(jrank-1)
+    enddo
+    recvsize=recvdispls(mpirankmax)+recvtabl(mpirankmax)
+    allocate(datarecv(recvsize))
+    !
+    call mpi_alltoallv(datasend, sendtabl, senddispls, mpi_integer, &
+                       datarecv, recvtabl, recvdispls, mpi_integer, &
+                       mpi_comm_world, ierr)
+    !
+    deallocate(senddispls,recvdispls)
+    !
+  end subroutine updatable_int_a2a_v
+  !
+  subroutine updatable_rel_a2a_v(datasend,datarecv,                    &
+                                 sendtabl,recvtabl)
+    !
+    ! arguments
+    real(8),intent(in) :: datasend(:)
+    real(8),allocatable,intent(out) :: datarecv(:)
+    integer,intent(in) :: sendtabl(0:),recvtabl(0:)
+    !
+    ! local data
+    integer :: nvar,ierr,incode,jrank,recvsize
+    integer,allocatable :: senddispls(:),recvdispls(:)
+    !
+    ! start
+    !
+    nvar=1
+    !
+    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax))
+    !
+    senddispls=0
+    recvdispls=0
+    do jrank=1,mpirankmax
+      senddispls(jrank)=senddispls(jrank-1)+sendtabl(jrank-1)
+      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl(jrank-1)
+    enddo
+    recvsize=recvdispls(mpirankmax)+recvtabl(mpirankmax)
+    allocate(datarecv(recvsize))
+    !
+    call mpi_alltoallv(datasend, sendtabl, senddispls, mpi_real8, &
+                       datarecv, recvtabl, recvdispls, mpi_real8, &
+                       mpi_comm_world, ierr)
+    !
+    deallocate(senddispls,recvdispls)
+    !
+  end subroutine updatable_rel_a2a_v
+  !
+  subroutine updatable_rel2d_a2a_v(datasend,datarecv,                 &
+                                   sendtabl,recvtabl)
+    !
+    ! arguments
+    real(8),intent(in) :: datasend(:,:)
+    real(8),allocatable,intent(out) :: datarecv(:,:)
+    integer,intent(in) :: sendtabl(0:),recvtabl(0:)
+    !
+    ! local data
+    integer :: nvar,ierr,incode,jrank,recvsize,n2size
+    integer,allocatable :: senddispls(:),recvdispls(:),                &
+                           sendtabl2(:),recvtabl2(:)
+    !
+    ! start
+    !
+    nvar=1
+    !
+    n2size=size(datasend,2)
+    !
+    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax),        &
+             sendtabl2(0:mpirankmax),recvtabl2(0:mpirankmax))
+    !
+    sendtabl2=sendtabl*n2size
+    recvtabl2=recvtabl*n2size
+    senddispls=0
+    recvdispls=0
+    do jrank=1,mpirankmax
+      senddispls(jrank)=senddispls(jrank-1)+sendtabl2(jrank-1)
+      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl2(jrank-1)
+    enddo
+    recvsize=recvdispls(mpirankmax)+recvtabl(mpirankmax)
+    allocate(datarecv(recvsize/n2size,n2size))
+    !
+    call mpi_alltoallv(datasend, sendtabl2, senddispls, mpi_real8, &
+                       datarecv, recvtabl2, recvdispls, mpi_real8, &
+                       mpi_comm_world, ierr)
+    !
+    deallocate(senddispls,recvdispls,sendtabl2,recvtabl2)
+    !
+  end subroutine updatable_rel2d_a2a_v
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine updatable_int.                          |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to gather arraies.                        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 16-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine pgather_rel2d_array(array,data)
+    !
+    ! arguments
+    real(8),intent(in) :: array(:,:)
+    real(8),intent(out),allocatable :: data(:,:)
+    !
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,nrecv(1),nsize,dim1,dim2
+    !
+    ! get the size of data to scatter
+    dim1=size(array,1)
+    dim2=size(array,2)
+    !
+    nrecv(1)=size(array)
+    !
+    dim1=pmax(dim1)
+    !
+    call mpi_allgather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  &
+                    mpi_comm_world, ierr)
+    !
+    displs(0)=0
+    do jrank=1,mpirankmax
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+    !
+    nsize=displs(mpirankmax)+counts(mpirankmax)
+    !
+    allocate(data(dim1,nsize/dim1))
+    !
+    call mpi_allgatherv(array, nrecv(1), mpi_real8,       &
+                        data,  counts, displs, mpi_real8, &
+                        mpi_comm_world, ierr)
+    !
+  end subroutine pgather_rel2d_array
+  !
+  subroutine pgather_int2d_array(array,data)
+    !
+    ! arguments
+    integer,intent(in) :: array(:,:)
+    integer,intent(out),allocatable :: data(:,:)
+    !
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,nrecv(1),nsize,dim1,dim2
+    !
+    ! get the size of data to scatter
+    dim1=size(array,1)
+    dim2=size(array,2)
+    !
+    nrecv(1)=size(array)
+    !
+    dim1=pmax(dim1)
+    !
+    call mpi_allgather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  &
+                    mpi_comm_world, ierr)
+    !
+    displs(0)=0
+    do jrank=1,mpirankmax
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+    !
+    nsize=displs(mpirankmax)+counts(mpirankmax)
+    !
+    allocate(data(dim1,nsize/dim1))
+    !
+    call mpi_allgatherv(array, nrecv(1), mpi_integer,       &
+                        data,  counts, displs, mpi_integer, &
+                        mpi_comm_world, ierr)
+    !
+  end subroutine pgather_int2d_array
+  !
+  subroutine pgather_cha1_array(array,data)
+    !
+    ! arguments
+    character(len=1),intent(in) :: array(:)
+    character(len=1),intent(out),allocatable :: data(:)
+    !
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,nrecv(1),nsize,dim1
+    !
+    ! get the size of data to scatter
+    dim1=size(array)
+    !
+    nrecv(1)=dim1
+    !
+    call mpi_allgather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  &
+                    mpi_comm_world, ierr)
+    !
+    displs(0)=0
+    do jrank=1,mpirankmax
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+    !
+    nsize=displs(mpirankmax)+counts(mpirankmax)
+    !
+    allocate(data(nsize))
+    !
+    call mpi_allgatherv(array, nrecv(1), mpi_character,       &
+                        data,  counts, displs, mpi_character, &
+                        mpi_comm_world, ierr)
+    !
+  end subroutine pgather_cha1_array
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pgather.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to merge arraies from differnet ranks and |
+  !| broadcast it.                                                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 15-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory   |
+  !+-------------------------------------------------------------------+
+  subroutine pmerg_sbou(var,nvar,vmerg)
+    !
+    use commtype,  only : sboun
+    !
+    ! arguments
+    type(sboun),allocatable,intent(in) :: var(:)
+    type(sboun),allocatable,intent(out) :: vmerg(:)
+    integer,intent(in),optional :: nvar
+    !
+    ! local data
+    integer :: nsize,ntotle,jb
+    real(8),allocatable :: sb_rea(:,:),sbt_rea(:,:)
+    integer,allocatable :: sb_int(:,:),sbt_int(:,:)
+    character(len=1),allocatable :: sb_cha(:),sbt_cha(:)
+    !
+    integer :: ns_tab(0:mpirankmax)
+    !
+    if(present(nvar)) then
+      nsize=nvar
+    else
+      nsize=size(var)
+    endif
+    !
+    call ptabupd(var=nsize,table=ns_tab)
+    !
+    allocate(sb_rea(3,nsize),sb_int(3,nsize),sb_cha(nsize))
+    !
+    ! merge x 
+    do jb=1,nsize
+      sb_rea(:,jb)=var(jb)%x(:)
+    enddo
+    !
+    call pgather(sb_rea,sbt_rea)
+    !
+    ntotle=psum(nsize)
+    !
+    allocate(vmerg(1:ntotle))
+    !
+    do jb=1,ntotle
+      vmerg(jb)%x(:)=sbt_rea(:,jb)
+    enddo
+    !
+    ! end of merge x 
+    !
+    ! merge normdir 
+    do jb=1,nsize
+      sb_rea(:,jb)=var(jb)%normdir(:)
+    enddo
+    !
+    call pgather(sb_rea,sbt_rea)
+    !
+    do jb=1,ntotle
+      vmerg(jb)%normdir(:)=sbt_rea(:,jb)
+    enddo
+    !
+    ! end of merge normdir
+    !
+    ! merge ximag 
+    do jb=1,nsize
+      sb_rea(:,jb)=var(jb)%ximag(:)
+    enddo
+    !
+    call pgather(sb_rea,sbt_rea)
+    !
+    do jb=1,ntotle
+      vmerg(jb)%ximag(:)=sbt_rea(:,jb)
+    enddo
+    !
+    ! end of merge ximag
+    !
+    ! merge igh 
+    do jb=1,nsize
+      sb_int(:,jb)=var(jb)%igh(:)
+    enddo
+    !
+    call pgather(sb_int,sbt_int)
+    !
+    do jb=1,ntotle
+      vmerg(jb)%igh(:)=sbt_int(:,jb)
+    enddo
+    ! end of merge igh
+    !
+    ! merge nodetype 
+    do jb=1,nsize
+      sb_cha(jb)=var(jb)%nodetype
+    enddo
+    !
+    call pgather(sb_cha,sbt_cha)
+    !
+    do jb=1,ntotle
+      vmerg(jb)%nodetype=sbt_cha(jb)
+    enddo
+    ! end of merge igh
+    !
+    ! print*,mpirank,'|',nsize
+    ! !
+    ! if(mpirank==4) then
+    !   print*,mpirank,'|',sb_int(:,1)
+    ! endif
+    ! !
+    ! if(mpirank==0) then
+    !   print*,mpirank,'|',sbt_int(:,717)
+    ! endif
+    !
+    return
+    !
+  end subroutine pmerg_sbou
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pmerg_sbou.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This function is used to sum a number across ranks                |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -964,6 +1396,26 @@ module parallel
     !
   end function psum_int
   !
+  function psum_int_ary(var) result(varsum)
+    !
+    ! arguments
+    integer,intent(in) :: var(:)
+    integer,allocatable :: varsum(:)
+    !
+    ! local data
+    integer :: ierr,nsize
+    !
+    nsize=size(var)
+    !
+    allocate(varsum(nsize))
+    !
+    call mpi_allreduce(var,varsum,nsize,mpi_integer,mpi_sum,           &
+                                                    mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function psum_int_ary
+  !
   real(8) function  psum_r8(var)
     !
     ! arguments
@@ -976,6 +1428,47 @@ module parallel
                                                     mpi_comm_world,ierr)
     !
   end function psum_r8
+  !
+  function psum_r8_ary(var) result(varsum)
+    !
+    ! arguments
+    real(8),intent(in) :: var(:)
+    real(8),allocatable :: varsum(:)
+    !
+    ! local data
+    integer :: ierr,nsize
+    !
+    nsize=size(var)
+    !
+    allocate(varsum(nsize))
+    !
+    call mpi_allreduce(var,varsum,nsize,mpi_real8,mpi_sum,             &
+                                                    mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function psum_r8_ary
+  !
+  function psum_r8_ary_2d(var) result(varsum)
+    !
+    ! arguments
+    real(8),intent(in) :: var(:,:)
+    real(8),allocatable :: varsum(:,:)
+    !
+    ! local data
+    integer :: ierr,nsize1,nsize2
+    !
+    nsize1=size(var,1)
+    nsize2=size(var,2)
+    !
+    allocate(varsum(nsize1,nsize2))
+    !
+    call mpi_allreduce(var,varsum,nsize1*nsize2,mpi_real8,mpi_sum,     &
+                                                    mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function psum_r8_ary_2d
   !+-------------------------------------------------------------------+
   !| The end of the subroutine psum.                                   |
   !+-------------------------------------------------------------------+
@@ -1108,9 +1601,9 @@ module parallel
     !! unpack the received left the packet
     if(mpileft==MPI_PROC_NULL) then
       !
-      ! do n=1,hm
-      !   x(-n,0:jm,0:km,1:3)=2.d0*x(0,0:jm,0:km,1:3)-x(n,0:jm,0:km,1:3) ! even
-      ! enddo
+      do n=1,hm
+        x(-n,0:jm,0:km,1:3)=2.d0*x(0,0:jm,0:km,1:3)-x(n,0:jm,0:km,1:3) ! even
+      enddo
       !
     else
       !
@@ -1123,9 +1616,9 @@ module parallel
     ! unpack the received right the packet
     if(mpiright==MPI_PROC_NULL) then
       !
-      ! do n=1,hm
-      !   x(im+n,0:jm,0:km,1:3)=2.d0*x(im,0:jm,0:km,1:3)-x(im-n,0:jm,0:km,1:3)
-      ! enddo
+      do n=1,hm
+        x(im+n,0:jm,0:km,1:3)=2.d0*x(im,0:jm,0:km,1:3)-x(im-n,0:jm,0:km,1:3)
+      enddo
       !
     else
       do n=1,hm
@@ -1169,9 +1662,9 @@ module parallel
       ! unpack the received up the packet
       if(mpidown==MPI_PROC_NULL) then
         !
-        ! do n=1,hm
-        !   x(0:im,-n,0:km,1:3)=2.d0*x(0:im,0,0:km,1:3)-x(0:im,n,0:km,1:3)
-        ! enddo
+        do n=1,hm
+          x(0:im,-n,0:km,1:3)=2.d0*x(0:im,0,0:km,1:3)-x(0:im,n,0:km,1:3)
+        enddo
         !
       else
         !
@@ -1183,9 +1676,9 @@ module parallel
       !
       ! unpack the received down the packet
       if(mpiup==MPI_PROC_NULL) then
-        ! do n=1,hm
-        !   x(0:im,jm+n,0:km,1:3)=2.d0*x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3)
-        ! enddo
+        do n=1,hm
+          x(0:im,jm+n,0:km,1:3)=2.d0*x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3)
+        enddo
       else
         !
         do n=1,hm
@@ -1295,6 +1788,418 @@ module parallel
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! the end of the subroutine gridsendrecv.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to swap a 3-D logical tensor.             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| -Jul-2021 | Created by J. Fang @ Warringon.                       |
+  !+-------------------------------------------------------------------+
+  subroutine array3d_sendrecv_log(var,subtime)
+    !
+    ! arguments
+    logical,intent(inout) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
+    real(8),intent(inout),optional :: subtime
+    !
+    ! logical data
+    integer :: ncou,j,k
+    integer :: ierr
+    logical,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    integer :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime()
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! buf1: send buffer
+    ! buf2: send buffer
+    ! buf1: redevice buffer
+    ! buf2: redevice buffer
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ncou=(jm+1)*(km+1)*hm
+    !
+    allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
+              rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
+    !
+    if(mpileft .ne. MPI_PROC_NULL) then
+      ! pack the left send buffer
+      sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+    endif
+    if(mpiright .ne. MPI_PROC_NULL) then
+      ! pack the right send buffer
+      sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
+    endif
+    !
+    ! Message passing
+    call mpi_sendrecv(sbuf1,ncou,mpi_logical,mpileft, mpitag,            &
+                      rbuf1,ncou,mpi_logical,mpiright,mpitag,            &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    call mpi_sendrecv(sbuf2,ncou,mpi_logical,mpiright,mpitag,            &
+                      rbuf2,ncou,mpi_logical,mpileft, mpitag,            &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    !
+    if(mpiright .ne. MPI_PROC_NULL) then
+      !
+      ! unpack the received the packet from right
+      var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
+      !
+    end if
+      !
+    if(mpileft .ne. MPI_PROC_NULL) then
+      !
+      ! unpack the received the packet from left
+      var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
+      !
+      ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
+      !                        rbuf2(0,0:jm,0:km) )
+    end if
+    !
+    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Finish message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(jsize==1 .and. ljhomo) then
+      !
+      if(ja==0) then 
+        do j=-hm,hm
+          var(0:im,j,0:km)    =var(0:im,0,0:km)
+        enddo
+      else
+        var(0:im,-hm:-1,0:km)    =var(0:im,jm-hm:jm-1,0:km)
+        var(0:im,jm+1:jm+hm,0:km)=var(0:im,1:hm,0:km)
+      endif
+      !
+    else
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*hm
+      !
+      allocate( sbuf1(0:im,1:hm, 0:km),sbuf2(0:im,1:hm, 0:km),         &
+                rbuf1(0:im,1:hm, 0:km),rbuf2(0:im,-hm:-1,0:km) )
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! pack the upper send buffer
+        sbuf1(0:im,1:hm,0:km)=var(0:im,1:hm,0:km)
+      endif
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! pack the down send buffer
+        sbuf2(0:im,1:hm,0:km)=var(0:im,jm-hm:jm-1,0:km)
+      end if
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_logical,mpidown,mpitag,             &
+                        rbuf1,ncou,mpi_logical,mpiup,  mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_logical,mpiup,  mpitag,             &
+                        rbuf2,ncou,mpi_logical,mpidown,mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from up
+        var(0:im,jm+1:jm+hm,0:km)=rbuf1(0:im,1:hm,0:km)
+        !
+      endif
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from down
+        var(0:im,-hm:-1,0:km)=rbuf2(0:im,-hm:-1,0:km) 
+        !
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+    endif
+    !
+    if(ksize==1 .and. lkhomo) then
+      !
+      if(ka==0) then
+        do k=-hm,hm
+          var(0:im,0:jm,k)    =var(0:im,0:jm,0)
+        enddo
+      else
+        var(0:im,0:jm,-hm:-1)    =var(0:im,0:jm,km-hm:km-1)
+        var(0:im,0:jm,km+1:km+hm)=var(0:im,0:jm,1:hm)
+      endif
+      !             
+    else
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(jm+1)*hm
+      !
+      allocate( sbuf1(0:im,0:jm, 1:hm),                      &
+                sbuf2(0:im,0:jm, 1:hm),                      &
+                rbuf1(0:im,0:jm, 1:hm),                      &
+                rbuf2(0:im,0:jm,-hm:-1) )
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        ! pack the back send buffer
+        sbuf1(0:im,0:jm,1:hm)=var(0:im,0:jm,1:hm)
+      endif
+      if(mpifront .ne. MPI_PROC_NULL) then
+        ! pack the front send buffer
+        sbuf2(0:im,0:jm,1:hm)=var(0:im,0:jm,km-hm:km-1)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_logical,mpiback, mpitag,          &
+                        rbuf1,ncou,mpi_logical,mpifront,mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_logical,mpifront,mpitag,          &
+                        rbuf2,ncou,mpi_logical,mpiback, mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpifront .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from front
+        var(0:im,0:jm,km+1:km+hm)=rbuf1(0:im,0:jm,1:hm)
+        !
+      end if
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet back
+        var(0:im,0:jm,-hm:-1)=rbuf2(0:im,0:jm,-hm:-1)
+        !
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
+  end subroutine array3d_sendrecv_log
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine array3d_sendrecv_log.                   |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to swap a 3-D integer tensor.             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| -Jul-2021 | Created by J. Fang @ Warringon.                       |
+  !+-------------------------------------------------------------------+
+  subroutine array3d_sendrecv_int(var,subtime)
+    !
+    ! arguments
+    integer,intent(inout) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
+    real(8),intent(inout),optional :: subtime
+    !
+    ! logical data
+    integer :: ncou,j,k
+    integer :: ierr
+    integer,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
+    integer :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime()
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! buf1: send buffer
+    ! buf2: send buffer
+    ! buf1: redevice buffer
+    ! buf2: redevice buffer
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ncou=(jm+1)*(km+1)*hm
+    !
+    allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
+              rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
+    !
+    if(mpileft .ne. MPI_PROC_NULL) then
+      ! pack the left send buffer
+      sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+    endif
+    if(mpiright .ne. MPI_PROC_NULL) then
+      ! pack the right send buffer
+      sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
+    endif
+    !
+    ! Message passing
+    call mpi_sendrecv(sbuf1,ncou,mpi_integer,mpileft, mpitag,            &
+                      rbuf1,ncou,mpi_integer,mpiright,mpitag,            &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    call mpi_sendrecv(sbuf2,ncou,mpi_integer,mpiright,mpitag,            &
+                      rbuf2,ncou,mpi_integer,mpileft, mpitag,            &
+                                             mpi_comm_world,status,ierr)
+    mpitag=mpitag+1
+    !
+    if(mpiright .ne. MPI_PROC_NULL) then
+      !
+      ! unpack the received the packet from right
+      var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
+      !
+    end if
+      !
+    if(mpileft .ne. MPI_PROC_NULL) then
+      !
+      ! unpack the received the packet from left
+      var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
+      !
+      ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
+      !                        rbuf2(0,0:jm,0:km) )
+    end if
+    !
+    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Finish message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(jsize==1 .and. ljhomo) then
+      !
+      if(ja==0) then 
+        do j=-hm,hm
+          var(0:im,j,0:km)    =var(0:im,0,0:km)
+        enddo
+      else
+        var(0:im,-hm:-1,0:km)    =var(0:im,jm-hm:jm-1,0:km)
+        var(0:im,jm+1:jm+hm,0:km)=var(0:im,1:hm,0:km)
+      endif
+      !
+    else
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*hm
+      !
+      allocate( sbuf1(0:im,1:hm, 0:km),sbuf2(0:im,1:hm, 0:km),         &
+                rbuf1(0:im,1:hm, 0:km),rbuf2(0:im,-hm:-1,0:km) )
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! pack the upper send buffer
+        sbuf1(0:im,1:hm,0:km)=var(0:im,1:hm,0:km)
+      endif
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! pack the down send buffer
+        sbuf2(0:im,1:hm,0:km)=var(0:im,jm-hm:jm-1,0:km)
+      end if
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_integer,mpidown,mpitag,             &
+                        rbuf1,ncou,mpi_integer,mpiup,  mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_integer,mpiup,  mpitag,             &
+                        rbuf2,ncou,mpi_integer,mpidown,mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from up
+        var(0:im,jm+1:jm+hm,0:km)=rbuf1(0:im,1:hm,0:km)
+        !
+      endif
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from down
+        var(0:im,-hm:-1,0:km)=rbuf2(0:im,-hm:-1,0:km) 
+        !
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+    endif
+    !
+    if(ksize==1 .and. lkhomo) then
+      !
+      if(ka==0) then
+        do k=-hm,hm
+          var(0:im,0:jm,k)    =var(0:im,0:jm,0)
+        enddo
+      else
+        var(0:im,0:jm,-hm:-1)    =var(0:im,0:jm,km-hm:km-1)
+        var(0:im,0:jm,km+1:km+hm)=var(0:im,0:jm,1:hm)
+      endif
+      !             
+    else
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(jm+1)*hm
+      !
+      allocate( sbuf1(0:im,0:jm, 1:hm),                      &
+                sbuf2(0:im,0:jm, 1:hm),                      &
+                rbuf1(0:im,0:jm, 1:hm),                      &
+                rbuf2(0:im,0:jm,-hm:-1) )
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        ! pack the back send buffer
+        sbuf1(0:im,0:jm,1:hm)=var(0:im,0:jm,1:hm)
+      endif
+      if(mpifront .ne. MPI_PROC_NULL) then
+        ! pack the front send buffer
+        sbuf2(0:im,0:jm,1:hm)=var(0:im,0:jm,km-hm:km-1)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_integer,mpiback, mpitag,          &
+                        rbuf1,ncou,mpi_integer,mpifront,mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_integer,mpifront,mpitag,          &
+                        rbuf2,ncou,mpi_integer,mpiback, mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpifront .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from front
+        var(0:im,0:jm,km+1:km+hm)=rbuf1(0:im,0:jm,1:hm)
+        !
+      end if
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet back
+        var(0:im,0:jm,-hm:-1)=rbuf2(0:im,0:jm,-hm:-1)
+        !
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
+  end subroutine array3d_sendrecv_int
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine array3d_sendrecv_int.                   |
+  !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is used to swap a 3-D tensor.                     |
@@ -2455,6 +3360,303 @@ module parallel
   end function ptime
   !+-------------------------------------------------------------------+
   !| The end of the function ptime.                                    |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to synconize immbnod(jb)%inmg             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 16-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine syncinmg(asboun)
+    !
+    use commtype,  only : sboun
+    !
+    ! arguments
+    type(sboun),intent(inout) :: asboun
+    !
+    ! local data
+    integer :: ierr,jrank
+    real(8) :: vta(0:mpirankmax),vtmin
+    integer :: ijk(3,0:mpirankmax)
+    !
+    call mpi_allgather(asboun%dis_imga_inmg,1,mpi_real8,              &
+                       vta,1,mpi_real8,mpi_comm_world,ierr)
+    call mpi_allgather(asboun%inmg,3,mpi_integer,              &
+                       ijk,3,mpi_integer,mpi_comm_world,ierr)
+    !
+    ! print*,asboun%dis_imga_inmg,asboun%inmg
+    vtmin=1.d15
+    do jrank=0,mpirankmax
+      !
+      if(vta(jrank)<vtmin) then
+        vtmin=vta(jrank)
+        asboun%dis_imga_inmg=vtmin
+        asboun%inmg=ijk(:,jrank)
+      endif
+      !
+    enddo
+    !
+  end subroutine syncinmg
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine syncinmg.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to synconize immbnod(jb)%isup             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 16-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine syncisup(asboun,snodes,nsnode)
+    !
+    use commtype,  only : sboun
+    !
+    ! arguments
+    type(sboun),intent(inout) :: asboun
+    integer,intent(in) :: snodes(:,:)
+    integer,intent(in) :: nsnode
+    !
+    ! local data
+    integer :: jb
+    integer :: ns_tab(0:mpirankmax)
+    integer,allocatable :: sb_int(:,:),sbt_int(:,:)
+    !
+    call ptabupd(var=nsnode,table=ns_tab)
+    !
+    allocate(sb_int(3,nsnode))
+    !
+    do jb=1,nsnode
+      sb_int(:,jb)=snodes(jb,:)
+    enddo
+    !
+    call pgather(sb_int,sbt_int)
+    !
+    call rmdup(sbt_int)
+    !
+    if(size(sbt_int,2)>0) then
+      !
+      allocate(asboun%isup(size(sbt_int,2),3))
+      !
+      do jb=1,size(sbt_int,2)
+        asboun%isup(jb,:)=sbt_int(:,jb)
+      enddo
+      !
+    else
+      print*,' !! WARNING !! no supporting nodes can be found @ syncisup'
+      stop
+    endif
+    !
+    ! if(size(sbt_int,2)>9) then
+    !   print*,mpirank,'|',nsnode,size(sbt_int,2)
+    !   print*,sbt_int(:,:)
+    !   print*,'---------------------------'
+    !   print*,sbt_int(:,:)
+    !   stop
+    ! endif
+    !
+    !
+    ! do jb=1,nsnode
+    !   sb_rea(:,jb)=var(jb)%x(:)
+    ! enddo
+    ! call mpi_allgather(snodes,1,mpi_integer,              &
+    !                    vta,   1,mpi_integer, mpi_comm_world,ierr)
+    
+    ! print*,mpirank,'|',sbt_int
+    !
+  end subroutine syncisup
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine syncisup.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to synconize immbnod(jb)%weig             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 16-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine syncweig(asboun)
+    !
+    use commtype,  only : sboun
+    !
+    ! arguments
+    type(sboun),intent(inout) :: asboun
+    !
+    ! local data
+    integer :: jb,nweig
+    real(8),allocatable :: sb_rea(:)
+    real(8) :: epslion=1.d-16
+    real(8) :: varcon
+    !
+    nweig=size(asboun%weig)
+    !
+    allocate(sb_rea(nweig))
+    !
+    sb_rea=asboun%weig
+    !
+    sb_rea=psum(sb_rea)
+    !
+    varcon=0.d0
+    do jb=1,nweig
+      !
+      if(sb_rea(jb)<=epslion) then
+        sb_rea=0.d0
+        sb_rea(jb)=1.d0
+        varcon=1.d0
+        exit
+      else
+        sb_rea(jb)=1.d0/sb_rea(jb)
+        varcon=varcon+sb_rea(jb)
+      endif
+      !
+    enddo
+    sb_rea=sb_rea/varcon
+    !
+    asboun%weig=sb_rea
+    !
+    deallocate(sb_rea)
+    !
+    return
+    !
+  end subroutine syncweig
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine syncisup.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| this subroutine removes duplicate entries from a sorted array     | 
+  !+-------------------------------------------------------------------+
+  !| ======                                                            | 
+  !| AUTHOR                                                            |
+  !| ------                                                            |
+  !| 15-Oct-2018:  CREATED by J. Fang @ STFC Daresbury Laboratory      |
+  !+-------------------------------------------------------------------+
+  subroutine rmdup_i4(ary)
+    !
+    ! arguments
+    integer,allocatable,intent(inout) :: ary(:)
+    !
+    ! local variable
+    integer :: i,nsz,nh,is
+    logical,allocatable :: mask(:)
+    integer,allocatable :: buffer(:)
+    !
+    if(.not. allocated(ary)) return
+    !
+    nsz=size(ary)
+    !
+    allocate(mask(nsz))
+    !
+    mask=.true.
+    nh=nsz
+    do i=nsz,2,-1
+      if(any(ary(1:i-1)==ary(i))) then
+        mask(i)=.false.
+        nh=nh-1
+      endif
+    enddo
+    !
+    allocate(buffer(1:nh))
+    is=0
+    do i=1,nsz
+      if(mask(i)) then
+        is=is+1
+        buffer(is)=ary(i)
+      endif
+    enddo
+    !
+    deallocate(ary)
+    call move_alloc(buffer,ary)
+    !
+    deallocate(mask)
+    !
+    !print*,ary
+    !print*,'============='
+  end subroutine rmdup_i4
+  !
+  subroutine rmdup_i4_2d(ary)
+    !
+    ! arguments
+    integer,allocatable,intent(inout) :: ary(:,:)
+    !
+    ! local variable
+    integer :: i,j,nsz2,nsz1,nh,js
+    logical,allocatable :: mask(:)
+    integer,allocatable :: buffer(:,:)
+    !
+    if(.not. allocated(ary)) return
+    !
+    nsz1=size(ary,1)
+    nsz2=size(ary,2)
+    !
+    allocate(mask(nsz2))
+    !
+    mask=.true.
+    nh=nsz2
+    do j=nsz2,2,-1
+      !
+      do i=1,j-1
+        !
+        if(ary(1,i)==ary(1,j) .and. &
+           ary(2,i)==ary(2,j) .and. &
+           ary(3,i)==ary(3,j) ) then
+          !
+          mask(j)=.false.
+          nh=nh-1
+          !
+          exit
+          !
+        endif
+        !
+      enddo
+      !
+    enddo
+    !
+    allocate(buffer(1:nsz1,1:nh))
+    js=0
+    do j=1,nsz2
+      if(mask(j)) then
+        js=js+1
+        buffer(:,js)=ary(:,j)
+      endif
+    enddo
+    !
+    deallocate(ary)
+    call move_alloc(buffer,ary)
+    !
+    deallocate(mask)
+    !
+  end subroutine rmdup_i4_2d
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine rmdup_i4.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| Thes functions are used to get the or of logical variable of all  |
+  !|  ranks                                                            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-January-2020: Created by J. Fang @ STFC Daresbury Laboratory   |
+  !+-------------------------------------------------------------------+
+  logical function por_log(var)
+    !
+    ! arguments
+    logical,intent(in) :: var
+    !
+    ! local data
+    integer :: ierr
+    !
+    call mpi_allreduce(var,por_log,1,mpi_logical,MPI_LOR,              &
+                                                    mpi_comm_world,ierr)
+    !
+    !
+  end function por_log
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine por_log.                                |
   !+-------------------------------------------------------------------+
   !
 end module parallel

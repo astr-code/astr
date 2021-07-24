@@ -556,7 +556,7 @@ module statistic
   function enstophycal() result(vout)
     !
     use commvar,   only : im,jm,km,ia,ja,ka
-    use commarray, only : vel,celvol,rho,dvel
+    use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
     real(8) :: vout
@@ -601,7 +601,7 @@ module statistic
   function kenergycal() result(vout)
     !
     use commvar,   only : im,jm,km,ia,ja,ka
-    use commarray, only : vel,celvol,rho,dvel
+    use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
     real(8) :: vout

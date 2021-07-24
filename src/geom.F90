@@ -10,11 +10,17 @@ module geom
   !
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
-                       datasync,ptime,irk,jrk,krk
+                       datasync,ptime,irk,jrk,krk,ig0,jg0,kg0
   use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,im,jm,km
   use tecio
+  use stlaio,  only: get_unit
   !
   implicit none
+  !
+  interface pointintriangle
+    module procedure pointintriangle_tri
+    module procedure pointintriangle_nodes
+  end interface
   !
   contains
   !
@@ -99,18 +105,31 @@ module geom
   !+-------------------------------------------------------------------+
   subroutine gridinsolid
     !
-    use commtype,  only : solid,triangle
-    use commvar,   only : immbody,nsolid
-    use commarray, only : x,cns
-    use commfunc,  only : dis2point
+    use commtype,  only : solid,triangle,sboun,nodcel
+    use commvar,   only : immbody,nsolid,immbnod,dxyzmax,dxyzmin,      &
+                          npdci,npdcj,npdck,ndims
+    use commarray, only : x,nodestat,cell
+    use commfunc,  only : dis2point,dis2point2,matinv4
+    use commcal,   only : ijkin
+    use parallel,  only : ig0,jg0,kg0,pmerg,syncinmg,syncisup,psum,    &
+                          syncweig
     !
     ! local data
-    integer :: i,j,k,jsd,jfc,counter,ninters,n
+    integer :: i,j,k,jsd,jfc,counter,ninters,n,n1,m,ii,jj,kk,bignum,   &
+               jb,kb,jdir,jx,iss,jss,kss,nc_f,nc_g,nc_b
+    integer :: fh,ncou,ke1
     type(solid),pointer :: pso
-    type(triangle),pointer :: pfa
     logical :: crossface
-    real(8),allocatable :: nodestate(:,:,:),pintersav(:,:)
-    real(8) :: pinters(3),epsilon
+    real(8),allocatable :: rnodestat(:,:,:)
+    integer :: snodes(27,3),i_cell(3)
+    real(8) :: epsilon
+    real(8) :: dist,distmin,var1,var2
+    real(8) :: xmin(3),xmax(3),xcell(4,3),xnorm(4,3)
+    real(8) :: Tm1(4,4),Tm2(4,4),Ti1(4,4),Ti2(4,4)
+    !
+    type(sboun),allocatable :: bnodes(:)
+    logical :: liout,ljout,lkout,lin
+    logical,allocatable :: marker(:,:,:)
     !
     if(lio) print*,' ** calculating grid in solid'
     !
@@ -118,10 +137,27 @@ module geom
     !
     ninters=10
     !
-    allocate(nodestate(0:im,0:jm,0:km),pintersav(3,1:ninters))
+    allocate(rnodestat(0:im,0:jm,0:km))
     !
-    nodestate=0.d0
-    pintersav=1.d16
+    nodestat=0
+    !
+    rnodestat=0.d0
+    !
+    if(npdci==1) then
+      iss=0
+    else
+      iss=1
+    endif
+    if(npdcj==1) then
+      jss=0
+    else
+      jss=1
+    endif
+    if(npdck==1 .or. ndims==2) then
+      kss=0
+    else
+      kss=1
+    endif
     !
     do jsd=1,nsolid
       !
@@ -135,7 +171,8 @@ module geom
            x(i,j,k,2)<pso%xmin(2) .or.  x(i,j,k,2)>pso%xmax(2) .or.    &
            x(i,j,k,3)<pso%xmin(3) .or.  x(i,j,k,3)>pso%xmax(3) ) then
           !
-          cns(i,j,k)='fl'
+          nodestat(i,j,k)=0
+          ! fluids 
           !
         else
           !
@@ -151,9 +188,10 @@ module geom
           !
           if(crossface) then
             ! ths point is in the solid
-            cns(i,j,k)='so'
+            nodestat(i,j,k)=5
           else
-            cns(i,j,k)='fl'
+            ! fluids
+            nodestat(i,j,k)=0
           endif
           !
         endif
@@ -164,31 +202,866 @@ module geom
       !
     enddo
     !
+    call dataswap(nodestat)
+    !
+    ! search for near-boundary ghost nodes (1-5)
+    allocate(marker(0:im,0:jm,0:km))
+    n=0
+    do while(n<5)
+      !
+      marker=.false.
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(nodestat(i,j,k)==5) then
+          ! for solid nodes
+          !
+          do ii=-1,1,2
+            if(nodestat(i+ii,j,k)==n) then
+              marker(i,j,k)=.true.
+              exit
+            endif
+          enddo
+          !
+          do jj=-1,1,2
+            if(nodestat(i,j+jj,k)==n) then
+              marker(i,j,k)=.true.
+              exit
+            endif
+          enddo
+          !
+          do kk=-1,1,2
+            if(nodestat(i,j,k+kk)==n) then
+              marker(i,j,k)=.true.
+              exit
+            endif
+          enddo
+          !
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(marker(i,j,k)) nodestat(i,j,k)=n+1
+        !
+      enddo
+      enddo
+      enddo
+      !
+      call dataswap(nodestat)
+      !
+      n=n+1
+      !
+    enddo
+    !
+    ! search for near-boundary force nodes (1-5)
+    !
+    marker=.false.
+    !
     do k=0,km
     do j=0,jm
     do i=0,im
-      if(cns(i,j,k)=='so') then
-        nodestate(i,j,k)=1.d0
-      elseif(cns(i,j,k)=='fl') then
-        nodestate(i,j,k)=0.d0
-      else
-        stop ' !! ERROR2 @ gridinsolid'
+      !
+      if(nodestat(i,j,k)==0) then
+        ! for fluids nodes
+        !
+        do ii=-1,1,2
+          if(nodestat(i+ii,j,k)>0) then
+            marker(i,j,k)=.true.
+            exit
+          endif
+        enddo
+        !
+        do jj=-1,1,2
+          if(nodestat(i,j+jj,k)>0) then
+            marker(i,j,k)=.true.
+            exit
+          endif
+        enddo
+        !
+        do kk=-1,1,2
+          if(nodestat(i,j,k+kk)>0) then
+            marker(i,j,k)=.true.
+            exit
+          endif
+        enddo
+        !
       endif
+      !
     enddo
     enddo
     enddo
     !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(marker(i,j,k)) nodestat(i,j,k)=-1
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(nodestat)
+    !
+    ! set bc for nodes, no need to go to the dummy edge or corner
+    nodestat(-hm:-1,     -hm:-1,   :)=10
+    nodestat(im+1:im+hm, -hm:-1,   :)=10
+    nodestat(-hm:-1,    jm+1:jm+hm,:)=10
+    nodestat(im+1:im+hm,jm+1:jm+hm,:)=10
+    !
+    nodestat(-hm:-1,    :,-hm:-1)=10
+    nodestat(im+1:im+hm,:,-hm:-1)=10
+    nodestat(-hm:-1,    :,km+1:km+hm)=10
+    nodestat(im+1:im+hm,:,km+1:km+hm)=10
+    !
+    nodestat(:,-hm:-1,-hm:-1)=10
+    nodestat(:,jm+1:jm+hm,-hm:-1)=10
+    nodestat(:,-hm:-1,km+1:km+hm)=10
+    nodestat(:,jm+1:jm+hm,km+1:km+hm)=10
+    !
+    if(npdci==1) then
+      nodestat(-hm:-1,:,:)=10
+    elseif(npdci==2) then
+      nodestat(im+1:im+hm,:,:)=10
+    endif
+    !
+    if(npdcj==1) then
+      nodestat(:,-hm:-1,:)=10
+    elseif(npdcj==2) then
+      nodestat(:,jm+1:jm+hm,:)=10
+    endif
+    !
+    if(npdck==1) then
+      nodestat(:,:,-hm:-1)=10
+    elseif(npdck==2) then
+      nodestat(:,:,km+1:km+hm)=10
+    endif
+    !
+    ! set cell state. currently, 2D only
+    do k=kss,km
+    do j=1,jm
+    do i=1,im
+      !
+      if( nodestat(i-1,j-1,k)<=0 .and. &
+          nodestat(i,  j-1,k)<=0 .and. &
+          nodestat(i,  j,  k)<=0 .and. &
+          nodestat(i-1,j,  k)<=0 ) then
+        !
+        cell(i,j,k)%celltype='f'
+        ! fluids
+        !
+      elseif( nodestat(i-1,j-1,k)>0 .and. &
+              nodestat(i,  j-1,k)>0 .and. &
+              nodestat(i,  j,  k)>0 .and. &
+              nodestat(i-1,j,  k)>0 ) then
+        !
+        cell(i,j,k)%celltype='s'
+        ! solid
+        !
+      else
+        !
+        cell(i,j,k)%celltype='i'
+        ! interface
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    bignum=im*jm*(km+1)
+    allocate(bnodes(bignum))
+    !
+    ! to get the nodes and distance of inner solid nodes to boundary 
+    counter=0
+    nc_f=0
+    nc_b=0
+    nc_g=0
+    !
+    marker=.false.
+    !
+    do jsd=1,nsolid
+      !
+      pso=>immbody(jsd)
+      !
+      do k=kss,km
+      do j=jss,jm
+      do i=iss,im
+        !
+        if(nodestat(i,j,k)>0 .and. nodestat(i,j,k)<5) then
+          ! ghost point
+          !
+          counter=counter+1
+          !
+          call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='+')
+          !
+          bnodes(counter)%igh(1)=i+ig0
+          bnodes(counter)%igh(2)=j+jg0
+          bnodes(counter)%igh(3)=k+kg0
+          !
+          bnodes(counter)%ximag(:)=2.d0*bnodes(counter)%x(:)-x(i,j,k,:)
+          !
+          if(dis2point(bnodes(counter)%x,x(i,j,k,:))<1.d-6) then
+            bnodes(counter)%nodetype='b'
+            nc_b=nc_b+1
+            !
+            marker(i,j,k)=.true.
+            ! boundary marker
+          else
+            bnodes(counter)%nodetype='g'
+            nc_g=nc_g+1
+          endif
+          !
+          !
+        elseif(nodestat(i,j,k)==-1) then
+          ! force point
+          !
+          ! counter=counter+1
+          ! !
+          ! call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='-')
+          ! !
+          ! bnodes(counter)%igh(1)=i+ig0
+          ! bnodes(counter)%igh(2)=j+jg0
+          ! bnodes(counter)%igh(3)=k+kg0
+          ! !
+          ! bnodes(counter)%ximag(:)=2.d0*x(i,j,k,:)-bnodes(counter)%x(:)
+          ! !
+          ! bnodes(counter)%nodetype='f'
+          ! !
+          ! nc_f=nc_f+1
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+    enddo
+    !
+    call pmerg(var=bnodes,nvar=counter,vmerg=immbnod)
+    !
+    nc_b=psum(nc_b)
+    nc_f=psum(nc_f)
+    nc_g=psum(nc_g)
+    if(lio) then
+      write(*,'(A,I0)')'  ** number of boundary nodes: ',size(immbnod)
+      write(*,'(A,I0)')'     **   ghost nodes: ',nc_g
+      write(*,'(A,I0)')'     ** forcing nodes: ',nc_f
+      write(*,'(A,I0)')'    ** boundary nodes: ',nc_b
+    endif
+    !
+    if(ndims==2) then
+      !
+      do jb=1,size(immbnod)
+        !
+        ! search the cell that contains the image node
+        i_cell=0
+        !
+        loopk: do k=kss,km
+        loopj: do j=1,jm
+        loopi: do i=1,im
+          !
+          lin=nodeincell(cell(i,j,k),immbnod(jb)%ximag)
+          !
+          if(lin) then
+            !
+            i_cell(1)=i+ig0
+            i_cell(2)=j+jg0
+            i_cell(3)=k+kg0
+            !
+            exit loopk
+            !
+          endif
+          !
+        enddo loopi
+        enddo loopj
+        enddo loopk
+        !
+        i_cell=psum(i_cell)
+        immbnod(jb)%icell=i_cell
+        !
+        ! to check if icell contain a ghost node
+        immbnod(jb)%icell_bnode=0
+        immbnod(jb)%icell_ijk=-1
+        !
+        ncou=0
+        do jj=-1,0
+        do ii=-1,0
+          !
+          ncou=ncou+1
+          !
+          i=immbnod(jb)%icell(1)-ig0+ii
+          j=immbnod(jb)%icell(2)-jg0+jj
+          k=immbnod(jb)%icell(3)-kg0
+          !
+          immbnod(jb)%icell_ijk(ncou,1)=i
+          immbnod(jb)%icell_ijk(ncou,2)=j
+          immbnod(jb)%icell_ijk(ncou,3)=k
+          !
+          if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm) then
+            !
+            if(nodestat(i,j,k)>0) then
+              ! icell contain a solid node or a boundary node
+              !
+              do kb=1,size(immbnod)
+                !
+                if( immbnod(kb)%igh(1)==i+ig0 .and. &
+                    immbnod(kb)%igh(2)==j+jg0 .and. &
+                    immbnod(kb)%igh(3)==k+kg0 ) then
+                  !
+                  immbnod(jb)%icell_bnode(ncou)=kb
+                  !
+                  ! reset ijk that is effective
+                  immbnod(jb)%icell_ijk(ncou,1)=-1
+                  immbnod(jb)%icell_ijk(ncou,2)=-1
+                  immbnod(jb)%icell_ijk(ncou,3)=-1
+                  !
+                  exit
+                  !
+                endif
+                !
+              enddo
+              !
+            endif
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+        ! determine interpolation coefficient
+        !
+        i=immbnod(jb)%icell(1)-ig0
+        j=immbnod(jb)%icell(2)-jg0
+        !
+        if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm ) then
+          ! icell is in the domain
+          !
+          do m=1,4
+            !
+            if(immbnod(jb)%icell_ijk(m,1)>=0) then
+              i=immbnod(jb)%icell_ijk(m,1)
+              j=immbnod(jb)%icell_ijk(m,2)
+              k=immbnod(jb)%icell_ijk(m,3)
+              !
+              xcell(m,:)=x(i,j,k,:)
+              !
+              Tm1(m,1)=xcell(m,1)*xcell(m,2)
+              Tm1(m,2)=xcell(m,1)
+              Tm1(m,3)=xcell(m,2)
+              Tm1(m,4)=1.d0
+              !
+              Tm2(m,1)=xcell(m,1)*xcell(m,2)
+              Tm2(m,2)=xcell(m,1)
+              Tm2(m,3)=xcell(m,2)
+              Tm2(m,4)=1.d0
+              !
+            elseif(immbnod(jb)%icell_bnode(m)>0) then
+              kb=immbnod(jb)%icell_bnode(m)
+              !
+              xcell(m,:)=immbnod(kb)%x(:)
+              xnorm(m,:)=immbnod(kb)%normdir(:)
+              !
+              Tm1(m,1)=xcell(m,1)*xcell(m,2)
+              Tm1(m,2)=xcell(m,1)
+              Tm1(m,3)=xcell(m,2)
+              Tm1(m,4)=1.d0
+              !
+              Tm2(m,1)=xcell(m,1)*xnorm(m,2)+xcell(m,2)*xnorm(m,1)
+              Tm2(m,2)=xnorm(m,1)
+              Tm2(m,3)=xnorm(m,2)
+              Tm2(m,4)=0.d0
+              !
+            else
+              stop ' !! ERROR in determining interpolation coefficient'
+            endif
+            !
+          enddo
+          !
+          allocate( immbnod(jb)%coef_dirichlet(4,4),                   &
+                    immbnod(jb)%coef_neumann(4,4)  )
+          !
+          immbnod(jb)%coef_dirichlet=matinv4(Tm1)
+          immbnod(jb)%coef_neumann  =matinv4(Tm2)
+          !
+          ! Ti1=matmul(Tm1,immbnod(jb)%coef_dirichlet)
+          ! Ti2=matmul(Tm2,immbnod(jb)%coef_neumann)
+          ! !
+          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(1,:)
+          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(2,:)
+          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(3,:)
+          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(4,:)
+          ! print*,'---------------------------------------------------------'
+          !
+        endif
+        !
+        ! setting locality
+        immbnod(jb)%localin=.false.
+        !
+        i=immbnod(jb)%igh(1)-ig0
+        j=immbnod(jb)%igh(2)-jg0
+        k=immbnod(jb)%igh(3)-kg0
+        !
+        if(i>=0 .and. i<=im .and. &
+           j>=0 .and. j<=jm ) then
+          immbnod(jb)%localin=.true.
+          !
+        endif
+        !
+        ! checking icell 
+        i=immbnod(jb)%icell(1)-ig0
+        j=immbnod(jb)%icell(2)-jg0
+        k=immbnod(jb)%icell(3)-kg0
+        !
+        if(i>=1 .and. i<=im .and. &
+           j>=1 .and. j<=jm ) then
+          immbnod(jb)%localin=.true.
+        endif
+        !
+      enddo
+      !
+    else
+      stop ' !! ERROR DIMENSION NOT SET @ gridinsolid'
+    endif
+    !
+    ! jb=1098
+    ! print*,mpirank,'|',immbnod(jb)%igh(1)-ig0,immbnod(jb)%igh(2)-jg0
+    !
+    ! search the supporting points
+    ! if(ndims==2) then
+    !   !
+    !   do jb=1,size(immbnod)
+    !     !
+    !     immbnod(jb)%dis_imga_inmg=1.d10
+    !     !
+    !     do k=0,ke1
+    !     do j=0,jm-1
+    !     do i=0,im-1
+    !       !
+    !       if(any(nodestat(i:i+1,j:j+1,k)==10)) cycle
+    !       !
+    !       do jdir=1,2
+    !         xmin(jdir)=min(x(i,  j,k,jdir),x(i,  j+1,k,jdir),          &
+    !                        x(i+1,j,k,jdir),x(i+1,j+1,k,jdir)  )
+    !         xmax(jdir)=max(x(i,  j,k,jdir),x(i,  j+1,k,jdir),          &
+    !                        x(i+1,j,k,jdir),x(i+1,j+1,k,jdir) )
+    !       enddo
+    !       !
+    !       if( immbnod(jb)%ximag(1)>=xmin(1) .and.                      &
+    !           immbnod(jb)%ximag(1)<=xmax(1) .and.                      &
+    !           immbnod(jb)%ximag(2)>=xmin(2) .and.                      &
+    !           immbnod(jb)%ximag(2)<=xmax(2) ) then
+    !         !
+    !         do jj=0,1
+    !         do ii=0,1
+    !           !
+    !           if(nodestat(i+ii,j+jj,k)>1) cycle ! keep the boundary node
+    !           !
+    !           dist=dis2point(immbnod(jb)%ximag,x(i+ii,j+jj,k,:))
+    !           !
+    !           if(dist<=immbnod(jb)%dis_imga_inmg) then
+    !             !
+    !             immbnod(jb)%dis_imga_inmg=dist
+    !             !
+    !             immbnod(jb)%inmg(1)=ig0+i+ii
+    !             immbnod(jb)%inmg(2)=jg0+j+jj
+    !             immbnod(jb)%inmg(3)=kg0+k
+    !             !
+    !           endif
+    !           !
+    !         enddo
+    !         enddo
+    !         !
+    !       endif
+    !       !
+    !     enddo
+    !     enddo
+    !     enddo
+    !     !
+    !     ! to get real inmg
+    !     call syncinmg(immbnod(jb))
+    !     !
+    !     ! checking the distance between the ximag and inmg
+    !     i=immbnod(jb)%inmg(1)-ig0
+    !     j=immbnod(jb)%inmg(2)-jg0
+    !     k=immbnod(jb)%inmg(3)-kg0
+    !     !
+    !     if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm .and. k>=0 .and. k<=km) then
+    !       var1=dis2point(x(i,j,k,:),immbnod(jb)%ximag)
+    !       !
+    !       ! print*,var1,'vs',immbnod(jb)%dis_imga_inmg
+    !       if(var1>dxyzmax) then
+    !         print*,mpirank,'|',jb
+    !         print*,var1,immbnod(jb)%dis_imga_inmg<1.d5
+    !         print*,' !! distance too large between the ximag and x(inmg) !!'
+    !         stop
+    !       endif
+    !       !
+    !     endif
+    !     !
+    !     ! build supporting nodes
+    !     ncou=0
+    !     do ii=-2,2
+    !     do jj=-2,2
+    !       !
+    !       i=immbnod(jb)%inmg(1)-ig0+ii
+    !       j=immbnod(jb)%inmg(2)-jg0+jj
+    !       k=immbnod(jb)%inmg(3)-kg0
+    !       !
+    !       if(i<0 .or. i>im .or. j<0 .or. j>jm) cycle
+    !       ! only search for the nodes in the domain, not dummy nodes
+    !       !
+    !       if(nodestat(i,j,k)==0) then
+    !         ! supporting nodes only in the fluids domain
+    !         !
+    !         if(dis2point2(x(i,j,k,:),immbnod(jb)%x)<epsilon) then
+    !           ! for the supporting nodes is too close to the boundary
+    !           cycle
+    !           !
+    !         endif
+    !         !
+    !         ncou=ncou+1
+    !         !
+    !         snodes(ncou,1)=i+ig0
+    !         snodes(ncou,2)=j+jg0
+    !         snodes(ncou,3)=k+kg0
+    !         !
+    !       endif
+    !       !
+    !     enddo
+    !     enddo
+    !     !
+    !     ! to get assumble supporting nodes
+    !     call syncisup(immbnod(jb),snodes,ncou)
+    !     !
+    !     ! if(mpirank==0) then
+    !     !   ! print supporting nodes.
+    !     !   m=size(immbnod(jb)%isup,1)
+    !     !   write(*,'(I0,A,2(E15.7E3),A,9(I0,A,I0,1X))')jb,'|',          &
+    !     !                                    immbnod(jb)%ximag(1:2),'|', &
+    !     !       (immbnod(jb)%isup(jx,1),'-',immbnod(jb)%isup(jx,2),jx=1,m)
+    !     ! endif
+    !     !
+    !     ! to calculate weight function from supporting nodes
+    !     m=size(immbnod(jb)%isup,1)
+    !     !
+    !     allocate(immbnod(jb)%weig(m))
+    !     !
+    !     immbnod(jb)%weig=0.d0
+    !     !
+    !     do jx=1,m
+    !       !
+    !       i=immbnod(jb)%isup(jx,1)-ig0
+    !       j=immbnod(jb)%isup(jx,2)-jg0
+    !       k=immbnod(jb)%isup(jx,3)-kg0
+    !       !
+    !       if(i>=iss .and. i<=im .and. &
+    !          j>=jss .and. j<=jm .and. &
+    !          k>=kss .and. k<=km ) then
+    !         !
+    !         immbnod(jb)%weig(jx)=dis2point2(immbnod(jb)%ximag,x(i,j,k,:))
+    !         !
+    !       endif
+    !       !
+    !     enddo
+    !     !
+    !     ! to get the weight using distance
+    !     call syncweig(immbnod(jb))
+    !     !
+      ! do jb=1,size(immbnod)
+      !   !
+      !   ! to get the localisation preoperty
+      !   immbnod(jb)%localin=.false.
+      !   !
+      !   ! checking ghost nodes
+      !   i=immbnod(jb)%igh(1)-ig0
+      !   j=immbnod(jb)%igh(2)-jg0
+      !   k=immbnod(jb)%igh(3)-kg0
+      !   !
+      !   if(i>=0 .and. i<=im .and. &
+      !      j>=0 .and. j<=jm .and. &
+      !      k>=0 .and. k<=km  ) then
+      !     immbnod(jb)%localin=.true.
+      !     !
+      !   endif
+      !   !
+      !   ! checking icell 
+      !   i=immbnod(jb)%icell(1)-ig0
+      !   j=immbnod(jb)%icell(2)-jg0
+      !   k=immbnod(jb)%icell(3)-kg0
+      !   !
+      !   if(i>=0 .and. i<=im .and. &
+      !      j>=0 .and. j<=jm .and. &
+      !      k>=0 .and. k<=km  ) then
+      !     immbnod(jb)%localin=.true.
+      !   endif
+        !
+        ! ! checking supporting nodes
+        ! do jx=1,m
+        !   !
+        !   i=immbnod(jb)%isup(jx,1)-ig0
+        !   j=immbnod(jb)%isup(jx,2)-jg0
+        !   k=immbnod(jb)%isup(jx,3)-kg0
+        !   !
+        !   if(i>=iss .and. i<=im .and. &
+        !      j>=jss .and. j<=jm .and. &
+        !      k>=kss .and. k<=km ) then
+        !     !
+        !     immbnod(jb)%localin=.true.
+        !     !
+        !     exit
+        !     !
+        !   endif
+        !   !
+        ! enddo
+        !
+      ! enddo
+    !   !
+    ! elseif(ndims==3) then
+    !   stop ' !! 3D not setup yet @ sub. gridinsolid' 
+    ! endif
+    !
+    ! do k=0,km
+    ! do j=0,jm
+    ! do i=0,im
+    !   rnodestat(i,j,k)=dble(nodestat(i,j,k))
+    ! enddo
+    ! enddo
+    ! enddo
+    ! !
     ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
     !                                   x(0:im,0:jm,0:km,1),'x',    &
     !                                   x(0:im,0:jm,0:km,2),'y',    &
     !                                   x(0:im,0:jm,0:km,3),'z',    &
-    !                           nodestate(0:im,0:jm,0:km),'ns' )
+    !                           rnodestat(0:im,0:jm,0:km),'ns' )
+    ! ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecbound_f'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f') then
+    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%x(:)
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecbound_f.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecbound_g'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g') then
+    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%x(:)
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecbound_g.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecimag_f'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f') then
+    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%ximag(:)
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecimag_f.dat'
+    ! fh=get_unit()
+    ! open(fh,file='tecimag_g'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g') then
+    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%ximag(:)
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecimag_g.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecimagijk_f'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f') then
+    !     i=immbnod(n)%inmg(1)-ig0
+    !     j=immbnod(n)%inmg(2)-jg0
+    !     k=immbnod(n)%inmg(3)-kg0
+    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecimagijk_f.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecimagijk_g'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g') then
+    !     i=immbnod(n)%inmg(1)-ig0
+    !     j=immbnod(n)%inmg(2)-jg0
+    !     k=immbnod(n)%inmg(3)-kg0
+    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecimagijk_g.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecgho'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g' ) then
+    !     i=immbnod(n)%igh(1)-ig0
+    !     j=immbnod(n)%igh(2)-jg0
+    !     k=immbnod(n)%igh(3)-kg0
+    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+    !     if(x(i,j,k,1)>5.6d0) print*,mpirank,'|',n,i,j,k
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecgho.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecforce'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f' ) then
+    !     i=immbnod(n)%igh(1)-ig0
+    !     j=immbnod(n)%igh(2)-jg0
+    !     k=immbnod(n)%igh(3)-kg0
+    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+    !     if(x(i,j,k,1)>5.6d0) print*,mpirank,'|',n,i,j,k
+    !     if(x(i,j,k,2)>5.6d0) print*,mpirank,'|',n,i,j,k
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecforce.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecsupp_f'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f' ) then
+    !     do jb=1,size(immbnod(n)%isup,1)
+    !       i=immbnod(n)%isup(jb,1)-ig0
+    !       j=immbnod(n)%isup(jb,2)-jg0
+    !       k=immbnod(n)%isup(jb,3)-kg0
+    !       write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+    !     enddo
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecsupp_f.dat'
+    ! !
+    ! fh=get_unit()
+    ! open(fh,file='tecsupp_g'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g' ) then
+    !     do jb=1,size(immbnod(n)%isup,1)
+    !       i=immbnod(n)%isup(jb,1)-ig0
+    !       j=immbnod(n)%isup(jb,2)-jg0
+    !       k=immbnod(n)%isup(jb,3)-kg0
+    !       write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+    !     enddo
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tecsupp_g.dat'
+    !
+    ! fh=get_unit()
+    ! open(fh,file='tec_icellin_g'//mpirankname//'.dat')
+    ! do n=1,size(immbnod)
+    !   i=immbnod(n)%icell(1)-ig0
+    !   j=immbnod(n)%icell(2)-jg0
+    !   k=immbnod(n)%icell(3)-kg0
+    !   if(ijkin(i,j,k) .and. ijkin(i-1,j-1,k))  then
+    !     !
+    !     do m=1,4
+    !       !
+    !       if(immbnod(n)%icell_ijk(m,1)>=0) then
+    !         i=immbnod(n)%icell_ijk(m,1)
+    !         j=immbnod(n)%icell_ijk(m,2)
+    !         k=immbnod(n)%icell_ijk(m,3)
+    !         xcell(m,:)=x(i,j,k,:)
+    !       elseif(immbnod(n)%icell_bnode(m)>0) then
+    !         n1=immbnod(n)%icell_bnode(m)
+    !         xcell(m,:)=immbnod(n1)%x(:)
+    !       endif
+    !       !
+    !     enddo
+    !     !
+    !     write(fh,'(A)')'TITLE = "FE-Volume QUADRILATERAL Data"'
+    !     write(fh,'(a)')'variables = "x", "y", "z"'
+    !     write(fh,'(A,I0,A)')'ZONE T="P_',n,'", DATAPACKING=BLOCK, NODES=4, ELEMENTS= 1, ZONETYPE=FEQUADRILATERAL'
+
+    !     write(fh,'(4(1X,E20.13E2))')xcell(1,1),xcell(2,1),xcell(4,1),xcell(3,1)
+    !     write(fh,'(4(1X,E20.13E2))')xcell(1,2),xcell(2,2),xcell(4,2),xcell(3,2)
+    !     write(fh,'(4(1X,E20.13E2))')xcell(1,3),xcell(2,3),xcell(4,3),xcell(3,3)
+    !     write(fh,'(A)')'1,2,3,4'
+    !   endif
+    ! enddo
+    ! close(fh)
+    ! print*,' << tec_icellin_g.dat'
+    !
+    deallocate(rnodestat,bnodes,marker)
+    !
+    ! call mpistop
     !
     if(lio) print*,' ** grid in solid calculated.'
+    !
+    return
     !
   end subroutine gridinsolid
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidingrid.                            |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to judge if a point in a cell.                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  function nodeincell(acell,p) result(lin)
+    !
+    use commtype, only : nodcel
+    use commvar,  only : ndims
+    !
+    ! arguments
+    type(nodcel),intent(in) :: acell
+    real(8),intent(in) :: p(3)
+    logical :: lin
+    !
+    if(p(1)<acell%xmin(1) .or. p(1)>acell%xmax(1) .or. &
+       p(2)<acell%xmin(2) .or. p(2)>acell%xmax(2) .or. &
+       p(3)<acell%xmin(3) .or. p(3)>acell%xmax(3) ) then
+      !
+      lin=.false.
+      !
+    else
+      !
+      if(ndims==2) then
+        !
+        ! checking in the point p is in any of the two triangles.
+        lin=pointintriangle(acell%x(1,:),acell%x(2,:),acell%x(3,:),p)
+        !
+        if(lin) then
+          return
+        else
+          lin=pointintriangle(acell%x(1,:),acell%x(4,:),acell%x(3,:),p)
+          return
+        endif
+        !
+      else
+        stop ' !! dimension not set yet @ nodeincell!!'
+      endif
+      !
+    endif
+    !
+    return
+    !
+  end function nodeincell
+  !+-------------------------------------------------------------------+
+  !| The end of the function nodeincell.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -325,10 +1198,10 @@ module geom
     ! local data
     integer :: i,jf,je,nedge,nemax
     type(lsegment),allocatable :: edge_temp(:)
-    real(8) :: dz,epsilon
+    real(8) :: dz,epsilon,nz
     logical :: lbpoint
     !
-    epsilon=1.d-10
+    epsilon=1.d-12
     !
     nemax=asolid%num_face*3
     !
@@ -338,8 +1211,9 @@ module geom
     do jf=1,asolid%num_face
       !
       dz=abs(asolid%face(jf)%a(3)-asolid%xmin(3))
+      nz=abs(abs(asolid%face(jf)%normdir(3))-1.d0)
       !
-      if(dz<=epsilon) then
+      if(dz<=epsilon .and. nz>epsilon) then
         nedge=nedge+1
         edge_temp(nedge)%a(1:2)=asolid%face(jf)%a(1:2)
         lbpoint=.true.
@@ -348,12 +1222,14 @@ module geom
       endif
       !
       dz=abs(asolid%face(jf)%b(3)-asolid%xmin(3))
+      nz=abs(abs(asolid%face(jf)%normdir(3))-1.d0)
       !
-      if(dz<=epsilon) then
+      if(dz<=epsilon .and. nz>epsilon) then
         !
         if(lbpoint) then
           edge_temp(nedge)%b(1:2)=asolid%face(jf)%b(1:2)
           edge_temp(nedge)%normdir(1:2)=asolid%face(jf)%normdir(1:2)
+          !
           lbpoint=.false.
         else
           nedge=nedge+1
@@ -366,12 +1242,22 @@ module geom
       if(.not. lbpoint) cycle
       !
       dz=abs(asolid%face(jf)%c(3)-asolid%xmin(3))
+      nz=abs(abs(asolid%face(jf)%normdir(3))-1.d0)
       !
-      if(dz<=epsilon) then
+      if(dz<=epsilon .and. nz>epsilon) then
         !
-        edge_temp(nedge)%b(1:2)=asolid%face(jf)%c(1:2)
-        lbpoint=.false.
+        if(lbpoint) then
+          edge_temp(nedge)%b(1:2)=asolid%face(jf)%c(1:2)
+          edge_temp(nedge)%normdir(1:2)=asolid%face(jf)%normdir(1:2)
+          lbpoint=.false.
+          !
+        else
+          stop ' !! ERROR @ solidreduc'
+          !
+        endif
         !
+      elseif(lbpoint) then
+        nedge=nedge-1
       endif
       
     enddo
@@ -380,6 +1266,10 @@ module geom
     call asolid%alloedge()
     !
     asolid%edge(1:nedge)=edge_temp(1:nedge)
+    !
+    ! do jf=1,nedge
+    !   print*,jf,'|',asolid%edge(jf)%normdir
+    ! enddo
     !
     ! open(18,file='test.dat')
     ! do je=1,nedge
@@ -408,6 +1298,7 @@ module geom
     !
     ! local data
     integer :: i,jf
+    real(8) :: var1
     !
     asolid%xmin=1.d10
     asolid%xmax=-1.d10
@@ -426,6 +1317,12 @@ module geom
       asolid%face(jf)%area=areatriangle(asolid%face(jf)%a,           &
                                         asolid%face(jf)%b,           &
                                         asolid%face(jf)%c )
+      !
+      var1= asolid%face(jf)%normdir(1)**2 +  &
+            asolid%face(jf)%normdir(2)**2 +  &
+            asolid%face(jf)%normdir(3)**2
+      !
+      asolid%face(jf)%normdir=asolid%face(jf)%normdir/sqrt(var1)
       !
       if(asolid%face(jf)%area<1.d-16) then
         print*,' !! WARNING @ solidrange'
@@ -571,8 +1468,9 @@ module geom
   subroutine gridgeom
     !
     use commvar,   only : ia,ja,ka,hm,npdci,npdcj,npdck,               &
-                          xmax,xmin,ymax,ymin,zmax,zmin,voldom,difschm
-    use commarray, only : x,jacob,dxi,celvol
+                          xmax,xmin,ymax,ymin,zmax,zmin,voldom,difschm,&
+                          dxyzmax,dxyzmin
+    use commarray, only : x,jacob,dxi,cell
     use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
     use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
     use tecio
@@ -587,12 +1485,13 @@ module geom
     real(8), allocatable :: dx(:,:,:,:,:)
     real(8),allocatable :: phi(:),can(:,:,:,:)
     real(8) :: can1av,can2av,can3av,can1var,can2var,can3var
+    real(8) :: var1,var2,var3
     !
     allocate( dx(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3) )
     !
     call gridsendrecv
     !
-    call xyzbc
+    ! call xyzbc
     !
     ! cscheme='442e'
     cscheme=difschm
@@ -649,6 +1548,9 @@ module geom
     enddo
     enddo
     !
+    dxyzmax=0.d0
+    dxyzmin=1.d10
+    !
     if(ndims==1) then
       !
       j=0
@@ -656,10 +1558,29 @@ module geom
       !
       voldom=0.d0
       do i=1,im
-        celvol(i,j,k)=abs(x(i,j,k,1)-x(i-1,j,k,1))
-        voldom=voldom+celvol(i,j,k)
+        allocate(cell(i,j,k)%x(2,3))
+        cell(i,j,k)%x(1,:)=x(i-1,j,k,:)
+        cell(i,j,k)%x(2,:)=x(i,j,k,:)
+        !
+        cell(i,j,k)%xmin(1)=min(x(i-1,j,k,1),x(i,j,k,1))
+        cell(i,j,k)%xmin(2)=min(x(i-1,j,k,1),x(i,j,k,2))
+        cell(i,j,k)%xmin(3)=min(x(i-1,j,k,1),x(i,j,k,3))
+        !
+        cell(i,j,k)%xmax(1)=max(x(i-1,j,k,1),x(i,j,k,1))
+        cell(i,j,k)%xmax(2)=max(x(i-1,j,k,1),x(i,j,k,2))
+        cell(i,j,k)%xmax(3)=max(x(i-1,j,k,1),x(i,j,k,3))
+        !
+        cell(i,j,k)%vol=abs(x(i,j,k,1)-x(i-1,j,k,1))
+        voldom=voldom+cell(i,j,k)%vol
       enddo
       voldom=psum(voldom)
+      !
+      do i=0,im
+        dxyzmax=max(dxyzmax,abs(dx(i,j,k,1,1)))
+        dxyzmin=min(dxyzmin,abs(dx(i,j,k,1,1)))
+      enddo
+      dxyzmax=pmax(dxyzmax)
+      dxyzmin=pmin(dxyzmin)
       !
     elseif(ndims==2) then
       k=0
@@ -667,26 +1588,111 @@ module geom
       voldom=0.d0
       do j=1,jm
       do i=1,im
-        celvol(i,j,k)=arquad( x(i-1,j-1,k,:),   x(i,j-1,k,:),          &
-                              x(i,j,k,:),       x(i-1,j,k,:) )
-        voldom=voldom+celvol(i,j,k)
+        allocate(cell(i,j,k)%x(4,3))
+        cell(i,j,k)%x(1,:)=x(i-1,j-1,k,:)
+        cell(i,j,k)%x(2,:)=x(i,  j-1,k,:)
+        cell(i,j,k)%x(3,:)=x(i,  j,  k,:)
+        cell(i,j,k)%x(4,:)=x(i-1,j,  k,:)
+        !
+        cell(i,j,k)%xmin(1)=min(x(i-1,j-1,k,1),x(i,  j-1,k,1),         &
+                                x(i,  j,  k,1),x(i-1,j,  k,1))
+        cell(i,j,k)%xmin(2)=min(x(i-1,j-1,k,2),x(i,  j-1,k,2),         &
+                                x(i,  j,  k,2),x(i-1,j,  k,2))
+        cell(i,j,k)%xmin(3)=min(x(i-1,j-1,k,3),x(i,  j-1,k,3),         &
+                                x(i,  j,  k,3),x(i-1,j,  k,3))
+        !
+        cell(i,j,k)%xmax(1)=max(x(i-1,j-1,k,1),x(i,  j-1,k,1),         &
+                                x(i,  j,  k,1),x(i-1,j,  k,1))
+        cell(i,j,k)%xmax(2)=max(x(i-1,j-1,k,2),x(i,  j-1,k,2),         &
+                                x(i,  j,  k,2),x(i-1,j,  k,2))
+        cell(i,j,k)%xmax(3)=max(x(i-1,j-1,k,3),x(i,  j-1,k,3),         &
+                                x(i,  j,  k,3),x(i-1,j,  k,3))
+        !
+        cell(i,j,k)%vol=arquad( x(i-1,j-1,k,:),   x(i,j-1,k,:),        &
+                                x(i,j,k,:),       x(i-1,j,k,:) )
+        voldom=voldom+cell(i,j,k)%vol
       enddo
       enddo
       voldom=psum(voldom)
+      !
+      do j=0,jm
+      do i=0,im
+        var1=sqrt(dx(i,j,k,1,1)**2+dx(i,j,k,2,1)**2)
+        var2=sqrt(dx(i,j,k,1,2)**2+dx(i,j,k,2,2)**2)
+        !
+        dxyzmax=max(dxyzmax,var1,var2)
+        dxyzmin=min(dxyzmin,var1,var2)
+      enddo
+      enddo
+      dxyzmax=pmax(dxyzmax)
+      dxyzmin=pmin(dxyzmin)
+      !
     elseif(ndims==3) then
       voldom=0.d0
       do k=1,km
       do j=1,jm
       do i=1,im
-        celvol(i,j,k)=volhex( x(i-1,j-1,k-1,:), x(i,j-1,k-1,:),        &
-                              x(i,j-1,k,:),     x(i-1,j-1,k,:),        &
-                              x(i-1,j,k-1,:),   x(i,j,k-1,:)  ,        &
-                              x(i,j,k,:),       x(i-1,j,k,:) )
-        voldom=voldom+celvol(i,j,k)
+        allocate(cell(i,j,k)%x(8,3))
+        cell(i,j,k)%x(1,:)=x(i-1,j-1,k-1,:)
+        cell(i,j,k)%x(2,:)=x(i,  j-1,k-1,:)
+        cell(i,j,k)%x(3,:)=x(i,  j-1,k,:)
+        cell(i,j,k)%x(4,:)=x(i-1,j-1,k,:)
+        cell(i,j,k)%x(5,:)=x(i-1,j,  k-1,:)
+        cell(i,j,k)%x(6,:)=x(i,  j,  k-1,:)
+        cell(i,j,k)%x(7,:)=x(i,  j,  k,:)
+        cell(i,j,k)%x(8,:)=x(i-1,j,  k,:)
+        !
+        cell(i,j,k)%xmin(1)=min(x(i-1,j-1,k,1),  x(i,  j-1,k,1),       &
+                                x(i,  j,  k,1),  x(i-1,j,  k,1),       &
+                                x(i-1,j-1,k-1,1),x(i,  j-1,k-1,1),     &
+                                x(i,  j,  k-1,1),x(i-1,j,  k-1,1))
+        cell(i,j,k)%xmin(2)=min(x(i-1,j-1,k,2),  x(i,  j-1,k,2),       &
+                                x(i,  j,  k,2),  x(i-1,j,  k,2),       &
+                                x(i-1,j-1,k-1,2),x(i,  j-1,k-1,2),     &
+                                x(i,  j,  k-1,2),x(i-1,j,  k-1,2))
+        cell(i,j,k)%xmin(3)=min(x(i-1,j-1,k,3),  x(i,  j-1,k,3),       &
+                                x(i,  j,  k,3),  x(i-1,j,  k,3),      &
+                                x(i-1,j-1,k-1,3),x(i,  j-1,k-1,3),     &
+                                x(i,  j,  k-1,3),x(i-1,j,  k-1,3))
+        !
+        cell(i,j,k)%xmax(1)=max(x(i-1,j-1,k,1),  x(i,  j-1,k,1),       &
+                                x(i,  j,  k,1),  x(i-1,j,  k,1),       &
+                                x(i-1,j-1,k-1,1),x(i,  j-1,k-1,1),     &
+                                x(i,  j,  k-1,1),x(i-1,j,  k-1,1))
+        cell(i,j,k)%xmax(2)=max(x(i-1,j-1,k,2),  x(i,  j-1,k,2),       &
+                                x(i,  j,  k,2),  x(i-1,j,  k,2),       &
+                                x(i-1,j-1,k-1,2),x(i,  j-1,k-1,2),     &
+                                x(i,  j,  k-1,2),x(i-1,j,  k-1,2))
+        cell(i,j,k)%xmax(3)=max(x(i-1,j-1,k,3),  x(i,  j-1,k,3),       &
+                                x(i,  j,  k,3),  x(i-1,j,  k,3),      &
+                                x(i-1,j-1,k-1,3),x(i,  j-1,k-1,3),     &
+                                x(i,  j,  k-1,3),x(i-1,j,  k-1,3))
+        !
+        cell(i,j,k)%vol=volhex( x(i-1,j-1,k-1,:), x(i,j-1,k-1,:),      &
+                                x(i,j-1,k,:),     x(i-1,j-1,k,:),      &
+                                x(i-1,j,k-1,:),   x(i,j,k-1,:)  ,      &
+                                x(i,j,k,:),       x(i-1,j,k,:) )
+        voldom=voldom+cell(i,j,k)%vol
       enddo
       enddo
       enddo
       voldom=psum(voldom)
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        var1=sqrt(dx(i,j,k,1,1)**2+dx(i,j,k,2,1)**2+dx(i,j,k,3,1)**2)
+        var2=sqrt(dx(i,j,k,1,2)**2+dx(i,j,k,2,2)**2+dx(i,j,k,3,2)**2)
+        var3=sqrt(dx(i,j,k,1,3)**2+dx(i,j,k,2,3)**2+dx(i,j,k,3,3)**2)
+        !
+        dxyzmax=max(dxyzmax,var1,var2,var3)
+        dxyzmin=min(dxyzmin,var1,var2,var3)
+      enddo
+      enddo
+      enddo
+      dxyzmax=pmax(dxyzmax)
+      dxyzmin=pmin(dxyzmin)
+      !
     endif
     !
     if(lio) print*,' ** total volume of the domain is: ',voldom
@@ -1057,6 +2063,8 @@ module geom
       write(*,'(3X,62A)')'       xmin      xmax      ymin      ymax      zmin      zmax'
       write(*,"(4X,6(F10.3))")xmin,xmax,ymin,ymax,zmin,zmax
       write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(7X,2(A,E20.7E3))')'  grid spacing:',dxyzmin,' ~',dxyzmax
+      write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                   *** Averaged of Identity ***'
       write(*,"(1X,3(1X,E20.7E3))")can1av,can2av,can3av
       write(*,'(2X,62A)')('-',i=1,62)
@@ -1135,8 +2143,6 @@ module geom
     !
     ! establish a random slop
     slop=(/1.d0,0.d0,0.d0/)
-    ! slop=(/0.70710678118654d0,0.70710678118654d0,0.d0/)
-    ! slop=(/0.57735026919d0,0.57735026919d0,0.57735026919d0/)
     !
     ldn=dot_product(slop,tria%normdir)
     ! vec1=num1d3*(tria%a+tria%b+tria%c)-p
@@ -1230,6 +2236,183 @@ module geom
   !+-------------------------------------------------------------------+
   !| The end of the subroutine ray2triangle.                           |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !|This function returns the distance of a point to a triangle.       |
+  !+-------------------------------------------------------------------+
+  !| ref: https://www.cnblogs.com/tenosdoit/p/4024413.html
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 15-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine dis2tri(tria,p,distance,intpoint,nodir,dir,debug)
+    !
+    use commtype, only : triangle
+    use commfunc, only : dis2point
+    !
+    type(triangle),intent(in) :: tria
+    real(8),intent(in) :: p(3)
+    character(len=1),intent(in) :: dir
+    logical,intent(in),optional :: debug
+    real(8),intent(out) :: distance
+    real(8),intent(out) :: intpoint(3),nodir(3)
+    !
+    ! local data
+    real(8) :: unitvect(3),vectoa(3)
+    real(8) :: var1
+    logical :: ldeg,linout
+    !
+    if(present(debug)) then
+      ldeg=debug
+    else
+      ldeg=.false.
+    endif
+    !
+    if(dir=='+') then
+      unitvect = tria%normdir 
+    elseif(dir=='-') then
+      unitvect =-tria%normdir 
+    else
+      stop ' ERROR @ dis2tri'
+    endif
+    !
+    ! The distance from the plane to the point is the projection of the
+    ! vector created between the point of interest off of the plane
+    ! and any point on the plane onto the unit normal vector. 
+    ! The first point in the plane [x(1), y(1), z(1)] is used.
+    !
+    vectoa=tria%a-p
+    !
+    var1 = dot_product(unitvect,vectoa)
+    !
+    intpoint=p+var1*unitvect
+    !
+    linout=pointintriangle(tria,intpoint)
+    !
+    if(linout) then
+      ! if the intersection point is in the triangle
+      distance=abs(var1)
+      nodir   =tria%normdir 
+    else
+      ! calculate the distance between corners and p
+      !
+      distance=dis2point(p,tria%a)
+      intpoint=tria%a
+      !
+      var1=dis2point(p,tria%b)
+      if(var1<distance) then
+        distance=var1
+        intpoint=tria%b
+      endif
+      !
+      var1=dis2point(p,tria%c)
+      if(var1<distance) then
+        distance=var1
+        intpoint=tria%c
+      endif
+      !
+      nodir=p-intpoint
+      nodir=nodir/(sqrt(nodir(1)**2+nodir(2)**2+nodir(3)**2))
+      !
+    endif
+    !
+    return
+    !
+  end subroutine dis2tri
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine dis2tri.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !|This function returns the distance of a point to a segment.        |
+  !+-------------------------------------------------------------------+
+  !| https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 18-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine dis2edge(edge,p,distance,intpoint,nodir,dir,debug)
+    !
+    use commtype, only : lsegment
+    use commfunc, only : dis2point
+    !
+    type(lsegment),intent(in) :: edge
+    real(8),intent(in) :: p(3)
+    character(len=1),intent(in) :: dir
+    logical,intent(in),optional :: debug
+    real(8),intent(out) :: distance
+    real(8),intent(out) :: intpoint(3),nodir(3)
+    !
+    ! local data
+    real(8) :: unitvect(2),ip(2)
+    real(8) :: var1,var2,var3,d1
+    logical :: ldeg,linout
+    real(8) :: epsilon=1.d-12
+    !
+    if(present(debug)) then
+      ldeg=debug
+    else
+      ldeg=.false.
+    endif
+    !
+    if(dir=='+') then
+      unitvect = edge%normdir 
+    elseif(dir=='-') then
+      unitvect =-edge%normdir 
+    else
+      stop ' ERROR @ dis2tri'
+    endif
+    !
+    !
+    var1=(edge%b(1)-edge%a(1))*(edge%a(2)-p(2))
+    var2=(edge%a(1)-p(1))     *(edge%b(2)-edge%a(2))
+    var3=sqrt((edge%b(1)-edge%a(1))**2+(edge%b(2)-edge%a(2))**2)
+    !
+    d1=abs(var1-var2)/var3 
+    !
+    ip=p(1:2)+d1*unitvect
+    !
+    nodir(1:2)=unitvect
+    nodir(3)=0.d0
+    !
+    var1=sqrt((p(1)-edge%a(1))**2+(p(2)-edge%a(2))**2)
+    var2=sqrt((p(1)-edge%b(1))**2+(p(2)-edge%b(2))**2)
+    !
+    if( (ip(1)-edge%a(1))*(ip(1)-edge%b(1))<=epsilon .and. &
+        (ip(2)-edge%a(2))*(ip(2)-edge%b(2))<=epsilon   ) then
+      linout=.true.
+      distance=d1
+    else
+      linout=.false.
+      !
+      if(var1<=var2) then
+        ip=edge%a
+        distance=var1
+        !
+      else
+        ip=edge%b
+        distance=var2
+      endif
+      !
+      nodir(1:2)=p(1:2)-ip
+      nodir(3)=0.d0
+      !
+      nodir=nodir/sqrt(nodir(1)**2+nodir(2)**2)
+      !
+    endif
+    !
+    intpoint(1:2)=ip(1:2)
+    intpoint(3)  =0.d0
+    !
+    return
+    !
+  end subroutine dis2edge
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine dis2edge.                               |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is to decide if a point is inside of a triangle.  |
   !+-------------------------------------------------------------------+
@@ -1239,7 +2422,7 @@ module geom
   !| -------------                                                     |
   !| 04-07-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  logical function pointintriangle(tria,p)
+  function pointintriangle_tri(tria,p) result(lin)
     !
     use commtype, only :  triangle
     use commfunc,  only : areatriangle,cross_product
@@ -1247,6 +2430,7 @@ module geom
     ! arguments
     type(triangle),intent(in) :: tria
     real(8),intent(in) :: p(3)
+    logical :: lin
     !
     ! local data
     real(8) :: pa(3),pb(3),pc(3),t1(3),t2(3),t3(3),v0(3),v1(3),v2(3)
@@ -1313,13 +2497,13 @@ module geom
       print*,tria%b
       print*,tria%c 
       print*,tria%area
-      stop ' !! ERROR @ pointintriangle'
+      stop ' !! ERROR @ pointintriangle_tri'
     endif
     ! print*,' ** u=',u
     !
     if (u < 0.d0 .or. u > 1.d0) then
       ! if u out of range, return directly
-      pointintriangle=.false.
+      lin=.false.
       return
     endif
     !
@@ -1327,20 +2511,79 @@ module geom
     ! print*,' ** v=',v
     if (v < 0.d0 .or. v > 1.d0) then
       ! if v out of range, return directly
-      pointintriangle=.false.
+      lin=.false.
       return 
     endif
     !
-    print*,' ** u+v=',u+v
     if(u + v <= 1.d0) then
-      pointintriangle=.true.
+      lin=.true.
     else
-      pointintriangle=.false.
+      lin=.false.
     endif
     !
     return
     !
-  end function pointintriangle
+  end function pointintriangle_tri
+  !
+  function pointintriangle_nodes(a,b,c,p) result(lin)
+    !
+    use commfunc,  only : areatriangle,cross_product
+    !
+    ! arguments
+    real(8),intent(in) :: a(3),b(3),c(3),p(3)
+    logical :: lin
+    !
+    ! local data
+    real(8) :: pa(3),pb(3),pc(3),t1(3),t2(3),t3(3),v0(3),v1(3),v2(3)
+    real(8) :: a1,a2,a3,error,var1,var2,dot00,dot01,dot02,dot11,dot12, &
+               inverDeno,u,v
+    real(8) :: epsilon
+    !
+    v0 = c - a 
+    v1 = b - a 
+    v2 = p - a 
+
+    dot00 = dot_product(v0,v0)
+    dot01 = dot_product(v0,v1)
+    dot02 = dot_product(v0,v2)
+    dot11 = dot_product(v1,v1)
+    dot12 = dot_product(v1,v2)
+
+    inverDeno = 1.d0 / (dot00 * dot11 - dot01 * dot01) 
+    
+    u = (dot11 * dot02 - dot01 * dot12) * inverDeno
+
+    if(isnan(u)) then
+      print*,a 
+      print*,b
+      print*,c
+      stop ' !! ERROR @ pointintriangle_nodes'
+    endif
+    ! print*,' ** u=',u
+    !
+    if (u < 0.d0 .or. u > 1.d0) then
+      ! if u out of range, return directly
+      lin=.false.
+      return
+    endif
+    !
+    v = (dot00 * dot12 - dot01 * dot02) * inverDeno
+    ! print*,' ** v=',v
+    if (v < 0.d0 .or. v > 1.d0) then
+      ! if v out of range, return directly
+      lin=.false.
+      return 
+    endif
+    !
+    if(u + v <= 1.d0) then
+      lin=.true.
+    else
+      lin=.false.
+    endif
+    !
+    return
+    !
+  end function pointintriangle_nodes
   !+-------------------------------------------------------------------+
   !| The end of the subroutine pointintriangle.                        |
   !+-------------------------------------------------------------------+
@@ -1348,7 +2591,6 @@ module geom
   !+-------------------------------------------------------------------+
   !| This subroutine is to whether two vectors v1 and v2 point to the  |
   !| same direction.                                                   |
-  !+-------------------------------------------------------------------+
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -1386,53 +2628,129 @@ module geom
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
+  !| This function is to return the boundary node. which is the.       |
+  !| shortest distance to a solid point.                               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-07-2021  | Added by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine polyhedron_bound_search(asolid,p,bnode,dir,debug)
+    !
+    use commtype, only : solid,sboun
+    !
+    ! arguments
+    type(solid),intent(in) :: asolid
+    real(kind=8),intent(in) :: p(3)
+    character(len=1),intent(in) :: dir
+    logical,intent(in),optional :: debug
+    type(sboun),intent(out) :: bnode
+    !
+    ! local data
+    integer :: jface,jedge,jfsave
+    real(8) :: dismin,dis,var1
+    real(8) :: nodeb(3),nodesave(3),vec(3),bnx(3)
+    logical :: ldeg
+    !
+    if(present(debug)) then
+      ldeg=debug
+    else
+      ldeg=.false.
+    endif
+    !
+    dismin=1.d10
+    !
+    if(ndims==2) then
+      !
+      do jedge=1,asolid%num_edge
+        !
+        call dis2edge(asolid%edge(jedge),p,dis,nodeb,bnx,dir,debug=ldeg)
+        !
+        if(dis<dismin) then
+          !
+          bnode%x=nodeb
+          bnode%normdir=bnx
+          !
+          dismin=dis
+          !
+        endif
+        !
+      enddo
+      !
+    elseif(ndims==3) then
+      !
+      do jface = 1, asolid%num_face
+        !
+        call dis2tri(asolid%face(jface),p,dis,nodeb,bnx,dir,debug=ldeg)
+        !
+        if(dis<dismin) then
+          !
+          bnode%x=nodeb
+          bnode%normdir=bnx
+          !
+          dismin=dis
+          !
+        endif
+        !
+      end do
+      !
+    endif
+    !
+    return
+    !
+  end subroutine polyhedron_bound_search
+  !+-------------------------------------------------------------------+
+  !| The end of the function polyhedron_bound_search.                  |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
   !
-  !! POINT_IN_POLYGON determines if a point is inside a polygon
+  ! POINT_IN_POLYGON determines if a point is inside a polygon
   !
-  !  Discussion:
+  ! Discussion:
   !
-  !    If the points ( x(i), y(i) ) ( i = 1, 2, ..., n ) are,
-  !    in this cyclic order, the vertices of a simple closed polygon and
-  !    (x0,y0) is a point not on any side of the polygon, then the
-  !    procedure determines, by setting "point_in_polygon" to TRUE or FALSE,
-  !    whether (x0,y0) lies in the interior of the polygon.
+  ! If the points ( x(i), y(i) ) ( i = 1, 2, ..., n ) are,
+  ! in this cyclic order, the vertices of a simple closed polygon and
+  ! (x0,y0) is a point not on any side of the polygon, then the
+  ! procedure determines, by setting "point_in_polygon" to TRUE or FALSE,
+  ! whether (x0,y0) lies in the interior of the polygon.
   !
-  !  Licensing:
+  ! Licensing:
   !
-  !    This code is distributed under the GNU LGPL license. 
+  !   This code is distributed under the GNU LGPL license. 
   !
-  !  Modified:
+  ! Modified:
   !
-  !    07 November 2016
+  !   07 November 2016
   !
-  !  Author:
+  ! Author:
   !
-  !    John Burkardt
+  !   John Burkardt
   !
-  !  Reference:
+  ! Reference:
   !
-  !    Moshe Shimrat,
-  !    ACM Algorithm 112,
-  !    Position of Point Relative to Polygon,
-  !    Communications of the ACM,
-  !    Volume 5, Number 8, page 434, August 1962.
+  !   Moshe Shimrat,
+  !   ACM Algorithm 112,
+  !   Position of Point Relative to Polygon,
+  !   Communications of the ACM,
+  !   Volume 5, Number 8, page 434, August 1962.
   !
-  !    Richard Hacker,
-  !    Certification of Algorithm 112,
-  !    Communications of the ACM,
-  !    Volume 5, Number 12, page  606, December 1962.
+  !   Richard Hacker,
+  !   Certification of Algorithm 112,
+  !   Communications of the ACM,
+  !   Volume 5, Number 12, page  606, December 1962.
   !
-  !  Parameters:
+  ! Parameters:
   !
-  !    Input, integer ( kind = 4 ) N, the number of nodes or vertices in 
-  !    the polygon.  N must be at least 3.
+  !   Input, integer ( kind = 4 ) N, the number of nodes or vertices in 
+  !   the polygon.  N must be at least 3.
   !
-  !    Input, real ( kind = 8 ) V(2,N), the vertices of the polygon.
+  !   Input, real ( kind = 8 ) V(2,N), the vertices of the polygon.
   !
-  !    Input, real ( kind = 8 ) P(2), the coordinates of the point to be tested.
+  !   Input, real ( kind = 8 ) P(2), the coordinates of the point to be tested.
   !
-  !    Output, logical ( kind = 4 ) INSIDE, is TRUE if the point is
-  !    inside the polygon.
+  !   Output, logical ( kind = 4 ) INSIDE, is TRUE if the point is
+  !   inside the polygon.
   !
   !+-------------------------------------------------------------------+
   function polyhedron_contains_point_2d ( asolid, p ) result (inside)

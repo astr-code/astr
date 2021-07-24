@@ -3335,6 +3335,155 @@ module commfunc
   ! end of the function MP
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  function MP5LD(u,weightBW,lskt,lsod) result(uh)
+    !
+    real(8),intent(in) :: u(1:6),weightBW
+    logical,intent(in) :: lskt,lsod
+    real(8) :: uh
+    !
+    ! local data
+    real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
+    real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+    !
+    real(8) :: b1,b2,b3,b4,b5,b6,vadp
+    !
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! vadp: optimize parameter, to control the dissipation
+    ! of the linear scheme. 
+    ! vadp from 0 to 1/60
+    ! vadp=0: standard 5 order upwind. Max dissipation
+    ! vadp=1/60: standard 6 order center. 0 dissipation
+    ! lskt: shock or not
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    ! if(lsod) then
+    !   ulinear=-num1d6*u(2)+num5d6*u(3)+num1d3*u(4)
+    !   ! ulinear=u(3)
+    ! else
+      vadp=1.666666666666667d-2*weightBW
+      !vadp=0.0d0*1.666666666666667d-2
+      !
+      b1=      -vadp+3.333333333333333d-2
+      b2=  5.d0*vadp-2.166666666666667d-1
+      b3=-10.d0*vadp+7.833333333333333d-1
+      b4= 10.d0*vadp+0.45d0
+      b5= -5.d0*vadp-5.d-2
+      b6=       vadp
+      !
+      ulinear=b1*u(1)+b2*u(2)+b3*u(3)+b4*u(4)+b5*u(5)+b6*u(6)
+    ! endif
+    !!
+    var1=u(4)-u(3)
+    var2=4.d0*(u(3)-u(2))
+    uMP=u(3)+minmod2(var1,var2)
+    !
+    var1=(ulinear-u(3))*(ulinear-uMP)
+    if(lskt) then
+      dm1=u(1)-2.d0*u(2)+u(3)
+      d0= u(2)-2.d0*u(3)+u(4)
+      d1= u(3)-2.d0*u(4)+u(5)
+      !
+      dhm1=minmod4( 4.d0*dm1-d0,4.d0*d0-dm1,dm1,d0 )
+      dh0 =minmod4(  4.d0*d0-d1, 4.d0*d1-d0, d0,d1 )
+      !
+      uUL=u(3)+4.d0*(u(3)-u(2))
+      uAV=0.5d0*(u(3)+u(4))
+      uMD=uAV-0.5d0*dh0
+      uLC=u(3)+0.5d0*(u(3)-u(2))+1.333333333333333d0*dhm1
+      !
+      var1=min(u(3),u(4),uMD)
+      var2=min(u(3),uUL,uLC)
+      uMIN=max(var1,var2)
+      !
+      var1=max(u(3),u(4),uMD)
+      var2=max(u(3),uUL,uLC)
+      uMAX=min(var1,var2)
+      !
+      var1=uMIN-ulinear
+      var2=uMAX-ulinear
+      uh=ulinear+minmod2(var1,var2)
+    else
+      uh=ulinear
+      !
+    end if
+    !
+    return
+    !
+  end function MP5LD
+  !
+  function MP7LD(u,weightBW,lskt,lsod) result(uh)
+    !
+    real(8),intent(in) :: u(0:7),weightBW
+    logical,intent(in) :: lskt,lsod
+    real(8) :: uh
+    !
+    ! local data
+    real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
+    real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+    real(8) :: b(0:7)
+    real(8) :: vadp
+    !
+    ! if(lsod) then
+    !   ulinear=-num1d6*u(2)+num5d6*u(3)+num1d3*u(4) 
+    !   ! ulinear=u(3)
+    ! else
+      !
+      vadp=3.571428571428571d-3*weightBW
+      !
+      b(0)=  1.d0*vadp-7.142857142857143d-3
+      b(1)= -7.d0*vadp+5.952380952380952d-2
+      b(2)= 21.d0*vadp-0.240476190476190d0 
+      b(3)=-35.d0*vadp+0.759523809523809d0 
+      b(4)= 35.d0*vadp+0.509523809523809d0 
+      b(5)=-21.d0*vadp-9.047619047619047d-2
+      b(6)=  7.d0*vadp+9.523809523809525d-3
+      b(7)= -1.d0*vadp
+      !
+      ulinear= b(0)*u(0)+b(1)*u(1)+b(2)*u(2)+b(3)*u(3)+b(4)*u(4)         &
+              +b(5)*u(5)+b(6)*u(6)+b(7)*u(7)
+    ! endif
+    !
+    var1=u(4)-u(3)
+    var2=4.d0*(u(3)-u(2))
+    uMP=u(3)+minmod2(var1,var2)
+    !
+    var1=(ulinear-u(3))*(ulinear-uMP)
+    if(lskt) then
+      !
+      dm1=u(1)-2.d0*u(2)+u(3)
+      d0= u(2)-2.d0*u(3)+u(4)
+      d1= u(3)-2.d0*u(4)+u(5)
+      !
+      dhm1=minmod4( 4.d0*dm1-d0,4.d0*d0-dm1,dm1,d0 )
+      dh0 =minmod4(  4.d0*d0-d1, 4.d0*d1-d0, d0,d1 )
+      !
+      uUL=u(3)+4.d0*(u(3)-u(2))
+      uAV=0.5d0*(u(3)+u(4))
+      uMD=uAV-0.5d0*dh0
+      uLC=u(3)+0.5d0*(u(3)-u(2))+1.333333333333333d0*dhm1
+      !
+      var1=min(u(3),u(4),uMD)
+      var2=min(u(3),uUL,uLC)
+      uMIN=max(var1,var2)
+      !
+      var1=max(u(3),u(4),uMD)
+      var2=max(u(3),uUL,uLC)
+      uMAX=min(var1,var2)
+      !
+      var1=uMIN-ulinear
+      var2=uMAX-ulinear
+      uh=ulinear+minmod2(var1,var2)
+    else
+      uh=ulinear
+      ! No limiter is needed
+      !
+    end if
+    !
+    return
+    !
+  end function MP7LD
+  !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! this fuction is the 2-variable minmod() function.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3743,6 +3892,17 @@ module commfunc
     return
     !
   end function dis2point
+  !
+  pure real(8) function dis2point2(p1,p2)
+    !
+    ! arguments
+    real(8),intent(in) :: p1(3),p2(3)
+    !
+    dis2point2=(p1(1)-p2(1))**2+(p1(2)-p2(2))**2+(p1(3)-p2(3))**2
+    !
+    return
+    !
+  end function dis2point2
   !+-------------------------------------------------------------------+
   !| The end of the subroutine dis2point.                              |
   !+-------------------------------------------------------------------+
@@ -3809,6 +3969,105 @@ module commfunc
   !| The end of the subroutine areatriangle.                           |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| ref: http://fortranwiki.org/fortran/show/Matrix+inversion
+  !+-------------------------------------------------------------------+
+  !| LAPACK is great when you wish to invert huge N×N matrices, 
+  !| but it can be really slow for inverting smaller 2×2, 3×3, and 
+  !| 4×4 matrices. For my use case, where I need to invert billions of 
+  !| 2×2 and 4×4 matrices instead of a few large N×N matrices, I got a 
+  !| 30% speedup of my program replacing the LAPACK calls by direct 
+  !| calculations of the matrix inversions. I have attached the code 
+  !| that I’ve used for the 2×2, 3×3, and 4×4 cases below. 
+  !| The 2×2 version is quite easy to derive analytically. 
+  !| The 3×3 and 4×4 versions are based on the subroutines M33INV and
+  !|  M44INV by David G. Simpson; I just converted them from subroutines
+  !| to pure functions
+  !+-------------------------------------------------------------------+
+  pure function matinv2(A) result(B)
+    !! Performs a direct calculation of the inverse of a 2×2 matrix.
+    real(8), intent(in) :: A(2,2)   !! Matrix
+    real(8)             :: B(2,2)   !! Inverse matrix
+    real(8)             :: detinv
+
+    ! Calculate the inverse determinant of the matrix
+    detinv = 1.d0/(A(1,1)*A(2,2) - A(1,2)*A(2,1))
+
+    ! Calculate the inverse of the matrix
+    B(1,1) = +detinv * A(2,2)
+    B(2,1) = -detinv * A(2,1)
+    B(1,2) = -detinv * A(1,2)
+    B(2,2) = +detinv * A(1,1)
+    !
+    return
+    !
+  end function matinv2
+  !!
+  pure function matinv3(A) result(B)
+    !! Performs a direct calculation of the inverse of a 3×3 matrix.
+    real(8), intent(in) :: A(3,3)   !! Matrix
+    real(8)             :: B(3,3)   !! Inverse matrix
+    real(8)             :: detinv
+
+    ! Calculate the inverse determinant of the matrix
+    detinv = 1.d0/(A(1,1)*A(2,2)*A(3,3) - A(1,1)*A(2,3)*A(3,2)&
+                 - A(1,2)*A(2,1)*A(3,3) + A(1,2)*A(2,3)*A(3,1)&
+                 + A(1,3)*A(2,1)*A(3,2) - A(1,3)*A(2,2)*A(3,1))
+
+    ! Calculate the inverse of the matrix
+    B(1,1) = +detinv * (A(2,2)*A(3,3) - A(2,3)*A(3,2))
+    B(2,1) = -detinv * (A(2,1)*A(3,3) - A(2,3)*A(3,1))
+    B(3,1) = +detinv * (A(2,1)*A(3,2) - A(2,2)*A(3,1))
+    B(1,2) = -detinv * (A(1,2)*A(3,3) - A(1,3)*A(3,2))
+    B(2,2) = +detinv * (A(1,1)*A(3,3) - A(1,3)*A(3,1))
+    B(3,2) = -detinv * (A(1,1)*A(3,2) - A(1,2)*A(3,1))
+    B(1,3) = +detinv * (A(1,2)*A(2,3) - A(1,3)*A(2,2))
+    B(2,3) = -detinv * (A(1,1)*A(2,3) - A(1,3)*A(2,1))
+    B(3,3) = +detinv * (A(1,1)*A(2,2) - A(1,2)*A(2,1))
+    !
+    return
+    !
+  end function matinv3
+  !!
+  pure function matinv4(A) result(B)
+    !! Performs a direct calculation of the inverse of a 4×4 matrix.
+    real(8), intent(in) :: A(4,4)   !! Matrix
+    real(8)             :: B(4,4)   !! Inverse matrix
+    real(8)             :: detinv
+
+    ! Calculate the inverse determinant of the matrix
+    detinv = &
+     1.d0/(A(1,1)*(A(2,2)*(A(3,3)*A(4,4)-A(3,4)*A(4,3))+A(2,3)*(A(3,4)*A(4,2)-A(3,2)*A(4,4))+A(2,4)*(A(3,2)*A(4,3)-A(3,3)*A(4,2)))&
+         - A(1,2)*(A(2,1)*(A(3,3)*A(4,4)-A(3,4)*A(4,3))+A(2,3)*(A(3,4)*A(4,1)-A(3,1)*A(4,4))+A(2,4)*(A(3,1)*A(4,3)-A(3,3)*A(4,1)))&
+         + A(1,3)*(A(2,1)*(A(3,2)*A(4,4)-A(3,4)*A(4,2))+A(2,2)*(A(3,4)*A(4,1)-A(3,1)*A(4,4))+A(2,4)*(A(3,1)*A(4,2)-A(3,2)*A(4,1)))&
+         - A(1,4)*(A(2,1)*(A(3,2)*A(4,3)-A(3,3)*A(4,2))+A(2,2)*(A(3,3)*A(4,1)-A(3,1)*A(4,3))+A(2,3)*(A(3,1)*A(4,2)-A(3,2)*A(4,1))))
+
+    ! Calculate the inverse of the matrix
+    B(1,1) = detinv*(A(2,2)*(A(3,3)*A(4,4)-A(3,4)*A(4,3))+A(2,3)*(A(3,4)*A(4,2)-A(3,2)*A(4,4))+A(2,4)*(A(3,2)*A(4,3)-A(3,3)*A(4,2)))
+    B(2,1) = detinv*(A(2,1)*(A(3,4)*A(4,3)-A(3,3)*A(4,4))+A(2,3)*(A(3,1)*A(4,4)-A(3,4)*A(4,1))+A(2,4)*(A(3,3)*A(4,1)-A(3,1)*A(4,3)))
+    B(3,1) = detinv*(A(2,1)*(A(3,2)*A(4,4)-A(3,4)*A(4,2))+A(2,2)*(A(3,4)*A(4,1)-A(3,1)*A(4,4))+A(2,4)*(A(3,1)*A(4,2)-A(3,2)*A(4,1)))
+    B(4,1) = detinv*(A(2,1)*(A(3,3)*A(4,2)-A(3,2)*A(4,3))+A(2,2)*(A(3,1)*A(4,3)-A(3,3)*A(4,1))+A(2,3)*(A(3,2)*A(4,1)-A(3,1)*A(4,2)))
+    B(1,2) = detinv*(A(1,2)*(A(3,4)*A(4,3)-A(3,3)*A(4,4))+A(1,3)*(A(3,2)*A(4,4)-A(3,4)*A(4,2))+A(1,4)*(A(3,3)*A(4,2)-A(3,2)*A(4,3)))
+    B(2,2) = detinv*(A(1,1)*(A(3,3)*A(4,4)-A(3,4)*A(4,3))+A(1,3)*(A(3,4)*A(4,1)-A(3,1)*A(4,4))+A(1,4)*(A(3,1)*A(4,3)-A(3,3)*A(4,1)))
+    B(3,2) = detinv*(A(1,1)*(A(3,4)*A(4,2)-A(3,2)*A(4,4))+A(1,2)*(A(3,1)*A(4,4)-A(3,4)*A(4,1))+A(1,4)*(A(3,2)*A(4,1)-A(3,1)*A(4,2)))
+    B(4,2) = detinv*(A(1,1)*(A(3,2)*A(4,3)-A(3,3)*A(4,2))+A(1,2)*(A(3,3)*A(4,1)-A(3,1)*A(4,3))+A(1,3)*(A(3,1)*A(4,2)-A(3,2)*A(4,1)))
+    B(1,3) = detinv*(A(1,2)*(A(2,3)*A(4,4)-A(2,4)*A(4,3))+A(1,3)*(A(2,4)*A(4,2)-A(2,2)*A(4,4))+A(1,4)*(A(2,2)*A(4,3)-A(2,3)*A(4,2)))
+    B(2,3) = detinv*(A(1,1)*(A(2,4)*A(4,3)-A(2,3)*A(4,4))+A(1,3)*(A(2,1)*A(4,4)-A(2,4)*A(4,1))+A(1,4)*(A(2,3)*A(4,1)-A(2,1)*A(4,3)))
+    B(3,3) = detinv*(A(1,1)*(A(2,2)*A(4,4)-A(2,4)*A(4,2))+A(1,2)*(A(2,4)*A(4,1)-A(2,1)*A(4,4))+A(1,4)*(A(2,1)*A(4,2)-A(2,2)*A(4,1)))
+    B(4,3) = detinv*(A(1,1)*(A(2,3)*A(4,2)-A(2,2)*A(4,3))+A(1,2)*(A(2,1)*A(4,3)-A(2,3)*A(4,1))+A(1,3)*(A(2,2)*A(4,1)-A(2,1)*A(4,2)))
+    B(1,4) = detinv*(A(1,2)*(A(2,4)*A(3,3)-A(2,3)*A(3,4))+A(1,3)*(A(2,2)*A(3,4)-A(2,4)*A(3,2))+A(1,4)*(A(2,3)*A(3,2)-A(2,2)*A(3,3)))
+    B(2,4) = detinv*(A(1,1)*(A(2,3)*A(3,4)-A(2,4)*A(3,3))+A(1,3)*(A(2,4)*A(3,1)-A(2,1)*A(3,4))+A(1,4)*(A(2,1)*A(3,3)-A(2,3)*A(3,1)))
+    B(3,4) = detinv*(A(1,1)*(A(2,4)*A(3,2)-A(2,2)*A(3,4))+A(1,2)*(A(2,1)*A(3,4)-A(2,4)*A(3,1))+A(1,4)*(A(2,2)*A(3,1)-A(2,1)*A(3,2)))
+    B(4,4) = detinv*(A(1,1)*(A(2,2)*A(3,3)-A(2,3)*A(3,2))+A(1,2)*(A(2,3)*A(3,1)-A(2,1)*A(3,3))+A(1,3)*(A(2,1)*A(3,2)-A(2,2)*A(3,1)))
+    !
+    return
+    !
+  end function matinv4
+  !+-------------------------------------------------------------------+
+  !| The end of the function matinv.                                   |
+  !+-------------------------------------------------------------------+
+  !
+  !
 end module commfunc
 !+---------------------------------------------------------------------+
 !| The end of the module commfunc.                                     |

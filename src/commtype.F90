@@ -43,9 +43,46 @@ module commtype
     !
   end type solid
   !
+  type :: sboun
+    !
+    character(len=1) :: nodetype
+    !
+    real(8) :: x(3),normdir(3),ximag(3)
+    real(8) :: dis_imga_inmg,dis2boun,dis2imag
+    real(8),allocatable :: qimag(:),q(:)
+    integer :: igh(3),inmg(3),icell(3),icell_bnode(8),icell_ijk(8,3)
+    integer,allocatable :: isup(:,:)
+    real(8),allocatable :: weig(:)
+    real(8),allocatable :: coef_dirichlet(:,:),coef_neumann(:,:)
+    !
+    logical :: localin
+    !
+    !+-------------------+---------------------------------------------+
+    !|               igh | i,j,k of the ghost point                    |
+    !|              inmg | i,j,k that closest to the image point       |
+    !|              isup | i,j,k that supports the image point         |
+    !|              weig | wright from supporting node to image node   |
+    !|                   | based on the distance.                      |
+    !|           normdir | normal direction of the face.               |
+    !|             ximag | coordinate of the boundary nodes.           |
+    !|           localin | is the boundary node local in.              |
+    !+-------------------+---------------------------------------------+
+    contains
+    !
+  end type sboun
+  !
+  type :: nodcel
+    real(8),allocatable :: x(:,:)
+    real(8) :: xmax(3),xmin(3)
+    real(8) :: vol
+    character(len=1) :: celltype
+  end type nodcel
+  !!
   !+---------------------+---------------------------------------------+
   !|           solidbody | a type of describing immersed solid body    |
   !|            triangle | a type of describing a  triangle            |
+  !|               sboun | a boundary at the solid.                    |
+  !|                cell | a cell formed with nodes.                   |
   !+---------------------+---------------------------------------------+
   !
   contains 

@@ -7,6 +7,7 @@
 !+---------------------------------------------------------------------+
 module readwrite
   !
+  use constdef
   use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
                       ptime,bcast
   use tecio
@@ -112,7 +113,7 @@ module readwrite
                         twall,lfftk,kcutoff,ninit,rkscheme,            &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
-                        lrestart,limmbou,solidfile
+                        lrestart,limmbou,solidfile,bfacmpld
     !
     ! local data
     character(len=42) :: typedefine
@@ -233,6 +234,7 @@ module readwrite
             write(*,'(24A)')'         WENO-SYM scheme'
           case(5)
             write(*,'(24A)')'            MP-LD scheme'
+            write(*,'(A56,F8.3)')'            b factor = ',bfacmpld
           case default
             stop ' !! reconstruction scheme not defined !!' 
           end select
@@ -352,7 +354,7 @@ module readwrite
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
-                        recon_schem,lrestart,limmbou,solidfile
+                        recon_schem,lrestart,limmbou,solidfile,bfacmpld
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     !
@@ -396,7 +398,7 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)conschm,difschm,rkscheme
       read(fh,'(/)')
-      read(fh,*)recon_schem,lchardecomp
+      read(fh,*)recon_schem,lchardecomp,bfacmpld
       read(fh,'(/)')
       read(fh,*)num_species
       read(fh,'(/)')
@@ -450,6 +452,7 @@ module readwrite
     call bcast(lfilter)
     !
     call bcast(alfa_filter)
+    call bcast(bfacmpld)
     call bcast(kcutoff)
     !
     call bcast(ref_t)
@@ -692,10 +695,13 @@ module readwrite
               !
               if(IsNum(c1)==1) then
                 read(c1,*)ns
+                !
                 if(ns==nstep) exit
+                !
               endif
               !
             enddo
+            if(ios<0) backspace(fh(n))
             write(*,'(3(A),I0)')'   ** resume monitor file ',          &
                                   trim(filename),' at step: ',ns
             !
@@ -1107,7 +1113,7 @@ module readwrite
     character(len=4) :: stepname
     character(len=2) :: spname,qname
     character(len=64) :: outfilename
-    integer :: jsp,i
+    integer :: jsp,i,fh
     real(8) :: time_beg
     !
     if(present(subtime)) time_beg=ptime() 
@@ -1183,6 +1189,10 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
       call h5srite(varname='nsamples',var=nsamples,                    &
                                          filename='outdat/auxiliary.h5')
+    endif
+    !
+    if(lio) then
+      call writecylimmbou
     endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
@@ -1295,6 +1305,116 @@ module readwrite
   end subroutine output
   !+-------------------------------------------------------------------+
   !| The end of the subroutine output.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write data at the immersed boundary.   |
+  !| for cylinder configuration.                                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 20-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine writecylimmbou
+    !
+    use commtype,  only : sboun
+    use commvar,   only : immbnod,num_species,pinf
+    use fludyna,   only : fvar2q,q2fvar
+    !
+    ! local data
+    integer :: fh,jb,kb,nb
+    real(8) :: xc,yc,radi,varmin
+    real(8) :: vel_bou(3),prs_bou,rho_bou,tmp_bou,spc_bou(num_species)
+    real(8),allocatable,save :: alfa(:)
+    integer,allocatable,save :: ialf(:)
+    type(sboun),pointer :: pb
+    !
+    logical,save :: firstcall=.true.
+    !
+    if(mpirank==0) then
+      !
+      nb=size(immbnod)
+      !
+      if(firstcall) then
+        !
+        xc=5.d0
+        yc=5.d0
+        radi=0.5d0
+        allocate(alfa(nb),ialf(nb))
+        !
+        do jb=1,nb
+          !
+          pb=>immbnod(jb)
+          !
+          if(pb%x(2)-yc>=0.d0) then
+            alfa(jb)=pi-acos((pb%x(1)-xc)/radi)
+          else
+            alfa(jb)=pi+acos((pb%x(1)-xc)/radi)
+          endif
+          !
+        enddo
+        !
+        ! sort the array according to the order of alfa
+        ialf=0
+        do kb=1,nb
+          !
+          varmin=1.d10
+          do jb=1,nb
+            !
+            if(any(ialf(1:kb)==jb)) cycle
+            !
+            if(alfa(jb)<varmin) then
+              varmin=alfa(jb)
+              ialf(kb)=jb
+            endif
+            !
+          enddo
+          !
+        enddo
+        !
+        firstcall=.false.
+        !
+      endif
+      !
+      ! do jb=1,nb
+      !   write(*,*)jb,ialf(jb),alfa(ialf(jb))
+      !   print*,'------------------------------------------'
+      ! enddo
+      !
+      fh=get_unit()
+      open(fh,file='outdat/immbou.dat')
+      write(fh,'(6(1X,A20))')'alfa','p','rho','u','v','T'
+      !
+      do jb=1,nb
+        !
+        kb=ialf(jb)
+        !
+        pb=>immbnod(kb)
+        !
+        call q2fvar(      q=  pb%q,                     &
+                      density=rho_bou,                  &
+                     velocity=vel_bou(:),               &
+                     pressure=prs_bou,                  &
+                  temperature=tmp_bou,                  &
+                      species=spc_bou                   )
+        !
+        write(fh,'(6(1X,E20.13E2))')alfa(kb),2.d0*(prs_bou-pinf),      &
+                                   rho_bou,vel_bou(1),vel_bou(2),tmp_bou
+        !
+      enddo
+      !
+      close(fh)
+      print*,' << outdat/immbou.dat'
+      !
+    endif
+    !
+    ! call mpistop
+    !
+    ! fh=get_unit()
+    !
+  end subroutine writecylimmbou
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine writecylimmbou.                         |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

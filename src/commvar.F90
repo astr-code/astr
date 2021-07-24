@@ -52,15 +52,17 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|               npdci | to control scheme at boundary.              |
   !+---------------------+---------------------------------------------+
-  real(8) :: xmax,xmin,ymax,ymin,zmax,zmin,voldom
-  real(8) :: alfa_filter
+  real(8) :: xmax,xmin,ymax,ymin,zmax,zmin,voldom,dxyzmax,dxyzmin
+  real(8) :: alfa_filter,bfacmpld
   integer :: kcutoff
   !+---------------------+---------------------------------------------+
   !|                *mix | min coordinates                             |
   !|                *max | max coordinates                             |
   !|         alfa_filter | the parameter to control width of filter.   |
+  !|            bfacmpld | b factor for mp-ld scheme.                  |
   !|             kcutoff | cutoff wavenumber when fft used.            |
   !|              voldom | total volume of the domain.                 |
+  !|     dxyzmax,dxyzmin | characteristic grid spacing.                |
   !+---------------------+---------------------------------------------+
   integer :: nstep,maxstep,nwrite,nlstep,filenumb,nmonitor
   integer,allocatable :: imon(:,:)
@@ -129,9 +131,11 @@ module commvar
   !+---------------------+---------------------------------------------+
   integer :: nsolid
   type(solid),allocatable,target :: immbody(:)
+  type(sboun),allocatable,target :: immbnod(:)
   !+---------------------+---------------------------------------------+
   !|           num_solid | number of solid bodies                      |
   !|             immbody | the immersed body.                          |
+  !|             immbnod | the boundary nodes of immersed body.        |
   !+---------------------+---------------------------------------------+
   !
   parameter(hm=5)

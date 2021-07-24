@@ -177,10 +177,13 @@ module solver
   subroutine rhscal(subtime)
     !
     use commarray, only : qrhs,x,q
-    use commvar,   only : flowtype,conschm,diffterm,im,jm
+    use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
+                          recon_schem,limmbou
+    use commcal,   only : ShockSolid
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
+    logical,save :: firstcall=.true.
     !
     ! local data
     integer :: j
@@ -191,6 +194,11 @@ module solver
     if(present(subtime)) time_beg=ptime() 
     !
     read(conschm(1:1),*) nconv
+    !
+    if(firstcall) then
+      if(limmbou) call ShockSolid
+      firstcall=.false.
+    endif
     !
     if(mod(nconv,2)==0) then
       call convrsdcal6(subtime=ctime(9))
@@ -306,10 +314,11 @@ module solver
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,                  &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
-                        recon_schem,lchardecomp,conschm
-    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+                        recon_schem,lchardecomp,conschm,bfacmpld
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid
     use fludyna,  only: sos
-    use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+    use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,     &
+                        weno5z,weno7z,mp5ld,mp7ld
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -328,6 +337,8 @@ module solver
     real(8), allocatable, dimension(:,:) :: fswp,fswm,Fh
     !
     real(8) :: time_beg
+    !
+    logical :: lsh,lso
     !
     if(present(subtime)) time_beg=ptime() 
     !
@@ -500,8 +511,17 @@ module solver
           !
         endif
         !
+        if(i==is-1) then
+          lso=lsolid(i+1,j,k)
+        elseif(i==ie) then
+          lso=lsolid(i,j,k)
+        else
+          lso=lsolid(i,j,k) .or. lsolid(i+1,j,k)
+        end if
+        lsh=.false.
+        !
         ! Calculating values at i+1/2 using shock-capturing scheme.
-
+        !
         do m=1,5
           !
           if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
@@ -528,9 +548,9 @@ module solver
             ! case(4)
             !   call weno7sym(flcp(m,1:8),var1)
             !   call weno7sym(flcm(m,1:8),var2)
-            ! case(5)
-            !   call mp7ld(flcp(m,1:8),var1,lsh)
-            !   call mp7ld(flcm(m,1:8),var2,lsh)
+            case(5)
+              var1=mp5ld(flcp(m,2:7),bfacmpld,lsh,lso)
+              var2=mp5ld(flcm(m,2:7),bfacmpld,lsh,lso)
             end select
             !
           else
@@ -551,10 +571,9 @@ module solver
             ! case(4)
             !   call weno7sym(flcp(m,1:8),var1)
             !   call weno7sym(flcm(m,1:8),var2)
-            ! case(5)
-            !   call mp7ld(flcp(m,1:8),var1,lsh)
-            !   call mp7ld(flcm(m,1:8),var2,lsh)
-            ! stop
+            case(5)
+              var1=mp7ld(flcp(m,1:8),bfacmpld,lsh,lso)
+              var2=mp7ld(flcm(m,1:8),bfacmpld,lsh,lso)
             end select
             !
           endif
@@ -745,8 +764,17 @@ module solver
           !
         endif
         !
+        if(j==js-1) then
+          lso=lsolid(i,j+1,k)
+        elseif(j==je) then
+          lso=lsolid(i,j,k)
+        else
+          lso=lsolid(i,j,k) .or. lsolid(i,j+1,k)
+        end if
+        !
+        lsh=.false.
+        !
         ! Calculating values at i+1/2 using shock-capturing scheme.
-
         do m=1,5
           !
           if((npdcj==1 .and. j==0)    .or.(npdcj==2 .and. j==jm-1)) then
@@ -773,9 +801,9 @@ module solver
             ! case(4)
             !   call weno7sym(flcp(m,1:8),var1)
             !   call weno7sym(flcm(m,1:8),var2)
-            ! case(5)
-            !   call mp7ld(flcp(m,1:8),var1,lsh)
-            !   call mp7ld(flcm(m,1:8),var2,lsh)
+            case(5)
+              var1=mp5ld(flcp(m,2:7),bfacmpld,lsh,lso)
+              var2=mp5ld(flcm(m,2:7),bfacmpld,lsh,lso)
             end select
             !
           else
@@ -796,10 +824,9 @@ module solver
             ! case(4)
             !   call weno7sym(flcp(m,1:8),var1)
             !   call weno7sym(flcm(m,1:8),var2)
-            ! case(5)
-            !   call mp7ld(flcp(m,1:8),var1,lsh)
-            !   call mp7ld(flcm(m,1:8),var2,lsh)
-            ! stop
+            case(5)
+              var1=mp7ld(flcp(m,1:8),bfacmpld,lsh,lso)
+              var2=mp7ld(flcm(m,1:8),bfacmpld,lsh,lso)
             end select
             !
           endif
@@ -991,8 +1018,18 @@ module solver
           !
         endif
         !
+        if(k==ks-1) then
+          lso=lsolid(i,j,k+1)
+        elseif(k==ke) then
+          lso=lsolid(i,j,k)
+        else
+          lso=lsolid(i,j,k) .or. lsolid(i,j,k+1)
+        end if
+        !
+        lsh=.false.
+        !
         ! Calculating values at i+1/2 using shock-capturing scheme.
-
+        !
         do m=1,5
           !
           if((npdck==1 .and. k==0)    .or.(npdck==2 .and. k==km-1)) then
@@ -1019,9 +1056,9 @@ module solver
             ! case(4)
             !   call weno7sym(flcp(m,1:8),var1)
             !   call weno7sym(flcm(m,1:8),var2)
-            ! case(5)
-            !   call mp7ld(flcp(m,1:8),var1,lsh)
-            !   call mp7ld(flcm(m,1:8),var2,lsh)
+            case(5)
+              var1=mp5ld(flcp(m,2:7),bfacmpld,lsh,lso)
+              var2=mp5ld(flcm(m,2:7),bfacmpld,lsh,lso)
             end select
             !
           else
@@ -1042,9 +1079,9 @@ module solver
             ! case(4)
             !   call weno7sym(flcp(m,1:8),var1)
             !   call weno7sym(flcm(m,1:8),var2)
-            ! case(5)
-            !   call mp7ld(flcp(m,1:8),var1,lsh)
-            !   call mp7ld(flcm(m,1:8),var2,lsh)
+            case(5)
+              var1=mp7ld(flcp(m,1:8),bfacmpld,lsh,lso)
+              var2=mp7ld(flcm(m,1:8),bfacmpld,lsh,lso)
             ! stop
             end select
             !
