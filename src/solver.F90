@@ -1805,7 +1805,7 @@ module solver
       ff(:,3)=vel(:,j,k,3)
       ff(:,4)=tmp(:,j,k)
       !
-      if(num_species>1) then
+      if(num_species>=1) then
         do n=1,num_species
           ff(:,4+n)=spc(:,j,k,n)
         enddo
@@ -1831,7 +1831,7 @@ module solver
       dtmp(:,j,k,2)=dtmp(:,j,k,2)+df(:,4)*dxi(0:im,j,k,1,2)
       dtmp(:,j,k,3)=dtmp(:,j,k,3)+df(:,4)*dxi(0:im,j,k,1,3)
       !
-      if(num_species>1) then
+      if(num_species>=1) then
         do n=1,num_species
           dspc(:,j,k,n,1)=dspc(:,j,k,n,1)+df(:,4+n)*dxi(0:im,j,k,1,1)
           dspc(:,j,k,n,2)=dspc(:,j,k,n,2)+df(:,4+n)*dxi(0:im,j,k,1,2)
@@ -1853,7 +1853,7 @@ module solver
       ff(:,3)=vel(i,:,k,3)
       ff(:,4)=tmp(i,:,k)
       !
-      if(num_species>1) then
+      if(num_species>=1) then
         do n=1,num_species
           ff(:,4+n)=spc(i,:,k,n)
         enddo
@@ -1879,7 +1879,7 @@ module solver
       dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
       dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
       !
-      if(num_species>1) then
+      if(num_species>=1) then
         do n=1,num_species
           dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
           dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
@@ -1901,7 +1901,7 @@ module solver
         ff(:,3)=vel(i,j,:,3)
         ff(:,4)=tmp(i,j,:)
         !
-        if(num_species>1) then
+        if(num_species>=1) then
           do n=1,num_species
             ff(:,4+n)=spc(i,j,:,n)
           enddo
@@ -1927,7 +1927,7 @@ module solver
         dtmp(i,j,:,2)=dtmp(i,j,:,2)+df(:,4)*dxi(i,j,0:km,3,2)
         dtmp(i,j,:,3)=dtmp(i,j,:,3)+df(:,4)*dxi(i,j,0:km,3,3)
         !
-        if(num_species>1) then
+        if(num_species>=1) then
           do n=1,num_species
             dspc(i,j,:,n,1)=dspc(i,j,:,n,1)+df(:,4+n)*dxi(i,j,0:km,3,1)
             dspc(i,j,:,n,2)=dspc(i,j,:,n,2)+df(:,4+n)*dxi(i,j,0:km,3,2)
@@ -1942,7 +1942,10 @@ module solver
     !
     allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
-    ! 
+    !
+    sigma=0.d0
+    qflux=0.d0
+    !
     do k=0,km
     do j=0,jm
     do i=0,im

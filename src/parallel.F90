@@ -30,7 +30,7 @@ module parallel
   end interface
   !
   interface dataswap
-    module procedure  array3d_sendrecv_log
+    module procedure array3d_sendrecv_log
     module procedure array3d_sendrecv_int
     module procedure array3d_sendrecv
     module procedure array4d_sendrecv
@@ -3653,11 +3653,52 @@ module parallel
     call mpi_allreduce(var,por_log,1,mpi_logical,MPI_LOR,              &
                                                     mpi_comm_world,ierr)
     !
+    return
     !
   end function por_log
   !+-------------------------------------------------------------------+
   !| The end of the subroutine por_log.                                |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| The  function is to determin icell from different processor.      |
+  !| the fisrt non-zero icell will be broadcasted to all processors    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-January-2020: Created by J. Fang @ STFC Daresbury Laboratory   |
+  !+-------------------------------------------------------------------+
+  function pgeticell(icellin) result(icellout)
+    !
+    ! arguments
+    integer,intent(in) :: icellin(3)
+    integer icellout(3)
+    !
+    ! local data
+    integer :: ierr,jrank
+    integer :: recvbuf(1:3,0:mpirankmax)
+    !
+    call mpi_gather(icellin,3,mpi_integer,                             &
+                    recvbuf,3,mpi_integer, 0 , mpi_comm_world,ierr)
+    !
+    if(mpirank==0) then
+      do jrank=0,mpirankmax
+        if(recvbuf(1,jrank)>0 .and. recvbuf(2,jrank)>0 ) then
+          icellout(:)=recvbuf(:,jrank)
+          exit
+        endif
+      enddo
+    endif
+    !
+    call bcast_int_ary(icellout)
+    !
+    return
+    !
+  end function pgeticell
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pgeticell.                              |
+  !+-------------------------------------------------------------------+
+  !
   !
 end module parallel
 !+---------------------------------------------------------------------+

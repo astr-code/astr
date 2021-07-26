@@ -112,7 +112,7 @@ module geom
     use commfunc,  only : dis2point,dis2point2,matinv4
     use commcal,   only : ijkin
     use parallel,  only : ig0,jg0,kg0,pmerg,syncinmg,syncisup,psum,    &
-                          syncweig
+                          syncweig,pgeticell
     !
     ! local data
     integer :: i,j,k,jsd,jfc,counter,ninters,n,n1,m,ii,jj,kk,bignum,   &
@@ -484,8 +484,15 @@ module geom
         enddo loopj
         enddo loopk
         !
-        i_cell=psum(i_cell)
+        !
+        i_cell=pgeticell(i_cell)
+        !
         immbnod(jb)%icell=i_cell
+        !
+        ! if(jb==549) then
+        !   i_cell=pgeticell(i_cell)
+        !   print*,mpirank,'|',i_cell(1:2),immbnod(jb)%ximag
+        ! endif
         !
         ! to check if icell contain a ghost node
         immbnod(jb)%icell_bnode=0
@@ -855,7 +862,7 @@ module geom
     ! fh=get_unit()
     ! open(fh,file='tecbound_g'//mpirankname//'.dat')
     ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g') then
+    !   if(immbnod(n)%localin) then
     !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%x(:)
     !   endif
     ! enddo
@@ -874,7 +881,7 @@ module geom
     ! fh=get_unit()
     ! open(fh,file='tecimag_g'//mpirankname//'.dat')
     ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g') then
+    !   if(immbnod(n)%localin) then
     !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%ximag(:)
     !   endif
     ! enddo
@@ -910,10 +917,10 @@ module geom
     ! fh=get_unit()
     ! open(fh,file='tecgho'//mpirankname//'.dat')
     ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g' ) then
-    !     i=immbnod(n)%igh(1)-ig0
-    !     j=immbnod(n)%igh(2)-jg0
-    !     k=immbnod(n)%igh(3)-kg0
+    !   i=immbnod(n)%igh(1)-ig0
+    !   j=immbnod(n)%igh(2)-jg0
+    !   k=immbnod(n)%igh(3)-kg0
+    !   if(ijkin(i,j,k)) then
     !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
     !     if(x(i,j,k,1)>5.6d0) print*,mpirank,'|',n,i,j,k
     !   endif

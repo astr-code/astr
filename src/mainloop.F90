@@ -334,7 +334,7 @@ module mainloop
       !
       call qswap(ctime(7))
       !
-      call boucon
+      call boucon(ctime(11))
       !
       call rhscal(ctime(4))
       !
@@ -406,23 +406,7 @@ module mainloop
                                  temperature=tmp(0:im,0:jm,0:km),      &
                                      species=spc(0:im,0:jm,0:km,:)     )
       !
-      ! if(irk==0 .and. jrk==jrkm) then
-      !   print*,x(0,jm,0,1),x(0,jm,0,2),':',vel(0,jm,0,1)
-      !   print*,'-----------------------------'
-      ! endif
-      !
       call crashcheck
-      !
-      ! call tecbin('testout/tecinit'//mpirankname//'.plt',              &
-      !                                    x(0:im,0:jm,-hm:km+hm,1),'x', &
-      !                                    x(0:im,0:jm,-hm:km+hm,2),'y', &
-      !                                    x(0:im,0:jm,-hm:km+hm,3),'z', &
-      !                                  rho(0:im,0:jm,-hm:km+hm),'ro',  &
-      !                                  vel(0:im,0:jm,-hm:km+hm,1),'u', &
-      !                                  vel(0:im,0:jm,-hm:km+hm,2),'v', &
-      !                                  prs(0:im,0:jm,-hm:km+hm),'p',   &
-      !                                  spc(0:im,0:jm,-hm:km+hm,1),'T' )
-      ! call mpistop
       !
     enddo
     !

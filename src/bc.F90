@@ -9,7 +9,7 @@ module bc
   !
   use constdef
   use parallel,only: lio,mpistop,mpirank,mpirankname,irk,jrk,krk,      &
-                     irkm,jrkm,krkm,pmax
+                     irkm,jrkm,krkm,pmax,ptime
   use commvar, only: hm,im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims, &
                      num_species,flowtype,gamma,numq,npdci,npdcj,      &
                      npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
@@ -224,12 +224,16 @@ module bc
   !| -------------                                                     |
   !| 13-02-2021: Created by J. Fang @ Warrington                       |
   !+-------------------------------------------------------------------+
-  subroutine boucon
+  subroutine boucon(subtime)
     !
     use commvar, only : bctype,twall,limmbou
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
     ! local data
     integer :: n
+    integer :: time_beg
     !
     do n=1,6
       !
@@ -273,8 +277,13 @@ module bc
       !
     enddo
     !
+    if(present(subtime)) time_beg=ptime()
+    !
     if(limmbou) call immbody
-    ! call corner4nscbc
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
     !
   end subroutine boucon
   !+-------------------------------------------------------------------+
@@ -295,8 +304,10 @@ module bc
     !
     use commvar,   only : twall,pinf,immbnod,num_species
     use commarray, only : nodestat,vel
+    use commcal,   only : ijkin
     use fludyna,   only : fvar2q,q2fvar,thermal
-    use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck
+    use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck,qswap
+    !
     !
     ! local data
     integer :: i,j,k,m,kb,iss,jss,kss,n,jspec,jq,jb,jsup
@@ -305,6 +316,7 @@ module bc
     real(8) :: vel_icell(4,3),tmp_icell(4),prs_icell(4),coef(4)
     real(8) :: vel_image(3),tmp_image,prs_image,rho_image,spc_image(num_species)
     type(sboun),pointer :: pb
+    !
     !
     if(npdci==1) then
       iss=0
@@ -482,21 +494,6 @@ module bc
           !
           spc(i,j,k,:)=1.d0
           !
-          ! if(mpirank==103 .and. i==9 .and. j==16) then
-          !   ! print*,vel(i,j,k,:)
-          !   print*,mpirank,'|','jb=',jb
-          !   print*,x(i,j,k,:)
-          !   print*,pb%ximag
-          !   print*,'----------------------------------'
-          ! endif
-          ! if(mpirank==135 .and. i==9 .and. j==0) then
-          !   ! print*,vel(i,j,k,:)
-          !   print*,mpirank,'|','jb=',jb
-          !   print*,x(i,j,k,:)
-          !   print*,pb%ximag
-          !   print*,'----------------------------------'
-          ! endif
-          !
         ! elseif(pb%nodetype=='f') then
         !   ! for force nodes
         !   vel(i,j,k,:)=0.5d0*var_u(:)
@@ -513,6 +510,10 @@ module bc
         call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
                    velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
                     species=spc(i,j,k,:)                               )
+        !
+        ! if(isnan(q(i,j,k,1))) then
+        !   print*,mpirank,'|',jb,pb%nodetype
+        ! endif
         !
       endif
       !
@@ -543,6 +544,10 @@ module bc
     enddo
     enddo
     enddo
+    !
+    call qswap
+    !
+    return
     !
   end subroutine immbody
   !+-------------------------------------------------------------------+

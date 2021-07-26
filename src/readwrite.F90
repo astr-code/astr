@@ -1481,6 +1481,8 @@ module readwrite
                             ctime(3),' - ',100.d0*ctime(3)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - rhs       : ',    &
                             ctime(4),' - ',100.d0*ctime(4)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
+                          ctime(11),' - ',100.d0*ctime(11)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Convc   : ',    &
                             ctime(9),' - ',100.d0*ctime(9)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
