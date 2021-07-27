@@ -531,7 +531,6 @@ module statistic
           write(*,"(2X,I7,6(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
         !
-        flush(hand_fs)
       endif
       !
       if(nstep==maxstep) then

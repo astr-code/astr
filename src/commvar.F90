@@ -129,9 +129,11 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|            lrestart | to assign the start mode. t=restart, f=new  |
   !+---------------------+---------------------------------------------+
-  integer :: nsolid
+  integer :: nsolid,imbroot
   type(solid),allocatable,target :: immbody(:)
   type(sboun),allocatable,target :: immbnod(:)
+  integer,allocatable :: imb_node_have(:),imb_node_need(:),        &
+                         num_icell_rank(:),num_ighost_rank(:)
   !+---------------------+---------------------------------------------+
   !|           num_solid | number of solid bodies                      |
   !|             immbody | the immersed body.                          |

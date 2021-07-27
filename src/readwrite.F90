@@ -1090,7 +1090,7 @@ module readwrite
   subroutine output(subtime)
     !
     use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
-                       lwrite,lavg,force,numq
+                       lwrite,lavg,force,numq,imbroot,limmbou
     use commarray,only : x,rho,vel,prs,tmp,spc,q
     use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
                          rom,u1m,u2m,u3m,pm,tm,                        &
@@ -1113,7 +1113,8 @@ module readwrite
     character(len=4) :: stepname
     character(len=2) :: spname,qname
     character(len=64) :: outfilename
-    integer :: jsp,i,fh
+    integer :: jsp,i,fh,ios
+    logical :: lfopen
     real(8) :: time_beg
     !
     if(present(subtime)) time_beg=ptime() 
@@ -1191,7 +1192,9 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
     endif
     !
-    if(lio) then
+    if(limmbou .and. mpirank==imbroot) then
+      ! call imboundarydata 
+      !
       call writecylimmbou
     endif
     !
@@ -1280,7 +1283,22 @@ module readwrite
       endif
       !
     endif
-    
+    !
+    ! flush all openned files
+    fh=20
+    lfopen=.true.
+    !
+    do while(lfopen)
+      inquire(unit=fh, opened=lfopen,iostat=ios)
+      !
+      if(lfopen .and. ios==0) then
+        flush(fh)
+        fh=fh+1
+      elseif(ios .ne. 0) then
+        print*,' !! error with opening file unit:',fh
+      endif
+    enddo
+    !
     ! open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
     ! write(18,"(5(1X,A15))")'x','ro','u','p','t'
     ! write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
@@ -1339,12 +1357,15 @@ module readwrite
         !
         xc=5.d0
         yc=5.d0
-        radi=0.5d0
+        ! radi=0.5d0
+        !
         allocate(alfa(nb),ialf(nb))
         !
         do jb=1,nb
           !
           pb=>immbnod(jb)
+          !
+          radi=sqrt((pb%x(1)-xc)**2+(pb%x(2)-yc)**2)
           !
           if(pb%x(2)-yc>=0.d0) then
             alfa(jb)=pi-acos((pb%x(1)-xc)/radi)
@@ -1383,7 +1404,7 @@ module readwrite
       !
       fh=get_unit()
       open(fh,file='outdat/immbou.dat')
-      write(fh,'(6(1X,A20))')'alfa','p','rho','u','v','T'
+      write(fh,'(2(1X,A20))')'alfa','p'
       !
       do jb=1,nb
         !
@@ -1391,15 +1412,14 @@ module readwrite
         !
         pb=>immbnod(kb)
         !
-        call q2fvar(      q=  pb%q,                     &
+        call q2fvar(      q=  pb%qimag,                 &
                       density=rho_bou,                  &
                      velocity=vel_bou(:),               &
                      pressure=prs_bou,                  &
                   temperature=tmp_bou,                  &
                       species=spc_bou                   )
         !
-        write(fh,'(6(1X,E20.13E2))')alfa(kb),2.d0*(prs_bou-pinf),      &
-                                   rho_bou,vel_bou(1),vel_bou(2),tmp_bou
+        write(fh,'(2(1X,E20.13E2))')alfa(kb),2.d0*(prs_bou-pinf)
         !
       enddo
       !
@@ -1481,8 +1501,6 @@ module readwrite
                             ctime(3),' - ',100.d0*ctime(3)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - rhs       : ',    &
                             ctime(4),' - ',100.d0*ctime(4)/ctime(2),' %'
-      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
-                          ctime(11),' - ',100.d0*ctime(11)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Convc   : ',    &
                             ctime(9),' - ',100.d0*ctime(9)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
@@ -1493,6 +1511,8 @@ module readwrite
                             ctime(6),' - ',100.d0*ctime(6)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - sta       : ',    &
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
+                          ctime(11),' - ',100.d0*ctime(11)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
       !

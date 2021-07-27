@@ -75,9 +75,15 @@ module parallel
   end interface
   !
   interface pgather
+    module procedure pgather_rel2d_array_rank
     module procedure pgather_rel2d_array
     module procedure pgather_int2d_array
+    module procedure pgather_int1d_array
     module procedure pgather_cha1_array
+  end interface
+  !
+  interface pscatter
+    module procedure pscatter_rel2d
   end interface
   !
   interface rmdup
@@ -869,17 +875,24 @@ module parallel
     !
   end subroutine bcast_r8_ary
   !
-  subroutine bcast_r8_ary2(vario)
+  subroutine bcast_r8_ary2(vario,rank)
     !
     ! arguments
     real(8),intent(inout) :: vario(:,:)
+    integer,intent(in),optional :: rank
     !
     ! local data
-    integer :: nsize,ierr
+    integer :: nsize,ierr,root
     !
     nsize=size(vario,1)*size(vario,2)
     !
-    call MPI_BCAST(vario,nsize,mpi_real8,0,mpi_comm_world,ierr)
+    if(present(rank)) then
+      root=rank
+    else
+      root=0
+    endif
+    !
+    call MPI_BCAST(vario,nsize,mpi_real8,root,mpi_comm_world,ierr)
     !
   end subroutine bcast_r8_ary2
   !
@@ -1146,6 +1159,80 @@ module parallel
   !| -------------                                                     |
   !| 16-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
+  subroutine pgather_rel2d_array_rank(array,data,rank)
+    !
+    ! arguments
+    real(8),intent(in) :: array(:,:)
+    integer,intent(in) :: rank
+    real(8),intent(out),allocatable :: data(:,:)
+    !
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,nrecv(1),nsize,dim1,dim2
+    !
+    ! get the size of data to gather
+    dim1=size(array,1)
+    dim2=size(array,2)
+    !
+    dim1=pmax(dim1)
+    !
+    nrecv(1)=size(array)
+    !
+    call mpi_gather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  &
+                    rank,mpi_comm_world, ierr)
+    ! 
+    if(mpirank==rank) then
+      !
+      displs(0)=0
+      do jrank=1,mpirankmax
+        displs(jrank)=displs(jrank-1)+counts(jrank-1)
+      enddo
+      !
+      nsize=displs(mpirankmax)+counts(mpirankmax)
+      !
+      allocate(data(dim1,nsize/dim1))
+      !
+    endif
+    !
+    call mpi_gatherv(array, nrecv(1), mpi_real8,              &
+                      data, counts, displs, mpi_real8, rank,  &
+                      mpi_comm_world, ierr)
+    return
+    !
+  end subroutine pgather_rel2d_array_rank
+  !
+  subroutine pgather_int1d_array(array,data)
+    !
+    ! arguments
+    integer,intent(in) :: array(:)
+    integer,intent(out),allocatable :: data(:)
+    !
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,nrecv(1),nsize
+    !
+    ! get the size of data to gather
+    nrecv(1)=size(array)
+    !
+    call mpi_allgather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  &
+                       mpi_comm_world, ierr)
+    !
+    displs(0)=0
+    do jrank=1,mpirankmax
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+    !
+    nsize=displs(mpirankmax)+counts(mpirankmax)
+    allocate(data(1:nsize))
+    !
+    call mpi_allgatherv(array, nrecv(1), mpi_integer,       &
+                        data,  counts, displs, mpi_integer, &
+                        mpi_comm_world, ierr)
+    !
+  end subroutine pgather_int1d_array
+  !
   subroutine pgather_rel2d_array(array,data)
     !
     ! arguments
@@ -1258,12 +1345,52 @@ module parallel
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to scatter data according to the table.   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 15-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine pscatter_rel2d(array,data,table,rank)
+    !
+    ! arguments
+    real(8),intent(in) :: array(:,:)
+    integer,intent(in) :: table(0:),rank
+    real(8),intent(out),allocatable :: data(:,:)
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,dim1
+    !
+    dim1=size(array,1)
+    !
+    counts=dim1*table
+    !
+    displs(0)=0
+    do jrank=1,mpirankmax
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+    !
+    allocate(data(dim1,table(mpirank)))
+    !
+    call mpi_scatterv(array, counts, displs,  mpi_real8,       &
+                      data,  counts(mpirank), mpi_real8, rank, &
+                      mpi_comm_world,ierr)
+    !
+    return
+    !
+  end subroutine pscatter_rel2d
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pscatter.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to merge arraies from differnet ranks and |
   !| broadcast it.                                                     |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 15-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory   |
+  !| 15-Jul-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
   subroutine pmerg_sbou(var,nvar,vmerg)
     !
@@ -1806,7 +1933,7 @@ module parallel
     integer :: ncou,j,k
     integer :: ierr
     logical,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
-    integer :: time_beg
+    real(8) :: time_beg
     !
     if(present(subtime)) time_beg=ptime()
     !
@@ -2012,7 +2139,7 @@ module parallel
     integer :: ncou,j,k
     integer :: ierr
     integer,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
-    integer :: time_beg
+    real(8) :: time_beg
     !
     if(present(subtime)) time_beg=ptime()
     !
@@ -3672,7 +3799,7 @@ module parallel
     !
     ! arguments
     integer,intent(in) :: icellin(3)
-    integer icellout(3)
+    integer :: icellout(3)
     !
     ! local data
     integer :: ierr,jrank
@@ -3690,7 +3817,7 @@ module parallel
       enddo
     endif
     !
-    call bcast_int_ary(icellout)
+    call bcast(icellout)
     !
     return
     !

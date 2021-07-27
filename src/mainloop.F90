@@ -292,7 +292,7 @@ module mainloop
   subroutine rk4
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep
+                         ctime,hm,lavg,navg,nstep,limmbou
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : q2fvar
     use solver,   only : rhscal,filterq,spongefilter

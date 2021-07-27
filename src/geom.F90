@@ -10,7 +10,8 @@ module geom
   !
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
-                       datasync,ptime,irk,jrk,krk,ig0,jg0,kg0
+                       datasync,ptime,irk,jrk,krk,ig0,jg0,kg0,         &
+                       mpirankmax
   use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,im,jm,km
   use tecio
   use stlaio,  only: get_unit
@@ -107,17 +108,19 @@ module geom
     !
     use commtype,  only : solid,triangle,sboun,nodcel
     use commvar,   only : immbody,nsolid,immbnod,dxyzmax,dxyzmin,      &
-                          npdci,npdcj,npdck,ndims
+                          npdci,npdcj,npdck,ndims,imb_node_have,       &
+                          imb_node_need,num_icell_rank,num_ighost_rank
     use commarray, only : x,nodestat,cell
     use commfunc,  only : dis2point,dis2point2,matinv4
     use commcal,   only : ijkin
     use parallel,  only : ig0,jg0,kg0,pmerg,syncinmg,syncisup,psum,    &
-                          syncweig,pgeticell
+                          syncweig,pgeticell,pgather
     !
     ! local data
     integer :: i,j,k,jsd,jfc,counter,ninters,n,n1,m,ii,jj,kk,bignum,   &
                jb,kb,jdir,jx,iss,jss,kss,nc_f,nc_g,nc_b
-    integer :: fh,ncou,ke1
+    integer :: fh,ncou,ke1,icell_counter,ighost_counter
+    integer,allocatable :: icell_order(:),ighost_order(:)
     type(solid),pointer :: pso
     logical :: crossface
     real(8),allocatable :: rnodestat(:,:,:)
@@ -125,7 +128,7 @@ module geom
     real(8) :: epsilon
     real(8) :: dist,distmin,var1,var2
     real(8) :: xmin(3),xmax(3),xcell(4,3),xnorm(4,3)
-    real(8) :: Tm1(4,4),Tm2(4,4),Ti1(4,4),Ti2(4,4)
+    real(8) :: Tm1(4,4),Tm2(4,4),Ti1(4,4),Ti2(4,4),xvec(4)
     !
     type(sboun),allocatable :: bnodes(:)
     logical :: liout,ljout,lkout,lin
@@ -457,6 +460,19 @@ module geom
       write(*,'(A,I0)')'    ** boundary nodes: ',nc_b
     endif
     !
+    allocate( icell_order(1:size(immbnod)),                            &
+              ighost_order(1:size(immbnod)*8),                         &
+              num_icell_rank(0:mpirankmax),                            &
+              num_ighost_rank(0:mpirankmax) )
+    !
+    num_ighost_rank=0
+    num_icell_rank=0
+    icell_order=0
+    ighost_order=0
+    !
+    icell_counter=0
+    ighost_counter=0
+    !
     if(ndims==2) then
       !
       do jb=1,size(immbnod)
@@ -485,13 +501,10 @@ module geom
         enddo loopk
         !
         !
-        i_cell=pgeticell(i_cell)
+        immbnod(jb)%icell=pgeticell(i_cell)
         !
-        immbnod(jb)%icell=i_cell
-        !
-        ! if(jb==549) then
-        !   i_cell=pgeticell(i_cell)
-        !   print*,mpirank,'|',i_cell(1:2),immbnod(jb)%ximag
+        ! if(jb==725) then
+        !   print*,mpirank,jb,'|',immbnod(jb)%icell(1:2),'-',immbnod(jb)%icell_rank
         ! endif
         !
         ! to check if icell contain a ghost node
@@ -592,11 +605,24 @@ module geom
             !
           enddo
           !
-          allocate( immbnod(jb)%coef_dirichlet(4,4),                   &
-                    immbnod(jb)%coef_neumann(4,4)  )
+          allocate( immbnod(jb)%coef_dirichlet(4),                   &
+                    immbnod(jb)%coef_neumann(4)  )
           !
-          immbnod(jb)%coef_dirichlet=matinv4(Tm1)
-          immbnod(jb)%coef_neumann  =matinv4(Tm2)
+          Ti1=matinv4(Tm1)
+          Ti2=matinv4(Tm2)
+          !
+          xvec(1)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)
+          xvec(2)=immbnod(jb)%ximag(1)
+          xvec(3)=immbnod(jb)%ximag(2)
+          xvec(4)=1.d0
+          !
+          do m=1,4
+            immbnod(jb)%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
+            immbnod(jb)%coef_neumann(m)  =dot_product(xvec,Ti2(:,m))
+          enddo
+          !
+          ! immbnod(jb)%coef_dirichlet=matinv4(Tm1)
+          ! immbnod(jb)%coef_neumann  =matinv4(Tm2)
           !
           ! Ti1=matmul(Tm1,immbnod(jb)%coef_dirichlet)
           ! Ti2=matmul(Tm2,immbnod(jb)%coef_neumann)
@@ -618,7 +644,14 @@ module geom
         !
         if(i>=0 .and. i<=im .and. &
            j>=0 .and. j<=jm ) then
+          !
           immbnod(jb)%localin=.true.
+          !
+          ighost_counter=ighost_counter+1
+          !
+          ighost_order(ighost_counter)=jb
+          !
+          num_ighost_rank(mpirank)=num_ighost_rank(mpirank)+1
           !
         endif
         !
@@ -629,7 +662,15 @@ module geom
         !
         if(i>=1 .and. i<=im .and. &
            j>=1 .and. j<=jm ) then
+          !
           immbnod(jb)%localin=.true.
+          !
+          icell_counter=icell_counter+1
+          !
+          icell_order(icell_counter)=jb
+          !
+          num_icell_rank(mpirank)=num_icell_rank(mpirank)+1
+          !
         endif
         !
       enddo
@@ -637,6 +678,27 @@ module geom
     else
       stop ' !! ERROR DIMENSION NOT SET @ gridinsolid'
     endif
+    !
+    call pgather(icell_order(1:icell_counter),imb_node_have)
+    !
+    call pgather(ighost_order(1:ighost_counter),imb_node_need)
+    !
+    ! call move_alloc(icell_order,imb_node_have)
+    ! call move_alloc(ighost_order,imb_node_need)
+    ! !
+    ! print*,mpirank,'|',icell_counter,ighost_counter
+    ! !
+    ! call mpistop
+    ! !
+    ! merge imm_icell_rank
+    ! call pgather(icell_order(1:icell_counter),imm_icell_order)
+    !
+    ! if(size(icell_order)>0)
+    ! imm_icell_order=psum(imm_icell_rank)
+    !
+    num_icell_rank=psum(num_icell_rank)
+    !
+    num_ighost_rank=psum(num_ighost_rank)
     !
     ! jb=1098
     ! print*,mpirank,'|',immbnod(jb)%igh(1)-ig0,immbnod(jb)%igh(2)-jg0

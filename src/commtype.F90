@@ -50,10 +50,11 @@ module commtype
     real(8) :: x(3),normdir(3),ximag(3)
     real(8) :: dis_imga_inmg,dis2boun,dis2imag
     real(8),allocatable :: qimag(:),q(:)
-    integer :: igh(3),inmg(3),icell(3),icell_bnode(8),icell_ijk(8,3)
+    integer :: igh(3),inmg(3)
+    integer :: icell(3),icell_bnode(8),icell_ijk(8,3)
     integer,allocatable :: isup(:,:)
     real(8),allocatable :: weig(:)
-    real(8),allocatable :: coef_dirichlet(:,:),coef_neumann(:,:)
+    real(8),allocatable :: coef_dirichlet(:),coef_neumann(:)
     !
     logical :: localin
     !
