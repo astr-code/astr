@@ -298,7 +298,7 @@ module mainloop
     use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
     use readwrite,only : output,writemon
-    use bc,       only : boucon
+    use bc,       only : boucon,immbody
     !
     !
     ! logical data
@@ -332,9 +332,11 @@ module mainloop
       !
       qrhs=0.d0
       !
+      if(limmbou) call immbody(ctime(11))
+      !
       call qswap(ctime(7))
       !
-      call boucon(ctime(11))
+      call boucon
       !
       call rhscal(ctime(4))
       !

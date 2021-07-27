@@ -260,8 +260,9 @@ module pp
     integer :: js
     !
     ! call readsolid(inputfile)
-    call solidgen_circle
+    ! call solidgen_circle
     ! call solidgen_cub
+    call solidgen_triagnle
     !
     do js=1,nsolid
       call solidrange(immbody(js))
@@ -286,6 +287,175 @@ module pp
   end subroutine solidpp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidpp.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a solid usign stl file format.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine solidgen_triagnle
+    !
+    use commtype, only : solid,triangle
+    use readwrite,only : readsolid
+    use commvar,  only : nsolid,immbody
+    use geom,     only : solidrange,solidresc,solidshif,solidimpro
+    use tecio,     only : tecsolid
+    use stlaio,    only : stla_write
+    use commfunc,  only : cross_product
+    !
+    ! local data
+    integer :: i,j,k,jf,km,jm,im,nface
+    real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
+               x1(3),x2(3),x3(3),x4(3),norm1(3),var1
+    real(8) :: epsilon
+    type(triangle),allocatable :: tempface(:)
+    !
+    epsilon=1.d-12
+    !
+    print*,' ** generating solid'
+    !
+    nsolid=1
+    allocate(immbody(nsolid))
+    immbody(1)%name='cube'
+    !
+    allocate(tempface(12))
+    !
+    x1(1)=0.d0
+    x1(2)=0.d0
+    x1(3)=0.d0
+    !
+    x2(1)=1.d0
+    x2(2)=-0.5d0
+    x2(3)=0.d0
+    !
+    x3(1)=1.d0
+    x3(2)=0.5d0
+    x3(3)=0.d0
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/0.d0,0.d0,-1.d0/)
+    !
+    x1(1)=0.d0
+    x1(2)=0.d0
+    x1(3)=1.d0
+    !
+    x2(1)=1.d0
+    x2(2)=-0.5d0
+    x2(3)=1.d0
+    !
+    x3(1)=1.d0
+    x3(2)=0.5d0
+    x3(3)=1.d0
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/0.d0,0.d0, 1.d0/)
+    !
+    x1(1)=1.d0
+    x1(2)=-0.5d0
+    x1(3)=0.d0
+    !
+    x2(1)=1.d0
+    x2(2)=-0.5d0
+    x2(3)=1.d0
+    !
+    x3(1)=1.d0
+    x3(2)=0.5d0
+    x3(3)=1.d0
+    !
+    x4(1)=1.d0
+    x4(2)=0.5d0
+    x4(3)=0.d0
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/1.d0,0.d0,0.d0/)
+    !
+    nface=nface+1
+    tempface(nface)%a=x3
+    tempface(nface)%b=x4
+    tempface(nface)%c=x1
+    tempface(nface)%normdir=(/1.d0,0.d0,0.d0/)
+    !
+    x1(1)=0.d0
+    x1(2)=0.d0
+    x1(3)=0.d0
+    !
+    x2(1)=0.d0
+    x2(2)=0.d0
+    x2(3)=1.d0
+    !
+    x3(1)=1.d0
+    x3(2)=0.5d0
+    x3(3)=1.d0
+    !
+    x4(1)=1.d0
+    x4(2)=0.5d0
+    x4(3)=0.d0
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/-1.d0/sqrt(5.d0),2.d0/sqrt(5.d0),0.d0/)
+    !
+    nface=nface+1
+    tempface(nface)%a=x3
+    tempface(nface)%b=x4
+    tempface(nface)%c=x1
+    tempface(nface)%normdir=(/-1.d0/sqrt(5.d0),2.d0/sqrt(5.d0),0.d0/)
+    !
+    x1(1)=0.d0
+    x1(2)=0.d0
+    x1(3)=0.d0
+    !
+    x2(1)=0.d0
+    x2(2)=0.d0
+    x2(3)=1.d0
+    !
+    x3(1)=1.d0
+    x3(2)=-0.5d0
+    x3(3)=1.d0
+    !
+    x4(1)=1.d0
+    x4(2)=-0.5d0
+    x4(3)=0.d0
+    !
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/-1.d0/sqrt(5.d0),-2.d0/sqrt(5.d0),0.d0/)
+    !
+    nface=nface+1
+    tempface(nface)%a=x3
+    tempface(nface)%b=x4
+    tempface(nface)%c=x1
+    tempface(nface)%normdir=(/-1.d0/sqrt(5.d0),-2.d0/sqrt(5.d0),0.d0/)
+    !
+    !
+    immbody(1)%num_face=nface
+    call immbody(1)%alloface()
+    immbody(1)%face(1:nface)=tempface(1:nface)
+    !
+    call tecsolid('tecsolid.plt',immbody)
+    !
+    print*,' ** solid generated'
+    !
+  end subroutine solidgen_triagnle
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine solidgen_triagnle.                      |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

@@ -279,8 +279,6 @@ module bc
     !
     ! if(present(subtime)) time_beg=ptime()
     !
-    if(limmbou) call immbody(subtime)
-    !
     ! if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
@@ -527,8 +525,6 @@ module bc
     enddo
     enddo
     !
-    call qswap
-    !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
@@ -581,7 +577,10 @@ module bc
         endif
       enddo
       !
-      if(mpirank==imbroot) print*,' ** immersed boudary root rank=',imbroot
+      if(mpirank==imbroot) then
+        write(*,'(3(A,I0))')' ** imb root rank= ',imbroot, &
+                            ', local size: ',qsize,', total imb size: ',nsize
+      endif
       !
       lfirstcal=.false.
       !
