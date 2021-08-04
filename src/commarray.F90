@@ -14,6 +14,7 @@ module commarray
   real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp
   real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
+  real(8),allocatable,dimension(:,:,:) :: tke,omg,miut
   real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax
@@ -47,7 +48,7 @@ module commarray
   !+-------------------------------------------------------------------+
   subroutine allocommarray
     !
-    use commvar, only : im,jm,km,hm,numq,num_species,ndims
+    use commvar, only : im,jm,km,hm,numq,num_species,ndims,turbmode
     !
     ! local data
     integer :: lallo
@@ -105,6 +106,13 @@ module commarray
       allocate( cell(1:im,1:jm,1:km),stat=lallo)
     endif
     if(lallo.ne.0) stop ' !! error at allocating cell'
+    !
+    if(trim(turbmode)=='k-omega') then
+      allocate(   tke(-hm:im+hm,-hm:jm+hm,-hm:km+hm),   &
+                  omg(-hm:im+hm,-hm:jm+hm,-hm:km+hm),   &
+                 miut(0:im,0:jm,0:km),stat=lallo)
+      if(lallo.ne.0) stop ' !! error at allocating tke,omg,miut'
+    endif
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+

@@ -247,14 +247,15 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species)
+  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species,tke,omega)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: q(:,:,:,:)
-    real(8),intent(out) :: density(:,:,:),velocity(:,:,:,:),           &
-                           pressure(:,:,:),temperature(:,:,:) 
-    real(8),intent(out),optional :: species(:,:,:,:)
+    real(8),intent(out) :: density(:,:,:)
+    real(8),intent(out),optional :: temperature(:,:,:),pressure(:,:,:),&
+                                    species(:,:,:,:),velocity(:,:,:,:),&
+                                    tke(:,:,:),omega(:,:,:)
     !
     ! local data
     integer :: jspec
@@ -262,21 +263,26 @@ module fludyna
     !
     density(:,:,:)   =q(:,:,:,1)
     !
-    velocity(:,:,:,1)=q(:,:,:,2)/density
-    velocity(:,:,:,2)=q(:,:,:,3)/density
-    velocity(:,:,:,3)=q(:,:,:,4)/density
+    if(present(velocity) .or. present(pressure) .or. present(temperature)) then
+      velocity(:,:,:,1)=q(:,:,:,2)/density
+      velocity(:,:,:,2)=q(:,:,:,3)/density
+      velocity(:,:,:,3)=q(:,:,:,4)/density
+    endif
     !
-    pressure(:,:,:)  =( q(:,:,:,5)-0.5d0*density(:,:,:)*(              &
-                                         velocity(:,:,:,1)**2+         &
-                                         velocity(:,:,:,2)**2+         &
-                                         velocity(:,:,:,3)**2) )/const6
-    ! !
+    if(present(pressure) .or. present(temperature)) then
+      pressure(:,:,:)  =( q(:,:,:,5)-0.5d0*density(:,:,:)*(              &
+                                           velocity(:,:,:,1)**2+         &
+                                           velocity(:,:,:,2)**2+         &
+                                           velocity(:,:,:,3)**2) )/const6
+    endif
     !
-    dim(1)=size(q,1)
-    dim(2)=size(q,2)
-    dim(3)=size(q,3)
-    !
-    temperature=thermal(pressure=pressure,density=density,dim=dim)
+    if(present(temperature)) then
+      dim(1)=size(q,1)
+      dim(2)=size(q,2)
+      dim(3)=size(q,3)
+      !
+      temperature=thermal(pressure=pressure,density=density,dim=dim)
+    endif
     !
     if(num_species>0 .and. present(species)) then
       !
@@ -286,16 +292,25 @@ module fludyna
       !
     endif
     !
+    if(present(tke)) then
+      tke(:,:,:)=q(:,:,:,5+num_species+1)/density
+    endif
+    !
+    if(present(omega)) then
+      omega(:,:,:)=q(:,:,:,5+num_species+2)/density
+    endif
+    !
   end subroutine q2fvar_3da
   !
-  subroutine q2fvar_1da(q,density,velocity,pressure,temperature,species)
+  subroutine q2fvar_1da(q,density,velocity,pressure,temperature,species,tke,omega)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: q(:,:)
-    real(8),intent(out) :: density(:),velocity(:,:),           &
-                           pressure(:),temperature(:) 
-    real(8),intent(out),optional :: species(:,:)
+    real(8),intent(out) :: density(:)
+    real(8),intent(out),optional :: velocity(:,:),pressure(:),         &
+                                    temperature(:),species(:,:),       &
+                                    tke(:),omega(:)
     !
     ! local data
     integer :: jspec
@@ -303,19 +318,24 @@ module fludyna
     !
     density(:)   =q(:,1)
     !
-    velocity(:,1)=q(:,2)/density
-    velocity(:,2)=q(:,3)/density
-    velocity(:,3)=q(:,4)/density
+    if(present(velocity) .or. present(pressure) .or. present(temperature)) then
+      velocity(:,1)=q(:,2)/density
+      velocity(:,2)=q(:,3)/density
+      velocity(:,3)=q(:,4)/density
+    endif
     !
-    pressure(:)  =( q(:,5)-0.5d0*density(:)*(              &
-                                         velocity(:,1)**2+         &
-                                         velocity(:,2)**2+         &
-                                         velocity(:,3)**2) )/const6
-    ! !
+    if(present(pressure) .or. present(temperature)) then
+      pressure(:)  =( q(:,5)-0.5d0*density(:)*(                   &
+                                           velocity(:,1)**2+      &
+                                           velocity(:,2)**2+      &
+                                           velocity(:,3)**2) )/const6
+    endif
     !
-    dim=size(q,1)
-    !
-    temperature=thermal(pressure=pressure,density=density,dim=dim)
+    if(present(temperature)) then
+      dim=size(q,1)
+      !
+      temperature=thermal(pressure=pressure,density=density,dim=dim)
+    endif
     !
     if(num_species>0 .and. present(species)) then
       !
@@ -325,30 +345,44 @@ module fludyna
       !
     endif
     !
+    if(present(tke)) then
+      tke(:)=q(:,5+num_species+1)/density
+    endif
+    !
+    if(present(omega)) then
+      omega(:)=q(:,5+num_species+2)/density
+    endif
+    !
   end subroutine q2fvar_1da
   !
-  subroutine q2fvar_sca(q,density,velocity,pressure,temperature,species)
+  subroutine q2fvar_sca(q,density,velocity,pressure,temperature,species,tke,omega)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: q(:)
-    real(8),intent(out) :: density,velocity(:),           &
-                           pressure,temperature 
-    real(8),intent(out),optional :: species(:)
+    real(8),intent(out) :: density
+    real(8),intent(out),optional :: velocity(:),pressure,temperature,  &
+                                    species(:),tke,omega
     !
     ! local data
     integer :: jspec
     !
     density   =q(1)
     !
-    velocity(1)=q(2)/density
-    velocity(2)=q(3)/density
-    velocity(3)=q(4)/density
+    if(present(velocity) .or. present(pressure) .or. present(temperature)) then
+      velocity(1)=q(2)/density
+      velocity(2)=q(3)/density
+      velocity(3)=q(4)/density
+    endif
     !
-    pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+    &
-                                     velocity(3)**2) )/const6
+    if(present(pressure) .or. present(temperature)) then
+      pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+    &
+                                       velocity(3)**2) )/const6
+    endif
     !
-    temperature=thermal(pressure=pressure,density=density)
+    if(present(temperature)) then
+      temperature=thermal(pressure=pressure,density=density)
+    endif
     !
     if(num_species>0 .and. present(species)) then
       !
@@ -356,6 +390,14 @@ module fludyna
         species(jspec)=q(5+jspec)/density
       enddo
       !
+    endif
+    !
+    if(present(tke)) then
+      tke=q(5+num_species+1)/density
+    endif
+    !
+    if(present(omega)) then
+      omega=q(5+num_species+2)/density
     endif
     !
   end subroutine q2fvar_sca

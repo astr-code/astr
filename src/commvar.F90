@@ -13,7 +13,8 @@ module commvar
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
   integer :: hm
-  integer :: numq,num_species,ndims,navg,ninit
+  integer :: numq,num_species,ndims,navg,ninit,num_modequ
+  character(len=10) :: turbmode
   character(len=4) :: conschm,difschm
   character(len=64) :: gridfile,solidfile
   !+---------------------+---------------------------------------------+

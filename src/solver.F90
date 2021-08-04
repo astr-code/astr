@@ -33,9 +33,16 @@ module solver
     use commvar, only : numq,num_species,prandtl,gamma,rgas,ia,ja,ka,  &
                         uinf,vinf,winf,roinf,pinf,tinf,const1,const2,  &
                         const3,const4,const5,const6,const7,tempconst,  &
-                        tempconst1,reynolds,ref_t,mach
+                        tempconst1,reynolds,ref_t,mach,                &
+                        num_modequ,turbmode
     !
-    numq=5+num_species
+    if(trim(turbmode)=='k-omega') then
+      num_modequ=2
+    else
+      num_modequ=0
+    endif
+    !
+    numq=5+num_species+num_modequ
     !
     if(ia>0 .and. ja>0 .and. ka>0) then
       ndims=3
@@ -1622,8 +1629,8 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine convrsdcal6(subtime)
     !
-    use commvar,  only: im,jm,km,hm,numq,num_species,conschm,          &
-                        npdci,npdcj,npdck,is,ie,js,je,ks,ke
+    use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
+                        conschm,npdci,npdcj,npdck,is,ie,js,je,ks,ke
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use commfunc, only: ddfc
     !
@@ -1631,7 +1638,7 @@ module solver
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    integer :: i,j,k,jspc,n
+    integer :: i,j,k,jspc,jmod,n
     real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:)
     !
     real(8) :: time_beg
@@ -1654,8 +1661,16 @@ module solver
       fcs(:,5)=jacob(:,j,k)*( q(:,j,k,5)+prs(:,j,k) )*uu
       !
       if(num_species>0) then
+        n=5
         do jspc=1,num_species
-          fcs(:,5+jspc)=jacob(:,j,k)*q(:,j,k,5+jspc)*uu
+          fcs(:,n+jspc)=jacob(:,j,k)*q(:,j,k,n+jspc)*uu
+        enddo
+      endif
+      !
+      if(num_modequ>0) then
+        n=5+num_species
+        do jmod=1,num_modequ
+          fcs(:,n+jmod)=jacob(:,j,k)*q(:,j,k,n+jmod)*uu
         enddo
       endif
       !
@@ -1664,9 +1679,6 @@ module solver
       enddo
       !
       qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:) 
-      !
-      ! print*,maxval(dfcs(:,2)),maxval(dfcs(:,3))
-      !
       !
     enddo
     enddo
@@ -1691,8 +1703,16 @@ module solver
       fcs(:,5)=jacob(i,:,k)*( q(i,:,k,5)+prs(i,:,k) )*uu
       !
       if(num_species>0) then
+        n=5
         do jspc=1,num_species
-          fcs(:,5+jspc)=jacob(i,:,k)*q(i,:,k,5+jspc)*uu
+          fcs(:,n+jspc)=jacob(i,:,k)*q(i,:,k,n+jspc)*uu
+        enddo
+      endif
+      !
+      if(num_modequ>0) then
+        n=5+num_species
+        do jmod=1,num_modequ
+          fcs(:,n+jmod)=jacob(i,:,k)*q(i,:,k,n+jmod)*uu
         enddo
       endif
       !
@@ -1728,8 +1748,16 @@ module solver
         fcs(:,5)=jacob(i,j,:)*( q(i,j,:,5)+prs(i,j,:) )*uu
         !
         if(num_species>0) then
+          n=5
           do jspc=1,num_species
-            fcs(:,5+jspc)=jacob(i,j,:)*q(i,j,:,5+jspc)*uu
+            fcs(:,n+jspc)=jacob(i,j,:)*q(i,j,:,n+jspc)*uu
+          enddo
+        endif
+        !
+        if(num_modequ>0) then
+          n=5+num_species
+          do jmod=1,num_modequ
+            fcs(:,n+jmod)=jacob(i,j,:)*q(i,j,:,n+jmod)*uu
           enddo
         endif
         !
@@ -1805,7 +1833,7 @@ module solver
       ff(:,3)=vel(:,j,k,3)
       ff(:,4)=tmp(:,j,k)
       !
-      if(num_species>=1) then
+      if(num_species>0) then
         do n=1,num_species
           ff(:,4+n)=spc(:,j,k,n)
         enddo
@@ -1831,7 +1859,7 @@ module solver
       dtmp(:,j,k,2)=dtmp(:,j,k,2)+df(:,4)*dxi(0:im,j,k,1,2)
       dtmp(:,j,k,3)=dtmp(:,j,k,3)+df(:,4)*dxi(0:im,j,k,1,3)
       !
-      if(num_species>=1) then
+      if(num_species>0) then
         do n=1,num_species
           dspc(:,j,k,n,1)=dspc(:,j,k,n,1)+df(:,4+n)*dxi(0:im,j,k,1,1)
           dspc(:,j,k,n,2)=dspc(:,j,k,n,2)+df(:,4+n)*dxi(0:im,j,k,1,2)
@@ -1853,7 +1881,7 @@ module solver
       ff(:,3)=vel(i,:,k,3)
       ff(:,4)=tmp(i,:,k)
       !
-      if(num_species>=1) then
+      if(num_species>0) then
         do n=1,num_species
           ff(:,4+n)=spc(i,:,k,n)
         enddo
@@ -1879,7 +1907,7 @@ module solver
       dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
       dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
       !
-      if(num_species>=1) then
+      if(num_species>0) then
         do n=1,num_species
           dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
           dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
@@ -1901,7 +1929,7 @@ module solver
         ff(:,3)=vel(i,j,:,3)
         ff(:,4)=tmp(i,j,:)
         !
-        if(num_species>=1) then
+        if(num_species>0) then
           do n=1,num_species
             ff(:,4+n)=spc(i,j,:,n)
           enddo
@@ -1927,7 +1955,7 @@ module solver
         dtmp(i,j,:,2)=dtmp(i,j,:,2)+df(:,4)*dxi(i,j,0:km,3,2)
         dtmp(i,j,:,3)=dtmp(i,j,:,3)+df(:,4)*dxi(i,j,0:km,3,3)
         !
-        if(num_species>=1) then
+        if(num_species>0) then
           do n=1,num_species
             dspc(i,j,:,n,1)=dspc(i,j,:,n,1)+df(:,4+n)*dxi(i,j,0:km,3,1)
             dspc(i,j,:,n,2)=dspc(i,j,:,n,2)+df(:,4+n)*dxi(i,j,0:km,3,2)

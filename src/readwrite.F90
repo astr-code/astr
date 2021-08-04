@@ -113,7 +113,7 @@ module readwrite
                         twall,lfftk,kcutoff,ninit,rkscheme,            &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
-                        lrestart,limmbou,solidfile,bfacmpld
+                        lrestart,limmbou,solidfile,bfacmpld,turbmode
     !
     ! local data
     character(len=42) :: typedefine
@@ -316,7 +316,20 @@ module readwrite
         write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
         write(*,'(2X,62A)')('-',i=1,62)
       endif
+      !
 
+      write(*,'(2X,A)')'                      *** Turbulence model ***'
+      !
+      if(trim(turbmode)=='none') then
+        write(*,'(35X,A)')'          no turbulence model'
+      elseif(trim(turbmode)=='k-omega') then
+        write(*,'(35X,A)')' the Menter SST k-omega model'
+      else
+        print*,' !! ERROR in defining turbulence model',turbmode
+        stop
+      endif
+      !
+      write(*,'(2X,62A)')('-',i=1,62)
       !
       if(lrestart) then
         write(*,'(2X,A62)')' restart a previous computation'
@@ -354,7 +367,8 @@ module readwrite
                         lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
-                        recon_schem,lrestart,limmbou,solidfile,bfacmpld
+                        recon_schem,lrestart,limmbou,solidfile,        &
+                        bfacmpld,turbmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     !
@@ -402,6 +416,8 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)num_species
       read(fh,'(/)')
+      read(fh,*)turbmode
+      read(fh,'(/)')
       do n=1,6
         read(fh,*)bctype(n)
         if(bctype(n)==41) then
@@ -441,6 +457,8 @@ module readwrite
     call bcast(lrestart)
     !
     call bcast(flowtype)
+    call bcast(turbmode)
+    !
     call bcast(conschm)
     call bcast(difschm)
     call bcast(gridfile)

@@ -244,12 +244,7 @@ module mainloop
       !
       call spongefilter
       !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:)     )
+      call updatefvar
       !
       call crashcheck
       !
@@ -275,6 +270,49 @@ module mainloop
   end subroutine rk3
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rk3.                                    |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to update flow variables from q.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-Aug-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine updatefvar
+    !
+    use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
+    use commvar,  only : num_species,num_modequ,turbmode
+    use fludyna,  only : q2fvar
+    !
+    if(trim(turbmode)=='k-omega') then
+      !
+      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
+                                     density=rho(0:im,0:jm,0:km),      &
+                                    velocity=vel(0:im,0:jm,0:km,:),    &
+                                    pressure=prs(0:im,0:jm,0:km),      &
+                                 temperature=tmp(0:im,0:jm,0:km),      &
+                                     species=spc(0:im,0:jm,0:km,:),    &
+                                         tke=tke(0:im,0:jm,0:km),      &
+                                       omega=omg(0:im,0:jm,0:km) )
+      !
+    elseif(trim(turbmode)=='none') then
+      !
+      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
+                                     density=rho(0:im,0:jm,0:km),      &
+                                    velocity=vel(0:im,0:jm,0:km,:),    &
+                                    pressure=prs(0:im,0:jm,0:km),      &
+                                 temperature=tmp(0:im,0:jm,0:km),      &
+                                     species=spc(0:im,0:jm,0:km,:) )
+      !
+    else
+      print*,' !! ERROR @ updatefvar'
+      stop
+    endif
+    !
+  end subroutine updatefvar
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine updatefvar.                             |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

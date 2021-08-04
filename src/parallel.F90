@@ -222,6 +222,7 @@ module parallel
           nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
           if(nfactor(n3) .ne. 1) cycle
           if(nfactor(n2) == 1) cycle
+          if(nfactor(n1) == 1) cycle
           !
         else
           !

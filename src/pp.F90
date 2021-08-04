@@ -96,8 +96,8 @@ module pp
       write(fh,'(A)')'# conschm,difschm,rkscheme                              : Numerical scheme'
       write(fh,'(A)')'642c, 642c, rk4 '
       write(fh,*)
-      write(fh,'(A)')'# recon_schem, lchardecomp                              : Parameters for upwind-biased scheme'
-      write(fh,'(A)')'0, f '
+      write(fh,'(A)')'# recon_schem, lchardecomp,bfacmpld                     : Parameters for upwind-biased scheme'
+      write(fh,'(A)')'0, f, 0.3d0 '
       write(fh,*)
       write(fh,'(A)')'# num_species : number of species'
       write(fh,'(A)')'1'
@@ -129,7 +129,7 @@ module pp
       close(fh)
       print*,' << ',trim(folder),'/datin/input.chl'
       !
-      call gridchannel(128,128,128,trim(folder))
+      call gridchannel(16,128,0,trim(folder))
       !
       open(fh,file=trim(folder)//'/datin/contr.dat',form='formatted')
       write(fh,'(A)')'############################################################'
@@ -213,7 +213,7 @@ module pp
     print*,' ** y1+=',y(0,1,0)*Retau
     print*,' ** ym+=',(y(0,jmm,0)-y(0,jmm-1,0))*Retau
     print*,' ** dx+=',(x(1,0,0)-x(0,0,0))*Retau,(x(1,0,0)-x(0,0,0))
-    print*,' ** dz+=',(z(0,0,1)-z(0,0,0))*Retau,(z(0,0,1)-z(0,0,0))
+    ! print*,' ** dz+=',(z(0,0,1)-z(0,0,0))*Retau,(z(0,0,1)-z(0,0,0))
     print*,' ** lx+=',(x(im,0,0)-x(0,0,0))*Retau
     print*,' ** lz+=',(z(0,0,km)-z(0,0,0))*Retau
     !
@@ -262,7 +262,8 @@ module pp
     ! call readsolid(inputfile)
     ! call solidgen_circle
     ! call solidgen_cub
-    call solidgen_triagnle
+    ! call solidgen_triagnle
+    call solidgen_airfoil
     !
     do js=1,nsolid
       call solidrange(immbody(js))
@@ -287,6 +288,162 @@ module pp
   end subroutine solidpp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidpp.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a solid usign stl file format.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine solidgen_airfoil
+    !
+    use commtype, only : solid,triangle
+    use readwrite,only : readsolid
+    use commvar,  only : nsolid,immbody
+    use geom,     only : solidrange,solidresc,solidshif,solidimpro
+    use tecio,     only : tecsolid
+    use stlaio,    only : stla_write
+    use commfunc,  only : cross_product,argtanh
+    !
+    ! local data
+    integer :: i,j,k,jf,km,jm,im,nface
+    real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
+               x1(3),x2(3),x3(3),x4(3),x5(3),x6(3),norm1(3),var1,var2, &
+               xc,yc
+    real(8) :: epsilon,varc,theter
+    integer :: map
+    character(len=4) :: nacaname
+    real(8),allocatable :: xap(:),yap(:),xin(:)
+    type(triangle),allocatable :: tempface(:)
+    !
+    epsilon=1.d-12
+    !
+    print*,' ** generating solid'
+    !
+    map=1024
+    nacaname='4412'
+    allocate(xin(0:map),xap(0:map),yap(0:map))
+    !
+    varc=1.02d0
+    do i=0,map/2
+      !
+      var1=argtanh(1.d0/varc)
+      var2=2.d0*(i)/(map)*1.d0-1.d0
+      !
+      xin(i)=1.d0*(1.d0+varc*dtanh(var1*var2))
+      call naca4digit(xin(i),xap(i),yap(i),nacaname,'upper')
+      !
+    end do
+    !
+    do i=map/2+1,map
+      xin(i)=xin(map-i)
+      call naca4digit(xin(i),xap(i),yap(i),nacaname,'lower')
+    enddo
+    !
+    theter=-10.d0/180.d0*pi
+    do i=0,map
+      var1=xap(i)*cos(theter)-yap(i)*sin(theter)
+      var2=xap(i)*sin(theter)+yap(i)*cos(theter)
+      xap(i)=var1
+      yap(i)=var2
+    enddo
+    !
+    open(18,file='naca'//nacaname//'.dat')
+    do i=0,map
+      write(18,*)xap(i),yap(i)
+    enddo
+    close(18)
+    print*,' << naca',nacaname,'.dat'
+    !
+    ! open(12,file='naca4412.dat')
+    ! read(12,*)map
+    ! allocate(xap(map),yap(map))
+    ! do i=1,map
+    !   read(12,*)xap(i),yap(i)
+    ! enddo
+    ! close(12)
+    ! print*,' << naca4412.dat'
+    !
+    xc=0.d0
+    yc=0.d0
+    do i=1,map-1
+      xc=xc+xap(i)
+      yc=yc+yap(i)
+    enddo
+    !
+    xc=xc/dble(map-1)
+    yc=yc/dble(map-1)
+    !
+    nsolid=1
+    allocate(immbody(nsolid))
+    immbody(1)%name='cube'
+    !
+    allocate(tempface(map*16))
+    !
+    do i=0,map-1
+      x1(1)=xap(i)
+      x1(2)=yap(i)
+      x1(3)=0.d0
+      !
+      x2(1)=xap(i+1)
+      x2(2)=yap(i+1)
+      x2(3)=0.d0
+      !
+      x3(1)=xap(i+1)
+      x3(2)=yap(i+1)
+      x3(3)=1.d0
+      !
+      x4(1)=xap(i)
+      x4(2)=yap(i)
+      x4(3)=1.d0
+      !
+      x5(1)=xc
+      x5(2)=yc
+      x5(3)=0.d0
+      !
+      x6(1)=xc
+      x6(2)=yc
+      x6(3)=1.d0
+      !
+      nface=nface+1
+      tempface(nface)%a=x1
+      tempface(nface)%b=x2
+      tempface(nface)%c=x3
+      tempface(nface)%normdir=cross_product(x3-x1,x2-x1)
+      !
+      nface=nface+1
+      tempface(nface)%a=x3
+      tempface(nface)%b=x4
+      tempface(nface)%c=x1
+      tempface(nface)%normdir=cross_product(x1-x3,x4-x3)
+      !
+      nface=nface+1
+      tempface(nface)%a=x1
+      tempface(nface)%b=x2
+      tempface(nface)%c=x5
+      tempface(nface)%normdir=(/0.d0,0.d0,-1.d0/)
+      !
+      nface=nface+1
+      tempface(nface)%a=x4
+      tempface(nface)%b=x3
+      tempface(nface)%c=x6
+      tempface(nface)%normdir=(/0.d0,0.d0,1.d0/)
+      !
+    enddo
+    !
+    immbody(1)%num_face=nface
+    call immbody(1)%alloface()
+    immbody(1)%face(1:nface)=tempface(1:nface)
+    !
+    call tecsolid('tecsolid.plt',immbody)
+    !
+    print*,' ** solid generated'
+    !
+  end subroutine solidgen_airfoil
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine solidgen_airfoil.                       |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -964,6 +1121,83 @@ module pp
   end subroutine solidgen_circle
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidgen_circle.                        |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to generate a  4-digit NACA airfoil.             |
+  !+-------------------------------------------------------------------+
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine naca4digit(xin,x,y,name,surface)
+    !
+    ! arguments
+    real(8),intent(in) :: xin
+    real(8),intent(out) :: x,y
+    character(len=4),intent(in) :: name
+    character(len=5),intent(in) :: surface
+    !
+    ! local data 
+    real(8) :: yt,t,yc,theter,mr,pr
+    integer :: m,p
+    !
+    read(name(1:1),*)m
+    read(name(2:2),*)p
+    read(name(3:4),*)t
+    !
+    t=t/100.d0
+    !
+    yt=5.d0*t*(0.2969d0*sqrt(xin)-0.1260d0*xin-0.3516d0*xin*xin+       &
+               0.2843d0*xin**3-0.1036d0*xin**4)
+    !
+    if(p==0 .and. m==0) then
+      ! NACA-00XX, a symmetrical 4-digit NACA airfoil
+      !
+      if(surface=='upper') then
+        x=xin
+        y=yt
+      elseif(surface=='lower') then
+        x=xin
+        y=-yt
+      else
+        print*,' surface=',surface
+        stop '!! ERROR 1 @ naca4digit'
+      endif
+      !
+    else
+      !
+      mr=0.01d0*dble(m)
+      pr=0.1d0*dble(p)
+      !
+      if(xin>=0.d0 .and. xin<=pr) then
+        yc=mr/pr/pr*(2.d0*pr*xin-xin*xin)
+        theter=atan(2.d0*mr/pr/pr*(pr-xin))
+      elseif(xin>=pr .and. xin<=1.d0) then
+        yc=mr/(1-pr)**2*(1.d0-2.d0*pr+2.d0*pr*xin-xin**2)
+        theter=atan(2.d0*mr/(1-pr)**2*(pr-xin))
+      else
+        stop '!! ERROR 2 @ naca4digit'
+      endif
+      !
+      if(surface=='upper') then
+        x=xin-yt*sin(theter)
+        y= yc+yt*cos(theter)
+      elseif(surface=='lower') then
+        x=xin+yt*sin(theter)
+        y= yc-yt*cos(theter)
+      else
+        print*,' surface=',surface
+        stop '!! ERROR 3 @ naca4digit'
+      endif
+      !
+    endif
+    !
+  end subroutine naca4digit
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine naca4digit.                             |
   !+-------------------------------------------------------------------+
   !
 end module pp
