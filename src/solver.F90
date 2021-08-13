@@ -2078,6 +2078,13 @@ module solver
       vor(i,j,k,2)=dvel(i,j,k,1,3)-dvel(i,j,k,3,1)
       vor(i,j,k,3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
       !
+      tau11=0.d0
+      tau12=0.d0
+      tau13=0.d0
+      tau22=0.d0
+      tau23=0.d0
+      tau33=0.d0
+      !
       if(trim(turbmode)=='k-omega') then
         miu2=2.d0*(miu+miut(i,j,k))
         hcc=(miu/prandtl+miut(i,j,k)/komega%prt)/const5
