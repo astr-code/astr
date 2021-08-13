@@ -156,7 +156,7 @@ module mainloop
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
                          ctime,hm,lavg,navg,nstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
-    use fludyna,  only : q2fvar
+    use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal,nsamples,liosta
     use readwrite,only : output
@@ -273,49 +273,6 @@ module mainloop
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is to update flow variables from q.               |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 04-Aug-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
-  !+-------------------------------------------------------------------+
-  subroutine updatefvar
-    !
-    use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
-    use commvar,  only : num_species,num_modequ,turbmode
-    use fludyna,  only : q2fvar
-    !
-    if(trim(turbmode)=='k-omega') then
-      !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:),    &
-                                         tke=tke(0:im,0:jm,0:km),      &
-                                       omega=omg(0:im,0:jm,0:km) )
-      !
-    elseif(trim(turbmode)=='none') then
-      !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:) )
-      !
-    else
-      print*,' !! ERROR @ updatefvar'
-      stop
-    endif
-    !
-  end subroutine updatefvar
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine updatefvar.                             |
-  !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
   !| This subroutine advances the field solution in time using 4-step  |
   !| 4th-rder Rungle-Kutta scheme.                                     |
   !+-------------------------------------------------------------------+
@@ -330,9 +287,9 @@ module mainloop
   subroutine rk4
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep,limmbou
+                         ctime,hm,lavg,navg,nstep,limmbou,turbmode
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
-    use fludyna,  only : q2fvar
+    use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
     use readwrite,only : output,writemon
@@ -385,11 +342,18 @@ module mainloop
           rhsav(0:im,0:jm,0:km,m)=0.d0
         enddo
         !
+        if(loop_counter==nwrite) then
+          !
+          call output(ctime(6))
+          !
+        endif
+        !
+        call statcal(ctime(5))
+        !
+        call statout
+        !
         if(nstep==0 .or. loop_counter.ne.0) then
-          !
-          call statcal(ctime(5))
-          !
-          call statout
+          ! the first step after reading ehecking out doesn't need to do this
           !
           call writemon
           !
@@ -399,15 +363,6 @@ module mainloop
             nsamples=0
             liosta=.false.
           endif
-          !
-        else
-          ! call statcal(ctime(5))
-          ! call statout
-        endif
-        !
-        if(loop_counter==nwrite) then
-          !
-          call output(ctime(6))
           !
         endif
         !
@@ -439,12 +394,7 @@ module mainloop
       !
       call spongefilter
       !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:)     )
+      call updatefvar
       !
       call crashcheck
       !

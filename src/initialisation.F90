@@ -28,28 +28,31 @@ module initialisation
   subroutine flowinit
     !
     use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart,   &
-                        lavg
-    use commarray,only: vel,rho,prs,spc,q
+                        lavg,turbmode
+    use commarray,only: vel,rho,prs,spc,q,tke,omg
     use readwrite,only: readcont,readflowini3d,readcheckpoint,         &
                         readmeanflow,readmonc
-    use fludyna,  only: fvar2q
+    use fludyna,  only: updateq
     use statistic,only: nsamples
     !
     if(lrestart) then
       !
       call readcheckpoint
       !
-      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
+      call updateq
       !
     else
       !
       if(ninit==3) then
         !
         call readflowini3d
+        !
+        ! vel(:,:,:,2)=0.d0
+        !
+        if(trim(turbmode)=='k-omega') then
+          tke=0.d0
+          omg=0.d0
+        endif
         !
       else
         !
@@ -79,11 +82,7 @@ module initialisation
         !
       endif
       !
-      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
-                    density=rho(0:im,0:jm,0:km),                       &
-                   velocity=vel(0:im,0:jm,0:km,:),                     &
-                   pressure=prs(0:im,0:jm,0:km),                       &
-                    species=spc(0:im,0:jm,0:km,:)                      )
+      call updateq
       !
       nstep=0
       time=0.d0
@@ -641,15 +640,34 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine chanini
     !
-    use commvar,  only: prandtl,mach,gamma,xmin,xmax,ymin,ymax,zmin,zmax
-    use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal
+    use commvar,  only: prandtl,mach,gamma,turbmode,                   &
+                        xmin,xmax,ymin,ymax,zmin,zmax,Reynolds
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
+    use fludyna,  only: thermal,miucal
+    use commfunc, only: dis2point2
+    use readwrite,only: readprofile
     !
     ! local data
     integer :: i,j,k,l
     real(8) :: theta,theter,fx,gz,zl,randomv(15),ran
+    real(8) :: delta,beta1,miu
+    real(8) :: yh(0:jm),nth(0:jm),r12(0:jm)
     !
     theta=0.1d0
+    !
+    beta1=0.075d0
+    !
+    if(trim(turbmode)=='udf1') then
+      !
+      call readprofile('Results/miut.dat',dir='j',                    &
+                                              var1=yh,var2=nth,var3=r12)
+      ! do j=0,jm
+      !   print*,mpirank,'|',yh(j),nth(j),r12(j)
+      ! enddo
+      !
+      allocate(miut(0:im,0:jm,0:km),res12(0:im,0:jm,0:km))
+      !
+    endif
     !
     if(ndims==2) then
       !
@@ -667,6 +685,19 @@ module initialisation
         !
         if(num_species>0) then
           spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          tke(i,j,k)=1.5d0*0.0001d0
+          !
+          ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
+          delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+          miu=miucal(tmp(i,j,k))/Reynolds
+          omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
+          !
+        elseif(trim(turbmode)=='udf1') then
+          miut(i,j,k)=nth(j)
+          res12(i,j,k)=r12(j)
         endif
         !
       enddo

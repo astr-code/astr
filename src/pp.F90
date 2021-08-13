@@ -129,7 +129,7 @@ module pp
       close(fh)
       print*,' << ',trim(folder),'/datin/input.chl'
       !
-      call gridchannel(16,128,0,trim(folder))
+      call gridchannel(320,128,128,trim(folder))
       !
       open(fh,file=trim(folder)//'/datin/contr.dat',form='formatted')
       write(fh,'(A)')'############################################################'
@@ -199,13 +199,13 @@ module pp
     do k=0,km
     do j=0,jm
     do i=0,im
-      x(i,j,k)=2.d0*pi/im*i
+      x(i,j,k)=4.d0*pi/im*i
       y(i,j,k)=y(0,j,0)
       !
       if(km==0) then
         z(i,j,k)=0.d0
       else
-        z(i,j,k)=pi/km*k
+        z(i,j,k)=num4d3*pi/km*k
       endif
     end do
     end do
@@ -213,7 +213,7 @@ module pp
     print*,' ** y1+=',y(0,1,0)*Retau
     print*,' ** ym+=',(y(0,jmm,0)-y(0,jmm-1,0))*Retau
     print*,' ** dx+=',(x(1,0,0)-x(0,0,0))*Retau,(x(1,0,0)-x(0,0,0))
-    ! print*,' ** dz+=',(z(0,0,1)-z(0,0,0))*Retau,(z(0,0,1)-z(0,0,0))
+    print*,' ** dz+=',(z(0,0,1)-z(0,0,0))*Retau,(z(0,0,1)-z(0,0,0))
     print*,' ** lx+=',(x(im,0,0)-x(0,0,0))*Retau
     print*,' ** lz+=',(z(0,0,km)-z(0,0,0))*Retau
     !

@@ -43,7 +43,8 @@ module commfunc
   !
   real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),      &
                          coef10i(:),coefb(:,:),                        &
-                         coef8e(:),coef6e(:),coef4e(:),coef4be(:,:)
+                         coef8e(:),coef6e(:),coef4e(:),coef2e(:),      &
+                         coef4be(:,:),coef3be(:,:)
   complex(8) :: ci=(0.d0,1.d0)
   !
   contains
@@ -511,8 +512,8 @@ module commfunc
     !
     if(ntype==1) then
       !
-      if(ns==442) then
-        ! ns==642: 2-4-4-...-4-4-2
+      if(ns==422) then
+        ! ns==422: 2-4-4-...-4-4-2
         vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
         vout(1)=0.5d0*(vin(2)-vin(0))
       else
@@ -532,8 +533,8 @@ module commfunc
                   num1d12*(vin(i+2)-vin(i-2))
       enddo
       !
-      if(ns==442) then
-        ! ns==642: 2-4-4-...-4-4-2
+      if(ns==422) then
+        ! ns==422: 2-2-4-...-4-2-2
         vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
         vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
       else
@@ -564,7 +565,8 @@ module commfunc
     !
     if(ntype==1) then
       !
-      vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+      ! vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+      vout(0)=vin(1)-vin(0)
       !
       do i=1,dim
         vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
@@ -576,7 +578,8 @@ module commfunc
         vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
       enddo
       !
-      vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+      ! vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+      vout(dim)  =-vin(dim-1)+vin(dim)
       !
     elseif(ntype==3) then
       do i=0,dim
@@ -671,11 +674,13 @@ module commfunc
   !+-------------------------------------------------------------------+
   function spafilter6exp(f,ntype,dim) result(ff)
     !
+    ! arguments
     integer,intent(in) :: ntype,dim
     real(8),intent(in) :: f(-hm:dim+hm)
+    !
+    ! local data
     real(8) :: ff(0:dim)
     !
-    real(8) :: coef(0:4)
     integer :: ii,m
     !
     ff=0.d0
@@ -684,13 +689,19 @@ module commfunc
     case(1)
       !
       ii=0
-      do m=0,4
-        ff(ii)=ff(ii)+coef4be(0,m)*f(m)
-      enddo
+      ! do m=0,4
+      !   ff(ii)=ff(ii)+coef4be(0,m)*f(m)
+      ! enddo
+      ff(ii)=f(ii)
+      !
       ii=1
-      do m=0,4
-        ff(ii)=ff(ii)+coef4be(1,m)*f(m)
+      ! do m=0,4
+      !   ff(ii)=ff(ii)+coef4be(1,m)*f(m)
+      ! enddo
+      do m=0,1
+        ff(ii)=ff(ii)+coef2e(m)*(f(ii-m)+f(ii+m))
       enddo
+      !
       ii=2
       do m=0,2
         ff(ii)=ff(ii)+coef4e(m)*(f(ii-m)+f(ii+m))
@@ -716,14 +727,20 @@ module commfunc
       do m=0,2
         ff(ii)=ff(ii)+coef4e(m)*(f(ii-m)+f(ii+m))
       enddo
+      !
       ii=dim-1
-      do m=0,4
-        ff(ii)=ff(ii)+coef4be(1,m)*f(dim-m)
+      !
+      do m=0,1
+        ff(ii)=ff(ii)+coef2e(m)*(f(ii-m)+f(ii+m))
       enddo
+      ! do m=0,4
+      !   ff(ii)=ff(ii)+coef4be(1,m)*f(dim-m)
+      ! enddo
       ii=dim
-      do m=0,4
-        ff(ii)=ff(ii)+coef4be(0,m)*f(dim-m)
-      enddo
+      ! do m=0,4
+      !   ff(ii)=ff(ii)+coef4be(0,m)*f(dim-m)
+      ! enddo
+      ff(ii)=f(ii)
       !
     case(3)
       !
@@ -743,7 +760,7 @@ module commfunc
     !
   end function spafilter6exp
   !+-------------------------------------------------------------------+
-  !| The end of the function spafilter6exp.                           |
+  !| The end of the function spafilter6exp.                            |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -1461,7 +1478,8 @@ module commfunc
     !
     allocate(coef2i(0:1),coef4i(0:2),coef6i(0:3),coef8i(0:4),coef10i(0:5))
     allocate(coefb(0:4,0:8))
-    allocate(coef8e(0:4),coef6e(0:3),coef4e(0:2),coef4be(0:1,0:4))
+    allocate(coef8e(0:4),coef6e(0:3),coef4e(0:2),coef2e(0:1))
+    allocate(coef3be(0:1,0:3),coef4be(0:1,0:4))
     !
     ! inernal coefficent
     ! 2nd-order
@@ -1552,6 +1570,20 @@ module commfunc
     coef4be(1,2)=( 3.d0 )/8.d0
     coef4be(1,3)=(-1.d0 )/4.d0
     coef4be(1,4)=( 1.d0 )/16.d0
+    !
+    coef3be(0,0)=( 7.d0 )/8.d0
+    coef3be(0,1)=( 3.d0 )/8.d0
+    coef3be(0,2)=(-3.d0 )/8.d0
+    coef3be(0,3)=( 1.d0 )/8.d0
+    !
+    coef3be(1,0)=( 1.d0 )/8.d0
+    coef3be(1,1)=( 5.d0 )/8.d0
+    coef3be(1,2)=( 3.d0 )/8.d0
+    coef3be(1,3)=(-1.d0 )/8.d0
+    !
+    ! 2nd-order
+    coef2e(0)=0.25d0
+    coef2e(1)=0.25d0
     !
     ! 4th-order
     coef4e(0)=( 5.d0 )/16.d0

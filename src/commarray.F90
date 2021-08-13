@@ -11,16 +11,21 @@ module commarray
   !
   implicit none
   !
-  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp
+  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp,     &
+                                            dgrid,vor
   real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
-  real(8),allocatable,dimension(:,:,:) :: tke,omg,miut
+  real(8),allocatable,dimension(:,:,:) :: dis2wall
   real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax
   integer,allocatable,dimension(:,:,:) :: nodestat
   logical,allocatable,dimension(:,:,:) :: lsolid
   type(nodcel),allocatable,dimension(:,:,:) :: cell
+  !
+  real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12
+  real(8),allocatable,dimension(:,:,:,:) :: dtke,domg
+  !
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
   !|               jacob | geometrical Jacobian.                       |
@@ -95,6 +100,9 @@ module commarray
     allocate(dtmp(0:im,0:jm,0:km,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating dvel'
     !
+    allocate(vor(0:im,0:jm,0:km,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating vor'
+    !
     allocate(lsolid(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating lsolid'
     !
@@ -107,12 +115,11 @@ module commarray
     endif
     if(lallo.ne.0) stop ' !! error at allocating cell'
     !
-    if(trim(turbmode)=='k-omega') then
-      allocate(   tke(-hm:im+hm,-hm:jm+hm,-hm:km+hm),   &
-                  omg(-hm:im+hm,-hm:jm+hm,-hm:km+hm),   &
-                 miut(0:im,0:jm,0:km),stat=lallo)
-      if(lallo.ne.0) stop ' !! error at allocating tke,omg,miut'
-    endif
+    allocate(dis2wall(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating dis2wall'
+    !
+    allocate(dgrid(0:im,0:jm,0:km,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating dgrid'
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+

@@ -108,6 +108,108 @@ module fludyna
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to update flow variables from q.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-Aug-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine updatefvar
+    !
+    use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
+    use commvar,  only : im,jm,km,num_species,num_modequ,turbmode
+    !
+    integer :: i,j,k
+    !
+    if(trim(turbmode)=='k-omega') then
+      !
+      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
+                                     density=rho(0:im,0:jm,0:km),      &
+                                    velocity=vel(0:im,0:jm,0:km,:),    &
+                                    pressure=prs(0:im,0:jm,0:km),      &
+                                 temperature=tmp(0:im,0:jm,0:km),      &
+                                     species=spc(0:im,0:jm,0:km,:),    &
+                                         tke=tke(0:im,0:jm,0:km),      &
+                                       omega=omg(0:im,0:jm,0:km) )
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(tke(i,j,k)<0.d0) then
+          tke(i,j,k)=0.d0
+          q(i,j,k,6+num_species)=rho(i,j,k)*tke(i,j,k)
+        endif
+        !
+        if(omg(i,j,k)<0.01d0) then
+          omg(i,j,k)=0.01d0
+          q(i,j,k,7+num_species)=rho(i,j,k)*omg(i,j,k)
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+    elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
+      !
+      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
+                                     density=rho(0:im,0:jm,0:km),      &
+                                    velocity=vel(0:im,0:jm,0:km,:),    &
+                                    pressure=prs(0:im,0:jm,0:km),      &
+                                 temperature=tmp(0:im,0:jm,0:km),      &
+                                     species=spc(0:im,0:jm,0:km,:) )
+      !
+    else
+      print*,' !! ERROR @ updatefvar'
+      stop
+    endif
+    !
+  end subroutine updatefvar
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine updatefvar.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to update q from flow variables.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 06-Aug-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine updateq
+    !
+    use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
+    use commvar,  only : im,jm,km,num_species,num_modequ,turbmode
+    !
+    if(trim(turbmode)=='k-omega') then
+      !
+      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                      density=rho(0:im,0:jm,0:km),                     &
+                     velocity=vel(0:im,0:jm,0:km,:),                   &
+                     pressure=prs(0:im,0:jm,0:km),                     &
+                      species=spc(0:im,0:jm,0:km,:),                   &
+                          tke=tke(0:im,0:jm,0:km),                     &
+                        omega=omg(0:im,0:jm,0:km)                      )
+      !
+    elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
+      !
+      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                      density=rho(0:im,0:jm,0:km),                     &
+                     velocity=vel(0:im,0:jm,0:km,:),                   &
+                     pressure=prs(0:im,0:jm,0:km),                     &
+                      species=spc(0:im,0:jm,0:km,:)                    )
+      !
+    else
+      print*,' !! ERROR @ updatefvar'
+      stop
+    endif
+    !
+  end subroutine updateq
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine updateq.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This function is used to convert flow variables to q.             |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -195,13 +297,14 @@ module fludyna
     !
   end subroutine fvar2q_1da
   !
-  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species)
+  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species,tke,omega)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: density(:,:,:),velocity(:,:,:,:)
     real(8),intent(in),optional :: pressure(:,:,:),temperature(:,:,:), &
-                                   species(:,:,:,:)
+                                   species(:,:,:,:),tke(:,:,:),        &
+                                   omega(:,:,:)
     real(8),intent(out) :: q(:,:,:,:)
     !
     ! local data
@@ -232,6 +335,13 @@ module fludyna
       do jspec=1,num_species
         q(:,:,:,5+jspec)=density(:,:,:)*species(:,:,:,jspec)
       enddo
+      !
+    endif
+    !
+    if(present(tke) .and. present(omega)) then
+      !
+      q(:,:,:,5+num_species+1)=tke(:,:,:)*density(:,:,:)
+      q(:,:,:,5+num_species+2)=omega(:,:,:)*density(:,:,:)
       !
     endif
     !

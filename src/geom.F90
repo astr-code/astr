@@ -1539,7 +1539,7 @@ module geom
     use commvar,   only : ia,ja,ka,hm,npdci,npdcj,npdck,               &
                           xmax,xmin,ymax,ymin,zmax,zmin,voldom,difschm,&
                           dxyzmax,dxyzmin
-    use commarray, only : x,jacob,dxi,cell
+    use commarray, only : x,jacob,dxi,cell,dgrid,dis2wall
     use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
     use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
     use tecio
@@ -1647,6 +1647,11 @@ module geom
       do i=0,im
         dxyzmax=max(dxyzmax,abs(dx(i,j,k,1,1)))
         dxyzmin=min(dxyzmin,abs(dx(i,j,k,1,1)))
+        !
+        dgrid(i,j,k,1)=abs(dx(i,j,k,1,1))
+        dgrid(i,j,k,2)=0.d0
+        dgrid(i,j,k,3)=0.d0
+        !
       enddo
       dxyzmax=pmax(dxyzmax)
       dxyzmin=pmin(dxyzmin)
@@ -1688,6 +1693,10 @@ module geom
       do i=0,im
         var1=sqrt(dx(i,j,k,1,1)**2+dx(i,j,k,2,1)**2)
         var2=sqrt(dx(i,j,k,1,2)**2+dx(i,j,k,2,2)**2)
+        !
+        dgrid(i,j,k,1)=var1
+        dgrid(i,j,k,2)=var2
+        dgrid(i,j,k,3)=0.d0
         !
         dxyzmax=max(dxyzmax,var1,var2)
         dxyzmin=min(dxyzmin,var1,var2)
@@ -1753,6 +1762,10 @@ module geom
         var1=sqrt(dx(i,j,k,1,1)**2+dx(i,j,k,2,1)**2+dx(i,j,k,3,1)**2)
         var2=sqrt(dx(i,j,k,1,2)**2+dx(i,j,k,2,2)**2+dx(i,j,k,3,2)**2)
         var3=sqrt(dx(i,j,k,1,3)**2+dx(i,j,k,2,3)**2+dx(i,j,k,3,3)**2)
+        !
+        dgrid(i,j,k,1)=var1
+        dgrid(i,j,k,2)=var2
+        dgrid(i,j,k,3)=var3
         !
         dxyzmax=max(dxyzmax,var1,var2,var3)
         dxyzmin=min(dxyzmin,var1,var2,var3)
@@ -2123,6 +2136,15 @@ module geom
     xmin=pmin(xmin)
     ymin=pmin(ymin)
     zmin=pmin(zmin)
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      ! only for channel flow.
+      dis2wall(i,j,k)=min(x(i,j,k,2),2.d0-x(i,j,k,2))
+    enddo
+    enddo
+    enddo
     !
     if(lio) then
       !

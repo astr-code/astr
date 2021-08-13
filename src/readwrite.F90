@@ -9,7 +9,7 @@ module readwrite
   !
   use constdef
   use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
-                      ptime,bcast
+                      ptime,bcast,mpirankmax,ig0,jg0,kg0
   use tecio
   use stlaio,  only: get_unit
   !
@@ -106,7 +106,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine infodisp
     !
-    use parallel,only : mpirank,mpirankmax,isize,jsize,ksize,mpistop
+    use parallel,only : mpirank,isize,jsize,ksize,mpistop
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
                         flowtype,ndims,lfilter,alfa_filter,bctype,     &
@@ -324,8 +324,10 @@ module readwrite
         write(*,'(35X,A)')'          no turbulence model'
       elseif(trim(turbmode)=='k-omega') then
         write(*,'(35X,A)')' the Menter SST k-omega model'
+      elseif(trim(turbmode)=='udf1') then
+        write(*,'(35X,A)')'         user defined model 1'
       else
-        print*,' !! ERROR in defining turbulence model',turbmode
+        print*,' !! ERROR in defining turbulence model: ',turbmode
         stop
       endif
       !
@@ -665,7 +667,6 @@ module readwrite
   subroutine writemon
     !
     use commvar, only: nmonitor,imon,nstep,time,pinf
-    use parallel,only : ig0,jg0,kg0
     use commarray, only : x,rho,vel,prs,tmp
     !
     ! local data
@@ -829,6 +830,110 @@ module readwrite
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
   !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to read a profile                         !
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine readprofile(filename,dir,var1,var2,var3,var4,var5)
+    !
+    use commvar,   only : im,jm,km,ia,ja,ka
+    use parallel,  only : ptabupd,pscatter
+    !
+    ! arguments
+    character(len=*),intent(in) :: filename,dir
+    real(8),optional,intent(out) ::  var1(0:),var2(0:),var3(0:),       &
+                                     var4(0:),var5(0:)
+    !
+    ! local data
+    integer :: fh,ios,i,j,n,offset
+    real(8),allocatable,dimension(:,:) :: data,scat
+    integer :: table(0:mpirankmax),displs(0:mpirankmax)
+    character(len=32) :: c1
+    !
+    fh=get_unit()
+    !
+    if( present(var5) ) then
+      n=5
+    elseif( present(var4)  ) then
+      n=4
+    elseif( present(var3) ) then
+      n=3
+    elseif( present(var2) ) then
+      n=2
+    elseif( present(var1) ) then
+      n=1
+    else
+      stop ' !! ERROR 1  define n @  readprofile '
+    endif
+    allocate(data(1:n,0:ja))
+    !
+    if(dir=='j') then
+      !
+      if(mpirank==0) then
+        !
+        open(fh,file=filename,action='read',form='formatted')
+        !
+        ios=0
+        do while(ios==0)
+          !
+          read(fh,*,iostat=ios)c1
+          !
+          if(isnum(c1)==2 .or. isnum(c1)==3 .or. isnum(c1)==4) then
+            ! the first line with a real number
+            backspace(fh)
+            !
+            exit
+            !
+          endif
+          !
+        enddo
+        !
+        ! start from real number
+        do j=0,ja
+          read(fh,*)(data(i,j),i=1,n)
+        enddo
+        !
+        close(fh)
+        write(*,'(3A,I0)')'  << ',filename,' using file handle : ',fh
+        !
+      endif
+      !
+      call ptabupd(var=jm+1,table=table)
+      !
+      call ptabupd(var=jg0*n,table=displs)
+      !
+      call pscatter(data,scat,table,offset=displs,rank=0)
+      !
+      ! print*,mpirank,'|',displs(mpirank)
+      ! do j=0,jm
+      !   print*,mpirank,'|',j+jg0,scat(1,j+1)
+      ! enddo
+      !
+      if( present(var5) )  var5(0:jm)=scat(5,1:1+jm)
+      if( present(var4) )  var4(0:jm)=scat(4,1:1+jm)
+      if( present(var3) )  var3(0:jm)=scat(3,1:1+jm)
+      if( present(var2) )  var2(0:jm)=scat(2,1:1+jm)
+      if( present(var1) )  var1(0:jm)=scat(1,1:1+jm)
+      !
+      deallocate(data,scat)
+      !
+    else
+      !
+      print*,' !! dir not set yet @ readprofile !!'
+      stop
+      !
+    endif
+    !
+    return
+    !
+  end subroutine readprofile
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine readprofile.                            |
+  !+-------------------------------------------------------------------+
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to read a initial flow filed.
@@ -874,8 +979,8 @@ module readwrite
   subroutine readcheckpoint
     !
     use commvar, only: nstep,filenumb,time,flowtype,num_species,       &
-                       im,jm,km,force,numq
-    use commarray, only : rho,vel,prs,tmp,spc,q
+                       im,jm,km,force,numq,turbmode
+    use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut
     use statistic,only : massflux,massflux_target,nsamples
     use hdf5io
     !
@@ -910,6 +1015,14 @@ module readwrite
          write(spname,'(i2.2)')jsp
         call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
       enddo
+      !
+      if(trim(turbmode)=='k-omega') then
+        call h5read(varname='k',     var=tke(0:im,0:jm,0:km))
+        call h5read(varname='omega', var=omg(0:im,0:jm,0:km))
+        call h5read(varname='miut',  var=miut(0:im,0:jm,0:km))
+      elseif(trim(turbmode)=='udf1') then
+        call h5read(varname='miut',  var=miut(0:im,0:jm,0:km))
+      endif
       !
       ! call h5io_init('checkpoint/qdata.h5',mode='read')
       ! do jsp=1,numq
@@ -1108,8 +1221,9 @@ module readwrite
   subroutine output(subtime)
     !
     use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
-                       lwrite,lavg,force,numq,imbroot,limmbou
+                       lwrite,lavg,force,numq,imbroot,limmbou,turbmode
     use commarray,only : x,rho,vel,prs,tmp,spc,q
+    use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
                          rom,u1m,u2m,u3m,pm,tm,                        &
                          u11,u22,u33,u12,u13,u23,pp,tt,tu1,tu2,tu3,    &
@@ -1177,10 +1291,20 @@ module readwrite
     call h5write(varname='u3', var=vel(0:im,0:jm,0:km,3))
     call h5write(varname='p', var=prs(0:im,0:jm,0:km))
     call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
-    do jsp=1,num_species
-       write(spname,'(i2.2)')jsp
-      call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
-    enddo
+    if(num_species>0) then
+      do jsp=1,num_species
+         write(spname,'(i2.2)')jsp
+        call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+      enddo
+    endif
+    if(trim(turbmode)=='k-omega') then
+      call h5write(varname='k',     var=tke(0:im,0:jm,0:km))
+      call h5write(varname='omega', var=omg(0:im,0:jm,0:km))
+      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km))
+    elseif(trim(turbmode)=='udf1') then
+      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km))
+    endif
+    !
     call h5io_end
     if(lio) then
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))

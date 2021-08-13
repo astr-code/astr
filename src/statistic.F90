@@ -218,8 +218,8 @@ module statistic
       prs_t=prs(i,j,k)
       tmp_t=tmp(i,j,k)
       u=vel(i,j,k,1)
-      v=vel(i,j,k,1)
-      w=vel(i,j,k,1)
+      v=vel(i,j,k,2)
+      w=vel(i,j,k,3)
       !
       rom(i,j,k)=rom(i,j,k) + rho_t
       u1m(i,j,k)=u1m(i,j,k) + rho_t*u

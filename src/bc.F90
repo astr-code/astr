@@ -615,7 +615,7 @@ module bc
       !
     endif
     !
-    call pscatter(q2send,qboud,num_ighost_rank,imbroot)
+    call pscatter(q2send,qboud,num_ighost_rank,rank=imbroot)
     !
     if(mpirank==0) then
       offset=0
@@ -3611,7 +3611,10 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine noslip(ndir,tw)
     !
-    use fludyna,   only : thermal,fvar2q,q2fvar
+    use commvar,   only : Reynolds,turbmode
+    use commarray, only : tke,omg
+    use fludyna,   only : thermal,fvar2q,q2fvar,miucal
+    use commfunc,  only : dis2point2
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -3619,7 +3622,9 @@ module bc
     !
     ! local data
     integer :: i,j,k,l,jspec
-    real(8) :: pe
+    real(8) :: pe,delta_d1,miu,beta1
+    !
+    beta1=0.075d0
     !
     if(ndir==3) then
       !
@@ -3649,24 +3654,33 @@ module bc
                      pressure=prs(i,j,k),                              &
                       species=spc(i,j,k,:)                             )
           !
-          do l=1,hm
-            q(i,j-l,k,1)= q(i,j+l,k,1) ! rho   is even
-            q(i,j-l,k,2)=-q(i,j+l,k,2) ! rho*u is odd 
-            q(i,j-l,k,3)=-q(i,j+l,k,3) ! rho*v is odd 
-            q(i,j-l,k,4)=-q(i,j+l,k,4) ! rho*w is odd
-            q(i,j-l,k,5)= q(i,j+l,k,5) ! rho*E is even
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=0.d0
             !
-            do jspec=1,num_species
-              q(i,j-l,k,5+jspec)= q(i,j+l,k,5+jspec) ! rho*Yj is even
-            enddo
+            delta_d1=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
             !
-            call q2fvar(q=q(i,j-l,k,:),density=rho(i,j-l,k),           &
-                                      velocity=vel(i,j-l,k,:),         &
-                                      pressure=prs(i,j-l,k),           &
-                                   temperature=tmp(i,j-l,k),           &
-                                       species=spc(i,j-l,k,:))
-            !
-          enddo
+          endif
+          !
+          ! do l=1,hm
+          !   q(i,j-l,k,1)= q(i,j+l,k,1) ! rho   is even
+          !   q(i,j-l,k,2)=-q(i,j+l,k,2) ! rho*u is odd 
+          !   q(i,j-l,k,3)=-q(i,j+l,k,3) ! rho*v is odd 
+          !   q(i,j-l,k,4)=-q(i,j+l,k,4) ! rho*w is odd
+          !   q(i,j-l,k,5)= q(i,j+l,k,5) ! rho*E is even
+          !   !
+          !   do jspec=1,num_species
+          !     q(i,j-l,k,5+jspec)= q(i,j+l,k,5+jspec) ! rho*Yj is even
+          !   enddo
+          !   !
+          !   call q2fvar(q=q(i,j-l,k,:),density=rho(i,j-l,k),           &
+          !                             velocity=vel(i,j-l,k,:),         &
+          !                             pressure=prs(i,j-l,k),           &
+          !                          temperature=tmp(i,j-l,k),           &
+          !                              species=spc(i,j-l,k,:))
+          !   !
+          ! enddo
           !
         enddo
         enddo
@@ -3700,24 +3714,32 @@ module bc
                      pressure=prs(i,j,k),                              &
                       species=spc(i,j,k,:)                             )
           !
-          do l=1,hm
-            q(i,j+l,k,1)= q(i,j-l,k,1) ! rho   is even
-            q(i,j+l,k,2)=-q(i,j-l,k,2) ! rho*u is odd 
-            q(i,j+l,k,3)=-q(i,j-l,k,3) ! rho*v is odd 
-            q(i,j+l,k,4)=-q(i,j-l,k,4) ! rho*w is odd
-            q(i,j+l,k,5)= q(i,j-l,k,5) ! rho*E is even
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=0.d0
             !
-            do jspec=1,num_species
-              q(i,j+l,k,5+jspec)= q(i,j-l,k,5+jspec) ! rho*Yj is even
-            enddo
-            !
-            call q2fvar(q=q(i,j+l,k,:),density=rho(i,j+l,k),           &
-                                      velocity=vel(i,j+l,k,:),         &
-                                      pressure=prs(i,j+l,k),           &
-                                   temperature=tmp(i,j+l,k),           &
-                                       species=spc(i,j+l,k,:))
-            !
-          enddo
+            delta_d1=dis2point2(x(i,j,k,:),x(i,j-1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+          endif
+          !
+          ! do l=1,hm
+          !   q(i,j+l,k,1)= q(i,j-l,k,1) ! rho   is even
+          !   q(i,j+l,k,2)=-q(i,j-l,k,2) ! rho*u is odd 
+          !   q(i,j+l,k,3)=-q(i,j-l,k,3) ! rho*v is odd 
+          !   q(i,j+l,k,4)=-q(i,j-l,k,4) ! rho*w is odd
+          !   q(i,j+l,k,5)= q(i,j-l,k,5) ! rho*E is even
+          !   !
+          !   do jspec=1,num_species
+          !     q(i,j+l,k,5+jspec)= q(i,j-l,k,5+jspec) ! rho*Yj is even
+          !   enddo
+          !   !
+          !   call q2fvar(q=q(i,j+l,k,:),density=rho(i,j+l,k),           &
+          !                             velocity=vel(i,j+l,k,:),         &
+          !                             pressure=prs(i,j+l,k),           &
+          !                          temperature=tmp(i,j+l,k),           &
+          !                              species=spc(i,j+l,k,:))
+          !   !
+          ! enddo
           !
         enddo
         enddo
