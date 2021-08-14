@@ -263,7 +263,8 @@ module pp
     ! call solidgen_circle
     ! call solidgen_cub
     ! call solidgen_triagnle
-    call solidgen_airfoil
+    ! call solidgen_airfoil
+    call solidgen_sphere_tri
     !
     do js=1,nsolid
       call solidrange(immbody(js))
@@ -271,9 +272,9 @@ module pp
     !
     ! call solidresc(immbody(1),0.025d0)
     !
-    call solidshif(immbody(1),x=5.d0-immbody(1)%xcen(1),  &
-                              y=5.d0-immbody(1)%xcen(2),  &
-                              z=0.d0-immbody(1)%xcen(3))
+    ! call solidshif(immbody(1),x=5.d0-immbody(1)%xcen(1),  &
+    !                           y=5.d0-immbody(1)%xcen(2),  &
+    !                           z=0.d0-immbody(1)%xcen(3))
     !
     call solidrange(immbody(1))
     !
@@ -829,6 +830,196 @@ module pp
   end subroutine solidgen_cub
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidgen_cub.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a sphere STL file with many        |
+  !| equilateral triangle.                                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-07-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine solidgen_sphere_tri
+    !
+    use commtype, only : solid,triangle
+    use readwrite,only : readsolid
+    use commvar,  only : nsolid,immbody
+    use geom,     only : solidrange,solidresc,solidshif,solidimpro
+    use tecio,     only : tecsolid
+    use stlaio,    only : stla_write
+    use commfunc,  only : cross_product
+    !
+    ! local data
+    integer :: i,j,k,jf,km,jm,im,nface,nface2,jface,ntrimax
+    real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
+               x1(3),x2(3),x3(3),x4(3),norm1(3),var1,    &
+               ab(3),ac(3),bc(3),abc(3)
+    real(8) :: epsilon
+    type(triangle),allocatable :: tempface(:),tempface2(:)
+    !
+    epsilon=1.d-12
+    ntrimax=5000
+    !
+    print*,' ** generating solid'
+    !
+    nsolid=1
+    allocate(immbody(nsolid))
+    immbody(1)%name='sphere'
+    !
+    ! first build a tetrahedron
+    !
+    x1(1)=1.d0
+    x1(2)=0.d0
+    x1(3)=-1.d0/sqrt(2.d0)
+    !
+    radi=sqrt(x1(1)**2+x1(2)**2+x1(3)**2)
+    !
+    x2(1)=-1.d0
+    x2(2)=0.d0
+    x2(3)=-1.d0/sqrt(2.d0)
+    !
+    !
+    x3(1)=0.d0
+    x3(2)=1.d0
+    x3(3)=1.d0/sqrt(2.d0)
+    !
+    x4(1)=0.d0
+    x4(2)=-1.d0
+    x4(3)=1.d0/sqrt(2.d0)
+    !
+    x1=x1/radi
+    x2=x2/radi
+    x3=x3/radi
+    x4=x4/radi
+    !
+    allocate(tempface(ntrimax),tempface2(2*ntrimax))
+    !
+    nface=0
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x4
+    !
+    nface=nface+1
+    tempface(nface)%a=x2
+    tempface(nface)%b=x3
+    tempface(nface)%c=x4
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x3
+    tempface(nface)%c=x4
+    !
+    do while(nface<ntrimax)
+      !
+      nface2=0
+      !
+      do jface=1,nface
+        !
+        ab=0.5d0*(tempface(jface)%a+tempface(jface)%b)
+        ac=0.5d0*(tempface(jface)%a+tempface(jface)%c)
+        bc=0.5d0*(tempface(jface)%b+tempface(jface)%c)
+        abc=num1d3*(tempface(jface)%a+tempface(jface)%b+tempface(jface)%c)
+        !
+        var1=sqrt(ab(1)**2+ab(2)**2+ab(3)**2)
+        ab=ab/var1
+        var1=sqrt(ac(1)**2+ac(2)**2+ac(3)**2)
+        ac=ac/var1
+        var1=sqrt(bc(1)**2+bc(2)**2+bc(3)**2)
+        bc=bc/var1
+        var1=sqrt(abc(1)**2+abc(2)**2+abc(3)**2)
+        abc=abc/var1
+        !
+        nface2=nface2+1
+        tempface2(nface2)%a=tempface(jface)%a
+        tempface2(nface2)%b=ab
+        tempface2(nface2)%c=ac
+        !
+        nface2=nface2+1
+        tempface2(nface2)%a=tempface(jface)%b
+        tempface2(nface2)%b=ab
+        tempface2(nface2)%c=bc
+        !
+        nface2=nface2+1
+        tempface2(nface2)%a=tempface(jface)%c
+        tempface2(nface2)%b=ac
+        tempface2(nface2)%c=bc
+        !
+        nface2=nface2+1
+        tempface2(nface2)%a=ab
+        tempface2(nface2)%b=ac
+        tempface2(nface2)%c=bc
+        !
+        if(nface2>ntrimax) exit
+        !
+      enddo
+      !
+      if(nface2>ntrimax) exit
+      !
+      nface=nface2
+      tempface=tempface2
+      !
+      print*,' ** nface=',nface
+      !
+    enddo
+    !
+    !
+    immbody(1)%num_face=nface
+    call immbody(1)%alloface()
+    immbody(1)%face(1:nface)=tempface(1:nface)
+    !
+    do jf=1,immbody(1)%num_face
+      !
+      norm1=cross_product(immbody(1)%face(jf)%b-immbody(1)%face(jf)%a,         &
+                          immbody(1)%face(jf)%c-immbody(1)%face(jf)%a )
+      !
+      var1=sqrt(norm1(1)**2+norm1(2)**2+norm1(3)**2)
+      !
+      if(abs(var1)<epsilon) then
+        !
+        norm1=cross_product(immbody(1)%face(jf)%a-immbody(1)%face(jf)%b,         &
+                            immbody(1)%face(jf)%c-immbody(1)%face(jf)%b )
+        !
+        var1=sqrt(norm1(1)**2+norm1(2)**2+norm1(3)**2)
+        !
+      endif
+      !
+      if(abs(var1)<epsilon) then
+        !
+        norm1=cross_product(immbody(1)%face(jf)%a-immbody(1)%face(jf)%c,         &
+                            immbody(1)%face(jf)%b-immbody(1)%face(jf)%c )
+        !
+        var1=sqrt(norm1(1)**2+norm1(2)**2+norm1(3)**2)
+        !
+      endif
+      !
+      immbody(1)%face(jf)%normdir=norm1/var1
+      !
+      if(isnan(immbody(1)%face(jf)%normdir(1))) then
+        print*,jf
+        print*,immbody(1)%face(jf)%a
+        print*,immbody(1)%face(jf)%b
+        print*,immbody(1)%face(jf)%c
+        print*,norm1,'|',var1
+        stop
+      endif
+      !
+    enddo
+    !
+    call tecsolid('tecsolid.plt',immbody)
+    !
+    print*,' ** solid generated'
+    !
+  end subroutine solidgen_sphere_tri
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine solidgen_sphere_tri.                    |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
