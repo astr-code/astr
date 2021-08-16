@@ -348,6 +348,8 @@ module geom
       nodestat(:,:,km+1:km+hm)=10
     endif
     !
+    if(ndims==3) return
+    !
     ! set cell state. currently, 2D only
     do k=kss,km
     do j=1,jm

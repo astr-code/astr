@@ -889,7 +889,7 @@ module solver
       stop ' !! error 2 @ subroutkne convrsduwd'
     endif
     !
-    allocate( fswp(-hm:jm+hm,1:5),fswm(-hm:km+hm,1:5))
+    allocate( fswp(-hm:km+hm,1:5),fswm(-hm:km+hm,1:5))
     allocate( Fh(-1:km,1:5) )
     !
     do j=js,je

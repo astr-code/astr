@@ -272,9 +272,9 @@ module pp
     !
     ! call solidresc(immbody(1),0.025d0)
     !
-    ! call solidshif(immbody(1),x=5.d0-immbody(1)%xcen(1),  &
-    !                           y=5.d0-immbody(1)%xcen(2),  &
-    !                           z=0.d0-immbody(1)%xcen(3))
+    call solidshif(immbody(1),x=5.d0-immbody(1)%xcen(1),  &
+                              y=5.d0-immbody(1)%xcen(2),  &
+                              z=5.d0-immbody(1)%xcen(3))
     !
     call solidrange(immbody(1))
     !
@@ -1002,58 +1002,58 @@ module pp
     ! tempface(nface)%b=x3
     ! tempface(nface)%c=x4
     ! !
-    do while(nface<ntrimax)
-      !
-      nface2=0
-      !
-      do jface=1,nface
-        !
-        ab=0.5d0*(tempface(jface)%a+tempface(jface)%b)
-        ac=0.5d0*(tempface(jface)%a+tempface(jface)%c)
-        bc=0.5d0*(tempface(jface)%b+tempface(jface)%c)
-        abc=num1d3*(tempface(jface)%a+tempface(jface)%b+tempface(jface)%c)
-        !
-        var1=sqrt(ab(1)**2+ab(2)**2+ab(3)**2)
-        ab=ab/var1
-        var1=sqrt(ac(1)**2+ac(2)**2+ac(3)**2)
-        ac=ac/var1
-        var1=sqrt(bc(1)**2+bc(2)**2+bc(3)**2)
-        bc=bc/var1
-        var1=sqrt(abc(1)**2+abc(2)**2+abc(3)**2)
-        abc=abc/var1
-        !
-        nface2=nface2+1
-        tempface2(nface2)%a=tempface(jface)%a
-        tempface2(nface2)%b=ab
-        tempface2(nface2)%c=ac
-        !
-        nface2=nface2+1
-        tempface2(nface2)%a=tempface(jface)%b
-        tempface2(nface2)%b=ab
-        tempface2(nface2)%c=bc
-        !
-        nface2=nface2+1
-        tempface2(nface2)%a=tempface(jface)%c
-        tempface2(nface2)%b=ac
-        tempface2(nface2)%c=bc
-        !
-        nface2=nface2+1
-        tempface2(nface2)%a=ab
-        tempface2(nface2)%b=ac
-        tempface2(nface2)%c=bc
-        !
-        if(nface2>ntrimax) exit
-        !
-      enddo
-      !
-      if(nface2>ntrimax) exit
-      !
-      nface=nface2
-      tempface=tempface2
-      !
-      print*,' ** nface=',nface
-      !
-    enddo
+    ! do while(nface<ntrimax)
+    !   !
+    !   nface2=0
+    !   !
+    !   do jface=1,nface
+    !     !
+    !     ab=0.5d0*(tempface(jface)%a+tempface(jface)%b)
+    !     ac=0.5d0*(tempface(jface)%a+tempface(jface)%c)
+    !     bc=0.5d0*(tempface(jface)%b+tempface(jface)%c)
+    !     abc=num1d3*(tempface(jface)%a+tempface(jface)%b+tempface(jface)%c)
+    !     !
+    !     var1=sqrt(ab(1)**2+ab(2)**2+ab(3)**2)
+    !     ab=ab/var1
+    !     var1=sqrt(ac(1)**2+ac(2)**2+ac(3)**2)
+    !     ac=ac/var1
+    !     var1=sqrt(bc(1)**2+bc(2)**2+bc(3)**2)
+    !     bc=bc/var1
+    !     var1=sqrt(abc(1)**2+abc(2)**2+abc(3)**2)
+    !     abc=abc/var1
+    !     !
+    !     nface2=nface2+1
+    !     tempface2(nface2)%a=tempface(jface)%a
+    !     tempface2(nface2)%b=ab
+    !     tempface2(nface2)%c=ac
+    !     !
+    !     nface2=nface2+1
+    !     tempface2(nface2)%a=tempface(jface)%b
+    !     tempface2(nface2)%b=ab
+    !     tempface2(nface2)%c=bc
+    !     !
+    !     nface2=nface2+1
+    !     tempface2(nface2)%a=tempface(jface)%c
+    !     tempface2(nface2)%b=ac
+    !     tempface2(nface2)%c=bc
+    !     !
+    !     nface2=nface2+1
+    !     tempface2(nface2)%a=ab
+    !     tempface2(nface2)%b=ac
+    !     tempface2(nface2)%c=bc
+    !     !
+    !     if(nface2>ntrimax) exit
+    !     !
+    !   enddo
+    !   !
+    !   if(nface2>ntrimax) exit
+    !   !
+    !   nface=nface2
+    !   tempface=tempface2
+    !   !
+    !   print*,' ** nface=',nface
+    !   !
+    ! enddo
     !
     !
     immbody(1)%num_face=nface
