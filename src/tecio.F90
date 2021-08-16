@@ -7,6 +7,7 @@
 !+---------------------------------------------------------------------+
 module tecio
   !
+  use constdef
   use stlaio,  only: get_unit
   !
   implicit none
@@ -1441,12 +1442,12 @@ module tecio
       open(unitf,file=filename,form='formatted')
       write(unitf,'(A)')'TITLE = "FE-Volume TRIANGLE Data"'
       do jsolid=1,nsolid
-        write(unitf,'(a)')'variables = "x", "y", "z", "nx", "ny", "nz"'
+        write(unitf,'(a)')'variables = "x","y","z","xc","yc","zc","nx","ny","nz"'
         write(unitf,'(3(A,I0),A)')'ZONE T="P_',jsolid,                    &
                           '", DATAPACKING=BLOCK, NODES=',              &
                          asolid(jsolid)%num_face*3,', ELEMENTS=',      &
                          asolid(jsolid)%num_face,', ZONETYPE=FETRIANGLE'
-        write(unitf,'(A)')'VarLocation=([4-6]=CellCentered)'
+        write(unitf,'(A)')'VarLocation=([4-9]=CellCentered)'
         write(unitf,'(3(1X,E15.7E3))')(asolid(jsolid)%face(j)%a(1),       &
                                     asolid(jsolid)%face(j)%b(1),       &
                                     asolid(jsolid)%face(j)%c(1),       &
@@ -1459,6 +1460,15 @@ module tecio
                                     asolid(jsolid)%face(j)%b(3),       &
                                     asolid(jsolid)%face(j)%c(3),       &
                                     j=1,asolid(jsolid)%num_face)
+        write(unitf,'(8(1X,E15.7E3))')(num1d3*(asolid(jsolid)%face(j)%a(1) + &
+                                               asolid(jsolid)%face(j)%b(1) + &
+                                               asolid(jsolid)%face(j)%c(1)),j=1,asolid(jsolid)%num_face)
+        write(unitf,'(8(1X,E15.7E3))')(num1d3*(asolid(jsolid)%face(j)%a(2) + &
+                                               asolid(jsolid)%face(j)%b(2) + &
+                                               asolid(jsolid)%face(j)%c(2)),j=1,asolid(jsolid)%num_face)
+        write(unitf,'(8(1X,E15.7E3))')(num1d3*(asolid(jsolid)%face(j)%a(3) + &
+                                               asolid(jsolid)%face(j)%b(3) + &
+                                               asolid(jsolid)%face(j)%c(3)),j=1,asolid(jsolid)%num_face)
         write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%face(j)%normdir(1), &
                                             j=1,asolid(jsolid)%num_face)
         write(unitf,'(8(1X,E15.7E3))')(asolid(jsolid)%face(j)%normdir(2), &

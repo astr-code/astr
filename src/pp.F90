@@ -848,18 +848,19 @@ module pp
     use geom,     only : solidrange,solidresc,solidshif,solidimpro
     use tecio,     only : tecsolid
     use stlaio,    only : stla_write
-    use commfunc,  only : cross_product
+    use commfunc,  only : cross_product,dis2point
     !
     ! local data
-    integer :: i,j,k,jf,km,jm,im,nface,nface2,jface,ntrimax
-    real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
-               x1(3),x2(3),x3(3),x4(3),norm1(3),var1,    &
-               ab(3),ac(3),bc(3),abc(3)
+    integer :: i,j,k,jf,km,jm,im,nface,nface2,jface,ntrimax,m,n,l
+    real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi,   &
+               x1(3),x2(3),x3(3),x4(3),norm1(3),norm2(3),var1,var2, &
+               ab(3),ac(3),bc(3),abc(3),xico(12,3),disab,disac,disbc
+    integer :: lmnsav(120,3)
     real(8) :: epsilon
     type(triangle),allocatable :: tempface(:),tempface2(:)
     !
     epsilon=1.d-12
-    ntrimax=5000
+    ntrimax=20000
     !
     print*,' ** generating solid'
     !
@@ -867,56 +868,140 @@ module pp
     allocate(immbody(nsolid))
     immbody(1)%name='sphere'
     !
-    ! first build a tetrahedron
-    !
-    x1(1)=1.d0
-    x1(2)=0.d0
-    x1(3)=-1.d0/sqrt(2.d0)
-    !
-    radi=sqrt(x1(1)**2+x1(2)**2+x1(3)**2)
-    !
-    x2(1)=-1.d0
-    x2(2)=0.d0
-    x2(3)=-1.d0/sqrt(2.d0)
-    !
-    !
-    x3(1)=0.d0
-    x3(2)=1.d0
-    x3(3)=1.d0/sqrt(2.d0)
-    !
-    x4(1)=0.d0
-    x4(2)=-1.d0
-    x4(3)=1.d0/sqrt(2.d0)
-    !
-    x1=x1/radi
-    x2=x2/radi
-    x3=x3/radi
-    x4=x4/radi
-    !
     allocate(tempface(ntrimax),tempface2(2*ntrimax))
     !
+    ! first build a icosahedron
+    !
+    var1=0.5d0*(sqrt(5.d0)+1.d0)
+    !
+    xico(1,1)=0.d0; xico(2,1)= 0.d0; xico(3,1)= 0.d0; xico(4,1)= 0.d0
+    xico(1,2)=1.d0; xico(2,2)= 1.d0; xico(3,2)=-1.d0; xico(4,2)=-1.d0
+    xico(1,3)=var1; xico(2,3)=-var1; xico(3,3)=-var1; xico(4,3)= var1
+    !
+    xico(5,1)=1.d0; xico(6,1)= 1.d0; xico(7,1)=-1.d0; xico(8,1)=-1.d0
+    xico(5,2)=var1; xico(6,2)=-var1; xico(7,2)=-var1; xico(8,2)= var1
+    xico(5,3)=0.d0; xico(6,3)= 0.d0; xico(7,3)= 0.d0; xico(8,3)= 0.d0
+    !
+    xico(9,1)=var1; xico(10,1)=-var1; xico(11,1)=-var1; xico(12,1)= var1
+    xico(9,2)=0.d0; xico(10,2)= 0.d0; xico(11,2)= 0.d0; xico(12,2)= 0.d0
+    xico(9,3)=1.d0; xico(10,3)= 1.d0; xico(11,3)=-1.d0; xico(12,3)=-1.d0
+    !
+    radi=sqrt(xico(1,1)**2+xico(1,2)**2+xico(1,3)**2)
+    print*,' ** radi= ',radi
+    xico=xico/radi
+    var2=2.d0/radi
+    !
     nface=0
+    lmnsav=0.d0
+    do l=1,12
+    do m=1,12
+    do n=1,12
+      !
+      disab=abs(dis2point(xico(m,:),xico(n,:))-var2)
+      disac=abs(dis2point(xico(l,:),xico(n,:))-var2)
+      disbc=abs(dis2point(xico(m,:),xico(l,:))-var2)
+      !
+      if(disab<epsilon .and. disac<epsilon .and. disbc<epsilon) then
+        !
+        do i=1,nface
+          !
+          if( (lmnsav(i,1)==l .and. lmnsav(i,2)==m .and. lmnsav(i,3)==n) .or. &
+              (lmnsav(i,1)==l .and. lmnsav(i,2)==n .and. lmnsav(i,3)==m) .or. &
+              (lmnsav(i,1)==m .and. lmnsav(i,2)==l .and. lmnsav(i,3)==n) .or. &
+              (lmnsav(i,1)==m .and. lmnsav(i,2)==n .and. lmnsav(i,3)==l) .or. &
+              (lmnsav(i,1)==n .and. lmnsav(i,2)==l .and. lmnsav(i,3)==m) .or. &
+              (lmnsav(i,1)==n .and. lmnsav(i,2)==m .and. lmnsav(i,3)==l) ) then
+            exit
+          endif
+        enddo
+        !
+        if(i==nface+1) then
+          !
+          nface=nface+1
+          !
+          print*,' ** nface= ',nface
+          !
+          lmnsav(nface,1)=l
+          lmnsav(nface,2)=m
+          lmnsav(nface,3)=n
+          !
+          tempface(nface)%a=xico(l,:)
+          tempface(nface)%b=xico(m,:)
+          tempface(nface)%c=xico(n,:)
+          !
+          norm1=cross_product(tempface(nface)%b-tempface(nface)%a,         &
+                              tempface(nface)%c-tempface(nface)%a )
+          norm2=tempface(nface)%a
+          !
+          if(dot_product(norm1,norm2)<0.d0) then
+            !
+            tempface(nface)%a=xico(l,:)
+            tempface(nface)%b=xico(n,:)
+            tempface(nface)%c=xico(m,:)
+            !
+            norm1=cross_product(tempface(nface)%b-tempface(nface)%a,         &
+                                tempface(nface)%c-tempface(nface)%a )
+            norm2=tempface(nface)%a
+            !
+          endif
+          !
+          !
+        endif
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
     !
-    nface=nface+1
-    tempface(nface)%a=x1
-    tempface(nface)%b=x2
-    tempface(nface)%c=x3
-    !
-    nface=nface+1
-    tempface(nface)%a=x1
-    tempface(nface)%b=x2
-    tempface(nface)%c=x4
-    !
-    nface=nface+1
-    tempface(nface)%a=x2
-    tempface(nface)%b=x3
-    tempface(nface)%c=x4
-    !
-    nface=nface+1
-    tempface(nface)%a=x1
-    tempface(nface)%b=x3
-    tempface(nface)%c=x4
-    !
+    ! x1(1)=1.d0
+    ! x1(2)=0.d0
+    ! x1(3)=-1.d0/sqrt(2.d0)
+    ! !
+    ! radi=sqrt(x1(1)**2+x1(2)**2+x1(3)**2)
+    ! !
+    ! x2(1)=-1.d0
+    ! x2(2)=0.d0
+    ! x2(3)=-1.d0/sqrt(2.d0)
+    ! !
+    ! !
+    ! x3(1)=0.d0
+    ! x3(2)=1.d0
+    ! x3(3)=1.d0/sqrt(2.d0)
+    ! !
+    ! x4(1)=0.d0
+    ! x4(2)=-1.d0
+    ! x4(3)=1.d0/sqrt(2.d0)
+    ! !
+    ! x1=x1/radi
+    ! x2=x2/radi
+    ! x3=x3/radi
+    ! x4=x4/radi
+    ! !
+    ! allocate(tempface(ntrimax),tempface2(2*ntrimax))
+    ! !
+    ! nface=0
+    ! !
+    ! nface=nface+1
+    ! tempface(nface)%a=x1
+    ! tempface(nface)%b=x2
+    ! tempface(nface)%c=x3
+    ! !
+    ! nface=nface+1
+    ! tempface(nface)%a=x1
+    ! tempface(nface)%b=x2
+    ! tempface(nface)%c=x4
+    ! !
+    ! nface=nface+1
+    ! tempface(nface)%a=x2
+    ! tempface(nface)%b=x3
+    ! tempface(nface)%c=x4
+    ! !
+    ! nface=nface+1
+    ! tempface(nface)%a=x1
+    ! tempface(nface)%b=x3
+    ! tempface(nface)%c=x4
+    ! !
     do while(nface<ntrimax)
       !
       nface2=0
