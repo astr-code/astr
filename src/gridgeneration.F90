@@ -39,6 +39,8 @@ module gridgeneration
         call gridcube(10.d0,1.d0,1.d0)
       elseif(trim(flowtype)=='shuosher') then
         call grid1d(-5.d0,5.d0)
+      elseif(trim(flowtype)=='windtunn') then
+        call gridcube(20.d0,10.d0,10.d0)
       else
         print*,trim(flowtype),'not defined @ gridgen'
         stop ' !! error at gridgen' 

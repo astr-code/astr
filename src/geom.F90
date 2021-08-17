@@ -84,6 +84,8 @@ module geom
         !
         if(ndims==2) then
           call solidreduc(immbody(js))
+        else
+          immbody(js)%num_edge=0
         endif
         !
       enddo

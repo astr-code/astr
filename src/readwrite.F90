@@ -1334,11 +1334,11 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
     endif
     !
-    if(limmbou .and. mpirank==imbroot) then
-      ! call imboundarydata 
-      !
-      call writecylimmbou
-    endif
+    ! if(limmbou .and. mpirank==imbroot) then
+    !   ! call imboundarydata 
+    !   !
+    !   call writecylimmbou
+    ! endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
     !     print*,'------------------------------------'

@@ -1779,6 +1779,27 @@ module bc
       enddo
       deallocate(qfilt)
       !
+      if(ndims==3) then 
+        !
+        allocate(qfilt(0:km,1:numq))
+        do i=0,im
+          !
+          do jq=1,numq
+            qfilt(:,jq)=spafilter6exp(q(i,j,:,jq),npdck,km)
+            q(i,j,0:km,jq)=qfilt(:,jq)
+          enddo
+          call q2fvar(      q=  q(i,j,0:km,:),                 &
+                      density=rho(i,j,0:km),                   &
+                     velocity=vel(i,j,0:km,:),                 &
+                     pressure=prs(i,j,0:km),                   &
+                  temperature=tmp(i,j,0:km),                   &
+                      species=spc(i,j,0:km,:)                  )
+          !
+        enddo
+        deallocate(qfilt)
+        !
+      endif
+      !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
       ! do i=is,ie
@@ -1983,6 +2004,27 @@ module bc
         !
       enddo
       deallocate(qfilt)
+      !
+      if(ndims==3) then 
+        !
+        allocate(qfilt(0:km,1:numq))
+        do i=0,im
+          !
+          do jq=1,numq
+            qfilt(:,jq)=spafilter6exp(q(i,j,:,jq),npdck,km)
+            q(i,j,0:km,jq)=qfilt(:,jq)
+          enddo
+          call q2fvar(      q=  q(i,j,0:km,:),                 &
+                      density=rho(i,j,0:km),                   &
+                     velocity=vel(i,j,0:km,:),                 &
+                     pressure=prs(i,j,0:km),                   &
+                  temperature=tmp(i,j,0:km),                   &
+                      species=spc(i,j,0:km,:)                  )
+          !
+        enddo
+        deallocate(qfilt)
+        !
+      endif
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
@@ -2209,11 +2251,28 @@ module bc
       enddo
       deallocate(qfilt)
       !
+      allocate(qfilt(0:jm,1:numq))
+      do i=0,im
+        !
+        do jq=1,numq
+          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+          q(i,0:jm,k,jq)=qfilt(:,jq)
+        enddo
+        call q2fvar(      q=  q(i,0:jm,k,:),                   &
+                    density=rho(i,0:jm,k),                     &
+                   velocity=vel(i,0:jm,k,:),                   &
+                   pressure=prs(i,0:jm,k),                     &
+                temperature=tmp(i,0:jm,k),                     &
+                    species=spc(i,0:jm,k,:)                    )
+        !
+      enddo
+      deallocate(qfilt)
+      !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
-      ! do j=js,je
-      ! do i=is,ie
       do j=0,jm
       do i=0,im
+        ! do j=js,je
+        ! do i=is,ie
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
                      vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,3,:),inv=.false.)
@@ -2267,13 +2326,13 @@ module bc
         G(4)= q(i,j,k,4)*vel(i,j,k,3)+prs(i,j,k)
         G(5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
         !
-        jcbi(1)= deriv( dxi(i,j,k,3,1)  *jacob(i,j,k),                 &
+        jcbi(1)= deriv( dxi(i,j,k,  3,1)*jacob(i,j,k),                 &
                         dxi(i,j,k+1,3,1)*jacob(i,j,k+1),               &
                         dxi(i,j,k+2,3,1)*jacob(i,j,k+2) )
-        jcbi(2)= deriv( dxi(i,j,k,3,2)  *jacob(i,j,k),                 &
+        jcbi(2)= deriv( dxi(i,j,k,  3,2)*jacob(i,j,k),                 &
                         dxi(i,j,k+1,3,2)*jacob(i,j,k+1),               &
                         dxi(i,j,k+2,3,2)*jacob(i,j,k+2) )
-        jcbi(3)= deriv( dxi(i,j,k,3,3)  *jacob(i,j,k),                 &
+        jcbi(3)= deriv( dxi(i,j,k,  3,3)*jacob(i,j,k),                 &
                         dxi(i,j,k+1,3,3)*jacob(i,j,k+1),               &
                         dxi(i,j,k+2,3,3)*jacob(i,j,k+2) )
         !
@@ -2293,9 +2352,9 @@ module bc
         !
         css=sos(tmp(i,j,k))
         !
-        uu=-(dxi(i,j,k,3,1)*vel(i,j,k,1) +                            &
-             dxi(i,j,k,3,2)*vel(i,j,k,2) +                            &
-             dxi(i,j,k,3,3)*vel(i,j,k,3))
+        ! uu=-(dxi(i,j,k,3,1)*vel(i,j,k,1) +                            &
+        !      dxi(i,j,k,3,2)*vel(i,j,k,2) +                            &
+        !      dxi(i,j,k,3,3)*vel(i,j,k,3))
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(zmax-zmin)
           LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
@@ -2410,6 +2469,23 @@ module bc
       enddo
       deallocate(qfilt)
       !
+      allocate(qfilt(0:jm,1:numq))
+      do i=0,im
+        !
+        do jq=1,numq
+          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+          q(i,0:jm,k,jq)=qfilt(:,jq)
+        enddo
+        call q2fvar(      q=  q(i,0:jm,k,:),                   &
+                    density=rho(i,0:jm,k),                     &
+                   velocity=vel(i,0:jm,k,:),                   &
+                   pressure=prs(i,0:jm,k),                     &
+                temperature=tmp(i,0:jm,k),                     &
+                    species=spc(i,0:jm,k,:)                    )
+        !
+      enddo
+      deallocate(qfilt)
+      !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       do j=0,jm
       do i=0,im
@@ -2432,14 +2508,14 @@ module bc
         ! end if
         !
         do ii=0,2
-          uu=dxi(i,j,k-ii,2,1)*vel(i,j,k-ii,1) +                       &
-             dxi(i,j,k-ii,2,2)*vel(i,j,k-ii,2) +                       &
-             dxi(i,j,k-ii,2,3)*vel(i,j,k-ii,3)
+          uu=dxi(i,j,k-ii,3,1)*vel(i,j,k-ii,1) +                       &
+             dxi(i,j,k-ii,3,2)*vel(i,j,k-ii,2) +                       &
+             dxi(i,j,k-ii,3,3)*vel(i,j,k-ii,3)
           !
           Ecs(ii,1)=jacob(i,j,k-ii)*  q(i,j,k-ii,1)*uu
-          Ecs(ii,2)=jacob(i,j,k-ii)*( q(i,j,k-ii,2)*uu+dxi(i,j,k-ii,2,1)*prs(i,j,k-ii) )
-          Ecs(ii,3)=jacob(i,j,k-ii)*( q(i,j,k-ii,3)*uu+dxi(i,j,k-ii,2,2)*prs(i,j,k-ii) )
-          Ecs(ii,4)=jacob(i,j,k-ii)*( q(i,j,k-ii,4)*uu+dxi(i,j,k-ii,2,3)*prs(i,j,k-ii) )
+          Ecs(ii,2)=jacob(i,j,k-ii)*( q(i,j,k-ii,2)*uu+dxi(i,j,k-ii,3,1)*prs(i,j,k-ii) )
+          Ecs(ii,3)=jacob(i,j,k-ii)*( q(i,j,k-ii,3)*uu+dxi(i,j,k-ii,3,2)*prs(i,j,k-ii) )
+          Ecs(ii,4)=jacob(i,j,k-ii)*( q(i,j,k-ii,4)*uu+dxi(i,j,k-ii,3,3)*prs(i,j,k-ii) )
           Ecs(ii,5)=jacob(i,j,k-ii)*( q(i,j,k-ii,5)+prs(i,j,k-ii) )*uu
           do jspc=1,num_species
             Ecs(ii,5+jspc)=jacob(i,j,k-ii)*q(i,j,k-ii,5+jspc)*uu
@@ -2468,13 +2544,13 @@ module bc
         G(4)= q(i,j,k,4)*vel(i,j,k,3)+prs(i,j,k)
         G(5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
         !
-        jcbi(1)=-deriv( dxi(i,j,k,3,1)  *jacob(i,j,k),                 &
+        jcbi(1)=-deriv( dxi(i,j,k,  3,1)*jacob(i,j,k),                 &
                         dxi(i,j,k-1,3,1)*jacob(i,j,k-1),               &
                         dxi(i,j,k-2,3,1)*jacob(i,j,k-2) )
-        jcbi(2)=-deriv( dxi(i,j,k,3,2)  *jacob(i,j,k),                 &
+        jcbi(2)=-deriv( dxi(i,j,k,  3,2)*jacob(i,j,k),                 &
                         dxi(i,j,k-1,3,2)*jacob(i,j,k-1),               &
                         dxi(i,j,k-2,3,2)*jacob(i,j,k-2) )
-        jcbi(3)=-deriv( dxi(i,j,k,3,3)  *jacob(i,j,k),                 &
+        jcbi(3)=-deriv( dxi(i,j,k,  3,3)*jacob(i,j,k),                 &
                         dxi(i,j,k-1,3,3)*jacob(i,j,k-1),               &
                         dxi(i,j,k-2,3,3)*jacob(i,j,k-2) )
         !
