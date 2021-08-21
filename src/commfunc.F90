@@ -3516,6 +3516,24 @@ module commfunc
     !
   end function MP7LD
   !
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! this fuction is the 3-variable median() function.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function median(var1,var2,var3)
+    !
+    real(8),intent(in) :: var1,var2,var3
+    real(8) :: median
+    !
+    median= var1+minmod2(var2-var1,var3-var1)
+    !
+    return
+    !
+  end function median
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function median.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! this fuction is the 2-variable minmod() function.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -4099,6 +4117,100 @@ module commfunc
   !| The end of the function matinv.                                   |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  ! Inverse matrix
+  ! Method: Invert matrix by Gauss method
+  !-----------------------------------------------------------
+  ! input ...
+  ! a(n,n) - array of coefficients for matrix A
+  ! n      - dimension
+  ! output ...
+  ! aa(n,n) - inverse matrix of A
+  ! comments ...
+  !+-------------------------------------------------------------------+
+  ! http://computer-programming-forum.com/49-fortran/55ed2ad2a9e4cef7.htm
+  !+-------------------------------------------------------------------+
+  function matinv (a,n) result(aa)  
+    !
+    real(8),intent(in) :: a(n,n)
+    integer,intent(in) :: n
+    real(8) :: aa(n,n)
+    !
+    ! - - - local variables - - -
+    real(8) :: b(n,n), c, d, temp(n)
+    integer :: i, j, k, m, imax(1), ipvt(n)
+    ! - - - - - - - - - - - - - -
+    b = a
+    ipvt = (/ (i, i = 1, n) /)
+    do k = 1,n
+       imax = maxloc(abs(b(k:n,k)))
+       m = k-1+imax(1)
+       if (m /= k) then
+          ipvt( (/m,k/) ) = ipvt( (/k,m/) )
+          b((/m,k/),:) = b((/k,m/),:)
+       end if
+       d = 1/b(k,k)
+       temp = b(:,k)
+       do j = 1, n
+          c = b(k,j)*d
+          b(:,j) = b(:,j)-temp*c
+          b(k,j) = c
+       end do
+       b(:,k) = temp*(-d)
+       b(k,k) = d
+    end do
+    aa(:,ipvt) = b
+    !
+    return
+    !
+  end function matinv
+  !+-------------------------------------------------------------------+
+  !| The end of the function matinv.                                   |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to check if a matrix is an Identity matrix.    | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 18-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure logical function isidenmar(a,epsilon) result(iden)
+    !
+    ! arguments
+    real(8),intent(in) :: a(:,:)
+    real(8),intent(in) :: epsilon
+    !
+    ! local data
+    integer :: n,i,j
+    !
+    n=size(a,1)
+    !
+    iden=.true.
+    !
+    do j=1,n
+      if(abs(a(j,j)-1.d0)>epsilon) then
+        iden=.false.
+        return
+      endif
+    enddo
+    !
+    do j=1,n
+    do i=1,n
+      if(i==j) cycle
+      if(abs(a(i,j))>epsilon) then
+        iden=.false.
+        return
+      endif
+    enddo
+    enddo
+    !
+    return
+    !
+  end function isidenmar
+  !+-------------------------------------------------------------------+
+  !| The end of the function isidenmar.                                |
+  !+-------------------------------------------------------------------+
   !
 end module commfunc
 !+---------------------------------------------------------------------+

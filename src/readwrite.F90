@@ -431,10 +431,8 @@ module readwrite
       read(fh,*)ninit
       read(fh,'(/)')
       read(fh,*)spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
-      if(lreadgrid) then
-        read(fh,'(/)')
-        read(fh,'(A)')gridfile
-      endif
+      read(fh,'(/)')
+      read(fh,'(A)')gridfile
       if(limmbou) then
         read(fh,'(/)')
         read(fh,'(A)')solidfile
@@ -1672,6 +1670,188 @@ module readwrite
   !| The end of the subroutine timerept.                               |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to write immersed boundary structure           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 18-Aug-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine write_sboun(abound,item2w)
+    !
+    use commtype, only : sboun
+    use commvar,  only : ndims
+    use commarray,only : x
+    use commcal,  only : ijkin
+    !
+    ! arguments
+    type(sboun),intent(in) :: abound(:)
+    character(len=*),intent(in) :: item2w
+    !
+    ! local data
+    integer :: counter,n,n1,m,i,j,k,fh
+    real(8),allocatable :: xcell(:,:)
+    !
+    select case(item2w)
+    case('bound')
+      !
+      counter=0
+      do n=1,size(abound)
+        if(abound(n)%localin) counter=counter+1
+      enddo
+      !
+      if(counter>0) then
+        fh=get_unit()
+        open(fh,file='tecbound'//mpirankname//'.dat')
+        write(fh,'(A)')' VARIABLES = "x" "y" "z" '
+        write(fh,'(A)')'ZONE T="ZONE 001"'
+        write(fh,'(A,I0,A)')'I=',counter,', J=1, K=1, ZONETYPE=Ordered'
+        write(fh,'(A)')'DATAPACKING=POINT'
+        do n=1,size(abound)
+          if(abound(n)%localin) then
+            write(fh,'(3(1X,E20.13E2))')abound(n)%x(:)
+          endif
+        enddo
+        close(fh)
+        print*,' << tecbound,',mpirankname,'.dat'
+      endif
+      !
+    case('ghost')
+      !
+      counter=0
+      do n=1,size(abound)
+        i=abound(n)%igh(1)-ig0
+        j=abound(n)%igh(2)-jg0
+        k=abound(n)%igh(3)-kg0
+        if(ijkin(i,j,k)) counter=counter+1
+      enddo
+      !
+      if(counter>0) then
+        !
+        fh=get_unit()
+        open(fh,file='tecghost'//mpirankname//'.dat')
+        write(fh,'(A)')' VARIABLES = "x" "y" "z" '
+        write(fh,'(A)')'ZONE T="ZONE 001"'
+        write(fh,'(A,I0,A)')'I=',counter,', J=1, K=1, ZONETYPE=Ordered'
+        write(fh,'(A)')'DATAPACKING=POINT'
+        do n=1,size(abound)
+          i=abound(n)%igh(1)-ig0
+          j=abound(n)%igh(2)-jg0
+          k=abound(n)%igh(3)-kg0
+          if(ijkin(i,j,k)) then
+            write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
+          endif
+        enddo
+        close(fh)
+        print*,' << tecghost',mpirankname,'.dat'
+        !
+      endif
+      !
+    case('image')
+      !
+      counter=0
+      do n=1,size(abound)
+        if(abound(n)%localin) counter=counter+1
+      enddo
+      !
+      if(counter>0) then
+        fh=get_unit()
+        open(fh,file='tecimage'//mpirankname//'.dat')
+        write(fh,'(A)')' VARIABLES = "x" "y" "z" '
+        write(fh,'(A)')'ZONE T="ZONE 001"'
+        write(fh,'(A,I0,A)')'I=',counter,', J=1, K=1, ZONETYPE=Ordered'
+        write(fh,'(A)')'DATAPACKING=POINT'
+        do n=1,size(abound)
+          if(abound(n)%localin) then
+            write(fh,'(3(1X,E20.13E2))')abound(n)%ximag(:)
+          endif
+        enddo
+        close(fh)
+        print*,' << tecimage',mpirankname,'.dat'
+      endif
+      !
+    case('icell')
+      !
+      allocate(xcell(1:2**ndims,1:3))
+      !
+      counter=0
+      do n=1,size(abound)
+        if(abound(n)%cellin) counter=counter+1
+      enddo
+      !
+      if(counter>0) then
+        !
+        fh=get_unit()
+        open(fh,file='tecicell'//mpirankname//'.dat')
+        !
+        if(ndims==2) then
+          write(fh,'(A)')'TITLE = "FE-Volume QUADRILATERAL Data"'
+          write(fh,'(a)')'variables = "x", "y", "z"'
+          write(fh,'((A,I0,A))')'ZONE T="',mpirank,'"'
+          write(fh,'(2(A,I0),A)')'DATAPACKING=POINT, NODES= ',counter*4, &
+                                 ', ELEMENTS= ',counter,', ZONETYPE=FEQUADRILATERAL'
+        elseif(ndims==3) then
+          write(fh,'(A)')'TITLE = "FE-Volume BRICK Data"'
+          write(fh,'(a)')'variables = "x", "y", "z"'
+          write(fh,'((A,I0,A))')'ZONE T="',mpirank,'"'
+          write(fh,'(2(A,I0),A)')'DATAPACKING=POINT, NODES= ',counter*8, &
+                                 ', ELEMENTS= ',counter,', ZONETYPE=FEBRICK'
+        endif
+        !
+        do n=1,size(abound)
+          !
+          i=abound(n)%icell(1)-ig0
+          j=abound(n)%icell(2)-jg0
+          k=abound(n)%icell(3)-kg0
+          !
+          if(abound(n)%cellin) then
+            !
+            do m=1,2**ndims
+              !
+              if(abound(n)%icell_ijk(m,1)>=0) then
+                i=abound(n)%icell_ijk(m,1)
+                j=abound(n)%icell_ijk(m,2)
+                k=abound(n)%icell_ijk(m,3)
+                xcell(m,:)=x(i,j,k,:)
+              elseif(abound(n)%icell_bnode(m)>0) then
+                n1=abound(n)%icell_bnode(m)
+                xcell(m,:)=abound(n1)%x(:)
+              endif
+              !
+            enddo
+            !
+            write(fh,'(3(1X,E20.13E2))')xcell(1,:)
+            write(fh,'(3(1X,E20.13E2))')xcell(2,:)
+            write(fh,'(3(1X,E20.13E2))')xcell(4,:)
+            write(fh,'(3(1X,E20.13E2))')xcell(3,:)
+            !
+            if(ndims==3) then
+              write(fh,'(3(1X,E20.13E2))')xcell(5,:)
+              write(fh,'(3(1X,E20.13E2))')xcell(6,:)
+              write(fh,'(3(1X,E20.13E2))')xcell(8,:)
+              write(fh,'(3(1X,E20.13E2))')xcell(7,:)
+            endif
+            !
+          endif
+        enddo
+        write(fh,'(8(1X,I0))')(m,m=1,counter*2**ndims)
+        close(fh)
+        print*,' << tecicell',mpirankname,'.dat'
+        !
+      endif
+      !
+      deallocate(xcell)
+      !
+    case default
+      stop ' ERROR 1, item2w not defined @ write_sboun'
+    end select
+    !
+    !
+  end subroutine write_sboun
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine write_sboun.                            |
+  !+-------------------------------------------------------------------+
+  !!
   !+-------------------------------------------------------------------+
   !| This function Verifies that a character string represents a       |
   !|  numerical value                                                  |

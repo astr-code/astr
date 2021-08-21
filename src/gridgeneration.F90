@@ -221,7 +221,7 @@ module gridgeneration
         x(i,j,k,2)=ly/real(ja,8)*real(j+jg0,8)
       endif
       if(ka==0) then
-        x(i,j,k,3)=lz
+        x(i,j,k,3)=0.d0
       else
         x(i,j,k,3)=lz/real(ka,8)*real(k+kg0,8)
       endif

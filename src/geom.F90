@@ -90,6 +90,8 @@ module geom
         !
       enddo
       !
+      call tecsolid('tecsolid.plt',immbody)
+      !
     endif
     !
     return
@@ -113,30 +115,36 @@ module geom
                           npdci,npdcj,npdck,ndims,imb_node_have,       &
                           imb_node_need,num_icell_rank,num_ighost_rank
     use commarray, only : x,nodestat,cell
-    use commfunc,  only : dis2point,dis2point2,matinv4
+    use commfunc,  only : dis2point,dis2point2,matinv4,matinv,isidenmar
     use commcal,   only : ijkin
     use parallel,  only : ig0,jg0,kg0,pmerg,syncinmg,syncisup,psum,    &
-                          syncweig,pgeticell,pgather
+                          syncweig,pgeticell,pcollecicell,pgather
+    use readwrite, only : write_sboun
     !
     ! local data
     integer :: i,j,k,jsd,jfc,counter,ninters,n,n1,m,ii,jj,kk,bignum,   &
-               jb,kb,jdir,jx,iss,jss,kss,nc_f,nc_g,nc_b
+               jb,kb,jdir,jx,iss,jss,kss,ks1,nc_f,nc_g,nc_b,k1,i0,j0,k0
     integer :: fh,ncou,ke1,icell_counter,ighost_counter
     integer,allocatable :: icell_order(:),ighost_order(:)
     type(solid),pointer :: pso
     logical :: crossface
     real(8),allocatable :: rnodestat(:,:,:)
-    integer :: snodes(27,3),i_cell(3)
+    integer :: snodes(27,3)
+    integer,allocatable :: i_cell(:,:)
     real(8) :: epsilon
     real(8) :: dist,distmin,var1,var2
-    real(8) :: xmin(3),xmax(3),xcell(4,3),xnorm(4,3)
-    real(8) :: Tm1(4,4),Tm2(4,4),Ti1(4,4),Ti2(4,4),xvec(4)
+    real(8) :: xmin(3),xmax(3)
+    real(8),allocatable :: Tm1(:,:),Tm2(:,:),Ti1(:,:),Ti2(:,:),        &
+                           xvec(:),xcell(:,:),xnorm(:,:)
     !
     type(sboun),allocatable :: bnodes(:)
     logical :: liout,ljout,lkout,lin
     logical,allocatable :: marker(:,:,:)
+    real(8) :: time_beg,time_loc,subtime,subtime1,subtime2,subtime3
     !
-    if(lio) print*,' ** calculating grid in solid'
+    time_beg=ptime() 
+    !
+    if(lio) print*,' ** grid in solid calculating ...'
     !
     epsilon=1.d-10
     !
@@ -162,6 +170,21 @@ module geom
       kss=0
     else
       kss=1
+    endif
+    !
+    if(ndims==2) then
+      k1=0
+      ks1=0
+      !
+      allocate( Tm1(4,4),Tm2(4,4),Ti1(4,4),Ti2(4,4),xvec(4),          &
+                xcell(4,3),xnorm(4,3))
+      !
+    elseif(ndims==3) then
+      k1=-1
+      ks1=1
+      !
+      allocate( Tm1(8,8),Tm2(8,8),Ti1(8,8),Ti2(8,8),xvec(8),          &
+                xcell(8,3),xnorm(8,3))
     endif
     !
     do jsd=1,nsolid
@@ -197,6 +220,19 @@ module geom
           else
             ! fluids
             nodestat(i,j,k)=0
+            !
+            ! if(dis2point(x(i,j,k,:),pso%xcen(:))<0.9d0) then
+            !   !
+            !   if(mpirank==0) then
+            !     print*,x(i,j,k,1),'~',pso%xcen(1)
+            !     print*,x(i,j,k,2),'~',pso%xcen(2)
+            !     print*,x(i,j,k,3),'~',pso%xcen(3),':',dis2point(x(i,j,k,:),pso%xcen(:))
+            !     print*,'--------------------------------'
+            !     crossface=polyhedron_contains_point_3d(pso,x(i,j,k,:),debug=.true.)
+            !   endif
+            !   !
+            ! endif
+            !
           endif
           !
         endif
@@ -208,6 +244,8 @@ module geom
     enddo
     !
     call dataswap(nodestat)
+    !
+    if(lio) print*,'    ** state of grid nodes calculated'
     !
     ! search for near-boundary ghost nodes (1-5)
     allocate(marker(0:im,0:jm,0:km))
@@ -265,6 +303,7 @@ module geom
       n=n+1
       !
     enddo
+    !
     !
     ! search for near-boundary force nodes (1-5)
     !
@@ -350,39 +389,88 @@ module geom
       nodestat(:,:,km+1:km+hm)=10
     endif
     !
-    if(ndims==3) return
+    if(lio) print*,'    ** near-boundary ghost nodes identified'
     !
-    ! set cell state. currently, 2D only
-    do k=kss,km
-    do j=1,jm
-    do i=1,im
+    ! set cell state.
+    if(ndims==2) then
       !
-      if( nodestat(i-1,j-1,k)<=0 .and. &
-          nodestat(i,  j-1,k)<=0 .and. &
-          nodestat(i,  j,  k)<=0 .and. &
-          nodestat(i-1,j,  k)<=0 ) then
+      do k=ks1,km
+      do j=1,jm
+      do i=1,im
         !
-        cell(i,j,k)%celltype='f'
-        ! fluids
+        if( nodestat(i-1,j-1,k)<=0 .and. &
+            nodestat(i,  j-1,k)<=0 .and. &
+            nodestat(i,  j,  k)<=0 .and. &
+            nodestat(i-1,j,  k)<=0 ) then
+          !
+          cell(i,j,k)%celltype='f'
+          ! fluids
+          !
+        elseif( nodestat(i-1,j-1,k)>0 .and. &
+                nodestat(i,  j-1,k)>0 .and. &
+                nodestat(i,  j,  k)>0 .and. &
+                nodestat(i-1,j,  k)>0 ) then
+          !
+          cell(i,j,k)%celltype='s'
+          ! solid
+          !
+        else
+          !
+          cell(i,j,k)%celltype='i'
+          ! interface
+          !
+        endif
         !
-      elseif( nodestat(i-1,j-1,k)>0 .and. &
-              nodestat(i,  j-1,k)>0 .and. &
-              nodestat(i,  j,  k)>0 .and. &
-              nodestat(i-1,j,  k)>0 ) then
-        !
-        cell(i,j,k)%celltype='s'
-        ! solid
-        !
-      else
-        !
-        cell(i,j,k)%celltype='i'
-        ! interface
-        !
-      endif
+      enddo
+      enddo
+      enddo
       !
-    enddo
-    enddo
-    enddo
+    elseif(ndims==3) then
+      !
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        !
+        if( nodestat(i-1,j-1,k)  <=0 .and. &
+            nodestat(i,  j-1,k)  <=0 .and. &
+            nodestat(i,  j,  k)  <=0 .and. &
+            nodestat(i-1,j,  k)  <=0 .and. &
+            nodestat(i-1,j-1,k-1)<=0 .and. &
+            nodestat(i,  j-1,k-1)<=0 .and. &
+            nodestat(i,  j,  k-1)<=0 .and. &
+            nodestat(i-1,j,  k-1)<=0 ) then
+          !
+          cell(i,j,k)%celltype='f'
+          ! fluids
+          !
+        elseif( nodestat(i-1,j-1,k)  >0 .and. &
+                nodestat(i,  j-1,k)  >0 .and. &
+                nodestat(i,  j,  k)  >0 .and. &
+                nodestat(i-1,j,  k)  >0 .and. &
+                nodestat(i-1,j-1,k-1)>0 .and. &
+                nodestat(i,  j-1,k-1)>0 .and. &
+                nodestat(i,  j,  k-1)>0 .and. &
+                nodestat(i-1,j,  k-1)>0) then
+          !
+          cell(i,j,k)%celltype='s'
+          ! solid
+          !
+        else
+          !
+          cell(i,j,k)%celltype='i'
+          ! interface
+          !
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+    else 
+      stop ' !! ERROR in ndims @ solidgeom'
+    endif
+    !
+    if(lio) print*,'    ** cell state set'
     !
     bignum=im*jm*(km+1)
     allocate(bnodes(bignum))
@@ -395,6 +483,9 @@ module geom
     !
     marker=.false.
     !
+    subtime1=0.d0
+    subtime2=0.d0
+    subtime3=0.d0
     do jsd=1,nsolid
       !
       pso=>immbody(jsd)
@@ -431,19 +522,19 @@ module geom
         elseif(nodestat(i,j,k)==-1) then
           ! force point
           !
-          ! counter=counter+1
-          ! !
-          ! call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='-')
-          ! !
-          ! bnodes(counter)%igh(1)=i+ig0
-          ! bnodes(counter)%igh(2)=j+jg0
-          ! bnodes(counter)%igh(3)=k+kg0
-          ! !
-          ! bnodes(counter)%ximag(:)=2.d0*x(i,j,k,:)-bnodes(counter)%x(:)
-          ! !
-          ! bnodes(counter)%nodetype='f'
-          ! !
-          ! nc_f=nc_f+1
+          counter=counter+1
+          !
+          call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='-')
+          !
+          bnodes(counter)%igh(1)=i+ig0
+          bnodes(counter)%igh(2)=j+jg0
+          bnodes(counter)%igh(3)=k+kg0
+          !
+          bnodes(counter)%ximag(:)=2.d0*x(i,j,k,:)-bnodes(counter)%x(:)
+          !
+          bnodes(counter)%nodetype='f'
+          !
+          nc_f=nc_f+1
         endif
         !
       enddo
@@ -454,20 +545,23 @@ module geom
     !
     call pmerg(var=bnodes,nvar=counter,vmerg=immbnod)
     !
+    if(lio) print*,'    ** ghost, boundary and image nodes collected'
+    !
     nc_b=psum(nc_b)
     nc_f=psum(nc_f)
     nc_g=psum(nc_g)
     if(lio) then
-      write(*,'(A,I0)')'  ** number of boundary nodes: ',size(immbnod)
-      write(*,'(A,I0)')'     **   ghost nodes: ',nc_g
-      write(*,'(A,I0)')'     ** forcing nodes: ',nc_f
-      write(*,'(A,I0)')'    ** boundary nodes: ',nc_b
+      write(*,'(A,I0)')'     ** number of boundary nodes: ',size(immbnod)
+      write(*,'(A,I0)')'        **   ghost nodes: ',nc_g
+      write(*,'(A,I0)')'        ** forcing nodes: ',nc_f
+      write(*,'(A,I0)')'       ** boundary nodes: ',nc_b
     endif
     !
     allocate( icell_order(1:size(immbnod)),                            &
               ighost_order(1:size(immbnod)*8),                         &
               num_icell_rank(0:mpirankmax),                            &
-              num_ighost_rank(0:mpirankmax) )
+              num_ighost_rank(0:mpirankmax),                           &
+              i_cell(size(immbnod),3) )
     !
     num_ighost_rank=0
     num_icell_rank=0
@@ -477,93 +571,142 @@ module geom
     icell_counter=0
     ighost_counter=0
     !
-    if(ndims==2) then
+    if(lio) print*,'    ** searching cells containing image nodes ... '
+    !
+    i_cell=0
+    !
+    time_loc=ptime()
+    !
+    do jb=1,size(immbnod)
       !
-      do jb=1,size(immbnod)
-        !
-        ! search the cell that contains the image node
-        i_cell=0
-        !
-        loopk: do k=kss,km
+      ! search the cell that contains the image node
+      !
+      if(ndims==2) then
+        k=0
         loopj: do j=1,jm
         loopi: do i=1,im
+          !
           !
           lin=nodeincell(cell(i,j,k),immbnod(jb)%ximag)
           !
           if(lin) then
             !
-            i_cell(1)=i+ig0
-            i_cell(2)=j+jg0
-            i_cell(3)=k+kg0
+            i_cell(jb,1)=i+ig0
+            i_cell(jb,2)=j+jg0
+            i_cell(jb,3)=k+kg0
             !
-            exit loopk
+            ! print*,' ** icell found for jb=',jb,' rank=',mpirank
+            !
+            exit loopj
             !
           endif
           !
         enddo loopi
         enddo loopj
-        enddo loopk
+      elseif(ndims==3) then
         !
+        i_cell(jb,:)=pngrid(immbnod(jb)%ximag)
         !
-        immbnod(jb)%icell=pgeticell(i_cell)
+      endif
+      !
+    enddo
+    !
+    subtime1=subtime1+ptime()-time_loc 
+    !
+    time_loc=ptime()
+    !
+    ! put icell to immbnod
+    call pcollecicell(i_cell,immbnod)
+    !
+    subtime2=ptime()-time_loc 
+    !
+    ! to check if icell contain a ghost node
+    do jb=1,size(immbnod)
+      !
+      !
+      ! time_loc=ptime()
+      ! !
+      ! immbnod(jb)%icell=pgeticell(i_cell(jb,:))
+      ! !
+      ! subtime2=subtime2+ptime()-time_loc 
+      !
+      immbnod(jb)%icell_bnode=0
+      immbnod(jb)%icell_ijk=-1
+      !
+      time_loc=ptime()
+      !
+      ncou=0
+      do kk=k1,0
+      do jj=-1,0
+      do ii=-1,0
         !
-        ! if(jb==725) then
-        !   print*,mpirank,jb,'|',immbnod(jb)%icell(1:2),'-',immbnod(jb)%icell_rank
-        ! endif
+        ncou=ncou+1
         !
-        ! to check if icell contain a ghost node
-        immbnod(jb)%icell_bnode=0
-        immbnod(jb)%icell_ijk=-1
+        i=immbnod(jb)%icell(1)-ig0+ii
+        j=immbnod(jb)%icell(2)-jg0+jj
+        k=immbnod(jb)%icell(3)-kg0+kk
         !
-        ncou=0
-        do jj=-1,0
-        do ii=-1,0
+        immbnod(jb)%icell_ijk(ncou,1)=i
+        immbnod(jb)%icell_ijk(ncou,2)=j
+        immbnod(jb)%icell_ijk(ncou,3)=k
+        !
+        if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm .and. k>=0 .and. k<=km) then
           !
-          ncou=ncou+1
-          !
-          i=immbnod(jb)%icell(1)-ig0+ii
-          j=immbnod(jb)%icell(2)-jg0+jj
-          k=immbnod(jb)%icell(3)-kg0
-          !
-          immbnod(jb)%icell_ijk(ncou,1)=i
-          immbnod(jb)%icell_ijk(ncou,2)=j
-          immbnod(jb)%icell_ijk(ncou,3)=k
-          !
-          if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm) then
+          if(nodestat(i,j,k)>0) then
+            ! icell contain a solid node or a boundary node
             !
-            if(nodestat(i,j,k)>0) then
-              ! icell contain a solid node or a boundary node
+            do kb=1,size(immbnod)
               !
-              do kb=1,size(immbnod)
+              if( immbnod(kb)%igh(1)==i+ig0 .and. &
+                  immbnod(kb)%igh(2)==j+jg0 .and. &
+                  immbnod(kb)%igh(3)==k+kg0 ) then
                 !
-                if( immbnod(kb)%igh(1)==i+ig0 .and. &
-                    immbnod(kb)%igh(2)==j+jg0 .and. &
-                    immbnod(kb)%igh(3)==k+kg0 ) then
-                  !
-                  immbnod(jb)%icell_bnode(ncou)=kb
-                  !
-                  ! reset ijk that is effective
-                  immbnod(jb)%icell_ijk(ncou,1)=-1
-                  immbnod(jb)%icell_ijk(ncou,2)=-1
-                  immbnod(jb)%icell_ijk(ncou,3)=-1
-                  !
-                  exit
-                  !
-                endif
+                immbnod(jb)%icell_bnode(ncou)=kb
                 !
-              enddo
+                ! reset ijk that is effective
+                immbnod(jb)%icell_ijk(ncou,1)=-1
+                immbnod(jb)%icell_ijk(ncou,2)=-1
+                immbnod(jb)%icell_ijk(ncou,3)=-1
+                !
+                ! if(mpirank==0) then
+                !   print*,mpirank,'|',immbnod(jb)%icell
+                !   print*,mpirank,'|',kb
+                ! endif
+                !
+                exit
+                !
+              endif
               !
-            endif
+            enddo
             !
           endif
           !
-        enddo
-        enddo
+        endif
         !
-        ! determine interpolation coefficient
+      enddo
+      enddo
+      enddo
+      !
+      subtime3=subtime3+ptime()-time_loc 
+    enddo
+    !
+    if(lio) print*,'    ** supporting cell established'
+    !
+    if(lio) write(*,'(A,F12.8)')'    ** time cost in search        :',subtime1
+    if(lio) write(*,'(A,F12.8)')'    ** time cost in pgeticell     :',subtime2
+    if(lio) write(*,'(A,F12.8)')'    ** time cost in checking icell:',subtime3
+    if(lio) write(*,'(A,F12.8)')'    ** total time cost :',subtime1+subtime2+subtime3
+    !
+    do jb=1,size(immbnod)
+      !
+      ! determine interpolation coefficient
+      !
+      i=immbnod(jb)%icell(1)-ig0
+      j=immbnod(jb)%icell(2)-jg0
+      k=immbnod(jb)%icell(3)-kg0
+      !
+      if(ndims==2) then
         !
-        i=immbnod(jb)%icell(1)-ig0
-        j=immbnod(jb)%icell(2)-jg0
         !
         if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm ) then
           ! icell is in the domain
@@ -612,8 +755,8 @@ module geom
           allocate( immbnod(jb)%coef_dirichlet(4),                   &
                     immbnod(jb)%coef_neumann(4)  )
           !
-          Ti1=matinv4(Tm1)
-          Ti2=matinv4(Tm2)
+          Ti1=matinv(Tm1,4)
+          Ti2=matinv(Tm2,4)
           !
           xvec(1)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)
           xvec(2)=immbnod(jb)%ximag(1)
@@ -628,8 +771,8 @@ module geom
           ! immbnod(jb)%coef_dirichlet=matinv4(Tm1)
           ! immbnod(jb)%coef_neumann  =matinv4(Tm2)
           !
-          ! Ti1=matmul(Tm1,immbnod(jb)%coef_dirichlet)
-          ! Ti2=matmul(Tm2,immbnod(jb)%coef_neumann)
+          ! Ti1=matmul(Tm1,Ti1)
+          ! Ti2=matmul(Tm2,Ti2)
           ! !
           ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(1,:)
           ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(2,:)
@@ -639,267 +782,189 @@ module geom
           !
         endif
         !
-        ! setting locality
-        immbnod(jb)%localin=.false.
+      elseif(ndims==3) then
         !
-        i=immbnod(jb)%igh(1)-ig0
-        j=immbnod(jb)%igh(2)-jg0
-        k=immbnod(jb)%igh(3)-kg0
-        !
-        if(i>=0 .and. i<=im .and. &
-           j>=0 .and. j<=jm ) then
+        if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm .and. k>=1 .and. k<=km ) then
+          ! icell is in the domain
           !
-          immbnod(jb)%localin=.true.
           !
-          ighost_counter=ighost_counter+1
+          do m=1,8
+            !
+            if(immbnod(jb)%icell_ijk(m,1)>=0) then
+              !
+              i=immbnod(jb)%icell_ijk(m,1)
+              j=immbnod(jb)%icell_ijk(m,2)
+              k=immbnod(jb)%icell_ijk(m,3)
+              !
+              xcell(m,:)=x(i,j,k,:)
+              !
+              Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+              Tm1(m,2)=xcell(m,1)*xcell(m,2)
+              Tm1(m,3)=xcell(m,1)*xcell(m,3)
+              Tm1(m,4)=xcell(m,2)*xcell(m,3)
+              Tm1(m,5)=xcell(m,1)
+              Tm1(m,6)=xcell(m,2)
+              Tm1(m,7)=xcell(m,3)
+              Tm1(m,8)=1.d0
+              !
+              Tm2(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+              Tm2(m,2)=xcell(m,1)*xcell(m,2)
+              Tm2(m,3)=xcell(m,1)*xcell(m,3)
+              Tm2(m,4)=xcell(m,2)*xcell(m,3)
+              Tm2(m,5)=xcell(m,1)
+              Tm2(m,6)=xcell(m,2)
+              Tm2(m,7)=xcell(m,3)
+              Tm2(m,8)=1.d0
+              !
+            elseif(immbnod(jb)%icell_bnode(m)>0) then
+              !
+              kb=immbnod(jb)%icell_bnode(m)
+              !
+              xcell(m,:)=immbnod(kb)%x(:)
+              xnorm(m,:)=immbnod(kb)%normdir(:)
+              !
+              Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+              Tm1(m,2)=xcell(m,1)*xcell(m,2)
+              Tm1(m,3)=xcell(m,1)*xcell(m,3)
+              Tm1(m,4)=xcell(m,2)*xcell(m,3)
+              Tm1(m,5)=xcell(m,1)
+              Tm1(m,6)=xcell(m,2)
+              Tm1(m,7)=xcell(m,3)
+              Tm1(m,8)=1.d0
+              !
+              Tm2(m,1)=xnorm(m,1)*xcell(m,2)*xcell(m,3) +  &
+                       xcell(m,1)*xnorm(m,2)*xcell(m,3) +  &
+                       xcell(m,1)*xcell(m,2)*xnorm(m,3)
+              Tm2(m,2)=xnorm(m,1)*xcell(m,2)+xcell(m,1)*xnorm(m,2)
+              Tm2(m,3)=xnorm(m,1)*xcell(m,3)+xcell(m,1)*xnorm(m,3)
+              Tm2(m,4)=xnorm(m,2)*xcell(m,3)+xcell(m,2)*xnorm(m,3)
+              Tm2(m,5)=xnorm(m,1)
+              Tm2(m,6)=xnorm(m,2)
+              Tm2(m,7)=xnorm(m,3)
+              Tm2(m,8)=0.d0
+              !
+            else
+              print*,' ** mpirank=',mpirank
+              print*,' ** immbnod(jb)%icell      :',immbnod(jb)%icell
+              print*,' ** immbnod(jb)%icell_ijk  :',immbnod(jb)%icell_ijk(m,:)
+              print*,' ** immbnod(jb)%icell_bnode:',immbnod(jb)%icell_bnode(m)
+              stop ' !! ERROR in determining interpolation coefficient'
+            endif
+            !
+          enddo
           !
-          ighost_order(ighost_counter)=jb
+          allocate( immbnod(jb)%coef_dirichlet(8),                   &
+                    immbnod(jb)%coef_neumann(8),immbnod(jb)%invmatrx(8,8)  )
           !
-          num_ighost_rank(mpirank)=num_ighost_rank(mpirank)+1
+          Ti1=matinv(Tm1,8)
+          Ti2=matinv(Tm2,8)
+          !
+          xvec(1)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)*immbnod(jb)%ximag(3)
+          xvec(2)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)
+          xvec(3)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(3)
+          xvec(4)=immbnod(jb)%ximag(2)*immbnod(jb)%ximag(3)
+          xvec(5)=immbnod(jb)%ximag(1)
+          xvec(6)=immbnod(jb)%ximag(2)
+          xvec(7)=immbnod(jb)%ximag(3)
+          xvec(8)=1.d0
+          !
+          do m=1,8
+            immbnod(jb)%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
+            immbnod(jb)%coef_neumann(m)  =dot_product(xvec,Ti2(:,m))
+          enddo
+          ! immbnod(jb)%invmatrx=Ti2
+          !
+          ! immbnod(jb)%coef_dirichlet=matinv4(Tm1)
+          ! immbnod(jb)%coef_neumann  =matinv4(Tm2)
+          !
+          ! Ti1=matmul(Tm1,Ti1)
+          ! Ti2=matmul(Tm2,Ti2)
+          ! !
+          ! if(.not. isidenmar(Ti1,1.d-5)) then
+          !   write(*,"(8(1X,F10.6))")Ti1(1,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(2,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(3,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(4,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(5,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(6,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(7,:)
+          !   write(*,"(8(1X,F10.6))")Ti1(8,:)
+          !   print*,'---------------------------------------------------------'
+          ! endif
+          ! if(.not. isidenmar(Ti2,1.d-5)) then
+          !   write(*,"(8(1X,F10.6))")Ti2(1,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(2,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(3,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(4,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(5,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(6,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(7,:)
+          !   write(*,"(8(1X,F10.6))")Ti2(8,:)
+          !   print*,'---------------------------------------------------------'
+          ! endif
           !
         endif
         !
-        ! checking icell 
-        i=immbnod(jb)%icell(1)-ig0
-        j=immbnod(jb)%icell(2)-jg0
-        k=immbnod(jb)%icell(3)-kg0
-        !
-        if(i>=1 .and. i<=im .and. &
-           j>=1 .and. j<=jm ) then
-          !
-          immbnod(jb)%localin=.true.
-          !
-          icell_counter=icell_counter+1
-          !
-          icell_order(icell_counter)=jb
-          !
-          num_icell_rank(mpirank)=num_icell_rank(mpirank)+1
-          !
-        endif
-        !
-      enddo
+      endif
       !
-    else
-      stop ' !! ERROR DIMENSION NOT SET @ gridinsolid'
-    endif
+    enddo
+    if(lio) print*,'    ** interpolating coefficients established.'
+    !
+    do jb=1,size(immbnod)
+      !
+      ! setting locality
+      immbnod(jb)%localin=.false.
+      !
+      i=immbnod(jb)%igh(1)-ig0
+      j=immbnod(jb)%igh(2)-jg0
+      k=immbnod(jb)%igh(3)-kg0
+      !
+      if(i>=0 .and. i<=im .and. &
+         j>=0 .and. j<=jm .and. &
+         k>=0 .and. k<=km ) then
+        !
+        immbnod(jb)%localin=.true.
+        !
+        ighost_counter=ighost_counter+1
+        !
+        ighost_order(ighost_counter)=jb
+        !
+        num_ighost_rank(mpirank)=num_ighost_rank(mpirank)+1
+        !
+      endif
+      !
+      ! checking icell 
+      i=immbnod(jb)%icell(1)-ig0
+      j=immbnod(jb)%icell(2)-jg0
+      k=immbnod(jb)%icell(3)-kg0
+      !
+      if(i>=1 .and. i<=im .and. &
+         j>=1 .and. j<=jm .and. &
+         k>=ks1 .and. k<=km ) then
+        !
+        immbnod(jb)%cellin=.true.
+        !
+        icell_counter=icell_counter+1
+        !
+        icell_order(icell_counter)=jb
+        !
+        num_icell_rank(mpirank)=num_icell_rank(mpirank)+1
+        !
+      else
+        immbnod(jb)%cellin=.false.
+      endif
+      !
+    enddo
     !
     call pgather(icell_order(1:icell_counter),imb_node_have)
     !
     call pgather(ighost_order(1:ighost_counter),imb_node_need)
     !
-    ! call move_alloc(icell_order,imb_node_have)
-    ! call move_alloc(ighost_order,imb_node_need)
-    ! !
-    ! print*,mpirank,'|',icell_counter,ighost_counter
-    ! !
-    ! call mpistop
-    ! !
-    ! merge imm_icell_rank
-    ! call pgather(icell_order(1:icell_counter),imm_icell_order)
-    !
-    ! if(size(icell_order)>0)
-    ! imm_icell_order=psum(imm_icell_rank)
-    !
     num_icell_rank=psum(num_icell_rank)
     !
     num_ighost_rank=psum(num_ighost_rank)
     !
-    ! jb=1098
-    ! print*,mpirank,'|',immbnod(jb)%igh(1)-ig0,immbnod(jb)%igh(2)-jg0
-    !
-    ! search the supporting points
-    ! if(ndims==2) then
-    !   !
-    !   do jb=1,size(immbnod)
-    !     !
-    !     immbnod(jb)%dis_imga_inmg=1.d10
-    !     !
-    !     do k=0,ke1
-    !     do j=0,jm-1
-    !     do i=0,im-1
-    !       !
-    !       if(any(nodestat(i:i+1,j:j+1,k)==10)) cycle
-    !       !
-    !       do jdir=1,2
-    !         xmin(jdir)=min(x(i,  j,k,jdir),x(i,  j+1,k,jdir),          &
-    !                        x(i+1,j,k,jdir),x(i+1,j+1,k,jdir)  )
-    !         xmax(jdir)=max(x(i,  j,k,jdir),x(i,  j+1,k,jdir),          &
-    !                        x(i+1,j,k,jdir),x(i+1,j+1,k,jdir) )
-    !       enddo
-    !       !
-    !       if( immbnod(jb)%ximag(1)>=xmin(1) .and.                      &
-    !           immbnod(jb)%ximag(1)<=xmax(1) .and.                      &
-    !           immbnod(jb)%ximag(2)>=xmin(2) .and.                      &
-    !           immbnod(jb)%ximag(2)<=xmax(2) ) then
-    !         !
-    !         do jj=0,1
-    !         do ii=0,1
-    !           !
-    !           if(nodestat(i+ii,j+jj,k)>1) cycle ! keep the boundary node
-    !           !
-    !           dist=dis2point(immbnod(jb)%ximag,x(i+ii,j+jj,k,:))
-    !           !
-    !           if(dist<=immbnod(jb)%dis_imga_inmg) then
-    !             !
-    !             immbnod(jb)%dis_imga_inmg=dist
-    !             !
-    !             immbnod(jb)%inmg(1)=ig0+i+ii
-    !             immbnod(jb)%inmg(2)=jg0+j+jj
-    !             immbnod(jb)%inmg(3)=kg0+k
-    !             !
-    !           endif
-    !           !
-    !         enddo
-    !         enddo
-    !         !
-    !       endif
-    !       !
-    !     enddo
-    !     enddo
-    !     enddo
-    !     !
-    !     ! to get real inmg
-    !     call syncinmg(immbnod(jb))
-    !     !
-    !     ! checking the distance between the ximag and inmg
-    !     i=immbnod(jb)%inmg(1)-ig0
-    !     j=immbnod(jb)%inmg(2)-jg0
-    !     k=immbnod(jb)%inmg(3)-kg0
-    !     !
-    !     if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm .and. k>=0 .and. k<=km) then
-    !       var1=dis2point(x(i,j,k,:),immbnod(jb)%ximag)
-    !       !
-    !       ! print*,var1,'vs',immbnod(jb)%dis_imga_inmg
-    !       if(var1>dxyzmax) then
-    !         print*,mpirank,'|',jb
-    !         print*,var1,immbnod(jb)%dis_imga_inmg<1.d5
-    !         print*,' !! distance too large between the ximag and x(inmg) !!'
-    !         stop
-    !       endif
-    !       !
-    !     endif
-    !     !
-    !     ! build supporting nodes
-    !     ncou=0
-    !     do ii=-2,2
-    !     do jj=-2,2
-    !       !
-    !       i=immbnod(jb)%inmg(1)-ig0+ii
-    !       j=immbnod(jb)%inmg(2)-jg0+jj
-    !       k=immbnod(jb)%inmg(3)-kg0
-    !       !
-    !       if(i<0 .or. i>im .or. j<0 .or. j>jm) cycle
-    !       ! only search for the nodes in the domain, not dummy nodes
-    !       !
-    !       if(nodestat(i,j,k)==0) then
-    !         ! supporting nodes only in the fluids domain
-    !         !
-    !         if(dis2point2(x(i,j,k,:),immbnod(jb)%x)<epsilon) then
-    !           ! for the supporting nodes is too close to the boundary
-    !           cycle
-    !           !
-    !         endif
-    !         !
-    !         ncou=ncou+1
-    !         !
-    !         snodes(ncou,1)=i+ig0
-    !         snodes(ncou,2)=j+jg0
-    !         snodes(ncou,3)=k+kg0
-    !         !
-    !       endif
-    !       !
-    !     enddo
-    !     enddo
-    !     !
-    !     ! to get assumble supporting nodes
-    !     call syncisup(immbnod(jb),snodes,ncou)
-    !     !
-    !     ! if(mpirank==0) then
-    !     !   ! print supporting nodes.
-    !     !   m=size(immbnod(jb)%isup,1)
-    !     !   write(*,'(I0,A,2(E15.7E3),A,9(I0,A,I0,1X))')jb,'|',          &
-    !     !                                    immbnod(jb)%ximag(1:2),'|', &
-    !     !       (immbnod(jb)%isup(jx,1),'-',immbnod(jb)%isup(jx,2),jx=1,m)
-    !     ! endif
-    !     !
-    !     ! to calculate weight function from supporting nodes
-    !     m=size(immbnod(jb)%isup,1)
-    !     !
-    !     allocate(immbnod(jb)%weig(m))
-    !     !
-    !     immbnod(jb)%weig=0.d0
-    !     !
-    !     do jx=1,m
-    !       !
-    !       i=immbnod(jb)%isup(jx,1)-ig0
-    !       j=immbnod(jb)%isup(jx,2)-jg0
-    !       k=immbnod(jb)%isup(jx,3)-kg0
-    !       !
-    !       if(i>=iss .and. i<=im .and. &
-    !          j>=jss .and. j<=jm .and. &
-    !          k>=kss .and. k<=km ) then
-    !         !
-    !         immbnod(jb)%weig(jx)=dis2point2(immbnod(jb)%ximag,x(i,j,k,:))
-    !         !
-    !       endif
-    !       !
-    !     enddo
-    !     !
-    !     ! to get the weight using distance
-    !     call syncweig(immbnod(jb))
-    !     !
-      ! do jb=1,size(immbnod)
-      !   !
-      !   ! to get the localisation preoperty
-      !   immbnod(jb)%localin=.false.
-      !   !
-      !   ! checking ghost nodes
-      !   i=immbnod(jb)%igh(1)-ig0
-      !   j=immbnod(jb)%igh(2)-jg0
-      !   k=immbnod(jb)%igh(3)-kg0
-      !   !
-      !   if(i>=0 .and. i<=im .and. &
-      !      j>=0 .and. j<=jm .and. &
-      !      k>=0 .and. k<=km  ) then
-      !     immbnod(jb)%localin=.true.
-      !     !
-      !   endif
-      !   !
-      !   ! checking icell 
-      !   i=immbnod(jb)%icell(1)-ig0
-      !   j=immbnod(jb)%icell(2)-jg0
-      !   k=immbnod(jb)%icell(3)-kg0
-      !   !
-      !   if(i>=0 .and. i<=im .and. &
-      !      j>=0 .and. j<=jm .and. &
-      !      k>=0 .and. k<=km  ) then
-      !     immbnod(jb)%localin=.true.
-      !   endif
-        !
-        ! ! checking supporting nodes
-        ! do jx=1,m
-        !   !
-        !   i=immbnod(jb)%isup(jx,1)-ig0
-        !   j=immbnod(jb)%isup(jx,2)-jg0
-        !   k=immbnod(jb)%isup(jx,3)-kg0
-        !   !
-        !   if(i>=iss .and. i<=im .and. &
-        !      j>=jss .and. j<=jm .and. &
-        !      k>=kss .and. k<=km ) then
-        !     !
-        !     immbnod(jb)%localin=.true.
-        !     !
-        !     exit
-        !     !
-        !   endif
-        !   !
-        ! enddo
-        !
-      ! enddo
-    !   !
-    ! elseif(ndims==3) then
-    !   stop ' !! 3D not setup yet @ sub. gridinsolid' 
-    ! endif
+    if(lio) print*,'    ** boundary nodes re-ordered'
     !
     ! do k=0,km
     ! do j=0,jm
@@ -914,171 +979,22 @@ module geom
     !                                   x(0:im,0:jm,0:km,2),'y',    &
     !                                   x(0:im,0:jm,0:km,3),'z',    &
     !                           rnodestat(0:im,0:jm,0:km),'ns' )
-    ! ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecbound_f'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f') then
-    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%x(:)
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecbound_f.dat'
     ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecbound_g'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin) then
-    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%x(:)
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecbound_g.dat'
+    ! ! 
     ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecimag_f'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f') then
-    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%ximag(:)
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecimag_f.dat'
-    ! fh=get_unit()
-    ! open(fh,file='tecimag_g'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin) then
-    !     write(fh,'(3(1X,E20.13E2))')immbnod(n)%ximag(:)
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecimag_g.dat'
+    ! call write_sboun(immbnod,'image')
+    ! call write_sboun(immbnod,'icell')
+    ! call write_sboun(immbnod,'ghost')
     ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecimagijk_f'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f') then
-    !     i=immbnod(n)%inmg(1)-ig0
-    !     j=immbnod(n)%inmg(2)-jg0
-    !     k=immbnod(n)%inmg(3)-kg0
-    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecimagijk_f.dat'
-    ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecimagijk_g'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g') then
-    !     i=immbnod(n)%inmg(1)-ig0
-    !     j=immbnod(n)%inmg(2)-jg0
-    !     k=immbnod(n)%inmg(3)-kg0
-    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecimagijk_g.dat'
-    ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecgho'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   i=immbnod(n)%igh(1)-ig0
-    !   j=immbnod(n)%igh(2)-jg0
-    !   k=immbnod(n)%igh(3)-kg0
-    !   if(ijkin(i,j,k)) then
-    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
-    !     if(x(i,j,k,1)>5.6d0) print*,mpirank,'|',n,i,j,k
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecgho.dat'
-    ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecforce'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f' ) then
-    !     i=immbnod(n)%igh(1)-ig0
-    !     j=immbnod(n)%igh(2)-jg0
-    !     k=immbnod(n)%igh(3)-kg0
-    !     write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
-    !     if(x(i,j,k,1)>5.6d0) print*,mpirank,'|',n,i,j,k
-    !     if(x(i,j,k,2)>5.6d0) print*,mpirank,'|',n,i,j,k
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecforce.dat'
-    ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecsupp_f'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='f' ) then
-    !     do jb=1,size(immbnod(n)%isup,1)
-    !       i=immbnod(n)%isup(jb,1)-ig0
-    !       j=immbnod(n)%isup(jb,2)-jg0
-    !       k=immbnod(n)%isup(jb,3)-kg0
-    !       write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
-    !     enddo
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecsupp_f.dat'
-    ! !
-    ! fh=get_unit()
-    ! open(fh,file='tecsupp_g'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   if(immbnod(n)%localin .and. immbnod(n)%nodetype=='g' ) then
-    !     do jb=1,size(immbnod(n)%isup,1)
-    !       i=immbnod(n)%isup(jb,1)-ig0
-    !       j=immbnod(n)%isup(jb,2)-jg0
-    !       k=immbnod(n)%isup(jb,3)-kg0
-    !       write(fh,'(3(1X,E20.13E2))')x(i,j,k,:)
-    !     enddo
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tecsupp_g.dat'
-    !
-    ! fh=get_unit()
-    ! open(fh,file='tec_icellin_g'//mpirankname//'.dat')
-    ! do n=1,size(immbnod)
-    !   i=immbnod(n)%icell(1)-ig0
-    !   j=immbnod(n)%icell(2)-jg0
-    !   k=immbnod(n)%icell(3)-kg0
-    !   if(ijkin(i,j,k) .and. ijkin(i-1,j-1,k))  then
-    !     !
-    !     do m=1,4
-    !       !
-    !       if(immbnod(n)%icell_ijk(m,1)>=0) then
-    !         i=immbnod(n)%icell_ijk(m,1)
-    !         j=immbnod(n)%icell_ijk(m,2)
-    !         k=immbnod(n)%icell_ijk(m,3)
-    !         xcell(m,:)=x(i,j,k,:)
-    !       elseif(immbnod(n)%icell_bnode(m)>0) then
-    !         n1=immbnod(n)%icell_bnode(m)
-    !         xcell(m,:)=immbnod(n1)%x(:)
-    !       endif
-    !       !
-    !     enddo
-    !     !
-    !     write(fh,'(A)')'TITLE = "FE-Volume QUADRILATERAL Data"'
-    !     write(fh,'(a)')'variables = "x", "y", "z"'
-    !     write(fh,'(A,I0,A)')'ZONE T="P_',n,'", DATAPACKING=BLOCK, NODES=4, ELEMENTS= 1, ZONETYPE=FEQUADRILATERAL'
-
-    !     write(fh,'(4(1X,E20.13E2))')xcell(1,1),xcell(2,1),xcell(4,1),xcell(3,1)
-    !     write(fh,'(4(1X,E20.13E2))')xcell(1,2),xcell(2,2),xcell(4,2),xcell(3,2)
-    !     write(fh,'(4(1X,E20.13E2))')xcell(1,3),xcell(2,3),xcell(4,3),xcell(3,3)
-    !     write(fh,'(A)')'1,2,3,4'
-    !   endif
-    ! enddo
-    ! close(fh)
-    ! print*,' << tec_icellin_g.dat'
-    !
     deallocate(rnodestat,bnodes,marker)
+    deallocate(Tm1,Tm2,Ti1,Ti2,xvec,xcell,xnorm)
+    !
+    subtime=ptime()-time_beg 
+    !
+    if(lio) print*,' ** grid in solid calculated'
+    if(lio) write(*,'(A,F12.8)')'    ** time cost:',subtime
     !
     ! call mpistop
-    !
-    if(lio) print*,' ** grid in solid calculated.'
     !
     return
     !
@@ -1096,13 +1012,18 @@ module geom
   !+-------------------------------------------------------------------+
   function nodeincell(acell,p) result(lin)
     !
-    use commtype, only : nodcel
+    use commtype, only : nodcel,solid
     use commvar,  only : ndims
+    use commfunc,  only : cross_product
     !
     ! arguments
     type(nodcel),intent(in) :: acell
+    type(solid) :: scell
     real(8),intent(in) :: p(3)
     logical :: lin
+    !
+    real(8) :: norm1(3),norm2(3),var1(3)
+    integer :: n
     !
     if(p(1)<acell%xmin(1) .or. p(1)>acell%xmax(1) .or. &
        p(2)<acell%xmin(2) .or. p(2)>acell%xmax(2) .or. &
@@ -1123,6 +1044,96 @@ module geom
           lin=pointintriangle(acell%x(1,:),acell%x(4,:),acell%x(3,:),p)
           return
         endif
+        !
+      elseif(ndims==3) then
+        !
+        scell%num_face=12
+        !
+        call scell%alloface()
+        !
+        scell%xcen(:)=0.125d0*( acell%x(1,:)+acell%x(2,:) + & 
+                                acell%x(3,:)+acell%x(4,:) + &
+                                acell%x(5,:)+acell%x(6,:) + &
+                                acell%x(7,:)+acell%x(8,:)   )
+        !
+        ! k-1 face
+        scell%face(1)%a=acell%x(1,:)
+        scell%face(1)%b=acell%x(4,:)
+        scell%face(1)%c=acell%x(3,:)
+        !
+        scell%face(2)%a=acell%x(3,:)
+        scell%face(2)%b=acell%x(2,:)
+        scell%face(2)%c=acell%x(1,:)
+        !
+        ! k face
+        scell%face(3)%a=acell%x(6,:)
+        scell%face(3)%b=acell%x(7,:)
+        scell%face(3)%c=acell%x(8,:)
+        !
+        scell%face(4)%a=acell%x(8,:)
+        scell%face(4)%b=acell%x(5,:)
+        scell%face(4)%c=acell%x(6,:)
+        !
+        ! j-1 face
+        scell%face(5)%a=acell%x(5,:)
+        scell%face(5)%b=acell%x(1,:)
+        scell%face(5)%c=acell%x(2,:)
+        !
+        scell%face(6)%a=acell%x(2,:)
+        scell%face(6)%b=acell%x(6,:)
+        scell%face(6)%c=acell%x(5,:)
+        !
+        ! j face
+        scell%face(7)%a=acell%x(7,:)
+        scell%face(7)%b=acell%x(3,:)
+        scell%face(7)%c=acell%x(4,:)
+        !
+        scell%face(8)%a=acell%x(4,:)
+        scell%face(8)%b=acell%x(8,:)
+        scell%face(8)%c=acell%x(7,:)
+        !
+        ! i-1 face
+        scell%face(9)%a=acell%x(4,:)
+        scell%face(9)%b=acell%x(1,:)
+        scell%face(9)%c=acell%x(5,:)
+        !
+        scell%face(10)%a=acell%x(5,:)
+        scell%face(10)%b=acell%x(8,:)
+        scell%face(10)%c=acell%x(4,:)
+        !
+        ! i face
+        scell%face(11)%a=acell%x(2,:)
+        scell%face(11)%b=acell%x(3,:)
+        scell%face(11)%c=acell%x(7,:)
+        !
+        scell%face(12)%a=acell%x(7,:)
+        scell%face(12)%b=acell%x(6,:)
+        scell%face(12)%c=acell%x(2,:)
+        !
+        do n=1,12
+          norm1=cross_product(scell%face(n)%b-scell%face(n)%a,  &
+                              scell%face(n)%c-scell%face(n)%a  )
+          norm2=scell%face(n)%b-scell%xcen
+          !
+          if(dot_product(norm1,norm2)<0.d0) then
+            var1=scell%face(n)%a
+            scell%face(n)%a=scell%face(n)%c
+            scell%face(n)%c=var1
+            print*,norm1,'-',norm2
+          endif
+          !
+        enddo
+        !
+        lin=polyhedron_contains_point_3d(scell,p)
+        !
+        ! if( p(1)>=acell%xmin(1) .and. p(1)<=acell%xmax(1) .and. &
+        !     p(2)>=acell%xmin(2) .and. p(2)<=acell%xmax(2) .and. &
+        !     p(3)>=acell%xmin(3) .and. p(3)<=acell%xmax(3) ) then
+        !   !
+        !   lin=.true.
+        ! else
+        !   lin=.false.
+        ! endif
         !
       else
         stop ' !! dimension not set yet @ nodeincell!!'
@@ -1242,7 +1253,7 @@ module geom
         print*,asolid%face(jf)%b
         print*,asolid%face(jf)%c
         print*,norm1,'-',asolid%face(jf)%normdir
-        stop ' !! ERROR 1 @ solidrange'
+        stop ' !! ERROR 1 @ solidimpro'
       endif
       !
     enddo
@@ -1717,10 +1728,10 @@ module geom
         allocate(cell(i,j,k)%x(8,3))
         cell(i,j,k)%x(1,:)=x(i-1,j-1,k-1,:)
         cell(i,j,k)%x(2,:)=x(i,  j-1,k-1,:)
-        cell(i,j,k)%x(3,:)=x(i,  j-1,k,:)
-        cell(i,j,k)%x(4,:)=x(i-1,j-1,k,:)
-        cell(i,j,k)%x(5,:)=x(i-1,j,  k-1,:)
-        cell(i,j,k)%x(6,:)=x(i,  j,  k-1,:)
+        cell(i,j,k)%x(3,:)=x(i,  j,  k-1,:)
+        cell(i,j,k)%x(4,:)=x(i-1,j,  k-1,:)
+        cell(i,j,k)%x(5,:)=x(i-1,j-1,k,:)
+        cell(i,j,k)%x(6,:)=x(i,  j-1,k,:)
         cell(i,j,k)%x(7,:)=x(i,  j,  k,:)
         cell(i,j,k)%x(8,:)=x(i-1,j,  k,:)
         !
@@ -2208,6 +2219,285 @@ module geom
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine gridgeom.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to find the point in 3d grid.                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  function pngrid(p) result(ijk)
+    !
+    use commvar,   only : im,jm,km
+    use commarray, only : x,cell
+    !
+    ! arguments
+    real(8),intent(in) :: p(3)
+    integer :: ijk(3)
+    !
+    ! local data
+    integer :: nlevel,ilevel,idomai,inxt,ncou,nco2
+    integer :: i,j,k,n,m,m20,is,ie,js,je,ks,ke
+    integer :: idomai_save(1024),idomai_save2(1024)
+    real(8) :: xmin(3),xmax(3)
+    !
+    logical,save :: lfirstcal=.true.
+    type :: subdomaim
+      integer :: i0,j0,k0
+      integer :: im,jm,km
+      integer :: next(8)
+      real(8) :: xmin(3),xmax(3)
+      type(subdomaim),allocatable :: subdom(:,:,:)
+    end type subdomaim
+    type :: level
+      integer :: numdom
+      type(subdomaim),allocatable :: domain(:)
+    end type level
+    !
+    type(level),allocatable,save :: dolevl(:)
+    !
+    if(lfirstcal) then
+      !
+      nlevel=1
+      do while(2**nlevel<max(im,jm,km))
+        nlevel=nlevel+1
+      enddo
+      ! write(*,'(3(A,I0))')'     ** nlevel= ',nlevel,         &
+      !                          ',  max nodes= ',2**nlevel, &
+      !                         '/',max(im,jm,km)
+      !
+      allocate(dolevl(1:nlevel))
+      !
+      ! the master level
+      dolevl(1)%numdom=1
+      allocate(dolevl(1)%domain(dolevl(1)%numdom))
+      !
+      do ilevel=2,nlevel
+        dolevl(ilevel)%numdom=dolevl(ilevel-1)%numdom*8
+        allocate(dolevl(ilevel)%domain(dolevl(ilevel)%numdom))
+      enddo
+      !
+      dolevl(1)%domain(1)%i0=0
+      dolevl(1)%domain(1)%j0=0
+      dolevl(1)%domain(1)%k0=0
+      dolevl(1)%domain(1)%im=im
+      dolevl(1)%domain(1)%jm=jm
+      dolevl(1)%domain(1)%km=km
+      !
+      do ilevel=1,nlevel-1
+        !
+        ncou=0
+        do n=1,dolevl(ilevel)%numdom
+          !
+          allocate(dolevl(ilevel)%domain(n)%subdom(2,2,2))
+          !
+          m20=(dolevl(ilevel)%domain(n)%im-dolevl(ilevel)%domain(n)%i0)/2 + &
+               dolevl(ilevel)%domain(n)%i0 
+          dolevl(ilevel)%domain(n)%subdom(1,:,:)%i0=dolevl(ilevel)%domain(n)%i0
+          dolevl(ilevel)%domain(n)%subdom(1,:,:)%im=m20
+          dolevl(ilevel)%domain(n)%subdom(2,:,:)%i0=m20
+          dolevl(ilevel)%domain(n)%subdom(2,:,:)%im=dolevl(ilevel)%domain(n)%im
+          !
+          m20=(dolevl(ilevel)%domain(n)%jm-dolevl(ilevel)%domain(n)%j0)/2 + &
+               dolevl(ilevel)%domain(n)%j0 
+          dolevl(ilevel)%domain(n)%subdom(:,1,:)%j0=dolevl(ilevel)%domain(n)%j0
+          dolevl(ilevel)%domain(n)%subdom(:,1,:)%jm=m20
+          dolevl(ilevel)%domain(n)%subdom(:,2,:)%j0=m20
+          dolevl(ilevel)%domain(n)%subdom(:,2,:)%jm=dolevl(ilevel)%domain(n)%jm
+          !
+          m20=(dolevl(ilevel)%domain(n)%km-dolevl(ilevel)%domain(n)%k0)/2 + &
+               dolevl(ilevel)%domain(n)%k0 
+          dolevl(ilevel)%domain(n)%subdom(:,:,1)%k0=dolevl(ilevel)%domain(n)%k0
+          dolevl(ilevel)%domain(n)%subdom(:,:,1)%km=m20
+          dolevl(ilevel)%domain(n)%subdom(:,:,2)%k0=m20
+          dolevl(ilevel)%domain(n)%subdom(:,:,2)%km=dolevl(ilevel)%domain(n)%km
+          !
+          nco2=0
+          do k=1,2
+          do j=1,2
+          do i=1,2
+            ncou=ncou+1
+            nco2=nco2+1
+            dolevl(ilevel+1)%domain(ncou)=dolevl(ilevel)%domain(n)%subdom(i,j,k)
+            dolevl(ilevel)%domain(n)%next(nco2)=ncou
+          enddo
+          enddo
+          enddo
+          !
+          ! if(mpirank==0) then
+          !   write(*,'(2(A,I0))')'     ** domain at level: ',ilevel,' n= ',n
+          !   write(*,'(12X,5(I3,A),I0)') dolevl(ilevel)%domain(n)%i0,' ~ ', &
+          !                              dolevl(ilevel)%domain(n)%im,' | ', &
+          !                              dolevl(ilevel)%domain(n)%j0,' ~ ', &
+          !                              dolevl(ilevel)%domain(n)%jm,' | ', &
+          !                              dolevl(ilevel)%domain(n)%k0,' ~ ', &
+          !                              dolevl(ilevel)%domain(n)%km
+          !   do k=1,2
+          !   do j=1,2
+          !   do i=1,2
+          !     write(*,'((A,3I0))')'        ** sub-domain: ',i,j,k
+          !     write(*,'(12X,5(I3,A),I0)')dolevl(ilevel)%domain(n)%subdom(i,j,k)%i0,' ~ ', &
+          !                               dolevl(ilevel)%domain(n)%subdom(i,j,k)%im,' | ', &
+          !                               dolevl(ilevel)%domain(n)%subdom(i,j,k)%j0,' ~ ', &
+          !                               dolevl(ilevel)%domain(n)%subdom(i,j,k)%jm,' | ', &
+          !                               dolevl(ilevel)%domain(n)%subdom(i,j,k)%k0,' ~ ', &
+          !                               dolevl(ilevel)%domain(n)%subdom(i,j,k)%km
+          !   enddo
+          !   enddo
+          !   enddo
+          ! endif
+          !
+        enddo
+        !
+      enddo
+      !
+      ! search the extent
+      do ilevel=1,nlevel
+        ! 
+        do n=1,dolevl(ilevel)%numdom
+          !
+          is=dolevl(ilevel)%domain(n)%i0
+          ie=dolevl(ilevel)%domain(n)%im
+          js=dolevl(ilevel)%domain(n)%j0
+          je=dolevl(ilevel)%domain(n)%jm
+          ks=dolevl(ilevel)%domain(n)%k0
+          ke=dolevl(ilevel)%domain(n)%km
+          !
+          dolevl(ilevel)%domain(n)%xmin=1.d10
+          dolevl(ilevel)%domain(n)%xmax=-1.d10
+          do k=ks,ke
+          do j=js,je
+          do i=is,ie
+            !
+            if(i==is .or. j==js .or. k==ks .or. i==ie .or. j==je .or. k==ke) then
+              ! only search the outerlayer
+              dolevl(ilevel)%domain(n)%xmin(1)=min(dolevl(ilevel)%domain(n)%xmin(1),x(i,j,k,1))
+              dolevl(ilevel)%domain(n)%xmin(2)=min(dolevl(ilevel)%domain(n)%xmin(2),x(i,j,k,2))
+              dolevl(ilevel)%domain(n)%xmin(3)=min(dolevl(ilevel)%domain(n)%xmin(3),x(i,j,k,3))
+              !
+              dolevl(ilevel)%domain(n)%xmax(1)=max(dolevl(ilevel)%domain(n)%xmax(1),x(i,j,k,1))
+              dolevl(ilevel)%domain(n)%xmax(2)=max(dolevl(ilevel)%domain(n)%xmax(2),x(i,j,k,2))
+              dolevl(ilevel)%domain(n)%xmax(3)=max(dolevl(ilevel)%domain(n)%xmax(3),x(i,j,k,3))
+            endif
+            !
+          enddo
+          enddo
+          enddo
+          !
+          ! if(mpirank==0) then
+          !   write(*,'(2(A,I0))')'     ** domain at level: ',ilevel,' n= ',n
+          !   write(*,'(12X,6(F10.6,A))') dolevl(ilevel)%domain(n)%xmin(1),' ~ ', &
+          !                               dolevl(ilevel)%domain(n)%xmax(1),' | ', &
+          !                               dolevl(ilevel)%domain(n)%xmin(2),' ~ ', &
+          !                               dolevl(ilevel)%domain(n)%xmax(2),' | ', &
+          !                               dolevl(ilevel)%domain(n)%xmin(3),' ~ ', &
+          !                               dolevl(ilevel)%domain(n)%xmax(3),' '
+          ! endif
+          !
+        enddo
+        !
+      enddo
+      !
+      lfirstcal=.false.
+    endif
+    !
+    ! if(mpirank==0) then
+    !   write(*,'(2(A,I0))')'     ** domain at level: ',ilevel,' n= ',n
+    !   write(*,'(12X,6(F10.6,A))') dolevl(1)%domain(1)%xmin(1),' ~ ', &
+    !                               dolevl(1)%domain(1)%xmax(1),' | ', &
+    !                               dolevl(1)%domain(1)%xmin(2),' ~ ', &
+    !                               dolevl(1)%domain(1)%xmax(2),' | ', &
+    !                               dolevl(1)%domain(1)%xmin(3),' ~ ', &
+    !                               dolevl(1)%domain(1)%xmax(3),' '
+    ! endif
+    !
+    ! Now do the search work
+    ijk=0
+    !
+    idomai_save=0
+    idomai_save2=0
+    !
+    ilevel=1
+    n=1
+    !
+    if( p(1)>=dolevl(ilevel)%domain(n)%xmin(1) .and. &
+        p(2)>=dolevl(ilevel)%domain(n)%xmin(2) .and. &
+        p(3)>=dolevl(ilevel)%domain(n)%xmin(3) .and. &
+        p(1)<=dolevl(ilevel)%domain(n)%xmax(1) .and. &
+        p(2)<=dolevl(ilevel)%domain(n)%xmax(2) .and. &
+        p(3)<=dolevl(ilevel)%domain(n)%xmax(3) ) then
+      ! first search the whole domain 
+      !
+      ncou=1
+      idomai_save(ncou)=n
+      !
+      do while(ilevel<nlevel)
+        nco2=0
+        do n=1,ncou
+          !
+          idomai=idomai_save(n)
+          !
+          ! go through branches
+          do m=1,8
+            !
+            inxt=dolevl(ilevel)%domain(idomai)%next(m)
+            !
+            xmin=dolevl(ilevel+1)%domain(inxt)%xmin
+            xmax=dolevl(ilevel+1)%domain(inxt)%xmax
+            !
+            if( p(1)>=xmin(1) .and. p(1)<=xmax(1) .and. &
+                p(2)>=xmin(2) .and. p(2)<=xmax(2) .and. &
+                p(3)>=xmin(3) .and. p(3)<=xmax(3) ) then
+              !
+              nco2=nco2+1
+              idomai_save2(nco2)=inxt
+              !
+              ! write(*,'(4(A,I0))')'  ** rank: ',mpirank,             &
+              !                     ' | locate p at level: ',ilevel+1, &
+              !                     ' domain: ',inxt,' numb: ',nco2
+              !
+            endif
+            !
+          enddo
+          !
+        enddo
+        !
+        ilevel=ilevel+1
+        idomai_save=idomai_save2
+        ncou=nco2
+      enddo
+      !
+      do n=1,ncou
+        !
+        idomai=idomai_save(n)
+        !
+        do k=dolevl(ilevel)%domain(idomai)%k0+1,dolevl(ilevel)%domain(idomai)%km
+        do j=dolevl(ilevel)%domain(idomai)%j0+1,dolevl(ilevel)%domain(idomai)%jm
+        do i=dolevl(ilevel)%domain(idomai)%i0+1,dolevl(ilevel)%domain(idomai)%im
+          !
+          if(nodeincell(cell(i,j,k),p)) then
+            !
+            ijk(1)=i+ig0
+            ijk(2)=j+jg0
+            ijk(3)=k+kg0
+            !
+          endif
+          !
+        enddo
+        enddo
+        enddo
+        !
+      enddo
+      !
+    endif
+    !
+    return
+    !
+  end function pngrid
+  !+-------------------------------------------------------------------+
+  !| The end of the function pngrid.                                   |
+  !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
   !| This subroutine is to decide is a line from a point intersects    |
@@ -2858,25 +3148,44 @@ module geom
     logical :: inside
     !
     ! local data
-    logical b
-    integer ( kind = 4 ) i
-    real ( kind = 8 ) t
-  
-    b = .false.
+    integer :: i
+    real(8) :: t,var1,var2,var3,epsilon
+    real(8) :: a(2),b(2)
+    
+    epsilon=1.d-16
+    !
+    inside = .false.
 
     do i = 1, asolid%num_edge
-
-      if(asolid%edge(i)%b(2)<p(2) .eqv. p(2)<=asolid%edge(i)%a(2)) then
-        t=p(1)-asolid%edge(i)%a(1)-(p(2)-asolid%edge(i)%a(2))*         &
-                   (asolid%edge(i)%b(1)-p(1))/(asolid%edge(i)%b(2)-p(2))
-        if ( t < 0.0D+00 ) then
-          b = .not. b
+      !
+      a(:)=asolid%edge(i)%a(1:2)
+      b(:)=asolid%edge(i)%b(1:2)
+      !
+      var1=sqrt((p(1)-a(1))**2+(p(2)-a(2))**2)
+      var2=sqrt((p(1)-b(1))**2+(p(2)-b(2))**2)
+      var3=sqrt((a(1)-b(1))**2+(a(2)-b(2))**2)
+      !
+      if(var1+var2-var3<=epsilon) then
+        inside=.true.
+      else
+        !
+        if(p(2)>b(2) .eqv. p(2)<=a(2)) then
+          !
+          if(abs(b(2)-p(2))>epsilon) then
+            t=(p(1)-a(1))-(p(2)-a(2))*(b(1)-p(1))/(b(2)-p(2))
+          else
+            t=(p(1)-b(1))-(p(2)-b(2))*(a(1)-p(1))/(a(2)-p(2))
+          endif
+          !
+          if ( t < 0.d0 ) then
+            inside = .not. inside
+          end if
         end if
-      end if
+        !
+      endif
+      !
     end do
-
-    inside = b
-
+    !
     return
 
   end function polyhedron_contains_point_2d
@@ -2936,13 +3245,14 @@ module geom
   !    output, logical inside, is true if the point 
   !    is inside the polyhedron.
   !+-------------------------------------------------------------------+
-  function polyhedron_contains_point_3d ( asolid, p ) result (inside)
+  function polyhedron_contains_point_3d ( asolid, p,debug ) result (inside)
     !
     use commtype, only : solid
     !
     ! arguments
     type(solid),intent(in) :: asolid
     real(kind=8),intent(in) :: p(3)
+    logical,intent(in),optional :: debug
     !
     ! local data
     integer, parameter :: dim_num = 3, face_order_max = 3
@@ -2951,29 +3261,44 @@ module geom
     integer jface
     integer face_order
     logical inside
-    real(kind=8), parameter :: pi = 3.141592653589793D+00
+    real(kind=8), parameter :: pi = 3.141592653589793d+00
+    real(kind=8), parameter :: epsilon = 1.d-12
     real(kind=8) solid_angle
     real(kind=8) v_face(dim_num,face_order_max)
-  
-    area = 0.0D+00
+    real(8) :: p2(3),norm(3),var1
+    
+    norm=p-asolid%xcen
+    var1=sqrt(norm(1)**2+norm(2)**2+norm(3)**2)
+    if(var1>epsilon*10.d0) then
+      norm=norm/var1
+      p2=p-norm*epsilon
+    else
+      p2=p
+    endif
+
+    area = 0.0d+00
     face_order=3
-  
+    
     do jface = 1, asolid%num_face
   
       v_face(:,1) = asolid%face(jface)%a
       v_face(:,2) = asolid%face(jface)%b
       v_face(:,3) = asolid%face(jface)%c
   
-      call geo_polygon_solid_angle_3d(face_order,v_face,p,solid_angle)
+      call geo_polygon_solid_angle_3d(face_order,v_face,p2,solid_angle)
   
       area = area + solid_angle
   
     end do
     !
-    !  AREA should be -4*PI, 0, or 4*PI.
-    !  So this test should be quite safe!
+    !  area should be -4*pi, 0, or 4*pi.
+    !  so this test should be quite safe!
     !
-    if ( area < -2.0D+00 * pi .or. 2.0D+00 * pi < area ) then
+    if(present(debug)) then
+      print*,'area=',area
+    endif
+    !
+    if ( area < -2.0d+00 * pi .or. 2.0d+00 * pi < area ) then
       inside = .true.
     else
       inside = .false.

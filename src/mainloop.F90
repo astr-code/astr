@@ -421,65 +421,57 @@ module mainloop
   subroutine crashcheck
     !
     use commvar,   only : hm
-    use commarray, only : q,rho,tmp,prs,x
+    use commarray, only : q,rho,tmp,prs,x,nodestat
     use parallel, only : por
     !
     ! local data
-    integer :: i,j,k,l
+    integer :: i,j,k,l,fh,ii,jj,kk
     logical :: ltocrash
     !
     ltocrash=.false.
     !
+    fh=get_unit()
+    !
+    ! open(fh,file='badpoint'//mpirankname//'.dat')
     do k=0,km
     do j=0,jm
     do i=0,im
       !
-      if(rho(i,j,k)>=0.d0) then
-        continue
-      else
-        print*,' !! non-positive density identified !!'
-        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
-                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
-        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        ltocrash=.true.
-      endif
-      !
-      if(tmp(i,j,k)>=0.d0) then
-        continue
-      else
-        print*,' !! non-positive temperature identified !!'
-        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
-                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
-        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        do l=-hm,hm
-          print*,l,x(i,j+l,k,2),q(i,j+l,k,5),tmp(i,j+l,k)
-        enddo
-        ltocrash=.true.
-      endif
-      !
-      if(prs(i,j,k)>=0.d0) then
-        continue
-      else
-        print*,' !! non-positive pressure identified !!'
-        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
-                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
-        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        ltocrash=.true.
-      endif
-      !
-      if(q(i,j,k,5)>=0.d0) then
-        continue
-      else
-        print*,' !! non-positive energy identified !!'
-        write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
-                           mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
-        write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,:)
-        ltocrash=.true.
+      if(nodestat(i,j,k)<=0.d0) then
+        ! only check fluid points
+        if(q(i,j,k,1)>=0.d0 .and. q(i,j,k,5)>=0.d0) then
+          continue
+        else
+          print*,' !! non-positive density/energy identified !!'
+          write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
+                             mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+          write(*,'(A,I0)')'   ** nodestat: ',nodestat(i,j,k)
+          write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,1:5)
+          !
+          do kk=-1,1
+          do jj=-1,1
+          do ii=-1,1
+            if(ii==0 .and. jj==0 .and. kk==0) then
+              continue
+            else
+              write(*,'(3(1X,I0),5(1X,E13.6E2),1X,I0)')ii,jj,kk,q(i+ii,j+jj,k+kk,1:5),nodestat(i+ii,j+jj,k+kk)
+            endif
+          enddo
+          enddo
+          enddo
+          !
+          ltocrash=.true.
+          !
+          ! write(fh,'(3(1X,E13.6E2))')x(i,j,k,:)
+        endif
+        !
       endif
       !
     enddo
     enddo
     enddo
+    ! close(fh)
+    ! print*,' << badpoint',mpirankname,'.dat'
     !
     ltocrash=por(ltocrash)
     !

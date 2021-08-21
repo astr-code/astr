@@ -3950,8 +3950,61 @@ module parallel
     return
     !
   end function pgeticell
+  !
+  subroutine pcollecicell(icellin,abound)
+    !
+    use commtype, only : sboun
+    !
+    ! arguments
+    integer,intent(in) :: icellin(:,:)
+    type(sboun),intent(inout) :: abound(:)
+    !
+    ! local data
+    integer :: ierr,jrank,csize,jb
+    integer,allocatable :: recvbuf(:,:,:),icellout(:,:)
+    !
+    csize=size(icellin,1)
+    allocate(recvbuf(1:csize,1:3,0:mpirankmax),icellout(1:csize,1:3))
+    !
+    call mpi_gather(icellin,csize*3,mpi_integer,                       &
+                    recvbuf,csize*3,mpi_integer, 0 , mpi_comm_world,ierr)
+    !
+    if(mpirank==0) then
+      !
+      do jb=1,csize
+        !
+        do jrank=0,mpirankmax
+          if(recvbuf(jb,1,jrank)>0) then
+            ! the first non-zero element
+            icellout(jb,:)=recvbuf(jb,:,jrank)
+            exit
+          endif
+        enddo
+        !
+        if(jrank==mpirankmax+1) then
+          print*,' ** jrank=',jrank
+          print*,' ** jb=',jb
+          print*,' ** recvbuf(jb,1,jrank)',recvbuf(jb,1,jrank)
+          stop ' ERROR 1 @ pcollecicell: all icell is 0'
+        endif
+        !
+      enddo
+      !
+    endif
+    !
+    call bcast(icellout)
+    !
+    do jb=1,csize
+      abound(jb)%icell=icellout(jb,:)
+    enddo
+    !
+    deallocate(recvbuf,icellout)
+    !
+    return
+    !
+  end subroutine pcollecicell
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine pgeticell.                              |
+  !| The end of the subroutine pcollecicell.                           |
   !+-------------------------------------------------------------------+
   !
   !

@@ -54,9 +54,9 @@ module commtype
     integer :: icell(3),icell_bnode(8),icell_ijk(8,3)
     integer,allocatable :: isup(:,:)
     real(8),allocatable :: weig(:)
-    real(8),allocatable :: coef_dirichlet(:),coef_neumann(:)
+    real(8),allocatable :: coef_dirichlet(:),coef_neumann(:),invmatrx(:,:)
     !
-    logical :: localin
+    logical :: localin,cellin
     !
     !+-------------------+---------------------------------------------+
     !|               igh | i,j,k of the ghost point                    |
