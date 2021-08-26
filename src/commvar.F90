@@ -132,13 +132,13 @@ module commvar
   !+---------------------+---------------------------------------------+
   integer :: nsolid,imbroot
   type(solid),allocatable,target :: immbody(:)
-  type(sboun),allocatable,target :: immbnod(:)
+  type(sboun),allocatable,target :: immbond(:)
   integer,allocatable :: imb_node_have(:),imb_node_need(:),        &
                          num_icell_rank(:),num_ighost_rank(:)
   !+---------------------+---------------------------------------------+
   !|           num_solid | number of solid bodies                      |
   !|             immbody | the immersed body.                          |
-  !|             immbnod | the boundary nodes of immersed body.        |
+  !|             immbond | the boundary nodes of immersed body.        |
   !+---------------------+---------------------------------------------+
   !
   parameter(hm=5)

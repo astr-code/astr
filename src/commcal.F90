@@ -318,6 +318,41 @@ module commcal
   !+-------------------------------------------------------------------+
   !| The end of the function ijkin.                                    |
   !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to determin is a i,j,k is in the domain          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  pure logical function ijkcellin(i,j,k)
+    !
+    use commvar, only : im,jm,km,ndims
+    !
+    integer,intent(in) :: i,j,k
+    !
+    if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm) then
+      !
+      if(ndims==3) then
+        if(k>=1 .and. k<=km) then
+          ijkcellin=.true.
+        else
+          ijkcellin=.false.
+        endif
+      elseif(ndims==2) then
+        ijkcellin=.true.
+      endif
+    else
+      ijkcellin=.false.
+    endif
+    !
+    return
+    !
+  end function ijkcellin
+  !+-------------------------------------------------------------------+
+  !| The end of the function ijkcellin.                                |
+  !+-------------------------------------------------------------------+
 
   !
 end module commcal

@@ -65,6 +65,7 @@ module parallel
   !
   interface por
     module procedure por_log
+    module procedure por_log_array1d
   end interface
   !
   interface ptabupd
@@ -1464,6 +1465,22 @@ module parallel
     !
     do jb=1,ntotle
       vmerg(jb)%ximag(:)=sbt_rea(:,jb)
+    enddo
+    !
+    ! end of merge ximag
+    !
+    ! merge dis2ghost and dist2image 
+    do jb=1,nsize
+      sb_rea(1,jb)=var(jb)%dis2image
+      sb_rea(2,jb)=var(jb)%dis2ghost
+      sb_rea(3,jb)=0.d0
+    enddo
+    !
+    call pgather(sb_rea,sbt_rea)
+    !
+    do jb=1,ntotle
+      vmerg(jb)%dis2image=sbt_rea(1,jb)
+      vmerg(jb)%dis2ghost=sbt_rea(2,jb)
     enddo
     !
     ! end of merge ximag
@@ -3911,6 +3928,25 @@ module parallel
     return
     !
   end function por_log
+  !
+  function por_log_array1d(var) result(vout)
+    !
+    ! arguments
+    logical,intent(in) :: var(:)
+    logical :: vout(size(var))
+    !
+    ! local data
+    integer :: ierr
+    integer :: nsize
+    !
+    nsize=size(var)
+    !
+    call mpi_allreduce(var,vout,nsize,mpi_logical,MPI_LOR,             &
+                                                    mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function por_log_array1d
   !+-------------------------------------------------------------------+
   !| The end of the subroutine por_log.                                |
   !+-------------------------------------------------------------------+
@@ -3982,10 +4018,10 @@ module parallel
         enddo
         !
         if(jrank==mpirankmax+1) then
+          stop ' ERROR 1 @ pcollecicell: all icell is 0'
           print*,' ** jrank=',jrank
           print*,' ** jb=',jb
-          print*,' ** recvbuf(jb,1,jrank)',recvbuf(jb,1,jrank)
-          stop ' ERROR 1 @ pcollecicell: all icell is 0'
+          print*,' ** recvbuf(jb,1,:)',recvbuf(jb,1,:)
         endif
         !
       enddo

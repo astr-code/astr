@@ -10,6 +10,7 @@ module readwrite
   use constdef
   use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
                       ptime,bcast,mpirankmax,ig0,jg0,kg0
+  use commvar, only : ndims,im,jm,km
   use tecio
   use stlaio,  only: get_unit
   !
@@ -380,7 +381,7 @@ module readwrite
     !
     if(mpirank==0) then
       !
-      call readkeyboad(name1=inputfile)
+      call readkeyboad(inputfile)
       !
       if(trim(inputfile)=='.') inputfile='datin/input.dat'
       !
@@ -1332,11 +1333,11 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
     endif
     !
-    ! if(limmbou .and. mpirank==imbroot) then
-    !   ! call imboundarydata 
-    !   !
-    !   call writecylimmbou
-    ! endif
+    if(limmbou .and. mpirank==imbroot) then
+      ! call imboundarydata 
+      !
+      call writecylimmbou
+    endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
     !     print*,'------------------------------------'
@@ -1476,7 +1477,7 @@ module readwrite
   subroutine writecylimmbou
     !
     use commtype,  only : sboun
-    use commvar,   only : immbnod,num_species,pinf
+    use commvar,   only : immbond,num_species,pinf
     use fludyna,   only : fvar2q,q2fvar
     !
     ! local data
@@ -1491,7 +1492,7 @@ module readwrite
     !
     if(mpirank==0) then
       !
-      nb=size(immbnod)
+      nb=size(immbond)
       !
       if(firstcall) then
         !
@@ -1503,7 +1504,7 @@ module readwrite
         !
         do jb=1,nb
           !
-          pb=>immbnod(jb)
+          pb=>immbond(jb)
           !
           radi=sqrt((pb%x(1)-xc)**2+(pb%x(2)-yc)**2)
           !
@@ -1550,7 +1551,7 @@ module readwrite
         !
         kb=ialf(jb)
         !
-        pb=>immbnod(kb)
+        pb=>immbond(kb)
         !
         call q2fvar(      q=  pb%qimag,                 &
                       density=rho_bou,                  &
@@ -1681,8 +1682,8 @@ module readwrite
     !
     use commtype, only : sboun
     use commvar,  only : ndims
-    use commarray,only : x
-    use commcal,  only : ijkin
+    use commarray,only : x,cell
+    use commcal,  only : ijkin,ijkcellin
     !
     ! arguments
     type(sboun),intent(in) :: abound(:)
@@ -1754,17 +1755,15 @@ module readwrite
         if(abound(n)%localin) counter=counter+1
       enddo
       !
-      if(counter>0) then
+      if(mpirank==0) then
         fh=get_unit()
         open(fh,file='tecimage'//mpirankname//'.dat')
         write(fh,'(A)')' VARIABLES = "x" "y" "z" '
         write(fh,'(A)')'ZONE T="ZONE 001"'
-        write(fh,'(A,I0,A)')'I=',counter,', J=1, K=1, ZONETYPE=Ordered'
+        write(fh,'(A,I0,A)')'I=',size(abound),', J=1, K=1, ZONETYPE=Ordered'
         write(fh,'(A)')'DATAPACKING=POINT'
         do n=1,size(abound)
-          if(abound(n)%localin) then
-            write(fh,'(3(1X,E20.13E2))')abound(n)%ximag(:)
-          endif
+          write(fh,'(3(1X,E20.13E2))')abound(n)%ximag(:)
         enddo
         close(fh)
         print*,' << tecimage',mpirankname,'.dat'
@@ -1776,7 +1775,15 @@ module readwrite
       !
       counter=0
       do n=1,size(abound)
-        if(abound(n)%cellin) counter=counter+1
+        !
+        i=abound(n)%icell(1)-ig0
+        j=abound(n)%icell(2)-jg0
+        k=abound(n)%icell(3)-kg0
+        !
+        if(ijkcellin(i,j,k)) then
+          counter=counter+1
+        endif
+        !
       enddo
       !
       if(counter>0) then
@@ -1804,35 +1811,22 @@ module readwrite
           j=abound(n)%icell(2)-jg0
           k=abound(n)%icell(3)-kg0
           !
-          if(abound(n)%cellin) then
+          if(ijkcellin(i,j,k)) then
             !
-            do m=1,2**ndims
-              !
-              if(abound(n)%icell_ijk(m,1)>=0) then
-                i=abound(n)%icell_ijk(m,1)
-                j=abound(n)%icell_ijk(m,2)
-                k=abound(n)%icell_ijk(m,3)
-                xcell(m,:)=x(i,j,k,:)
-              elseif(abound(n)%icell_bnode(m)>0) then
-                n1=abound(n)%icell_bnode(m)
-                xcell(m,:)=abound(n1)%x(:)
-              endif
-              !
-            enddo
+            write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(1,:)
+            write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(2,:)
+            write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(3,:)
+            write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(4,:)
             !
-            write(fh,'(3(1X,E20.13E2))')xcell(1,:)
-            write(fh,'(3(1X,E20.13E2))')xcell(2,:)
-            write(fh,'(3(1X,E20.13E2))')xcell(4,:)
-            write(fh,'(3(1X,E20.13E2))')xcell(3,:)
-            !
-            if(ndims==3) then
-              write(fh,'(3(1X,E20.13E2))')xcell(5,:)
-              write(fh,'(3(1X,E20.13E2))')xcell(6,:)
-              write(fh,'(3(1X,E20.13E2))')xcell(8,:)
-              write(fh,'(3(1X,E20.13E2))')xcell(7,:)
+            if(ndims==3 ) then
+              write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(5,:)
+              write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(6,:)
+              write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(7,:)
+              write(fh,'(3(1X,E20.13E2))')cell(i,j,k)%x(8,:)
             endif
             !
           endif
+          !
         enddo
         write(fh,'(8(1X,I0))')(m,m=1,counter*2**ndims)
         close(fh)

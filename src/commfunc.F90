@@ -3933,9 +3933,17 @@ module commfunc
   pure real(8) function dis2point(p1,p2)
     !
     ! arguments
-    real(8),intent(in) :: p1(3),p2(3)
+    real(8),intent(in) :: p1(:),p2(:)
     !
-    dis2point=(p1(1)-p2(1))**2+(p1(2)-p2(2))**2+(p1(3)-p2(3))**2
+    ! local data
+    integer :: n,nd
+    !
+    nd=size(p1)
+    !
+    dis2point=0.d0
+    do n=1,nd
+      dis2point=dis2point+(p1(n)-p2(n))**2
+    enddo
     !
     dis2point=sqrt(dis2point)
     !
@@ -3946,9 +3954,17 @@ module commfunc
   pure real(8) function dis2point2(p1,p2)
     !
     ! arguments
-    real(8),intent(in) :: p1(3),p2(3)
+    real(8),intent(in) :: p1(:),p2(:)
     !
-    dis2point2=(p1(1)-p2(1))**2+(p1(2)-p2(2))**2+(p1(3)-p2(3))**2
+    ! local data
+    integer :: n,nd
+    !
+    nd=size(p1)
+    !
+    dis2point2=0.d0
+    do n=1,nd
+      dis2point2=dis2point2+(p1(n)-p2(n))**2
+    enddo
     !
     return
     !

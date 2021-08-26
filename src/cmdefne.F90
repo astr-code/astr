@@ -10,8 +10,6 @@ module cmdefne
   !
   implicit none
   !
-  integer :: nkey=0
-  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -22,31 +20,16 @@ module cmdefne
   !| 11-02-2021  | Created by J. Fang @ Warrington                     |
   !| 28-05-2021  | Moved to the module command by J. Fang @ Warrington |
   !+-------------------------------------------------------------------+
-  subroutine readkeyboad(cmd,name1)
+  subroutine readkeyboad(keyin)
     !
-    character(len=*),intent(out),optional :: cmd,name1
+    character(len=*),intent(out),optional :: keyin
     !
     ! local data
     integer :: ierr,cli_len,nlen,arg_count
-    character(len=128) :: keyin
-    !
-    if(present(name1)) name1='.' ! default value
+    integer,save :: nkey=0
     !
     nkey=nkey+1
     call get_command_argument(nkey,keyin,cli_len,ierr)
-    !
-    if(trim(keyin)=='init' .or. trim(keyin)=='solid') then
-      cmd=trim(keyin)
-      nkey=nkey+1
-      call get_command_argument(nkey,keyin,cli_len,ierr)
-      name1=trim(keyin)
-    elseif(trim(keyin)=='-input') then
-      nkey=nkey+1
-      call get_command_argument(nkey,keyin,cli_len,ierr)
-      name1=trim(keyin)
-    else
-      cmd=trim(keyin)
-    endif
     !
   end subroutine readkeyboad
   !+-------------------------------------------------------------------+
@@ -72,13 +55,13 @@ module cmdefne
     !
     if(mpirank==0) then
       !
-      call readkeyboad(cmd=cmd,name1=casename)
+      call readkeyboad(cmd)
       !
       if(cmd=='list' .or. cmd=='help') then
         call listcmd
       endif
       !
-      print*,' ** input command: ',cmd,casename
+      print*,' ** input command: ',cmd
       !
     endif
     !

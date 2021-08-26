@@ -298,11 +298,10 @@ module bc
     !
     use commtype,  only : sboun
     !
-    use commvar,   only : twall,pinf,immbnod,num_species,              &
-                          imb_node_have,imb_node_need,                 &
+    use commvar,   only : twall,pinf,immbond,num_species,              &
                           num_icell_rank,num_ighost_rank
     use commarray, only : nodestat,vel,x
-    use commcal,   only : ijkin
+    use commcal,   only : ijkin,ijkcellin
     use fludyna,   only : fvar2q,q2fvar,thermal
     use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck,qswap
     use commfunc,  only : median
@@ -346,13 +345,13 @@ module bc
     !
     allocate( vel_icell(ncube,3),tmp_icell(ncube),prs_icell(ncube), &
               c_dir(ncube),c_neu(ncube))
-    allocate(qimag(numq,1:size(immbnod)))
+    allocate(qimag(numq,1:size(immbond)))
     !
     counter=0
     !
-    do jb=1,size(immbnod)
+    do jb=1,size(immbond)
       !
-      pb=>immbnod(jb)
+      pb=>immbond(jb)
       !
       ! if(.not. allocated(pb%qimag)) allocate(pb%qimag(numq))
       ! pb%qimag=0.d0
@@ -361,9 +360,7 @@ module bc
       j=pb%icell(2)-jg0
       k=pb%icell(3)-kg0
       !
-      if( i>=1   .and. i<=im .and. & 
-          j>=1   .and. j<=jm .and. &
-          k>=kss .and. k<=km) then
+      if( ijkcellin(i,j,k)) then
         ! the icell is in local processor
         !
         prslmin= 1.d10
@@ -382,12 +379,12 @@ module bc
             !
             prslmin=min(prslmin,prs(i,j,k))
             prslmax=max(prslmax,prs(i,j,k))
-          elseif(pb%icell_bnode(m)>0) then
-            kb=pb%icell_bnode(m)
-            !
-            vel_icell(m,:)=0.d0
-            tmp_icell(m)  =tinf
-            prs_icell(m)  =0.d0
+          ! elseif(pb%icell_bnode(m)>0) then
+          !   kb=pb%icell_bnode(m)
+          !   !
+          !   vel_icell(m,:)=0.d0
+          !   tmp_icell(m)  =tinf
+          !   prs_icell(m)  =0.d0
             !
           else
             stop ' !! ERROR in determining interpolation coefficient'
@@ -396,7 +393,7 @@ module bc
         enddo
         !
         c_dir=pb%coef_dirichlet
-        c_neu=pb%coef_neumann
+        ! c_neu=pb%coef_neumann
         !
         vel_image(1)=dot_product(c_dir,vel_icell(:,1))
         vel_image(2)=dot_product(c_dir,vel_icell(:,2))
@@ -404,7 +401,8 @@ module bc
         !
         tmp_image   =dot_product(c_dir,tmp_icell)
         !
-        prs_image   =dot_product(c_neu,prs_icell)
+        ! prs_image   =dot_product(c_neu,prs_icell)
+        prs_image   =dot_product(c_dir,prs_icell)
         prs_image   =median(prs_image,prslmin,prslmin)
         !
         rho_image=thermal(pressure=prs_image,temperature=tmp_image)
@@ -415,18 +413,18 @@ module bc
         !
         call fvar2q(      q=qimag(:,counter),                      &
                     density=rho_image,  velocity=vel_image,        &
-                    pressure=prs_image,  species=spc_image             )
+                    pressure=prs_image,  species=spc_image         )
         !
         !
       endif
       !
     enddo
-    !
+    ! !
     call syncqimag(qimag(:,1:counter))
-    !
-    do jb=1,size(immbnod)
+    ! !
+    do jb=1,size(immbond)
       !
-      pb=>immbnod(jb)
+      pb=>immbond(jb)
       !
       ! if(.not. allocated(pb%q)) allocate(pb%q(numq))
       !
@@ -468,8 +466,8 @@ module bc
         if(pb%nodetype=='g') then
           ! for ghost nodes
           !
-          vel(i,j,k,:)=-1.d0*var_u(:)
-            tmp(i,j,k)=2.d0*tinf-var_t
+          vel(i,j,k,:)=-1.d0*var_u(:)*pb%dis2ghost/pb%dis2image
+            tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
             prs(i,j,k)=var_p
             rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
           !
@@ -542,7 +540,7 @@ module bc
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
-  !| This subroutine is used to synconize immbnod(jb)%qimag            |
+  !| This subroutine is used to synconize immbond(jb)%qimag            |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -552,7 +550,7 @@ module bc
     !
     use commtype, only : sboun
     use parallel, only : psum,ptabupd,mpirankmax,pgather,bcast,pscatter
-    use commvar,  only : immbnod,imb_node_have,imb_node_need,          &
+    use commvar,  only : immbond,imb_node_have,imb_node_need,          &
                          num_ighost_rank,numq,imbroot
     !
     ! arguments
@@ -567,7 +565,7 @@ module bc
     !
     logical,save :: lfirstcal=.true.
     !
-    nsize=size(immbnod)
+    nsize=size(immbond)
     nsend=size(imb_node_need)
     !
     if(lfirstcal) then
@@ -585,7 +583,7 @@ module bc
       enddo
       !
       if(mpirank==imbroot) then
-        write(*,'(3(A,I0))')' ** imb root rank= ',imbroot, &
+        write(*,'(3(A,I0))')'  ** imb root rank= ',imbroot, &
                             ', local size: ',qsize,', total imb size: ',nsize
       endif
       !
@@ -605,9 +603,9 @@ module bc
         !
         qimmb(:,kb)=buf(:,jb)
         !
-        if(.not. allocated(immbnod(kb)%qimag)) allocate(immbnod(kb)%qimag(numq))
+        if(.not. allocated(immbond(kb)%qimag)) allocate(immbond(kb)%qimag(numq))
         !
-        immbnod(kb)%qimag(:)=qimmb(:,kb)
+        immbond(kb)%qimag(:)=qimmb(:,kb)
         !
       enddo
       !
@@ -641,9 +639,9 @@ module bc
         !
         kb=imb_node_need(jb+offset)
         !
-        if(.not. allocated(immbnod(kb)%qimag)) allocate(immbnod(kb)%qimag(numq))
+        if(.not. allocated(immbond(kb)%qimag)) allocate(immbond(kb)%qimag(numq))
         !
-        immbnod(kb)%qimag(:)=qboud(:,jb)
+        immbond(kb)%qimag(:)=qboud(:,jb)
         !
         ! if(jb==size(qboud,2)) then
         !   print*,mpirank,'|',jb,kb

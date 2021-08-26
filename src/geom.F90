@@ -11,10 +11,12 @@ module geom
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
                        datasync,ptime,irk,jrk,krk,ig0,jg0,kg0,         &
-                       mpirankmax
-  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,im,jm,km
+                       mpirankmax,psum,pmax
+  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,im,jm,km,         &
+                       npdci,npdcj,npdck
   use tecio
   use stlaio,  only: get_unit
+  use commcal, only: ijkcellin,ijkin
   !
   implicit none
   !
@@ -48,7 +50,7 @@ module geom
       !
       call bcast(immbody)
       !
-      call gridinsolid
+      call immsgrid
       !
     endif
     !
@@ -73,24 +75,89 @@ module geom
     use tecio,     only : tecsolid
     !
     ! local data
-    integer :: js
+    integer :: js,fh,ios,i
     type(solid),pointer :: psolid
+    character(len=64) :: infile,head
+    logical :: lexist,lread
+    logical :: lshift=.false.,lscale=.false.,lrotate=.false.
+    real(8) :: xcen(3),scale,theta,rot_vec(3)
     !
     if(mpirank==0) then
       !
+      infile='datin/stltransform.dat'
+      inquire(file=trim(infile), exist=lexist)
+      !
+      if(lexist) then
+        !
+        fh=get_unit()
+        open(fh,file=trim(infile),action='read')
+        lread=.true.
+        ios=0
+        do while(lread .and. ios==0)
+          !
+          read(fh,*,iostat=ios)head
+          !
+          if(ios.ne.0) exit
+          !
+          select case(trim(head))
+            !
+            case('center')
+              !
+              backspace(fh)
+              read(fh,*,iostat=ios)head,(xcen(i),i=1,3)
+              lshift=.true.
+              !
+            case('rescale')
+              !
+              backspace(fh)
+              read(fh,*,iostat=ios)head,scale
+              lscale=.true.
+              !
+            case('rotate')
+              !
+              backspace(fh)
+              read(fh,*,iostat=ios)head,theta,(rot_vec(i),i=1,3)
+              lrotate=.true.
+              !
+          case default
+            print*,' ERROR: head not recognised: ',head
+            stop
+          end select
+          !
+        enddo
+        close(fh)
+        print*,' >> ',trim(infile)
+        !
+      endif
+      !
       do js=1,nsolid
         !
-        call solidrange(immbody(js))
+        call solidrange(immbody(js),inputcmd='checkdomain')
+        !
+        if(lscale) then
+          call solidresc(immbody(js),scale)
+        endif
+        !
+        if(lrotate) then
+          call solidrota(immbody(js),theta,rot_vec)
+        endif
+        !
+        if(lshift) then
+          call solidshif(immbody(js),x=xcen(1)-immbody(js)%xcen(1),  &
+                                     y=xcen(2)-immbody(js)%xcen(2),  &
+                                     z=xcen(3)-immbody(js)%xcen(3))
+        endif
         !
         if(ndims==2) then
-          call solidreduc(immbody(js))
+          ! call solidreduc(immbody(js))
+          call solidsilce(immbody(js),zsec=0.d0)
         else
           immbody(js)%num_edge=0
         endif
         !
       enddo
       !
-      call tecsolid('tecsolid.plt',immbody)
+      call tecsolid('tecsolid.plt',immbody,dim=3)
       !
     endif
     !
@@ -99,6 +166,43 @@ module geom
   end subroutine solidgeom
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidgeom.                              |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to build a immersed body in the grid.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-Aug-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine immsgrid
+    !
+    ! local data
+    real(8) :: time_beg,subtime
+    !
+    time_beg=ptime() 
+    !
+    call nodestatecal
+    !
+    call boundnodecal
+    !
+    call icellsearch
+    !
+    call icellijkcal
+    !
+    call cellbilincoef
+    !
+    call immblocal
+    !
+    subtime=ptime()-time_beg 
+    !
+    if(lio) print*,' ** grid in solid calculated'
+    !
+    if(lio) write(*,'(A,F12.8)')'  ** time cost in processing immersed grid :',subtime
+    !
+  end subroutine immsgrid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine immsgrid.                               |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -111,7 +215,7 @@ module geom
   subroutine gridinsolid
     !
     use commtype,  only : solid,triangle,sboun,nodcel
-    use commvar,   only : immbody,nsolid,immbnod,dxyzmax,dxyzmin,      &
+    use commvar,   only : immbody,nsolid,immbond,dxyzmax,dxyzmin,      &
                           npdci,npdcj,npdck,ndims,imb_node_have,       &
                           imb_node_need,num_icell_rank,num_ighost_rank
     use commarray, only : x,nodestat,cell
@@ -128,12 +232,11 @@ module geom
     integer,allocatable :: icell_order(:),ighost_order(:)
     type(solid),pointer :: pso
     logical :: crossface
-    real(8),allocatable :: rnodestat(:,:,:)
     integer :: snodes(27,3)
     integer,allocatable :: i_cell(:,:)
     real(8) :: epsilon
     real(8) :: dist,distmin,var1,var2
-    real(8) :: xmin(3),xmax(3)
+    real(8) :: xmin(3),xmax(3),xinc(3)
     real(8),allocatable :: Tm1(:,:),Tm2(:,:),Ti1(:,:),Ti2(:,:),        &
                            xvec(:),xcell(:,:),xnorm(:,:)
     !
@@ -149,12 +252,6 @@ module geom
     epsilon=1.d-10
     !
     ninters=10
-    !
-    allocate(rnodestat(0:im,0:jm,0:km))
-    !
-    nodestat=0
-    !
-    rnodestat=0.d0
     !
     if(npdci==1) then
       iss=0
@@ -187,6 +284,516 @@ module geom
                 xcell(8,3),xnorm(8,3))
     endif
     !
+    ! allocate( icell_order(1:size(immbond)),                            &
+    !           ighost_order(1:size(immbond)*8),                         &
+    !           num_icell_rank(0:mpirankmax),                            &
+    !           num_ighost_rank(0:mpirankmax),                           &
+    !           i_cell(size(immbond),3) )
+    ! !
+    ! num_ighost_rank=0
+    ! num_icell_rank=0
+    ! icell_order=0
+    ! ighost_order=0
+    ! !
+    ! icell_counter=0
+    ! ighost_counter=0
+    ! !
+    ! if(lio) print*,'    ** searching cells containing image nodes ... '
+    ! !
+    ! i_cell=0
+    ! !
+    ! time_loc=ptime()
+    ! !
+    ! do jb=1,size(immbond)
+    !   !
+    !   ! search the cell that contains the image node
+    !   !
+    !   if(ndims==2) then
+    !     !
+    !     k=0
+    !     loopj: do j=1,jm
+    !     loopi: do i=1,im
+    !       !
+    !       !
+    !       lin=nodeincell(cell(i,j,k),immbond(jb)%ximag)
+    !       !
+    !       if(lin) then
+    !         !
+    !         i_cell(jb,1)=i+ig0
+    !         i_cell(jb,2)=j+jg0
+    !         i_cell(jb,3)=k+kg0
+    !         !
+    !         ! print*,' ** icell found for jb=',jb,' rank=',mpirank
+    !         !
+    !         exit loopj
+    !         !
+    !       endif
+    !       !
+    !     enddo loopi
+    !     enddo loopj
+    !     !
+    !     if(cell(i,j,k)%celltype=='i') then
+    !       ! it is not a pure fluid or pure solid cell.
+    !       ! extent the ximage
+    !     endif
+    !     !
+    !   elseif(ndims==3) then
+    !     !
+    !     i_cell(jb,:)=pngrid(immbond(jb)%ximag)
+    !     !
+    !   endif
+    !   !
+    ! enddo
+    ! !
+    ! subtime1=subtime1+ptime()-time_loc 
+    ! !
+    ! time_loc=ptime()
+    ! !
+    ! ! put icell to immbond
+    ! call pcollecicell(i_cell,immbond)
+    ! !
+    ! subtime2=ptime()-time_loc 
+    ! !
+    ! ! to check if icell contain a ghost node
+    ! do jb=1,size(immbond)
+    !   !
+    !   !
+    !   ! time_loc=ptime()
+    !   ! !
+    !   ! immbond(jb)%icell=pgeticell(i_cell(jb,:))
+    !   ! !
+    !   ! subtime2=subtime2+ptime()-time_loc 
+    !   !
+    !   immbond(jb)%icell_bnode=0
+    !   immbond(jb)%icell_ijk=-1
+    !   !
+    !   time_loc=ptime()
+    !   !
+    !   ncou=0
+    !   !
+    !   i=immbond(jb)%icell(1)-ig0
+    !   j=immbond(jb)%icell(2)-jg0
+    !   k=immbond(jb)%icell(3)-kg0
+    !   !
+    !   if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm .and. k>=ks1 .and. k<=km) then
+    !     !
+    !     ! it is not a pure fluid or pure solid cell.
+    !     if(cell(i,j,k)%celltype=='i') then
+    !       ! if(immbond(jb)%dis2image==0.d0) then
+    !       !   print*,mpirank,'|',immbond(jb)%dis2image
+    !       !   print*,mpirank,'|',immbond(jb)%ximag
+    !       !   print*,mpirank,'|',immbond(jb)%x,immbond(jb)%nodetype
+    !       ! endif
+    !       ! now to get the intercepting point of the ray and cell
+    !       !
+    !       xinc=cellintercep(cell(i,j,k),immbond(jb))
+    !       !
+    !       ! immbond(jb)%ximag=xinc+immbond(jb)%normdir*dxyzmin*0.1d0
+    !       ! immbond(jb)%dis2image=immbond(jb)%dis2image+dxyzmin*0.1d0
+    !       ! xinc=xinc-immbond(jb)%x
+    !       ! xinc=xinc/sqrt(xinc(1)**2+xinc(2)**2)
+    !       print*,mpirank,'|',xinc(1:2),':',dis2point(xinc,immbond(jb)%ximag)
+    !       !
+    !     endif
+    !     !
+    !   endif
+    !   !
+    !   ! do kk=k1,0
+    !   ! do jj=-1,0
+    !   ! do ii=-1,0
+    !   !   !
+    !   !   ncou=ncou+1
+    !   !   !
+    !   !   immbond(jb)%icell_ijk(ncou,1)=i
+    !   !   immbond(jb)%icell_ijk(ncou,2)=j
+    !   !   immbond(jb)%icell_ijk(ncou,3)=k
+    !   !   !
+    !   !   if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm .and. k>=0 .and. k<=km) then
+    !   !     !
+    !   !     if(nodestat(i,j,k)>0) then
+    !   !       ! icell contain a solid node or a boundary node
+    !   !       !
+    !   !       ! ! use the boundary node to instead the ghost node
+    !   !       ! do kb=1,size(immbond)
+    !   !       !   !
+    !   !       !   if( immbond(kb)%igh(1)==i+ig0 .and. &
+    !   !       !       immbond(kb)%igh(2)==j+jg0 .and. &
+    !   !       !       immbond(kb)%igh(3)==k+kg0 ) then
+    !   !       !     !
+    !   !       !     immbond(jb)%icell_bnode(ncou)=kb
+    !   !       !     !
+    !   !       !     ! reset ijk that is effective
+    !   !       !     immbond(jb)%icell_ijk(ncou,1)=-1
+    !   !       !     immbond(jb)%icell_ijk(ncou,2)=-1
+    !   !       !     immbond(jb)%icell_ijk(ncou,3)=-1
+    !   !       !     !
+    !   !       !     ! if(mpirank==0) then
+    !   !       !     !   print*,mpirank,'|',immbond(jb)%icell
+    !   !       !     !   print*,mpirank,'|',kb
+    !   !       !     ! endif
+    !   !       !     !
+    !   !       !     exit
+    !   !       !     !
+    !   !       !   endif
+    !   !       !   !
+    !   !       ! enddo
+    !   !       !
+    !   !       ! extent ximag
+    !   !       !
+    !   !       immbond(jb)%ximag=immbond(jb)%ximag
+    !   !       !
+    !   !     endif
+    !   !     !
+    !   !   endif
+    !   !   !
+    !   ! enddo
+    !   ! enddo
+    !   ! enddo
+    !   !
+    !   subtime3=subtime3+ptime()-time_loc 
+    !   !
+    ! enddo
+    ! !
+    ! if(lio) print*,'    ** supporting cell established'
+    ! !
+    ! if(lio) write(*,'(A,F12.8)')'    ** time cost in search        :',subtime1
+    ! if(lio) write(*,'(A,F12.8)')'    ** time cost in pgeticell     :',subtime2
+    ! if(lio) write(*,'(A,F12.8)')'    ** time cost in checking icell:',subtime3
+    ! if(lio) write(*,'(A,F12.8)')'    ** total time cost :',subtime1+subtime2+subtime3
+    ! !
+    ! call mpistop
+    ! !
+    ! do jb=1,size(immbond)
+    !   !
+    !   ! determine interpolation coefficient
+    !   !
+    !   i=immbond(jb)%icell(1)-ig0
+    !   j=immbond(jb)%icell(2)-jg0
+    !   k=immbond(jb)%icell(3)-kg0
+    !   !
+    !   if(ndims==2) then
+    !     !
+    !     !
+    !     if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm ) then
+    !       ! icell is in the domain
+    !       !
+    !       do m=1,4
+    !         !
+    !         if(immbond(jb)%icell_ijk(m,1)>=0) then
+    !           i=immbond(jb)%icell_ijk(m,1)
+    !           j=immbond(jb)%icell_ijk(m,2)
+    !           k=immbond(jb)%icell_ijk(m,3)
+    !           !
+    !           xcell(m,:)=x(i,j,k,:)
+    !           !
+    !           Tm1(m,1)=xcell(m,1)*xcell(m,2)
+    !           Tm1(m,2)=xcell(m,1)
+    !           Tm1(m,3)=xcell(m,2)
+    !           Tm1(m,4)=1.d0
+    !           !
+    !           Tm2(m,1)=xcell(m,1)*xcell(m,2)
+    !           Tm2(m,2)=xcell(m,1)
+    !           Tm2(m,3)=xcell(m,2)
+    !           Tm2(m,4)=1.d0
+    !           !
+    !         elseif(immbond(jb)%icell_bnode(m)>0) then
+    !           kb=immbond(jb)%icell_bnode(m)
+    !           !
+    !           xcell(m,:)=immbond(kb)%x(:)
+    !           xnorm(m,:)=immbond(kb)%normdir(:)
+    !           !
+    !           Tm1(m,1)=xcell(m,1)*xcell(m,2)
+    !           Tm1(m,2)=xcell(m,1)
+    !           Tm1(m,3)=xcell(m,2)
+    !           Tm1(m,4)=1.d0
+    !           !
+    !           Tm2(m,1)=xcell(m,1)*xnorm(m,2)+xcell(m,2)*xnorm(m,1)
+    !           Tm2(m,2)=xnorm(m,1)
+    !           Tm2(m,3)=xnorm(m,2)
+    !           Tm2(m,4)=0.d0
+    !           !
+    !         else
+    !           stop ' !! ERROR in determining interpolation coefficient'
+    !         endif
+    !         !
+    !       enddo
+    !       !
+    !       allocate( immbond(jb)%coef_dirichlet(4),                   &
+    !                 immbond(jb)%coef_neumann(4)  )
+    !       !
+    !       Ti1=matinv(Tm1,4)
+    !       Ti2=matinv(Tm2,4)
+    !       !
+    !       xvec(1)=immbond(jb)%ximag(1)*immbond(jb)%ximag(2)
+    !       xvec(2)=immbond(jb)%ximag(1)
+    !       xvec(3)=immbond(jb)%ximag(2)
+    !       xvec(4)=1.d0
+    !       !
+    !       do m=1,4
+    !         immbond(jb)%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
+    !         immbond(jb)%coef_neumann(m)  =dot_product(xvec,Ti2(:,m))
+    !       enddo
+    !       !
+    !       ! immbond(jb)%coef_dirichlet=matinv4(Tm1)
+    !       ! immbond(jb)%coef_neumann  =matinv4(Tm2)
+    !       !
+    !       ! Ti1=matmul(Tm1,Ti1)
+    !       ! Ti2=matmul(Tm2,Ti2)
+    !       ! !
+    !       ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(1,:)
+    !       ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(2,:)
+    !       ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(3,:)
+    !       ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(4,:)
+    !       ! print*,'---------------------------------------------------------'
+    !       !
+    !     endif
+    !     !
+    !   elseif(ndims==3) then
+    !     !
+    !     if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm .and. k>=1 .and. k<=km ) then
+    !       ! icell is in the domain
+    !       !
+    !       !
+    !       do m=1,8
+    !         !
+    !         if(immbond(jb)%icell_ijk(m,1)>=0) then
+    !           !
+    !           i=immbond(jb)%icell_ijk(m,1)
+    !           j=immbond(jb)%icell_ijk(m,2)
+    !           k=immbond(jb)%icell_ijk(m,3)
+    !           !
+    !           xcell(m,:)=x(i,j,k,:)
+    !           !
+    !           Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+    !           Tm1(m,2)=xcell(m,1)*xcell(m,2)
+    !           Tm1(m,3)=xcell(m,1)*xcell(m,3)
+    !           Tm1(m,4)=xcell(m,2)*xcell(m,3)
+    !           Tm1(m,5)=xcell(m,1)
+    !           Tm1(m,6)=xcell(m,2)
+    !           Tm1(m,7)=xcell(m,3)
+    !           Tm1(m,8)=1.d0
+    !           !
+    !           Tm2(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+    !           Tm2(m,2)=xcell(m,1)*xcell(m,2)
+    !           Tm2(m,3)=xcell(m,1)*xcell(m,3)
+    !           Tm2(m,4)=xcell(m,2)*xcell(m,3)
+    !           Tm2(m,5)=xcell(m,1)
+    !           Tm2(m,6)=xcell(m,2)
+    !           Tm2(m,7)=xcell(m,3)
+    !           Tm2(m,8)=1.d0
+    !           !
+    !         elseif(immbond(jb)%icell_bnode(m)>0) then
+    !           !
+    !           kb=immbond(jb)%icell_bnode(m)
+    !           !
+    !           xcell(m,:)=immbond(kb)%x(:)
+    !           xnorm(m,:)=immbond(kb)%normdir(:)
+    !           !
+    !           Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+    !           Tm1(m,2)=xcell(m,1)*xcell(m,2)
+    !           Tm1(m,3)=xcell(m,1)*xcell(m,3)
+    !           Tm1(m,4)=xcell(m,2)*xcell(m,3)
+    !           Tm1(m,5)=xcell(m,1)
+    !           Tm1(m,6)=xcell(m,2)
+    !           Tm1(m,7)=xcell(m,3)
+    !           Tm1(m,8)=1.d0
+    !           !
+    !           Tm2(m,1)=xnorm(m,1)*xcell(m,2)*xcell(m,3) +  &
+    !                    xcell(m,1)*xnorm(m,2)*xcell(m,3) +  &
+    !                    xcell(m,1)*xcell(m,2)*xnorm(m,3)
+    !           Tm2(m,2)=xnorm(m,1)*xcell(m,2)+xcell(m,1)*xnorm(m,2)
+    !           Tm2(m,3)=xnorm(m,1)*xcell(m,3)+xcell(m,1)*xnorm(m,3)
+    !           Tm2(m,4)=xnorm(m,2)*xcell(m,3)+xcell(m,2)*xnorm(m,3)
+    !           Tm2(m,5)=xnorm(m,1)
+    !           Tm2(m,6)=xnorm(m,2)
+    !           Tm2(m,7)=xnorm(m,3)
+    !           Tm2(m,8)=0.d0
+    !           !
+    !         else
+    !           print*,' ** mpirank=',mpirank
+    !           print*,' ** immbond(jb)%icell      :',immbond(jb)%icell
+    !           print*,' ** immbond(jb)%icell_ijk  :',immbond(jb)%icell_ijk(m,:)
+    !           print*,' ** immbond(jb)%icell_bnode:',immbond(jb)%icell_bnode(m)
+    !           stop ' !! ERROR in determining interpolation coefficient'
+    !         endif
+    !         !
+    !       enddo
+    !       !
+    !       allocate( immbond(jb)%coef_dirichlet(8),                   &
+    !                 immbond(jb)%coef_neumann(8),immbond(jb)%invmatrx(8,8)  )
+    !       !
+    !       Ti1=matinv(Tm1,8)
+    !       Ti2=matinv(Tm2,8)
+    !       !
+    !       xvec(1)=immbond(jb)%ximag(1)*immbond(jb)%ximag(2)*immbond(jb)%ximag(3)
+    !       xvec(2)=immbond(jb)%ximag(1)*immbond(jb)%ximag(2)
+    !       xvec(3)=immbond(jb)%ximag(1)*immbond(jb)%ximag(3)
+    !       xvec(4)=immbond(jb)%ximag(2)*immbond(jb)%ximag(3)
+    !       xvec(5)=immbond(jb)%ximag(1)
+    !       xvec(6)=immbond(jb)%ximag(2)
+    !       xvec(7)=immbond(jb)%ximag(3)
+    !       xvec(8)=1.d0
+    !       !
+    !       do m=1,8
+    !         immbond(jb)%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
+    !         immbond(jb)%coef_neumann(m)  =dot_product(xvec,Ti2(:,m))
+    !       enddo
+    !       ! immbond(jb)%invmatrx=Ti2
+    !       !
+    !       ! immbond(jb)%coef_dirichlet=matinv4(Tm1)
+    !       ! immbond(jb)%coef_neumann  =matinv4(Tm2)
+    !       !
+    !       ! Ti1=matmul(Tm1,Ti1)
+    !       ! Ti2=matmul(Tm2,Ti2)
+    !       ! !
+    !       ! if(.not. isidenmar(Ti1,1.d-5)) then
+    !       !   write(*,"(8(1X,F10.6))")Ti1(1,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(2,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(3,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(4,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(5,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(6,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(7,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti1(8,:)
+    !       !   print*,'---------------------------------------------------------'
+    !       ! endif
+    !       ! if(.not. isidenmar(Ti2,1.d-5)) then
+    !       !   write(*,"(8(1X,F10.6))")Ti2(1,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(2,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(3,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(4,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(5,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(6,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(7,:)
+    !       !   write(*,"(8(1X,F10.6))")Ti2(8,:)
+    !       !   print*,'---------------------------------------------------------'
+    !       ! endif
+    !       !
+    !     endif
+    !     !
+    !   endif
+    !   !
+    ! enddo
+    ! if(lio) print*,'    ** interpolating coefficients established.'
+    ! !
+    ! do jb=1,size(immbond)
+    !   !
+    !   ! setting locality
+    !   immbond(jb)%localin=.false.
+    !   !
+    !   i=immbond(jb)%igh(1)-ig0
+    !   j=immbond(jb)%igh(2)-jg0
+    !   k=immbond(jb)%igh(3)-kg0
+    !   !
+    !   if(i>=0 .and. i<=im .and. &
+    !      j>=0 .and. j<=jm .and. &
+    !      k>=0 .and. k<=km ) then
+    !     !
+    !     immbond(jb)%localin=.true.
+    !     !
+    !     ighost_counter=ighost_counter+1
+    !     !
+    !     ighost_order(ighost_counter)=jb
+    !     !
+    !     num_ighost_rank(mpirank)=num_ighost_rank(mpirank)+1
+    !     !
+    !   endif
+    !   !
+    !   ! checking icell 
+    !   i=immbond(jb)%icell(1)-ig0
+    !   j=immbond(jb)%icell(2)-jg0
+    !   k=immbond(jb)%icell(3)-kg0
+    !   !
+    !   if(i>=1 .and. i<=im .and. &
+    !      j>=1 .and. j<=jm .and. &
+    !      k>=ks1 .and. k<=km ) then
+    !     !
+    !     immbond(jb)%cellin=.true.
+    !     !
+    !     icell_counter=icell_counter+1
+    !     !
+    !     icell_order(icell_counter)=jb
+    !     !
+    !     num_icell_rank(mpirank)=num_icell_rank(mpirank)+1
+    !     !
+    !   else
+    !     immbond(jb)%cellin=.false.
+    !   endif
+    !   !
+    ! enddo
+    ! !
+    ! call pgather(icell_order(1:icell_counter),imb_node_have)
+    ! !
+    ! call pgather(ighost_order(1:ighost_counter),imb_node_need)
+    ! !
+    ! num_icell_rank=psum(num_icell_rank)
+    ! !
+    ! num_ighost_rank=psum(num_ighost_rank)
+    ! !
+    ! if(lio) print*,'    ** boundary nodes re-ordered'
+    ! !
+    ! do k=0,km
+    ! do j=0,jm
+    ! do i=0,im
+    !   rnodestat(i,j,k)=dble(nodestat(i,j,k))
+    ! enddo
+    ! enddo
+    ! enddo
+    ! !
+    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
+    !                                   x(0:im,0:jm,0:km,1),'x',    &
+    !                                   x(0:im,0:jm,0:km,2),'y',    &
+    !                                   x(0:im,0:jm,0:km,3),'z',    &
+    !                           rnodestat(0:im,0:jm,0:km),'ns' )
+    ! ! !
+    ! ! ! 
+    ! ! !
+    ! call write_sboun(immbond,'image')
+    ! call write_sboun(immbond,'icell')
+    ! call write_sboun(immbond,'ghost')
+    ! ! !
+    ! deallocate(rnodestat,bnodes,marker)
+    ! deallocate(Tm1,Tm2,Ti1,Ti2,xvec,xcell,xnorm)
+    ! !
+    ! subtime=ptime()-time_beg 
+    ! !
+    ! if(lio) print*,' ** grid in solid calculated'
+    ! if(lio) write(*,'(A,F12.8)')'    ** time cost:',subtime
+    !
+    call mpistop
+    !
+    return
+    !
+  end subroutine gridinsolid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine gridinsolid.                            |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calculate nodestat.                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-Aug-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine nodestatecal
+    !
+    use commtype,  only : solid
+    use commvar,   only : immbody,npdci,npdcj,npdck,nsolid,dxyzmin
+    use commarray, only : x,nodestat,cell
+    use commfunc,  only : dis2point
+    !
+    ! local data
+    integer :: n,ncou,jsd,i,j,k,ii,jj,kk
+    type(solid),pointer :: pso
+    logical,allocatable :: marker(:,:,:)
+    logical :: linsold
+    real(8) :: xp(3),pcdir(3),dist
+    !
+    if(lio) print*,' ** identifying solid nodes ...'
+    !
+    nodestat=0
+    ncou=0
     do jsd=1,nsolid
       !
       pso=>immbody(jsd)
@@ -195,9 +802,17 @@ module geom
       do j=0,jm
       do i=0,im
         !
-        if(x(i,j,k,1)<pso%xmin(1) .or.  x(i,j,k,1)>pso%xmax(1) .or.    &
-           x(i,j,k,2)<pso%xmin(2) .or.  x(i,j,k,2)>pso%xmax(2) .or.    &
-           x(i,j,k,3)<pso%xmin(3) .or.  x(i,j,k,3)>pso%xmax(3) ) then
+        xp=x(i,j,k,:)
+        !
+        pcdir=pso%xcen(:)-xp
+        dist=pcdir(1)**2+pcdir(2)**2+pcdir(3)**2
+        if(dist>1.d-10) then
+          xp=xp+1.d-4*dxyzmin*pcdir/sqrt(dist)
+        endif
+        !
+        if(xp(1)<pso%xmin(1) .or.  xp(1)>pso%xmax(1) .or.    &
+           xp(2)<pso%xmin(2) .or.  xp(2)>pso%xmax(2) .or.    &
+           xp(3)<pso%xmin(3) .or.  xp(3)>pso%xmax(3) ) then
           !
           nodestat(i,j,k)=0
           ! fluids 
@@ -207,31 +822,22 @@ module geom
           ! to calculation the intersection between nodes and face
           ! !
           if(ndims==2) then
-            crossface=polyhedron_contains_point_2d(pso,x(i,j,k,:))
+            linsold=polyhedron_contains_point_2d(pso,xp)
           elseif(ndims==3) then
-            crossface=polyhedron_contains_point_3d(pso,x(i,j,k,:))
+            linsold=polyhedron_contains_point_3d(pso,xp)
           else
-            stop ' !! ERROR1 @ gridinsolid' 
+            stop ' !! ERROR1 @ nodestatecal' 
           endif
           !
-          if(crossface) then
+          if(linsold) then
             ! ths point is in the solid
             nodestat(i,j,k)=5
+            !
+            ncou=ncou+1
+            !
           else
             ! fluids
             nodestat(i,j,k)=0
-            !
-            ! if(dis2point(x(i,j,k,:),pso%xcen(:))<0.9d0) then
-            !   !
-            !   if(mpirank==0) then
-            !     print*,x(i,j,k,1),'~',pso%xcen(1)
-            !     print*,x(i,j,k,2),'~',pso%xcen(2)
-            !     print*,x(i,j,k,3),'~',pso%xcen(3),':',dis2point(x(i,j,k,:),pso%xcen(:))
-            !     print*,'--------------------------------'
-            !     crossface=polyhedron_contains_point_3d(pso,x(i,j,k,:),debug=.true.)
-            !   endif
-            !   !
-            ! endif
             !
           endif
           !
@@ -243,9 +849,12 @@ module geom
       !
     enddo
     !
+    ncou=psum(ncou)
+    if(lio) write(*,'(A,I0)')'  ** total number of solide nodes: ',ncou
+    !
     call dataswap(nodestat)
     !
-    if(lio) print*,'    ** state of grid nodes calculated'
+    if(lio) print*,' ** state of grid nodes calculated'
     !
     ! search for near-boundary ghost nodes (1-5)
     allocate(marker(0:im,0:jm,0:km))
@@ -259,7 +868,7 @@ module geom
       do i=0,im
         !
         if(nodestat(i,j,k)==5) then
-          ! for solid nodes
+          ! solid nodes
           !
           do ii=-1,1,2
             if(nodestat(i+ii,j,k)==n) then
@@ -275,12 +884,14 @@ module geom
             endif
           enddo
           !
-          do kk=-1,1,2
-            if(nodestat(i,j,k+kk)==n) then
-              marker(i,j,k)=.true.
-              exit
-            endif
-          enddo
+          if(ndims==3) then
+            do kk=-1,1,2
+              if(nodestat(i,j,k+kk)==n) then
+                marker(i,j,k)=.true.
+                exit
+              endif
+            enddo
+          endif
           !
         endif
         !
@@ -304,6 +915,8 @@ module geom
       !
     enddo
     !
+    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
+    !                              nodestat(0:im,0:jm,0:km),'ns' )
     !
     ! search for near-boundary force nodes (1-5)
     !
@@ -330,12 +943,14 @@ module geom
           endif
         enddo
         !
-        do kk=-1,1,2
-          if(nodestat(i,j,k+kk)>0) then
-            marker(i,j,k)=.true.
-            exit
-          endif
-        enddo
+        if(ndims==3) then
+          do kk=-1,1,2
+            if(nodestat(i,j,k+kk)>0) then
+              marker(i,j,k)=.true.
+              exit
+            endif
+          enddo
+        endif
         !
       endif
       !
@@ -389,12 +1004,13 @@ module geom
       nodestat(:,:,km+1:km+hm)=10
     endif
     !
-    if(lio) print*,'    ** near-boundary ghost nodes identified'
+    !
+    if(lio) print*,' ** near-boundary ghost nodes identified'
     !
     ! set cell state.
     if(ndims==2) then
       !
-      do k=ks1,km
+      k=0
       do j=1,jm
       do i=1,im
         !
@@ -421,7 +1037,6 @@ module geom
           !
         endif
         !
-      enddo
       enddo
       enddo
       !
@@ -470,10 +1085,53 @@ module geom
       stop ' !! ERROR in ndims @ solidgeom'
     endif
     !
-    if(lio) print*,'    ** cell state set'
+    !
+    if(lio) print*,' ** cell state set'
+    !
+  end subroutine nodestatecal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine nodestatecal.                           |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to establish the boundary node.                |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine boundnodecal
+    !
+    use commvar,   only : nsolid,immbody,immbond,dxyzmin
+    use commtype,  only : solid,sboun
+    use commarray, only : nodestat,x
+    use parallel,  only : ig0,jg0,kg0,pmerg
+    use commfunc,  only : dis2point
+    use readwrite, only : write_sboun
+    !
+    ! local data
+    integer :: counter,nc_f,nc_b,nc_g,bignum,jsd,iss,jss,kss,i,j,k
+    type(solid),pointer :: pso
+    type(sboun),allocatable :: bnodes(:)
     !
     bignum=im*jm*(km+1)
     allocate(bnodes(bignum))
+    !
+    if(npdci==1) then
+      iss=0
+    else
+      iss=1
+    endif
+    if(npdcj==1) then
+      jss=0
+    else
+      jss=1
+    endif
+    if(npdck==1 .or. ndims==2) then
+      kss=0
+    else
+      kss=1
+    endif
     !
     ! to get the nodes and distance of inner solid nodes to boundary 
     counter=0
@@ -481,11 +1139,6 @@ module geom
     nc_b=0
     nc_g=0
     !
-    marker=.false.
-    !
-    subtime1=0.d0
-    subtime2=0.d0
-    subtime3=0.d0
     do jsd=1,nsolid
       !
       pso=>immbody(jsd)
@@ -507,11 +1160,15 @@ module geom
           !
           bnodes(counter)%ximag(:)=2.d0*bnodes(counter)%x(:)-x(i,j,k,:)
           !
-          if(dis2point(bnodes(counter)%x,x(i,j,k,:))<1.d-6) then
+          bnodes(counter)%dis2image=dis2point(bnodes(counter)%x,bnodes(counter)%ximag)
+          bnodes(counter)%dis2ghost=dis2point(bnodes(counter)%x,x(i,j,k,:))
+          !
+          if(dis2point(bnodes(counter)%x,x(i,j,k,:))<dxyzmin*0.01d0) then
+            ! the distance of node to wall is less thant 1/100 of 
+            ! the min grid spacing
             bnodes(counter)%nodetype='b'
             nc_b=nc_b+1
             !
-            marker(i,j,k)=.true.
             ! boundary marker
           else
             bnodes(counter)%nodetype='g'
@@ -519,22 +1176,22 @@ module geom
           endif
           !
           !
-        elseif(nodestat(i,j,k)==-1) then
-          ! force point
-          !
-          counter=counter+1
-          !
-          call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='-')
-          !
-          bnodes(counter)%igh(1)=i+ig0
-          bnodes(counter)%igh(2)=j+jg0
-          bnodes(counter)%igh(3)=k+kg0
-          !
-          bnodes(counter)%ximag(:)=2.d0*x(i,j,k,:)-bnodes(counter)%x(:)
-          !
-          bnodes(counter)%nodetype='f'
-          !
-          nc_f=nc_f+1
+        ! elseif(nodestat(i,j,k)==-1) then
+        !   ! force point
+        !   !
+        !   counter=counter+1
+        !   !
+        !   call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='-')
+        !   !
+        !   bnodes(counter)%igh(1)=i+ig0
+        !   bnodes(counter)%igh(2)=j+jg0
+        !   bnodes(counter)%igh(3)=k+kg0
+        !   !
+        !   bnodes(counter)%ximag(:)=2.d0*x(i,j,k,:)-bnodes(counter)%x(:)
+        !   !
+        !   bnodes(counter)%nodetype='f'
+        !   !
+        !   nc_f=nc_f+1
         endif
         !
       enddo
@@ -543,97 +1200,240 @@ module geom
       !
     enddo
     !
-    call pmerg(var=bnodes,nvar=counter,vmerg=immbnod)
+    call pmerg(var=bnodes,nvar=counter,vmerg=immbond)
     !
-    if(lio) print*,'    ** ghost, boundary and image nodes collected'
+    if(lio) print*,' ** ghost, boundary and image nodes collected'
     !
     nc_b=psum(nc_b)
     nc_f=psum(nc_f)
     nc_g=psum(nc_g)
     if(lio) then
-      write(*,'(A,I0)')'     ** number of boundary nodes: ',size(immbnod)
-      write(*,'(A,I0)')'        **   ghost nodes: ',nc_g
-      write(*,'(A,I0)')'        ** forcing nodes: ',nc_f
-      write(*,'(A,I0)')'       ** boundary nodes: ',nc_b
+      write(*,'(A,I0)')'     ** number of boundary nodes: ',size(immbond)
+      write(*,'(A,I0)')'        **    ghost nodes: ',nc_g
+      write(*,'(A,I0)')'        **  forcing nodes: ',nc_f
+      write(*,'(A,I0)')'        ** boundary nodes: ',nc_b
     endif
     !
-    allocate( icell_order(1:size(immbnod)),                            &
-              ighost_order(1:size(immbnod)*8),                         &
-              num_icell_rank(0:mpirankmax),                            &
-              num_ighost_rank(0:mpirankmax),                           &
-              i_cell(size(immbnod),3) )
+    return
     !
-    num_ighost_rank=0
-    num_icell_rank=0
-    icell_order=0
-    ighost_order=0
+  end subroutine boundnodecal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine boundnodecal.                           |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to build the cell that contains image nodes.   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-Aug-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine icellsearch
     !
-    icell_counter=0
-    ighost_counter=0
+    use commtype,  only : sboun
+    use commvar,   only : immbond,dxyzmin
+    use commarray, only : x,nodestat,cell
+    use commfunc,  only : dis2point
+    use parallel,  only : pcollecicell,por
+    use readwrite, only : write_sboun
     !
-    if(lio) print*,'    ** searching cells containing image nodes ... '
+    ! local data
+    integer,allocatable :: i_cell(:,:)
+    integer :: jb,i,j,k,ncou
+    real(8) :: time_beg,subtime
+    real(8) :: deltamv,xintcell(3)
+    logical,allocatable :: icell_marker(:)
+    type(sboun),pointer :: pbon
+    !
+    ! start ... 
+    time_beg=ptime() 
+    !
+    allocate( i_cell(size(immbond),3),icell_marker(size(immbond)) )
+    !
+    if(lio) print*,' ** searching cells containing image nodes ... '
+    !
+    icell_marker=.false.
     !
     i_cell=0
     !
-    time_loc=ptime()
-    !
-    do jb=1,size(immbnod)
+    ncou=0
+    do jb=1,size(immbond)
+      ! go through all boundary nodes
       !
+      pbon=>immbond(jb)
       ! search the cell that contains the image node
       !
       if(ndims==2) then
-        k=0
-        loopj: do j=1,jm
-        loopi: do i=1,im
-          !
-          !
-          lin=nodeincell(cell(i,j,k),immbnod(jb)%ximag)
-          !
-          if(lin) then
-            !
-            i_cell(jb,1)=i+ig0
-            i_cell(jb,2)=j+jg0
-            i_cell(jb,3)=k+kg0
-            !
-            ! print*,' ** icell found for jb=',jb,' rank=',mpirank
-            !
-            exit loopj
-            !
-          endif
-          !
-        enddo loopi
-        enddo loopj
+        !
+        i_cell(jb,:)=pngrid2d(pbon%ximag)
+        !
       elseif(ndims==3) then
         !
-        i_cell(jb,:)=pngrid(immbnod(jb)%ximag)
+        i_cell(jb,:)=pngrid3d(pbon%ximag)
+        !
+      endif
+      !
+      i=i_cell(jb,1)-ig0
+      j=i_cell(jb,2)-jg0
+      k=i_cell(jb,3)-kg0
+      !
+      if(ijkcellin(i,j,k)) then
+        !
+        if(cell(i,j,k)%celltype=='i' .or. cell(i,j,k)%celltype=='s') then
+          ! it is not a pure fluid.
+          ! extent the ximage
+          ncou=ncou+1
+          !
+          icell_marker(jb)=.true.
+          !
+        else
+        endif
         !
       endif
       !
     enddo
     !
-    subtime1=subtime1+ptime()-time_loc 
+    ncou=psum(ncou)
+    icell_marker=por(icell_marker)
     !
-    time_loc=ptime()
+    if(lio) print*,' ** number of cut cell:',ncou
     !
-    ! put icell to immbnod
-    call pcollecicell(i_cell,immbnod)
+    ! go through the marked boundary nodes
     !
-    subtime2=ptime()-time_loc 
-    !
-    ! to check if icell contain a ghost node
-    do jb=1,size(immbnod)
+    do while(ncou>0)
       !
       !
-      ! time_loc=ptime()
-      ! !
-      ! immbnod(jb)%icell=pgeticell(i_cell(jb,:))
-      ! !
-      ! subtime2=subtime2+ptime()-time_loc 
+      do jb=1,size(immbond)
+        !
+        deltamv=0.d0
+        !
+        pbon=>immbond(jb)
+        !
+        if(icell_marker(jb)) then
+          !
+          i=i_cell(jb,1)-ig0
+          j=i_cell(jb,2)-jg0
+          k=i_cell(jb,3)-kg0
+          !
+          if(ijkcellin(i,j,k)) then
+            ! calculate the intersection the boundary extension 
+            ! ray and the cell
+            xintcell=cellintersec(cell(i,j,k),pbon)
+            !
+            deltamv=dis2point(xintcell,pbon%ximag)
+            !
+          endif
+          !
+          ! extend the ximag
+          deltamv=pmax(deltamv)
+          !
+          xintcell=pbon%ximag+pbon%normdir*(deltamv+0.01d0*dxyzmin)
+          pbon%ximag=xintcell
+          !
+          pbon%dis2image=dis2point(pbon%x,pbon%ximag)
+          !
+        endif
+        !
+      enddo
       !
-      immbnod(jb)%icell_bnode=0
-      immbnod(jb)%icell_ijk=-1
+      ! rebuilt icell
+      ncou=0
+      do jb=1,size(immbond)
+        !
+        pbon=>immbond(jb)
+        !
+        if(icell_marker(jb)) then
+          !
+          icell_marker(jb)=.false.
+          !
+          if(ndims==2) then
+            !
+            i_cell(jb,:)=pngrid2d(pbon%ximag)
+            !
+          elseif(ndims==3) then
+            !
+            i_cell(jb,:)=pngrid3d(pbon%ximag)
+            !
+          endif
+          !
+          i=i_cell(jb,1)-ig0
+          j=i_cell(jb,2)-jg0
+          k=i_cell(jb,3)-kg0
+          !
+          if(ijkcellin(i,j,k)) then
+            !
+            !
+            if(cell(i,j,k)%celltype=='i' .or. cell(i,j,k)%celltype=='s') then
+              ! it is not a pure fluid or pure solid cell.
+              ! extent the ximage
+              ncou=ncou+1
+              !
+              icell_marker(jb)=.true.
+              !
+            else
+            endif
+            !
+          endif
+          !
+        endif
+        !
+      enddo
       !
-      time_loc=ptime()
+      ncou=psum(ncou)
+      icell_marker=por(icell_marker)
+      !
+      if(lio) print*,' ** number of cut cell:',ncou
+      !
+    enddo
+    !
+    !
+    ! put icell to immbond
+    call pcollecicell(i_cell,immbond)
+    !
+    call write_sboun(immbond,'image')
+    !
+    call write_sboun(immbond,'ghost')
+    !
+    call write_sboun(immbond,'icell')
+    !
+    subtime=ptime()-time_beg 
+    !
+    if(lio) write(*,'(A,F12.8)')'  ** time cost in searching icell :',subtime
+    !
+  end subroutine icellsearch
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine icellsearch.                            |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calculate the ijk of icell.                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-Aug-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine icellijkcal
+    !
+    use commtype,  only : sboun
+    use commvar,   only : immbond,ndims
+    use commarray, only : nodestat,cell
+    !
+    integer :: jb,ncou,k1,i,j,k,ic,jc,kc,ii,jj,kk
+    type(sboun),pointer :: pbon
+    real(8) :: epsilon=1.d-12
+    !
+    if(ndims==2) then
+      k1=0
+    elseif(ndims==3) then
+      k1=-1
+    endif
+    !
+    do jb=1,size(immbond)
+      !
+      pbon=>immbond(jb)
+      !
+      pbon%icell_bnode=0
+      pbon%icell_ijk=-1
       !
       ncou=0
       do kk=k1,0
@@ -642,43 +1442,33 @@ module geom
         !
         ncou=ncou+1
         !
-        i=immbnod(jb)%icell(1)-ig0+ii
-        j=immbnod(jb)%icell(2)-jg0+jj
-        k=immbnod(jb)%icell(3)-kg0+kk
+        ic=pbon%icell(1)-ig0
+        jc=pbon%icell(2)-jg0
+        kc=pbon%icell(3)-kg0
         !
-        immbnod(jb)%icell_ijk(ncou,1)=i
-        immbnod(jb)%icell_ijk(ncou,2)=j
-        immbnod(jb)%icell_ijk(ncou,3)=k
+        i=ic+ii
+        j=jc+jj
+        k=kc+kk
         !
-        if(i>=0 .and. i<=im .and. j>=0 .and. j<=jm .and. k>=0 .and. k<=km) then
+        pbon%icell_ijk(ncou,1)=i
+        pbon%icell_ijk(ncou,2)=j
+        pbon%icell_ijk(ncou,3)=k
+        !
+        if(ijkin(i,j,k)) then
           !
           if(nodestat(i,j,k)>0) then
             ! icell contain a solid node or a boundary node
-            !
-            do kb=1,size(immbnod)
-              !
-              if( immbnod(kb)%igh(1)==i+ig0 .and. &
-                  immbnod(kb)%igh(2)==j+jg0 .and. &
-                  immbnod(kb)%igh(3)==k+kg0 ) then
-                !
-                immbnod(jb)%icell_bnode(ncou)=kb
-                !
-                ! reset ijk that is effective
-                immbnod(jb)%icell_ijk(ncou,1)=-1
-                immbnod(jb)%icell_ijk(ncou,2)=-1
-                immbnod(jb)%icell_ijk(ncou,3)=-1
-                !
-                ! if(mpirank==0) then
-                !   print*,mpirank,'|',immbnod(jb)%icell
-                !   print*,mpirank,'|',kb
-                ! endif
-                !
-                exit
-                !
-              endif
-              !
-            enddo
-            !
+            ! should not happen now
+            print*,mpirank,'| cell:',ic,jc,kc,cell(ic,jc,kc)%celltype
+            print*,mpirank,'| node:',i,j,k
+            print*,' !! ERROR: icell contain a solid node or a boundary node'
+            stop 
+          endif
+          !
+          if(pbon%dis2image<epsilon) then
+            print*,mpirank,'|',i,j,k
+            print*,' !! WARNING the distance between image node to boundary is too small',pbon%dis2image
+            stop 
           endif
           !
         endif
@@ -687,243 +1477,186 @@ module geom
       enddo
       enddo
       !
-      subtime3=subtime3+ptime()-time_loc 
     enddo
     !
-    if(lio) print*,'    ** supporting cell established'
+    if(lio) write(*,'(A)')'  ** icell ijk built.'
     !
-    if(lio) write(*,'(A,F12.8)')'    ** time cost in search        :',subtime1
-    if(lio) write(*,'(A,F12.8)')'    ** time cost in pgeticell     :',subtime2
-    if(lio) write(*,'(A,F12.8)')'    ** time cost in checking icell:',subtime3
-    if(lio) write(*,'(A,F12.8)')'    ** total time cost :',subtime1+subtime2+subtime3
+  end subroutine icellijkcal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine icellijkcal.                            |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calcualte coefficient for bilinear          |
+  !| interpolation                                                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine cellbilincoef
     !
-    do jb=1,size(immbnod)
+    use commtype,  only : sboun
+    use commvar,   only : immbond,ndims
+    use commarray, only : x
+    use commfunc,  only : matinv
+    !
+    integer :: jb,i,j,k,ic,jc,kc,m,ncord
+    type(sboun),pointer :: pbon
+    real(8),allocatable :: xcell(:,:),Tm1(:,:),Ti1(:,:),xvec(:)
+    !
+    ncord=2**ndims
+    allocate(Tm1(1:ncord,1:ncord),xcell(1:ncord,1:3),xvec(1:ncord))
+    !
+    do jb=1,size(immbond)
       !
-      ! determine interpolation coefficient
+      pbon=>immbond(jb)
       !
-      i=immbnod(jb)%icell(1)-ig0
-      j=immbnod(jb)%icell(2)-jg0
-      k=immbnod(jb)%icell(3)-kg0
+      ic=pbon%icell(1)-ig0
+      jc=pbon%icell(2)-jg0
+      kc=pbon%icell(3)-kg0
       !
-      if(ndims==2) then
+      if(ijkcellin(ic,jc,kc)) then
         !
-        !
-        if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm ) then
-          ! icell is in the domain
+        if(ndims==2) then
           !
           do m=1,4
             !
-            if(immbnod(jb)%icell_ijk(m,1)>=0) then
-              i=immbnod(jb)%icell_ijk(m,1)
-              j=immbnod(jb)%icell_ijk(m,2)
-              k=immbnod(jb)%icell_ijk(m,3)
-              !
-              xcell(m,:)=x(i,j,k,:)
-              !
-              Tm1(m,1)=xcell(m,1)*xcell(m,2)
-              Tm1(m,2)=xcell(m,1)
-              Tm1(m,3)=xcell(m,2)
-              Tm1(m,4)=1.d0
-              !
-              Tm2(m,1)=xcell(m,1)*xcell(m,2)
-              Tm2(m,2)=xcell(m,1)
-              Tm2(m,3)=xcell(m,2)
-              Tm2(m,4)=1.d0
-              !
-            elseif(immbnod(jb)%icell_bnode(m)>0) then
-              kb=immbnod(jb)%icell_bnode(m)
-              !
-              xcell(m,:)=immbnod(kb)%x(:)
-              xnorm(m,:)=immbnod(kb)%normdir(:)
-              !
-              Tm1(m,1)=xcell(m,1)*xcell(m,2)
-              Tm1(m,2)=xcell(m,1)
-              Tm1(m,3)=xcell(m,2)
-              Tm1(m,4)=1.d0
-              !
-              Tm2(m,1)=xcell(m,1)*xnorm(m,2)+xcell(m,2)*xnorm(m,1)
-              Tm2(m,2)=xnorm(m,1)
-              Tm2(m,3)=xnorm(m,2)
-              Tm2(m,4)=0.d0
-              !
-            else
-              stop ' !! ERROR in determining interpolation coefficient'
-            endif
+            i=pbon%icell_ijk(m,1)
+            j=pbon%icell_ijk(m,2)
+            k=pbon%icell_ijk(m,3)
+            !
+            xcell(m,:)=x(i,j,k,:)
+            !
+            Tm1(m,1)=xcell(m,1)*xcell(m,2)
+            Tm1(m,2)=xcell(m,1)
+            Tm1(m,3)=xcell(m,2)
+            Tm1(m,4)=1.d0
             !
           enddo
           !
-          allocate( immbnod(jb)%coef_dirichlet(4),                   &
-                    immbnod(jb)%coef_neumann(4)  )
+          allocate( pbon%coef_dirichlet(4) )
           !
           Ti1=matinv(Tm1,4)
-          Ti2=matinv(Tm2,4)
           !
-          xvec(1)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)
-          xvec(2)=immbnod(jb)%ximag(1)
-          xvec(3)=immbnod(jb)%ximag(2)
+          xvec(1)=pbon%ximag(1)*pbon%ximag(2)
+          xvec(2)=pbon%ximag(1)
+          xvec(3)=pbon%ximag(2)
           xvec(4)=1.d0
           !
           do m=1,4
-            immbnod(jb)%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
-            immbnod(jb)%coef_neumann(m)  =dot_product(xvec,Ti2(:,m))
+            pbon%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
           enddo
           !
-          ! immbnod(jb)%coef_dirichlet=matinv4(Tm1)
-          ! immbnod(jb)%coef_neumann  =matinv4(Tm2)
-          !
-          ! Ti1=matmul(Tm1,Ti1)
-          ! Ti2=matmul(Tm2,Ti2)
-          ! !
-          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(1,:)
-          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(2,:)
-          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(3,:)
-          ! write(*,"(I0,A,4(1X,F16.12))")mpirank,'|',Ti2(4,:)
-          ! print*,'---------------------------------------------------------'
-          !
-        endif
-        !
-      elseif(ndims==3) then
-        !
-        if(i>=1 .and. i<=im .and. j>=1 .and. j<=jm .and. k>=1 .and. k<=km ) then
-          ! icell is in the domain
-          !
+        elseif(ndims==3) then
           !
           do m=1,8
             !
-            if(immbnod(jb)%icell_ijk(m,1)>=0) then
-              !
-              i=immbnod(jb)%icell_ijk(m,1)
-              j=immbnod(jb)%icell_ijk(m,2)
-              k=immbnod(jb)%icell_ijk(m,3)
-              !
-              xcell(m,:)=x(i,j,k,:)
-              !
-              Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
-              Tm1(m,2)=xcell(m,1)*xcell(m,2)
-              Tm1(m,3)=xcell(m,1)*xcell(m,3)
-              Tm1(m,4)=xcell(m,2)*xcell(m,3)
-              Tm1(m,5)=xcell(m,1)
-              Tm1(m,6)=xcell(m,2)
-              Tm1(m,7)=xcell(m,3)
-              Tm1(m,8)=1.d0
-              !
-              Tm2(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
-              Tm2(m,2)=xcell(m,1)*xcell(m,2)
-              Tm2(m,3)=xcell(m,1)*xcell(m,3)
-              Tm2(m,4)=xcell(m,2)*xcell(m,3)
-              Tm2(m,5)=xcell(m,1)
-              Tm2(m,6)=xcell(m,2)
-              Tm2(m,7)=xcell(m,3)
-              Tm2(m,8)=1.d0
-              !
-            elseif(immbnod(jb)%icell_bnode(m)>0) then
-              !
-              kb=immbnod(jb)%icell_bnode(m)
-              !
-              xcell(m,:)=immbnod(kb)%x(:)
-              xnorm(m,:)=immbnod(kb)%normdir(:)
-              !
-              Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
-              Tm1(m,2)=xcell(m,1)*xcell(m,2)
-              Tm1(m,3)=xcell(m,1)*xcell(m,3)
-              Tm1(m,4)=xcell(m,2)*xcell(m,3)
-              Tm1(m,5)=xcell(m,1)
-              Tm1(m,6)=xcell(m,2)
-              Tm1(m,7)=xcell(m,3)
-              Tm1(m,8)=1.d0
-              !
-              Tm2(m,1)=xnorm(m,1)*xcell(m,2)*xcell(m,3) +  &
-                       xcell(m,1)*xnorm(m,2)*xcell(m,3) +  &
-                       xcell(m,1)*xcell(m,2)*xnorm(m,3)
-              Tm2(m,2)=xnorm(m,1)*xcell(m,2)+xcell(m,1)*xnorm(m,2)
-              Tm2(m,3)=xnorm(m,1)*xcell(m,3)+xcell(m,1)*xnorm(m,3)
-              Tm2(m,4)=xnorm(m,2)*xcell(m,3)+xcell(m,2)*xnorm(m,3)
-              Tm2(m,5)=xnorm(m,1)
-              Tm2(m,6)=xnorm(m,2)
-              Tm2(m,7)=xnorm(m,3)
-              Tm2(m,8)=0.d0
-              !
-            else
-              print*,' ** mpirank=',mpirank
-              print*,' ** immbnod(jb)%icell      :',immbnod(jb)%icell
-              print*,' ** immbnod(jb)%icell_ijk  :',immbnod(jb)%icell_ijk(m,:)
-              print*,' ** immbnod(jb)%icell_bnode:',immbnod(jb)%icell_bnode(m)
-              stop ' !! ERROR in determining interpolation coefficient'
-            endif
+            i=pbon%icell_ijk(m,1)
+            j=pbon%icell_ijk(m,2)
+            k=pbon%icell_ijk(m,3)
+            !
+            xcell(m,:)=x(i,j,k,:)
+            !
+            Tm1(m,1)=xcell(m,1)*xcell(m,2)*xcell(m,3)
+            Tm1(m,2)=xcell(m,1)*xcell(m,2)
+            Tm1(m,3)=xcell(m,1)*xcell(m,3)
+            Tm1(m,4)=xcell(m,2)*xcell(m,3)
+            Tm1(m,5)=xcell(m,1)
+            Tm1(m,6)=xcell(m,2)
+            Tm1(m,7)=xcell(m,3)
+            Tm1(m,8)=1.d0
             !
           enddo
           !
-          allocate( immbnod(jb)%coef_dirichlet(8),                   &
-                    immbnod(jb)%coef_neumann(8),immbnod(jb)%invmatrx(8,8)  )
+          allocate( pbon%coef_dirichlet(8) )
           !
           Ti1=matinv(Tm1,8)
-          Ti2=matinv(Tm2,8)
           !
-          xvec(1)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)*immbnod(jb)%ximag(3)
-          xvec(2)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(2)
-          xvec(3)=immbnod(jb)%ximag(1)*immbnod(jb)%ximag(3)
-          xvec(4)=immbnod(jb)%ximag(2)*immbnod(jb)%ximag(3)
-          xvec(5)=immbnod(jb)%ximag(1)
-          xvec(6)=immbnod(jb)%ximag(2)
-          xvec(7)=immbnod(jb)%ximag(3)
+          xvec(1)=immbond(jb)%ximag(1)*immbond(jb)%ximag(2)*immbond(jb)%ximag(3)
+          xvec(2)=immbond(jb)%ximag(1)*immbond(jb)%ximag(2)
+          xvec(3)=immbond(jb)%ximag(1)*immbond(jb)%ximag(3)
+          xvec(4)=immbond(jb)%ximag(2)*immbond(jb)%ximag(3)
+          xvec(5)=immbond(jb)%ximag(1)
+          xvec(6)=immbond(jb)%ximag(2)
+          xvec(7)=immbond(jb)%ximag(3)
           xvec(8)=1.d0
           !
           do m=1,8
-            immbnod(jb)%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
-            immbnod(jb)%coef_neumann(m)  =dot_product(xvec,Ti2(:,m))
+            pbon%coef_dirichlet(m)=dot_product(xvec,Ti1(:,m))
           enddo
-          ! immbnod(jb)%invmatrx=Ti2
-          !
-          ! immbnod(jb)%coef_dirichlet=matinv4(Tm1)
-          ! immbnod(jb)%coef_neumann  =matinv4(Tm2)
-          !
-          ! Ti1=matmul(Tm1,Ti1)
-          ! Ti2=matmul(Tm2,Ti2)
-          ! !
-          ! if(.not. isidenmar(Ti1,1.d-5)) then
-          !   write(*,"(8(1X,F10.6))")Ti1(1,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(2,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(3,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(4,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(5,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(6,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(7,:)
-          !   write(*,"(8(1X,F10.6))")Ti1(8,:)
-          !   print*,'---------------------------------------------------------'
-          ! endif
-          ! if(.not. isidenmar(Ti2,1.d-5)) then
-          !   write(*,"(8(1X,F10.6))")Ti2(1,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(2,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(3,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(4,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(5,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(6,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(7,:)
-          !   write(*,"(8(1X,F10.6))")Ti2(8,:)
-          !   print*,'---------------------------------------------------------'
-          ! endif
           !
         endif
+        !
+        ! Ti1=matmul(Tm1,Ti1)
+        ! !
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(1,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(2,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(3,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(4,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(5,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(6,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(7,:)
+        ! write(*,"(I0,A,8(1X,F8.4))")mpirank,'|',Ti1(8,:)
+        ! print*,'---------------------------------------------------------'
         !
       endif
       !
     enddo
-    if(lio) print*,'    ** interpolating coefficients established.'
     !
-    do jb=1,size(immbnod)
+    deallocate(Tm1,xcell)
+    !
+    if(lio) write(*,'(A)')'  ** cell interpolation coefficients calculated'
+    !
+  end subroutine cellbilincoef
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine cellbilincoef.                          |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to collect ib information.                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-Agu-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine immblocal
+    !!
+    use commtype,  only : sboun
+    use commvar,   only : immbond,ndims,imb_node_have,imb_node_need,   &
+                          num_icell_rank,num_ighost_rank
+    use parallel,  only : pgather
+    !
+    integer :: jb,i,j,k,icell_counter,ighost_counter
+    integer,allocatable :: ighost_order(:),icell_order(:)
+    type(sboun),pointer :: pbon
+    !
+    allocate( icell_order(1:size(immbond)),                            &
+              ighost_order(1:size(immbond)*8),                         &
+              num_icell_rank(0:mpirankmax),                            &
+              num_ighost_rank(0:mpirankmax) )
+    icell_counter=0
+    ighost_counter=0
+    !
+    num_ighost_rank=0
+    num_icell_rank=0
+    icell_order=0
+    ighost_order=0
+    
+    do jb=1,size(immbond)
+      !
+      pbon=>immbond(jb)
       !
       ! setting locality
-      immbnod(jb)%localin=.false.
+      pbon%localin=.false.
       !
-      i=immbnod(jb)%igh(1)-ig0
-      j=immbnod(jb)%igh(2)-jg0
-      k=immbnod(jb)%igh(3)-kg0
+      i=pbon%igh(1)-ig0
+      j=pbon%igh(2)-jg0
+      k=pbon%igh(3)-kg0
       !
-      if(i>=0 .and. i<=im .and. &
-         j>=0 .and. j<=jm .and. &
-         k>=0 .and. k<=km ) then
+      if( ijkin(i,j,k) ) then
         !
-        immbnod(jb)%localin=.true.
+        pbon%localin=.true.
         !
         ighost_counter=ighost_counter+1
         !
@@ -934,15 +1667,15 @@ module geom
       endif
       !
       ! checking icell 
-      i=immbnod(jb)%icell(1)-ig0
-      j=immbnod(jb)%icell(2)-jg0
-      k=immbnod(jb)%icell(3)-kg0
+      pbon%cellin=.false.
       !
-      if(i>=1 .and. i<=im .and. &
-         j>=1 .and. j<=jm .and. &
-         k>=ks1 .and. k<=km ) then
+      i=pbon%icell(1)-ig0
+      j=pbon%icell(2)-jg0
+      k=pbon%icell(3)-kg0
+      !
+      if( ijkcellin(i,j,k) ) then
         !
-        immbnod(jb)%cellin=.true.
+        pbon%cellin=.true.
         !
         icell_counter=icell_counter+1
         !
@@ -950,8 +1683,6 @@ module geom
         !
         num_icell_rank(mpirank)=num_icell_rank(mpirank)+1
         !
-      else
-        immbnod(jb)%cellin=.false.
       endif
       !
     enddo
@@ -964,44 +1695,13 @@ module geom
     !
     num_ighost_rank=psum(num_ighost_rank)
     !
-    if(lio) print*,'    ** boundary nodes re-ordered'
+    if(lio) print*,' ** boundary nodes re-ordered'
     !
-    ! do k=0,km
-    ! do j=0,jm
-    ! do i=0,im
-    !   rnodestat(i,j,k)=dble(nodestat(i,j,k))
-    ! enddo
-    ! enddo
-    ! enddo
-    ! !
-    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
-    !                                   x(0:im,0:jm,0:km,1),'x',    &
-    !                                   x(0:im,0:jm,0:km,2),'y',    &
-    !                                   x(0:im,0:jm,0:km,3),'z',    &
-    !                           rnodestat(0:im,0:jm,0:km),'ns' )
-    ! !
-    ! ! 
-    ! !
-    ! call write_sboun(immbnod,'image')
-    ! call write_sboun(immbnod,'icell')
-    ! call write_sboun(immbnod,'ghost')
-    ! !
-    deallocate(rnodestat,bnodes,marker)
-    deallocate(Tm1,Tm2,Ti1,Ti2,xvec,xcell,xnorm)
-    !
-    subtime=ptime()-time_beg 
-    !
-    if(lio) print*,' ** grid in solid calculated'
-    if(lio) write(*,'(A,F12.8)')'    ** time cost:',subtime
-    !
-    ! call mpistop
-    !
-    return
-    !
-  end subroutine gridinsolid
+  end subroutine immblocal
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine solidingrid.                            |
+  !| The end of the subroutine immblocal.                              |
   !+-------------------------------------------------------------------+
+  !!
   !!
   !+-------------------------------------------------------------------+
   !| This function is to judge if a point in a cell.                   |
@@ -1263,6 +1963,208 @@ module geom
   !| The end of the subroutine solidimpro.                             |
   !+-------------------------------------------------------------------+
   !
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to cut a 2d slice from a 3D geometry.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 07-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine solidsilce(asolid,zsec)
+    !
+    use commtype,  only : solid,triangle,lsegment
+    use commvar,   only : xmax,xmin,ymax,ymin,zmax,zmin
+    use commfunc,  only : areatriangle,cross_product,dis2point
+    !
+    ! arguments
+    type(solid),intent(inout),target :: asolid
+    real(8),intent(in) :: zsec
+    !
+    ! local data
+    integer :: i,jf,je,nedge,nemax
+    type(lsegment),allocatable :: edge_temp(:)
+    type(triangle),pointer :: aface
+    real(8) :: dz2,dz1,epsilon,tange(2),norma(2),n2cen(2)
+    logical :: lbpoint
+    !
+    epsilon=1.d-12
+    !
+    nemax=asolid%num_face
+    !
+    allocate(edge_temp(nemax))
+    !
+    nedge=0
+    do jf=1,asolid%num_face
+      !
+      aface=>asolid%face(jf)
+      !
+      lbpoint=.false.
+      !
+      if( (aface%a(3)>=zsec .and. aface%b(3)<=zsec) .or. &
+          (aface%a(3)<=zsec .and. aface%b(3)>=zsec)  ) then
+        !
+        dz2=aface%b(3)-aface%a(3)
+        dz1=zsec-aface%a(3)
+        !
+        if(abs(dz2)<epsilon) then
+          !
+          nedge=nedge+1
+          !
+          edge_temp(nedge)%a=aface%a(1:2)
+          edge_temp(nedge)%b=aface%b(1:2)
+          !
+          if(dis2point(edge_temp(nedge)%a,edge_temp(nedge)%b)>=epsilon) then
+            cycle
+          else
+            nedge=nedge-1
+          endif
+          !
+        else
+          nedge=nedge+1
+          !
+          edge_temp(nedge)%a=dz1/dz2*(aface%b(1:2)-aface%a(1:2))+aface%a(1:2)
+          lbpoint=.true.
+          !
+        endif
+        !
+      endif
+      !
+      if( (aface%b(3)>=zsec .and. aface%c(3)<=zsec) .or. &
+          (aface%b(3)<=zsec .and. aface%c(3)>=zsec)  ) then
+        !
+        dz2=aface%c(3)-aface%b(3)
+        dz1=zsec-aface%b(3)
+        !
+        if(abs(dz2)<epsilon) then
+          !
+          if(.not. lbpoint) nedge=nedge+1
+          !
+          edge_temp(nedge)%a=aface%b(1:2)
+          edge_temp(nedge)%b=aface%c(1:2)
+          !
+          if(dis2point(edge_temp(nedge)%a,edge_temp(nedge)%b)>=epsilon) then
+            cycle
+          else
+            nedge=nedge-1
+          endif
+          !
+        else
+          !
+          if(lbpoint) then
+            !
+            edge_temp(nedge)%b=dz1/dz2*(aface%c(1:2)-aface%b(1:2))+aface%b(1:2)
+            !
+            if(dis2point(edge_temp(nedge)%a,edge_temp(nedge)%b)>=epsilon) then
+              cycle
+            else
+              nedge=nedge-1
+            endif
+            !
+          else
+            nedge=nedge+1
+            edge_temp(nedge)%a=dz1/dz2*(aface%c(1:2)-aface%b(1:2))+aface%b(1:2)
+            lbpoint=.true.
+          endif
+          !
+        endif
+        !
+      endif
+      !
+      if( (aface%c(3)>=zsec .and. aface%a(3)<=zsec) .or. &
+          (aface%c(3)<=zsec .and. aface%a(3)>=zsec)  ) then
+        !
+        dz2=aface%a(3)-aface%c(3)
+        dz1=zsec-aface%c(3)
+        !
+        if(abs(dz2)<epsilon) then
+          !
+          if(.not. lbpoint) nedge=nedge+1
+          !
+          edge_temp(nedge)%a=aface%c(1:2)
+          edge_temp(nedge)%b=aface%a(1:2)
+          !
+          !
+          if(dis2point(edge_temp(nedge)%a,edge_temp(nedge)%b)>=epsilon) then
+            cycle
+          else
+            nedge=nedge-1
+          endif
+          !
+        else
+          !
+          if(lbpoint) then
+            !
+            edge_temp(nedge)%b=dz1/dz2*(aface%a(1:2)-aface%c(1:2))+aface%c(1:2)
+            !
+            if(dis2point(edge_temp(nedge)%a,edge_temp(nedge)%b)>=epsilon) then
+              cycle
+            else
+              nedge=nedge-1
+            endif
+            !
+          else
+            stop ' !! ERROR @ solidsilce'
+          endif
+          !
+        endif
+        !
+      endif
+      !
+    enddo
+    !
+    if(nedge==0) then
+      print*,' !! ERROR, failed to cut a slice from the solid'
+      print*,' ** zsec=',zsec
+      print*,' ** solid extent:',asolid%xmin,'~',asolid%xmax
+    endif
+    !
+    asolid%num_edge=nedge
+    call asolid%alloedge()
+    !
+    asolid%edge(1:nedge)=edge_temp(1:nedge)
+    !
+    asolid%xcen=0.d0
+    do je=1,asolid%num_edge
+      asolid%xcen(1:2)=asolid%xcen(1:2)+0.5d0*(asolid%edge(je)%a+asolid%edge(je)%b)
+    enddo
+    asolid%xcen=asolid%xcen/dble(asolid%num_edge)
+    asolid%xcen(3)=zsec
+    !
+    print*,' ** center of the solid: ',asolid%xcen
+    !
+    do je=1,asolid%num_edge
+      !
+      tange=asolid%edge(je)%b-asolid%edge(je)%a
+      norma(1)=-tange(2)/sqrt(tange(1)**2+tange(2)**2)
+      norma(2)= tange(1)/sqrt(tange(1)**2+tange(2)**2)
+      !
+      if(sqrt(tange(1)**2+tange(2)**2)<1.d-16) then
+        print*,' !! ERROR: the two ends of the edge is two close'
+        print*,je,asolid%edge(je)%a,':',asolid%edge(je)%b
+      endif
+      !
+      n2cen=0.5d0*(asolid%edge(je)%a+asolid%edge(je)%b)-asolid%xcen(1:2)
+      !
+      if(dot_product(norma,n2cen)>=0.d0) then
+        !
+        asolid%edge(je)%normdir=norma
+        !
+      else
+        !
+        asolid%edge(je)%normdir=-norma
+        !
+      endif
+      !
+    enddo
+    !
+    if(lio) print*,' ** the body is slided at z=',zsec
+    !
+  end subroutine solidsilce
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine solidsilce.                             |
+  !+-------------------------------------------------------------------+
+  !!
   !+-------------------------------------------------------------------+
   !| This subroutine is used to reduce a 3D polyhedron to a 2D polygon |
   !+-------------------------------------------------------------------+
@@ -1371,7 +2273,7 @@ module geom
   !| -------------                                                     |
   !| 03-Jul-2021: Created by J. Fang @ Appleton                        |
   !+-------------------------------------------------------------------+
-  subroutine solidrange(asolid)
+  subroutine solidrange(asolid,inputcmd)
     !
     use commtype,  only : solid,triangle
     use commvar,   only : xmax,xmin,ymax,ymin,zmax,zmin
@@ -1379,6 +2281,7 @@ module geom
     !
     ! arguments
     type(solid),intent(inout) :: asolid
+    character(len=*),intent(in),optional :: inputcmd
     !
     ! local data
     integer :: i,jf
@@ -1427,38 +2330,48 @@ module geom
     write(*,'(2(A,E15.7E3))')'    x: ',asolid%xmin(1),'~',asolid%xmax(1)
     write(*,'(2(A,E15.7E3))')'    y: ',asolid%xmin(2),'~',asolid%xmax(2)
     write(*,'(2(A,E15.7E3))')'    z: ',asolid%xmin(3),'~',asolid%xmax(3)
+    write(*,'(3(A,E15.7E3))')' size: ',asolid%xmax(1)-asolid%xmin(1),':', &
+                                       asolid%xmax(2)-asolid%xmin(2),':', &
+                                       asolid%xmax(3)-asolid%xmin(3)
     write(*,'(A,3(E15.7E3))')' cent: ',asolid%xcen(:)
     !
-    if(asolid%xmin(1)<xmin) then
-      write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof computational domain'
-      write(*,'(2(A,E15.7E3))')'  !! solid xmin: ',asolid%xmin(1),      &
-                                  ' domain xmin: ',xmin
-    endif
-    if(asolid%xmin(2)<ymin) then
-      write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof computational domain'
-      write(*,'(2(A,E15.7E3))')'  !! solid ymin: ',asolid%xmin(2),      &
-                                  ' domain ymin: ',ymin
-    endif
-    if(asolid%xmin(3)<zmin) then
-      write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof computational domain'
-      write(*,'(2(A,E15.7E3))')'  !! solid zmin: ',asolid%xmin(3),      &
-                                  ' domain zmin: ',zmin
-    endif
-    !
-    if(asolid%xmax(1)>xmax) then
-      write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof computational domain'
-      write(*,'(2(A,E15.7E3))')'  !! solid xmax: ',asolid%xmax(1),      &
-                                  ' domain xmax: ',xmax
-    endif
-    if(asolid%xmax(2)>ymax) then
-      write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof computational domain'
-      write(*,'(2(A,E15.7E3))')'  !! solid ymax: ',asolid%xmax(2),      &
-                                  ' domain ymax: ',ymax
-    endif
-    if(asolid%xmax(3)>zmax) then
-      write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof computational domain'
-      write(*,'(2(A,E15.7E3))')'  !! solid zmax: ',asolid%xmax(3),      &
-                                  ' domain zmax: ',zmax
+    if(trim(inputcmd)=='checkdomain') then
+      !
+      if(asolid%xmin(1)<xmin) then
+        write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof domain'
+        write(*,'(2(A,E15.7E3))')'  !! solid xmin: ',asolid%xmin(1),   &
+                                    ' domain xmin: ',xmin
+      endif
+      if(asolid%xmax(1)>xmax) then
+        write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof domain'
+        write(*,'(2(A,E15.7E3))')'  !! solid xmax: ',asolid%xmax(1),   &
+                                    ' domain xmax: ',xmax
+      endif
+      if(asolid%xmin(2)<ymin) then
+        write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof domain'
+        write(*,'(2(A,E15.7E3))')'  !! solid ymin: ',asolid%xmin(2),   &
+                                    ' domain ymin: ',ymin
+      endif
+      if(asolid%xmax(2)>ymax) then
+        write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof domain'
+        write(*,'(2(A,E15.7E3))')'  !! solid ymax: ',asolid%xmax(2),  &
+                                    ' domain ymax: ',ymax
+      endif
+      !
+      if(ndims==3) then
+        if(asolid%xmin(3)<zmin) then
+          write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof domain'
+          write(*,'(2(A,E15.7E3))')'  !! solid zmin: ',asolid%xmin(3), &
+                                      ' domain zmin: ',zmin
+        endif
+        !
+        if(asolid%xmax(3)>zmax) then
+          write(*,'(A,2(E15.7E3))')'  !! WARNING: solid outof domain'
+          write(*,'(2(A,E15.7E3))')'  !! solid zmax: ',asolid%xmax(3), &
+                                      ' domain zmax: ',zmax
+        endif
+      endif
+      !
     endif
     !
   end subroutine solidrange
@@ -1498,13 +2411,15 @@ module geom
     write(*,'(3A,E15.7E3)')'  ** solid ',trim(asolid%name),            &
                                                  ' is rescaled by',scale
     !
+    call solidrange(asolid)
+    !
   end subroutine solidresc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidresc.                              |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is used to rescale size of the solid.             |
+  !| This subroutine is used to shift size of the solid.               |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -1538,9 +2453,84 @@ module geom
     write(*,'(3(A),3(E15.7E3))')'  ** solid ',trim(asolid%name),       &
                                                 ' is shifted by ',x,y,z
     !
+    call solidrange(asolid)
+    !
   end subroutine solidshif
   !+-------------------------------------------------------------------+
   !| The end of the subroutine solidshif.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to rotate size of the solid.              |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-Aug-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  !| ref: https://zh.wikipedia.org/wiki/%E6%97%8B%E8%BD%AC%E7%9F%A9%E9%98%B5
+  !+-------------------------------------------------------------------+
+  subroutine solidrota(asolid,theta,vec)
+    !
+    use commtype,  only : solid,triangle
+    !
+    ! arguments
+    type(solid),intent(inout) :: asolid
+    real(8),intent(in) :: theta,vec(3)
+    !
+    ! local data
+    integer :: i,jf
+    real(8) :: rotmat(3,3),a,vec_xyz(3,3),vec_abc(3,3)
+    !
+    a=theta/180.d0*pi
+    !
+    rotmat(1,1)=(1.d0-cos(a))*vec(1)*vec(1)+cos(a)
+    rotmat(1,2)=(1.d0-cos(a))*vec(1)*vec(2)-sin(a)*vec(3)
+    rotmat(1,3)=(1.d0-cos(a))*vec(1)*vec(3)+sin(a)*vec(2)
+    !
+    rotmat(2,1)=(1.d0-cos(a))*vec(1)*vec(2)+sin(a)*vec(3)
+    rotmat(2,2)=(1.d0-cos(a))*vec(2)*vec(2)+cos(a)
+    rotmat(2,3)=(1.d0-cos(a))*vec(2)*vec(3)-sin(a)*vec(1)
+    !
+    rotmat(3,1)=(1.d0-cos(a))*vec(1)*vec(3)-sin(a)*vec(2)
+    rotmat(3,2)=(1.d0-cos(a))*vec(2)*vec(3)+sin(a)*vec(1)
+    rotmat(3,3)=(1.d0-cos(a))*vec(3)*vec(3)+cos(a)
+    !
+    ! print*,rotmat(1,:)
+    ! print*,rotmat(2,:)
+    ! print*,rotmat(3,:)
+    !
+    do jf=1,asolid%num_face
+      !
+      vec_xyz(1,:)=asolid%face(jf)%a
+      vec_xyz(2,:)=asolid%face(jf)%b
+      vec_xyz(3,:)=asolid%face(jf)%c
+      !
+      do i=1,3
+        vec_abc(1,i)=dot_product(rotmat(i,:),vec_xyz(1,:))
+        vec_abc(2,i)=dot_product(rotmat(i,:),vec_xyz(2,:))
+        vec_abc(3,i)=dot_product(rotmat(i,:),vec_xyz(3,:))
+      enddo
+      !
+      asolid%face(jf)%a=vec_abc(1,:)
+      asolid%face(jf)%b=vec_abc(2,:)
+      asolid%face(jf)%c=vec_abc(3,:)
+      !
+      vec_xyz(1,:)=asolid%face(jf)%normdir
+      !
+      asolid%face(jf)%normdir(1)=dot_product(rotmat(1,:),vec_xyz(1,:))
+      asolid%face(jf)%normdir(2)=dot_product(rotmat(2,:),vec_xyz(1,:))
+      asolid%face(jf)%normdir(3)=dot_product(rotmat(3,:),vec_xyz(1,:))
+      !
+    enddo
+    !
+    write(*,'(3(A),F10.6,A,3(F10.6))')'  ** solid ',trim(asolid%name), &
+                                 ' roates ',theta,'deg along a vec:',vec
+    !
+    call solidrange(asolid)
+    !
+  end subroutine solidrota
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine solidrota.                              |
   !+-------------------------------------------------------------------+
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2221,13 +3211,265 @@ module geom
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
+  !| This function is to find the intercept between a ray and a cell.  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  function cellintersec(acell,abond,debug) result(xincep)
+    !
+    use commtype, only : nodcel,sboun,triangle
+    use commfunc, only : dis2point,cross_product
+    !
+    ! arguments
+    type(nodcel),intent(in) :: acell
+    type(sboun),intent(in) :: abond
+    logical,intent(in),optional :: debug
+    real(8) :: xincep(3)
+    !
+    ! local data
+    integer :: n
+    real(8) :: x1(4,3),x2(4,3),p(3),dir(3),xint(3),dist,distmax
+    type(triangle) :: atri(12)
+    logical :: lintercept
+    !
+    if(ndims==2) then
+      !
+      p=abond%ximag
+      dir=abond%normdir
+      !
+      ! edge 1
+      x1(1,:)=acell%x(1,:); x2(1,:)=acell%x(2,:)
+      x1(2,:)=acell%x(2,:); x2(2,:)=acell%x(3,:)
+      x1(3,:)=acell%x(3,:); x2(3,:)=acell%x(4,:)
+      x1(4,:)=acell%x(4,:); x2(4,:)=acell%x(1,:)
+      !
+      distmax=-1.d10
+      do n=1,4
+        !
+        call ray2segment(x1(n,:),x2(n,:),p,dir,xint,lintercept)
+        !
+        if(lintercept) then
+          !
+          dist=dis2point(xint,p)
+          !
+          if(dist>distmax) then
+            distmax=dist
+            xincep=xint
+          endif
+          !
+        endif
+        !
+      enddo
+      !
+    elseif(ndims==3) then
+      !
+      p=abond%ximag
+      dir=abond%normdir
+      !
+      ! establish a hexahedron
+      ! k-1 face
+      atri(1)%a=acell%x(1,:)
+      atri(1)%b=acell%x(4,:)
+      atri(1)%c=acell%x(3,:)
+      !
+      atri(2)%a=acell%x(3,:)
+      atri(2)%b=acell%x(2,:)
+      atri(2)%c=acell%x(1,:)
+      !
+      ! k face
+      atri(3)%a=acell%x(6,:)
+      atri(3)%b=acell%x(7,:)
+      atri(3)%c=acell%x(8,:)
+      !
+      atri(4)%a=acell%x(8,:)
+      atri(4)%b=acell%x(5,:)
+      atri(4)%c=acell%x(6,:)
+      !
+      ! j-1 face
+      atri(5)%a=acell%x(5,:)
+      atri(5)%b=acell%x(1,:)
+      atri(5)%c=acell%x(2,:)
+      !
+      atri(6)%a=acell%x(2,:)
+      atri(6)%b=acell%x(6,:)
+      atri(6)%c=acell%x(5,:)
+      !
+      ! j face
+      atri(7)%a=acell%x(7,:)
+      atri(7)%b=acell%x(3,:)
+      atri(7)%c=acell%x(4,:)
+      !
+      atri(8)%a=acell%x(4,:)
+      atri(8)%b=acell%x(8,:)
+      atri(8)%c=acell%x(7,:)
+      !
+      ! i-1 face
+      atri(9)%a=acell%x(4,:)
+      atri(9)%b=acell%x(1,:)
+      atri(9)%c=acell%x(5,:)
+      !
+      atri(10)%a=acell%x(5,:)
+      atri(10)%b=acell%x(8,:)
+      atri(10)%c=acell%x(4,:)
+      !
+      ! i face
+      atri(11)%a=acell%x(2,:)
+      atri(11)%b=acell%x(3,:)
+      atri(11)%c=acell%x(7,:)
+      !
+      atri(12)%a=acell%x(7,:)
+      atri(12)%b=acell%x(6,:)
+      atri(12)%c=acell%x(2,:)
+      !
+      do n=1,12
+        atri(n)%normdir=cross_product(atri(n)%b-atri(n)%a,  &
+                                      atri(n)%c-atri(n)%a  )
+      enddo
+      !
+      distmax=-1.d10
+      do n=1,12
+        call ray2triangle(atri(n),p,dir,xint,lintercept)
+        !
+        if(lintercept) then
+          !
+          dist=dis2point(xint,p)
+          !
+          if(dist>distmax) then
+            distmax=dist
+            xincep=xint
+          endif
+          !
+        endif
+        !
+      enddo
+      !
+    else
+      print*,' !! ERROR 1 dimension @ cellintersec'
+      stop
+    endif
+    !
+    return
+    !
+  end function cellintersec
+  !+-------------------------------------------------------------------+
+  !| The end of the function cellintersec.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to find the intersection between a ray and a   |
+  !| segment                                                           |
+  !+-------------------------------------------------------------------+
+  ! https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line_segment
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine ray2segment(x1,x2,p,dir,xint,lint)
+    !
+    use commfunc, only : dis2point2
+    ! arguments
+    real(8),intent(in)  :: x1(3),x2(3),p(3),dir(3)
+    real(8),intent(out) :: xint(3)
+    logical :: lint
+    !
+    ! local data
+    real(8) :: t,u,var1,dis12,dis1p,disp2
+    if(ndims==2) then
+      !
+      var1=-(x1(1)-x2(1))*dir(2)+(x1(2)-x2(2))*dir(1)
+      !
+      if(abs(var1)<1.d-16) then
+        ! The segment is parallel to the ray, check if p is on x1-x2
+        !
+        lint=.false.
+        xint(1)=0.d0
+        xint(2)=0.d0
+        xint(3)=0.d0
+        !
+      else
+        t=(-(x1(1)-p(1)) *dir(2)+(x1(2)-p(2))*dir(1))/var1
+        u=( (x2(1)-x1(1))*(x1(2)-p(2)) - (x2(2)-x1(2))*(x1(1)-p(1)))/var1
+        !
+        if(u>=0.d0 .and. t>=0.d0 .and. t<=1.d0 ) then
+          lint=.true.
+          !
+          xint(1)=p(1)+dir(1)*u
+          xint(2)=p(2)+dir(2)*u
+          xint(3)=0.d0
+        else
+          lint=.false.
+          xint(1)=0.d0
+          xint(2)=0.d0
+          xint(3)=0.d0
+        endif
+        !
+      endif
+      !
+    else
+      stop ' !! ERROR in dimension @ ray2segment'
+    endif
+    !
+    return
+    !
+  end subroutine ray2segment
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine ray2segment.                            |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
   !| This function is to find the point in 3d grid.                    |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 19-08-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  function pngrid(p) result(ijk)
+  function pngrid2d(p) result(ijk)
+    !
+    use commvar,   only : im,jm,km
+    use commarray, only : x,cell
+    !
+    ! arguments
+    real(8),intent(in) :: p(3)
+    integer :: ijk(3)
+    !
+    integer :: i,j,k
+    logical :: lin
+    !
+    ijk=0
+    !
+    k=0
+    loopj: do j=1,jm
+    loopi: do i=1,im
+      !
+      if(nodeincell(cell(i,j,k),p)) then
+        !
+        ijk(1)=i+ig0
+        ijk(2)=j+jg0
+        ijk(3)=k+kg0
+        !
+        exit loopj
+        !
+      endif
+      !
+    enddo loopi
+    enddo loopj
+    !
+  end function pngrid2d
+  !+-------------------------------------------------------------------+
+  !| The end of the function pngrid2d.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to find the point in 3d grid.                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-08-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  function pngrid3d(p) result(ijk)
     !
     use commvar,   only : im,jm,km
     use commarray, only : x,cell
@@ -2494,7 +3736,7 @@ module geom
     !
     return
     !
-  end function pngrid
+  end function pngrid3d
   !+-------------------------------------------------------------------+
   !| The end of the function pngrid.                                   |
   !+-------------------------------------------------------------------+
@@ -2509,106 +3751,48 @@ module geom
   !| -------------                                                     |
   !| 04-07-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine ray2triangle(tria,p,intertri,pintersection)
+  subroutine ray2triangle(tria,p,dir,pintersection,intertri)
     !
     use commtype, only :  triangle
     use commfunc,  only : dis2point,areatriangle
     !
     ! arguments
     type(triangle),intent(in) :: tria
-    real(8),intent(in) :: p(3)
+    real(8),intent(in) :: p(3),dir(3)
     logical,intent(out) :: intertri
     real(8),intent(out) :: pintersection(3)
     !
     ! local data
     integer :: i,j
-    real(8) :: slop(3),vec1(3),vec2(3),intpoint(3),d,d2,ldn
-    real(8) :: epsilon=1.d-10
+    real(8) :: vec1(3),vec2(3),intpoint(3),d,d2,ldn
+    real(8) :: epsilon=1.d-12
     real(8) :: trxmin(3),trxmax(3)
     !
-    ! establish a random slop
-    slop=(/1.d0,0.d0,0.d0/)
     !
-    ldn=dot_product(slop,tria%normdir)
+    ldn=dot_product(dir,tria%normdir)
+    !
     ! vec1=num1d3*(tria%a+tria%b+tria%c)-p
     vec1=tria%a-p
     d=dot_product(vec1,tria%normdir)
     !
     !
-    if(abs(ldn)<epsilon) then
+    if(abs(ldn)<=epsilon) then
       ! the ray line is parallel to the plane
       !
-      if(abs(d)<epsilon) then
-        ! the line is in the plane
-        intertri=pointintriangle(tria,p)
-        if(intertri) pintersection=intpoint
-        !
-      else
-        intertri=.false.
-        pintersection=(/1.d10,1.d10,1.d10/)
-      endif
+      intertri=.false.
+      pintersection=(/1.d10,1.d10,1.d10/)
       !
     else
       !
       d=d/ldn
-      intpoint=d*slop+p
       !
-      do i=1,3
-        trxmin(i)=min(tria%a(i),tria%b(i),tria%c(i))
-        trxmax(i)=max(tria%a(i),tria%b(i),tria%c(i))
-      enddo
+      intpoint=abs(d)*dir+p
       !
-      ! use the ray line condition
-      vec2=intpoint-p
-      d2=dot_product(vec2,slop)
+      intertri=pointintriangle(tria,intpoint)
       !
-      if(d2>=0 .or. dis2point(intpoint,p)<epsilon) then
-        !
-        intertri=pointintriangle(tria,intpoint)
-        if(intertri)  pintersection=intpoint
-        !
-        ! if(intertri) then
-        !   print*,tria%normdir,':',intpoint
-        !   ! print*,tria%a,'-',tria%b,'-',tria%c
-        ! endif
-        ! if(intpoint(1)>=trxmin(1) .and. intpoint(1)<=trxmax(1) .and.     &
-        !    intpoint(2)>=trxmin(2) .and. intpoint(2)<=trxmax(2) .and.     & 
-        !    intpoint(3)>=trxmin(3) .and. intpoint(3)<=trxmax(3) ) then
-        !   !
-        !   intertri=pointintriangle(tria,intpoint)
-          write(*,'(A)')'----------------------------------------------'
-          write(*,'(3(1X,E20.12E3))')tria%normdir
-          write(*,'(3(1X,E20.12E3))')tria%a
-          write(*,'(3(1X,E20.12E3))')tria%b
-          write(*,'(3(1X,E20.12E3))')tria%c
-          write(*,'(A)')'----------------------------------------------'
-          write(*,'(3(1X,E20.12E3))')intpoint
-        ! !   !
-        ! !   print*,areatriangle(tria%a,tria%b,intpoint) + &
-        ! !          areatriangle(tria%a,tria%c,intpoint) + &
-        ! !          areatriangle(tria%b,tria%c,intpoint),tria%area,intertri
-        !   !
-        !   ! open(18,file='test.plt',position='append')
-        !   ! write(18,'(a)')'variables = "x", "y", "z"'
-        !   ! write(18,'(2(A,I0),A)')'ZONE T="P_1", DATAPACKING=POINT, NODES=', &
-        !   !                      4,', ELEMENTS=',4,', ZONETYPE=FETRIANGLE'
-        !   ! write(18,'(3(1X,E15.7E3))')tria%a
-        !   ! write(18,'(3(1X,E15.7E3))')tria%b
-        !   ! write(18,'(3(1X,E15.7E3))')tria%c
-        !   ! write(18,'(3(1X,E15.7E3))')intpoint
-        !   ! write(18,'(3(1X,I8))')1,2,3
-        !   ! write(18,'(3(1X,I8))')1,2,4
-        !   ! write(18,'(3(1X,I8))')1,3,4
-        !   ! write(18,'(3(1X,I8))')2,3,4
-        !   ! !
-        !   ! close(18)
-        !   ! print*,' << test.plt'
-        !   !
-        ! endif
-        !
+      if(intertri) then
+        pintersection=intpoint
       else
-        ! the point p is opposite of the ray's direction
-        intertri=.false.
         pintersection=(/1.d10,1.d10,1.d10/)
       endif
       !

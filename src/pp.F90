@@ -29,12 +29,13 @@ module pp
     ! local data
     character(len=64) :: cmd,casefolder
     !
-    call readkeyboad(cmd=cmd,name1=casefolder)
+    call readkeyboad(cmd)
     !
     if(trim(cmd)=='init') then
+      call readkeyboad(casefolder)
       call examplegen(trim(casefolder))
     elseif(trim(cmd)=='solid') then
-      call solidpp(trim(casefolder))
+      call solidpp
     endif
     ! generate an example channel flow case
     ! 
@@ -244,39 +245,70 @@ module pp
   !| -------------                                                     |
   !| 05-07-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine solidpp(inputfile)
+  subroutine solidpp
     !
     use commtype, only : solid,triangle
     use readwrite,only : readsolid
     use commvar,  only : nsolid,immbody
-    use geom,     only : solidrange,solidresc,solidshif,solidimpro
-    use tecio,     only : tecsolid
-    use stlaio,    only : stla_write
+    use geom,     only : solidrange,solidresc,solidshif,solidimpro,solidrota
+    use tecio,    only : tecsolid
+    use stlaio,   only : stla_write
+    use cmdefne,  only : readkeyboad
     !
     ! arguments
-    character(len=*),intent(in) :: inputfile
     !
     ! local data
     integer :: js
+    character(len=64) :: inputfile
+    character(len=4) :: cmd
+    real(8) :: resc_fact
+    real(8) :: rot_vec(3),rot_theta,shift_cor(3)
     !
-    ! call readsolid(inputfile)
+    call readkeyboad(cmd)
+    !
+    print*,cmd
+    !
+    if(cmd=='sgen') then
+      call solidgen_sphere_tri
+    elseif(cmd=='proc') then
+      call readkeyboad(inputfile)
+      !
+      call readsolid(trim(inputfile))
+      !
+      ! resc_fact=0.015d0
+      resc_fact=0.06667d0
+      rot_vec=(/0.d0,1.d0,0.d0/)
+      rot_theta=-90.d0
+      shift_cor=(/5.d0,5.d0,0.d0/)
+    else
+      !
+      print*,' !! ERROR 1, cmd not defined !!'
+      print*,' ** cmd=',cmd
+      print*,' ** inputfile',inputfile
+      !
+      stop
+      !
+    endif
+    !
+    ! 
     ! call solidgen_circle
     ! call solidgen_cub
     ! call solidgen_triagnle
     ! call solidgen_airfoil
-    call solidgen_sphere_tri
     !
     do js=1,nsolid
       call solidrange(immbody(js))
+      !
+      call solidresc(immbody(js),resc_fact)
+      call solidrota(immbody(js),rot_theta,rot_vec)
+      call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
+                                 y=shift_cor(2)-immbody(js)%xcen(2),  &
+                                 z=shift_cor(3)-immbody(js)%xcen(3))
+      !
     enddo
     !
-    call solidresc(immbody(1),0.5d0)
     !
-    call solidshif(immbody(1),x=5.d0-immbody(1)%xcen(1),  &
-                              y=5.d0-immbody(1)%xcen(2),  &
-                              z=5.d0-immbody(1)%xcen(3))
     !
-    call solidrange(immbody(1))
     !
     ! do js=1,nsolid
     !   call solidimpro(immbody(js))

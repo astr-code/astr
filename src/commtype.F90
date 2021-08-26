@@ -48,7 +48,7 @@ module commtype
     character(len=1) :: nodetype
     !
     real(8) :: x(3),normdir(3),ximag(3)
-    real(8) :: dis_imga_inmg,dis2boun,dis2imag
+    real(8) :: dis_imga_inmg,dis2image,dis2ghost
     real(8),allocatable :: qimag(:),q(:)
     integer :: igh(3),inmg(3)
     integer :: icell(3),icell_bnode(8),icell_ijk(8,3)
