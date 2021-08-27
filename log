@@ -1,0 +1,2 @@
+h5pfc -O3 -fbounds-check   -J obj -DHDF5  -c -o obj/geom.o  src/geom.F90
+Makefile:42: recipe for target 'geom.o' failed

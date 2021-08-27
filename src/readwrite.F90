@@ -1333,11 +1333,12 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
     endif
     !
-    if(limmbou .and. mpirank==imbroot) then
-      ! call imboundarydata 
-      !
-      call writecylimmbou
-    endif
+    ! if(limmbou .and. mpirank==imbroot) then
+    !   ! call imboundarydata 
+    !   !
+    !   call writecylimmbou
+    !   !
+    ! endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
     !     print*,'------------------------------------'
@@ -1490,84 +1491,80 @@ module readwrite
     !
     logical,save :: firstcall=.true.
     !
-    if(mpirank==0) then
+    nb=size(immbond)
+    !
+    if(firstcall) then
       !
-      nb=size(immbond)
+      xc=5.d0
+      yc=5.d0
+      ! radi=0.5d0
       !
-      if(firstcall) then
+      allocate(alfa(nb),ialf(nb))
+      !
+      do jb=1,nb
         !
-        xc=5.d0
-        yc=5.d0
-        ! radi=0.5d0
+        pb=>immbond(jb)
         !
-        allocate(alfa(nb),ialf(nb))
+        radi=sqrt((pb%x(1)-xc)**2+(pb%x(2)-yc)**2)
         !
+        if(pb%x(2)-yc>=0.d0) then
+          alfa(jb)=pi-acos((pb%x(1)-xc)/radi)
+        else
+          alfa(jb)=pi+acos((pb%x(1)-xc)/radi)
+        endif
+        !
+      enddo
+      !
+      ! sort the array according to the order of alfa
+      ialf=0
+      do kb=1,nb
+        !
+        varmin=1.d10
         do jb=1,nb
           !
-          pb=>immbond(jb)
+          if(any(ialf(1:kb)==jb)) cycle
           !
-          radi=sqrt((pb%x(1)-xc)**2+(pb%x(2)-yc)**2)
-          !
-          if(pb%x(2)-yc>=0.d0) then
-            alfa(jb)=pi-acos((pb%x(1)-xc)/radi)
-          else
-            alfa(jb)=pi+acos((pb%x(1)-xc)/radi)
+          if(alfa(jb)<varmin) then
+            varmin=alfa(jb)
+            ialf(kb)=jb
           endif
           !
         enddo
         !
-        ! sort the array according to the order of alfa
-        ialf=0
-        do kb=1,nb
-          !
-          varmin=1.d10
-          do jb=1,nb
-            !
-            if(any(ialf(1:kb)==jb)) cycle
-            !
-            if(alfa(jb)<varmin) then
-              varmin=alfa(jb)
-              ialf(kb)=jb
-            endif
-            !
-          enddo
-          !
-        enddo
-        !
-        firstcall=.false.
-        !
-      endif
-      !
-      ! do jb=1,nb
-      !   write(*,*)jb,ialf(jb),alfa(ialf(jb))
-      !   print*,'------------------------------------------'
-      ! enddo
-      !
-      fh=get_unit()
-      open(fh,file='outdat/immbou.dat')
-      write(fh,'(2(1X,A20))')'alfa','p'
-      !
-      do jb=1,nb
-        !
-        kb=ialf(jb)
-        !
-        pb=>immbond(kb)
-        !
-        call q2fvar(      q=  pb%qimag,                 &
-                      density=rho_bou,                  &
-                     velocity=vel_bou(:),               &
-                     pressure=prs_bou,                  &
-                  temperature=tmp_bou,                  &
-                      species=spc_bou                   )
-        !
-        write(fh,'(2(1X,E20.13E2))')alfa(kb),2.d0*(prs_bou-pinf)
-        !
       enddo
       !
-      close(fh)
-      print*,' << outdat/immbou.dat'
+      firstcall=.false.
       !
     endif
+    !
+    ! do jb=1,nb
+    !   write(*,*)jb,ialf(jb),alfa(ialf(jb))
+    !   print*,'------------------------------------------'
+    ! enddo
+    !
+    fh=get_unit()
+    open(fh,file='outdat/immbou.dat')
+    write(fh,'(2(1X,A20))')'alfa','p'
+    !
+    do jb=1,nb
+      !
+      kb=ialf(jb)
+      !
+      pb=>immbond(kb)
+      !
+      call q2fvar(      q=  pb%qimag,                 &
+                    density=rho_bou,                  &
+                   velocity=vel_bou(:),               &
+                   pressure=prs_bou,                  &
+                temperature=tmp_bou,                  &
+                    species=spc_bou                   )
+      !
+      write(fh,'(2(1X,E20.13E2))')alfa(kb),2.d0*(prs_bou-pinf)
+      !
+    enddo
+    !
+    close(fh)
+    print*,' << outdat/immbou.dat'
     !
     ! call mpistop
     !

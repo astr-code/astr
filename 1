@@ -1,0 +1,1362 @@
+src/geom.F90:4038:24:
+
+   end function ijksearch
+                        1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:4053:2:
+
+   subroutine ray2triangle(tria,p,dir,pintersection,intertri)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4055:34:
+
+     use commtype, only :  triangle
+                                  1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4056:48:
+
+     use commfunc,  only : dis2point,areatriangle
+                                                1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4059:37:
+
+     type(triangle),intent(in) :: tria
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4060:27:
+
+     real(8),intent(in) :: p(3),dir(3)
+                           1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4061:35:
+
+     logical,intent(out) :: intertri
+                                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4062:43:
+
+     real(8),intent(out) :: pintersection(3)
+                                           1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4065:16:
+
+     integer :: i,j
+                1
+Error: Symbol ‘i’ at (1) already has basic type of INTEGER
+src/geom.F90:4066:51:
+
+     real(8) :: vec1(3),vec2(3),intpoint(3),d,d2,ldn
+                                                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4067:29:
+
+     real(8) :: epsilon=1.d-12
+                             1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4068:34:
+
+     real(8) :: trxmin(3),trxmax(3)
+                                  1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4071:29:
+
+     ldn=dot_product(dir,tria%normdir)
+                             1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4074:14:
+
+     vec1=tria%a-p
+              1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4075:28:
+
+     d=dot_product(vec1,tria%normdir)
+                            1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4103:5:
+
+   end subroutine ray2triangle
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4117:2:
+
+   subroutine dis2tri(tria,p,distance,intpoint,nodir,dir,debug)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4119:33:
+
+     use commtype, only : triangle
+                                 1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4120:34:
+
+     use commfunc, only : dis2point
+                                  1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4122:37:
+
+     type(triangle),intent(in) :: tria
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4123:27:
+
+     real(8),intent(in) :: p(3)
+                           1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4124:38:
+
+     character(len=1),intent(in) :: dir
+                                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4125:40:
+
+     logical,intent(in),optional :: debug
+                                        1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4126:35:
+
+     real(8),intent(out) :: distance
+                                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4127:47:
+
+     real(8),intent(out) :: intpoint(3),nodir(3)
+                                               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4130:36:
+
+     real(8) :: unitvect(3),vectoa(3)
+                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4131:19:
+
+     real(8) :: var1
+                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4132:26:
+
+     logical :: ldeg,linout
+                          1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4141:22:
+
+       unitvect = tria%normdir 
+                      1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4143:22:
+
+       unitvect =-tria%normdir 
+                      1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4153:16:
+
+     vectoa=tria%a-p
+                1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4164:20:
+
+       nodir   =tria%normdir 
+                    1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4168:32:
+
+       distance=dis2point(p,tria%a)
+                                1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4169:20:
+
+       intpoint=tria%a
+                    1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4171:28:
+
+       var1=dis2point(p,tria%b)
+                            1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4174:22:
+
+         intpoint=tria%b
+                      1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4177:28:
+
+       var1=dis2point(p,tria%c)
+                            1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4180:22:
+
+         intpoint=tria%c
+                      1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4184:29:
+
+       nodir=nodir/(sqrt(nodir(1)**2+nodir(2)**2+nodir(3)**2))
+                             1
+Error: Syntax error in argument list at (1)
+src/geom.F90:4190:5:
+
+   end subroutine dis2tri
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4204:2:
+
+   subroutine dis2edge(edge,p,distance,intpoint,nodir,dir,debug)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4206:33:
+
+     use commtype, only : lsegment
+                                 1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4207:34:
+
+     use commfunc, only : dis2point
+                                  1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4209:37:
+
+     type(lsegment),intent(in) :: edge
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4210:27:
+
+     real(8),intent(in) :: p(3)
+                           1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4211:38:
+
+     character(len=1),intent(in) :: dir
+                                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4212:40:
+
+     logical,intent(in),optional :: debug
+                                        1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4213:35:
+
+     real(8),intent(out) :: distance
+                                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4214:47:
+
+     real(8),intent(out) :: intpoint(3),nodir(3)
+                                               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4217:32:
+
+     real(8) :: unitvect(2),ip(2)
+                                1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4218:32:
+
+     real(8) :: var1,var2,var3,d1
+                                1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4219:26:
+
+     logical :: ldeg,linout
+                          1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4220:29:
+
+     real(8) :: epsilon=1.d-12
+                             1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4229:22:
+
+       unitvect = edge%normdir 
+                      1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4231:22:
+
+       unitvect =-edge%normdir 
+                      1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4237:15:
+
+     var1=(edge%b(1)-edge%a(1))*(edge%a(2)-p(2))
+               1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4238:15:
+
+     var2=(edge%a(1)-p(1))     *(edge%b(2)-edge%a(2))
+               1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4239:20:
+
+     var3=sqrt((edge%b(1)-edge%a(1))**2+(edge%b(2)-edge%a(2))**2)
+                    1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4245:4:
+
+     nodir(1:2)=unitvect
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4246:4:
+
+     nodir(3)=0.d0
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4248:25:
+
+     var1=sqrt((p(1)-edge%a(1))**2+(p(2)-edge%a(2))**2)
+                         1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4249:25:
+
+     var2=sqrt((p(1)-edge%b(1))**2+(p(2)-edge%b(2))**2)
+                         1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4251:11:
+
+     if( (ip(1)-edge%a(1))*(ip(1)-edge%b(1))<=epsilon .and. &
+           1
+Error: Expected a right parenthesis in expression at (1)
+src/geom.F90:4255:8:
+
+     else
+        1
+Error: Unexpected ELSE statement at (1)
+src/geom.F90:4259:16:
+
+         ip=edge%a
+                1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4263:16:
+
+         ip=edge%b
+                1
+Error: Symbol ‘edge’ at (1) has no IMPLICIT type
+src/geom.F90:4267:6:
+
+       nodir(1:2)=p(1:2)-ip
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4268:6:
+
+       nodir(3)=0.d0
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4270:28:
+
+       nodir=nodir/sqrt(nodir(1)**2+nodir(2)**2)
+                            1
+Error: Syntax error in argument list at (1)
+src/geom.F90:4272:7:
+
+     endif
+       1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4274:4:
+
+     intpoint(1:2)=ip(1:2)
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4275:4:
+
+     intpoint(3)  =0.d0
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4279:5:
+
+   end subroutine dis2edge
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4293:2:
+
+   function pointintriangle_tri(tria,p) result(lin)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4295:34:
+
+     use commtype, only :  triangle
+                                  1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4296:52:
+
+     use commfunc,  only : areatriangle,cross_product
+                                                    1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4299:37:
+
+     type(triangle),intent(in) :: tria
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4300:27:
+
+     real(8),intent(in) :: p(3)
+                           1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4301:18:
+
+     logical :: lin
+                  1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4304:68:
+
+     real(8) :: pa(3),pb(3),pc(3),t1(3),t2(3),t3(3),v0(3),v1(3),v2(3)
+                                                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4306:28:
+
+                inverDeno,u,v
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4307:22:
+
+     real(8) :: epsilon
+                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4349:14:
+
+     v0 = tria%c - tria%a 
+              1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4350:14:
+
+     v1 = tria%b - tria%a 
+              1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4351:23:
+
+     v2 =      p - tria%a 
+                       1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4364:18:
+
+       print*,tria%a 
+                  1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4365:18:
+
+       print*,tria%b
+                  1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4366:18:
+
+       print*,tria%c 
+                  1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4367:18:
+
+       print*,tria%area
+                  1
+Error: Symbol ‘tria’ at (1) has no IMPLICIT type
+src/geom.F90:4394:34:
+
+   end function pointintriangle_tri
+                                  1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:4396:2:
+
+   function pointintriangle_nodes(a,b,c,p) result(lin)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4398:52:
+
+     use commfunc,  only : areatriangle,cross_product
+                                                    1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4401:42:
+
+     real(8),intent(in) :: a(3),b(3),c(3),p(3)
+                                          1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4402:18:
+
+     logical :: lin
+                  1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4405:68:
+
+     real(8) :: pa(3),pb(3),pc(3),t1(3),t2(3),t3(3),v0(3),v1(3),v2(3)
+                                                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4407:28:
+
+                inverDeno,u,v
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4408:22:
+
+     real(8) :: epsilon
+                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4454:36:
+
+   end function pointintriangle_nodes
+                                    1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:4467:2:
+
+   pure logical function sameside(a,b,c,p)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4469:37:
+
+     use commfunc, only: cross_product
+                                     1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4472:42:
+
+     real(8),intent(in) :: a(3),b(3),c(3),p(3)
+                                          1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4475:49:
+
+     real(8) :: ab(3),ac(3),ap(3),v1(3),v2(3),var1
+                                                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4493:23:
+
+   end function sameside
+                       1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:4506:2:
+
+   subroutine polyhedron_bound_search(asolid,p,bnode,dir,debug)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4508:36:
+
+     use commtype, only : solid,sboun
+                                    1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4511:36:
+
+     type(solid),intent(in) :: asolid
+                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4512:32:
+
+     real(kind=8),intent(in) :: p(3)
+                                1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4513:38:
+
+     character(len=1),intent(in) :: dir
+                                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4514:40:
+
+     logical,intent(in),optional :: debug
+                                        1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4515:36:
+
+     type(sboun),intent(out) :: bnode
+                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4518:33:
+
+     integer :: jface,jedge,jfsave
+                                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4519:30:
+
+     real(8) :: dismin,dis,var1
+                              1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4520:49:
+
+     real(8) :: nodeb(3),nodesave(3),vec(3),bnx(3)
+                                                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4521:19:
+
+     logical :: ldeg
+                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4533:24:
+
+       do jedge=1,asolid%num_edge
+                        1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4535:29:
+
+         call dis2edge(asolid%edge(jedge),p,dis,nodeb,bnx,dir,debug=ldeg)
+                             1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4539:16:
+
+           bnode%x=nodeb
+                1
+Error: Symbol ‘bnode’ at (1) has no IMPLICIT type
+src/geom.F90:4540:16:
+
+           bnode%normdir=bnx
+                1
+Error: Symbol ‘bnode’ at (1) has no IMPLICIT type
+src/geom.F90:4546:9:
+
+       enddo
+         1
+Error: Expecting END IF statement at (1)
+src/geom.F90:4550:27:
+
+       do jface = 1, asolid%num_face
+                           1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4552:28:
+
+         call dis2tri(asolid%face(jface),p,dis,nodeb,bnx,dir,debug=ldeg)
+                            1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4556:16:
+
+           bnode%x=nodeb
+                1
+Error: Symbol ‘bnode’ at (1) has no IMPLICIT type
+src/geom.F90:4557:16:
+
+           bnode%normdir=bnx
+                1
+Error: Symbol ‘bnode’ at (1) has no IMPLICIT type
+src/geom.F90:4563:9:
+
+       end do
+         1
+Error: Expecting END IF statement at (1)
+src/geom.F90:4569:5:
+
+   end subroutine polyhedron_bound_search
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4624:2:
+
+   function polyhedron_contains_point_2d ( asolid, p ) result (inside)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4626:30:
+
+     use commtype, only : solid
+                              1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4629:36:
+
+     type(solid),intent(in) :: asolid
+                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4630:32:
+
+     real(kind=8),intent(in) :: p(3)
+                                1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4631:21:
+
+     logical :: inside
+                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4634:16:
+
+     integer :: i
+                1
+Error: Symbol ‘i’ at (1) already has basic type of INTEGER
+src/geom.F90:4635:39:
+
+     real(8) :: t,var1,var2,var3,epsilon
+                                       1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4636:24:
+
+     real(8) :: a(2),b(2)
+                        1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4642:21:
+
+     do i = 1, asolid%num_edge
+                     1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4644:6:
+
+       a(:)=asolid%edge(i)%a(1:2)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4645:6:
+
+       b(:)=asolid%edge(i)%b(1:2)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4647:23:
+
+       var1=sqrt((p(1)-a(1))**2+(p(2)-a(2))**2)
+                       1
+Error: Expected a right parenthesis in expression at (1)
+src/geom.F90:4648:23:
+
+       var2=sqrt((p(1)-b(1))**2+(p(2)-b(2))**2)
+                       1
+Error: Expected a right parenthesis in expression at (1)
+src/geom.F90:4649:18:
+
+       var3=sqrt((a(1)-b(1))**2+(a(2)-b(2))**2)
+                  1
+Error: Expected a right parenthesis in expression at (1)
+src/geom.F90:4655:17:
+
+         if(p(2)>b(2) .eqv. p(2)<=a(2)) then
+                 1
+Error: Syntax error in IF-expression at (1)
+src/geom.F90:4657:18:
+
+           if(abs(b(2)-p(2))>epsilon) then
+                  1
+Error: Syntax error in argument list at (1)
+src/geom.F90:4658:21:
+
+             t=(p(1)-a(1))-(p(2)-a(2))*(b(1)-p(1))/(b(2)-p(2))
+                     1
+Error: Expected a right parenthesis in expression at (1)
+src/geom.F90:4653:10:
+
+       else
+          1
+src/geom.F90:4659:14:
+
+           else
+              2
+Error: Duplicate ELSE statements at (1) and (2)
+src/geom.F90:4660:21:
+
+             t=(p(1)-b(1))-(p(2)-b(2))*(a(1)-p(1))/(a(2)-p(2))
+                     1
+Error: Expected a right parenthesis in expression at (1)
+src/geom.F90:4666:11:
+
+         end if
+           1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4668:9:
+
+       endif
+         1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4670:7:
+
+     end do
+       1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4674:43:
+
+   end function polyhedron_contains_point_2d
+                                           1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:4731:2:
+
+   function polyhedron_contains_point_3d ( asolid, p,debug ) result (inside)
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4733:30:
+
+     use commtype, only : solid
+                              1
+Error: Unexpected USE statement at (1)
+src/geom.F90:4736:36:
+
+     type(solid),intent(in) :: asolid
+                                    1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4737:32:
+
+     real(kind=8),intent(in) :: p(3)
+                                1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4738:40:
+
+     logical,intent(in),optional :: debug
+                                        1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4741:57:
+
+     integer, parameter :: dim_num = 3, face_order_max = 3
+                                                         1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4743:21:
+
+     real(kind=8) area
+                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4744:17:
+
+     integer jface
+                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4745:22:
+
+     integer face_order
+                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4746:18:
+
+     logical inside
+                  1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4747:57:
+
+     real(kind=8), parameter :: pi = 3.141592653589793d+00
+                                                         1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4748:38:
+
+     real(kind=8), parameter :: epsilon = 1.d-12
+                                      1
+Error: VARIABLE attribute conflicts with PARAMETER attribute at (1)
+src/geom.F90:4749:28:
+
+     real(kind=8) solid_angle
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4750:47:
+
+     real(kind=8) v_face(dim_num,face_order_max)
+                                               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4751:33:
+
+     real(8) :: p2(3),norm(3),var1
+                                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4753:18:
+
+     norm=p-asolid%xcen
+                  1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4756:10:
+
+       norm=norm/var1
+          1
+Error: ‘norm’ at (1) is not a variable
+src/geom.F90:4757:15:
+
+       p2=p-norm*epsilon
+               1
+Error: Function ‘norm’ requires an argument list at (1)
+src/geom.F90:4765:25:
+
+     do jface = 1, asolid%num_face
+                         1
+Error: Symbol ‘asolid’ at (1) has no IMPLICIT type
+src/geom.F90:4767:6:
+
+       v_face(:,1) = asolid%face(jface)%a
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4768:6:
+
+       v_face(:,2) = asolid%face(jface)%b
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4769:6:
+
+       v_face(:,3) = asolid%face(jface)%c
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4775:7:
+
+     end do
+       1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4792:43:
+
+   end function polyhedron_contains_point_3d
+                                           1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:4837:2:
+
+   subroutine geo_polygon_solid_angle_3d ( n, v, p, solid_angle )
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4839:17:
+
+     implicit none
+                 1
+Error: Unexpected IMPLICIT NONE statement at (1)
+src/geom.F90:4841:37:
+
+     integer, parameter :: dim_num = 3
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4842:13:
+
+     integer n
+             1
+Error: Symbol ‘n’ at (1) already has basic type of INTEGER
+src/geom.F90:4844:27:
+
+     real(kind=8) a(dim_num)
+                           1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4845:22:
+
+     real(kind=8) angle
+                      1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4846:21:
+
+     real(kind=8) area
+                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4847:27:
+
+     real(kind=8) b(dim_num)
+                           1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4848:13:
+
+     integer i
+             1
+Error: Symbol ‘i’ at (1) already has basic type of INTEGER
+src/geom.F90:4849:13:
+
+     integer j
+             1
+Error: Symbol ‘j’ at (1) already has basic type of INTEGER
+src/geom.F90:4850:15:
+
+     integer jp1
+               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4851:33:
+
+     real(kind=8) normal1(dim_num)
+                                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4852:29:
+
+     real(kind=8) normal1_norm
+                             1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4853:33:
+
+     real(kind=8) normal2(dim_num)
+                                 1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4854:29:
+
+     real(kind=8) normal2_norm
+                             1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4855:18:
+
+     real(kind=8) p(dim_num)
+                  1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:4856:57:
+
+     real(kind=8), parameter :: pi = 3.141592653589793D+00
+                                                         1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4857:31:
+
+     real(kind=8) plane(dim_num)
+                               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4858:28:
+
+     real(kind=8) r1(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4859:18:
+
+     real(kind=8) s
+                  1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4860:28:
+
+     real(kind=8) solid_angle
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4861:29:
+
+     real(kind=8) v(dim_num,n)
+                             1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4870:4:
+
+     a(1:dim_num) = v(1:dim_num,n) - v(1:dim_num,1)
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4876:6:
+
+       r1(1:dim_num) = v(1:dim_num,j) - p(1:dim_num)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4880:6:
+
+       b(1:dim_num) = v(1:dim_num,jp1) - v(1:dim_num,j)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4890:33:
+
+       s = dot_product ( normal1(1:dim_num), normal2(1:dim_num) ) &
+                                 1
+Error: Syntax error in argument list at (1)
+src/geom.F90:4903:6:
+
+       a(1:dim_num) = -b(1:dim_num)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:4909:40:
+
+     if ( 0.0D+00 < dot_product ( plane(1:dim_num), r1(1:dim_num) ) ) then
+                                        1
+Error: Syntax error in argument list at (1)
+src/geom.F90:4911:8:
+
+     else
+        1
+Error: Unexpected ELSE statement at (1)
+src/geom.F90:4913:7:
+
+     end if
+       1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4917:5:
+
+   end subroutine geo_polygon_solid_angle_3d
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:4948:6:
+
+   real(kind=8) function arc_cosine ( c )
+      1
+Error: ‘real’ at (1) is not a variable
+src/geom.F90:4951:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:4953:18:
+
+     real(kind=8) c
+                  1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4954:19:
+
+     real(kind=8) c2
+                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:4960:14:
+
+     arc_cosine = acos ( c2 )
+              1
+Error: ‘arc_cosine’ at (1) is not a variable
+src/geom.F90:4964:25:
+
+   end function arc_cosine
+                         1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:5001:2:
+
+   subroutine geo_dvec_cross_3d ( v1, v2, v3 )
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5003:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:5005:37:
+
+     integer, parameter :: dim_num = 3
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5007:28:
+
+     real(kind=8) v1(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5008:28:
+
+     real(kind=8) v2(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5009:28:
+
+     real(kind=8) v3(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5011:4:
+
+     v3(1) = v1(2) * v2(3) - v1(3) * v2(2)
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5012:4:
+
+     v3(2) = v1(3) * v2(1) - v1(1) * v2(3)
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5013:4:
+
+     v3(3) = v1(1) * v2(2) - v1(2) * v2(1)
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5017:5:
+
+   end subroutine geo_dvec_cross_3d
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:5042:6:
+
+   real(kind=8) function dvec_length ( dim_num, x )
+      1
+Error: ‘real’ at (1) is not a variable
+src/geom.F90:5044:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:5046:19:
+
+     integer dim_num
+                   1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5048:18:
+
+src/geom.F90:3756:8:
+
+     use commarray, only : x,cell
+        2          
+src/geom.F90:5048:18:
+
+     real(kind=8) x(dim_num)
+                  1
+Error: Symbol ‘x’ at (1) conflicts with symbol from module ‘commarray’, use-associated at (2)
+src/geom.F90:5050:15:
+
+     dvec_length = sqrt ( sum ( ( x(1:dim_num) )**2 ) )
+               1
+Error: ‘dvec_length’ at (1) is not a variable
+src/geom.F90:5054:26:
+
+   end function dvec_length
+                          1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:5094:6:
+
+   real(kind=8) function dvec_triple_product ( v1, v2, v3 )
+      1
+Error: ‘real’ at (1) is not a variable
+src/geom.F90:5096:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:5098:37:
+
+     integer, parameter :: dim_num = 3
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5100:28:
+
+     real(kind=8) v1(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5101:28:
+
+     real(kind=8) v2(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5102:28:
+
+     real(kind=8) v3(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5103:28:
+
+     real(kind=8) v4(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5107:23:
+
+     dvec_triple_product = dot_product ( v1(1:dim_num), v4(1:dim_num) )
+                       1
+Error: ‘dvec_triple_product’ at (1) is not a variable
+src/geom.F90:5111:34:
+
+   end function dvec_triple_product
+                                  1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:5164:18:
+
+   integer function geo_i_modp ( i, j )
+                  1
+Error: Syntax error in data declaration at (1)
+src/geom.F90:5166:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:5168:13:
+
+     integer i
+             1
+Error: Symbol ‘i’ at (1) already has basic type of INTEGER
+src/geom.F90:5169:13:
+
+     integer j
+             1
+Error: Symbol ‘j’ at (1) already has basic type of INTEGER
+src/geom.F90:5186:25:
+
+   end function geo_i_modp
+                         1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:5236:18:
+
+   integer function i_wrap ( ival, ilo, ihi )
+                  1
+Error: Syntax error in data declaration at (1)
+src/geom.F90:5238:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:5240:15:
+
+     integer ihi
+               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5241:15:
+
+     integer ilo
+               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5242:16:
+
+     integer ival
+                1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5243:15:
+
+     integer jhi
+               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5244:15:
+
+     integer jlo
+               1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5245:16:
+
+     integer wide
+                1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5253:12:
+
+       i_wrap = jlo
+            1
+Error: ‘i_wrap’ at (1) is not a variable
+src/geom.F90:5255:12:
+
+       i_wrap = jlo + geo_i_modp ( ival - jlo, wide )
+            1
+Error: ‘i_wrap’ at (1) is not a variable
+src/geom.F90:5260:21:
+
+   end function i_wrap
+                     1
+Error: Expected label ‘pngrid3d’ for END FUNCTION statement at (1)
+src/geom.F90:5307:2:
+
+   subroutine geo_polygon_normal_3d ( n, v, normal ) 
+  1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5309:17:
+
+     implicit none
+                 1
+Error: Duplicate IMPLICIT NONE statement at (1)
+src/geom.F90:5311:37:
+
+     integer, parameter :: dim_num = 3
+                                     1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5312:13:
+
+     integer n
+             1
+Error: Symbol ‘n’ at (1) already has basic type of INTEGER
+src/geom.F90:5314:13:
+
+     integer i
+             1
+Error: Symbol ‘i’ at (1) already has basic type of INTEGER
+src/geom.F90:5315:13:
+
+     integer j
+             1
+Error: Symbol ‘j’ at (1) already has basic type of INTEGER
+src/geom.F90:5316:32:
+
+     real(kind=8) normal(dim_num)
+                                1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5317:28:
+
+     real(kind=8) normal_norm
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5318:18:
+
+     real(kind=8) p(dim_num)
+                  1
+Error: Symbol ‘p’ at (1) already has basic type of REAL
+src/geom.F90:5319:29:
+
+     real(kind=8) v(dim_num,n)
+                             1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5320:28:
+
+     real(kind=8) v1(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5321:28:
+
+     real(kind=8) v2(dim_num)
+                            1
+Error: Unexpected data declaration statement at (1)
+src/geom.F90:5323:4:
+
+     normal(1:dim_num) = 0.0D+00
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5325:4:
+
+     v1(1:dim_num) = v(1:dim_num,2) - v(1:dim_num,1)
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5329:6:
+
+       v2(1:dim_num) = v(1:dim_num,j) - v(1:dim_num,1)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5333:6:
+
+       normal(1:dim_num) = normal(1:dim_num) + p(1:dim_num)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5335:6:
+
+       v1(1:dim_num) = v2(1:dim_num)
+      1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5347:4:
+
+     normal(1:dim_num) = normal(1:dim_num) / normal_norm
+    1
+Error: Unclassifiable statement at (1)
+src/geom.F90:5351:5:
+
+   end subroutine geo_polygon_normal_3d
+     1
+Error: Expecting END FUNCTION statement at (1)
+src/geom.F90:5356:3:
+
+ end module geom
+   1
+Error: Expecting END FUNCTION statement at (1)
+f951: Error: Unexpected end of file in ‘src/geom.F90’
+make: *** [geom.o] Error 1
