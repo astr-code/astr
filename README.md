@@ -1,3 +1,1 @@
-ASTRR is a upgrade version of ASTR code for reacting flow
-ASTR is a high-order finite-difference solver on body-fitted mesh.
-
+ASTR 2.0 is high-order finite-difference Navier-Stokes solver.
