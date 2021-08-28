@@ -53,3 +53,4 @@ solid_in.stl
 tecsolid.plt
 src/pp.F90
 astr.code-workspace
+benchmark/channel/datin/parallel.info

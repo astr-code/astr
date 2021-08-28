@@ -100,8 +100,11 @@ module pp
       write(fh,'(A)')'# recon_schem, lchardecomp,bfacmpld                     : Parameters for upwind-biased scheme'
       write(fh,'(A)')'0, f, 0.3d0 '
       write(fh,*)
-      write(fh,'(A)')'# num_species : number of species'
+      write(fh,'(A)')'# num_species                                           : number of species'
       write(fh,'(A)')'1'
+      write(fh,*)
+      write(fh,'(A)')'# turbmode                                              : turbulence model'
+      write(fh,'(A)')'none'
       write(fh,*)
       write(fh,'(A)')'# bctype                                                : Boundary condition definition '
       write(fh,'(A)')'1'
