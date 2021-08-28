@@ -1,3 +1,4 @@
+.vscode/
 *.plt
 *.dat
 bin/astr
