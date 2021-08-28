@@ -2328,13 +2328,13 @@ module geom
     asolid%xcen(:)=0.5d0*(asolid%xmin(:)+asolid%xmax(:))
     !
     write(*,'(A,A)')      '  solid: ',asolid%name
-    write(*,'(2(A,E15.7E3))')'    x: ',asolid%xmin(1),'~',asolid%xmax(1)
-    write(*,'(2(A,E15.7E3))')'    y: ',asolid%xmin(2),'~',asolid%xmax(2)
-    write(*,'(2(A,E15.7E3))')'    z: ',asolid%xmin(3),'~',asolid%xmax(3)
-    write(*,'(3(A,E15.7E3))')' size: ',asolid%xmax(1)-asolid%xmin(1),':', &
-                                       asolid%xmax(2)-asolid%xmin(2),':', &
-                                       asolid%xmax(3)-asolid%xmin(3)
-    write(*,'(A,3(E15.7E3))')' cent: ',asolid%xcen(:)
+    write(*,'(2(A,E15.7E3))')'     x: ',asolid%xmin(1),'~',asolid%xmax(1)
+    write(*,'(2(A,E15.7E3))')'     y: ',asolid%xmin(2),'~',asolid%xmax(2)
+    write(*,'(2(A,E15.7E3))')'     z: ',asolid%xmin(3),'~',asolid%xmax(3)
+    write(*,'(3(A,E15.7E3))')'  size: ',asolid%xmax(1)-asolid%xmin(1),':', &
+                                        asolid%xmax(2)-asolid%xmin(2),':', &
+                                        asolid%xmax(3)-asolid%xmin(3)
+    write(*,'(A,3(E15.7E3))')'  cent: ',asolid%xcen(:)
     !
     if(trim(inputcmd)=='checkdomain') then
       !
@@ -2374,6 +2374,8 @@ module geom
       endif
       !
     endif
+    !
+    write(*,'(2X,62A)')('-',i=1,62)
     !
   end subroutine solidrange
   !+-------------------------------------------------------------------+

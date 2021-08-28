@@ -155,7 +155,7 @@ module pp
       !
       print*,' ** An example case is generated.'
       print*,' ** you can now run a simulation of channel flow by : '
-      print*,' mpirun -np 8 ./astr run -input datin/input.chl'
+      print*,' mpirun -np 8 ./astr run datin/input.chl'
       !
     endif
     !
