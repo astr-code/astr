@@ -13,9 +13,10 @@ module bc
   use commvar, only: hm,im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims, &
                      num_species,flowtype,gamma,numq,npdci,npdcj,      &
                      npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
-                     zmin,zmax
+                     zmin,zmax,time
   use commarray, only : x,dxi,jacob,prs,vel,tmp,rho,spc,q,qrhs
   use tecio
+  use stlaio,  only: get_unit
   !
   implicit none
   !
@@ -23,6 +24,8 @@ module bc
   real(8) :: uinf_j0,uinf_jm
   real(8),allocatable :: rho_in(:,:),vel_in(:,:,:),tmp_in(:,:),        &
                          prs_in(:,:),spc_in(:,:,:)
+  real(8),allocatable :: rho_prof(:),vel_prof(:,:),tmp_prof(:),        &
+                         prs_prof(:),spc_prof(:,:)
   real(8),allocatable,dimension(:,:,:) :: bvec_i0,bvec_im,             &
                                           bvec_j0,bvec_jm,             &
                                           bvec_k0,bvec_km
@@ -55,9 +58,8 @@ module bc
     integer,intent(in) :: ndir
     !
     if(ndir==1) then
-      allocate( rho_in(0:jm,0:km),vel_in(0:jm,0:km,1:3),               &
-                tmp_in(0:jm,0:km),prs_in(0:jm,0:km),                   &
-                spc_in(0:jm,0:km,1:num_species) )
+      allocate( rho_in(0:jm,0:km),tmp_in(0:jm,0:km),prs_in(0:jm,0:km), &
+                vel_in(0:jm,0:km,1:3),spc_in(0:jm,0:km,1:num_species)  )
     elseif(ndir==3) then
       allocate( rho_in(0:im,0:km),vel_in(0:im,0:km,1:3),               &
                 tmp_in(0:im,0:km),prs_in(0:im,0:km),                   &
@@ -278,6 +280,8 @@ module bc
     ! if(present(subtime)) time_beg=ptime()
     !
     ! if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    ! call mpistop
     !
     return
     !
@@ -841,6 +845,8 @@ module bc
           call jetinflow
         elseif(trim(flowtype)=='mixlayer') then
           call mixlayerinflow
+        elseif(trim(flowtype)=='bl') then
+          call profileinflow
         else
           call freestreaminflow
         endif
@@ -873,13 +879,18 @@ module bc
           roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),  dv=0.d0)
           ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
           !
-          vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
+          vel(i,j,k,1)=vel_in(j,k,1)
           vel(i,j,k,2)=vel_in(j,k,2)
           vel(i,j,k,3)=vel_in(j,k,3)
-          prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
-          rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
+          tmp(i,j,k)  =tmp_in(j,k)
+          prs(i,j,k)  =pe
+          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
           !
-          tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+          ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
+          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
+          ! rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
+          !
+          ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           !
           do jspc=1,num_species
             spc(i,j,k,jspc)=spc_in(j,k,jspc)
@@ -888,6 +899,7 @@ module bc
           ! print*,vel_in(j,k,1),rho(i,j,k)
           !
         else
+          print*,mpirank,'|',i,j,k
           print*,ub,css
           stop ' !! velocity at inflow error 1 !! @ inflow'
         endif
@@ -1641,15 +1653,22 @@ module bc
           !
           vel(i,j,k,1)=ue 
           vel(i,j,k,2)=ve 
+          vel(i,j,k,3)=0.d0 
           prs(i,j,k)  =pe
           rho(i,j,k)  =roe
           !
         elseif(ub<css .and. ub>=0.d0) then
           ! subsonic outlet
-          prs(i,j,k)= pinf
-          rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
-          vel(i,j,k,1)= ue + (pe-prs(i,j,k))/roe/csse
-          vel(i,j,k,2)= ve
+          ! prs(i,j,k)= pinf
+          ! rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
+          ! vel(i,j,k,1)= ue + (pe-prs(i,j,k))/roe/csse
+          ! vel(i,j,k,2)= ve
+          ! vel(i,j,k,3)= 0.d0
+          vel(i,j,k,1)=ue 
+          vel(i,j,k,2)=ve 
+          vel(i,j,k,3)=0.d0 
+          prs(i,j,k)  =pe
+          rho(i,j,k)  =roe
         else
           stop ' !! velocity at outflow error !! @ outflow'
         endif
@@ -2841,8 +2860,15 @@ module bc
         css=sos(tmp(i,j,k))
         !
         if(uu>=0.d0) then
-          kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
-          LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
+          !
+          if(uu<css) then
+            kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
+            LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          endif
+          !
+          kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+          ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
+          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         else
           ! back flow
           var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &
@@ -3736,14 +3762,22 @@ module bc
     use commarray, only : tke,omg
     use fludyna,   only : thermal,fvar2q,q2fvar,miucal
     use commfunc,  only : dis2point2
+    use parallel,  only : mpi_jmin,bcast
     !
     ! arguments
     integer,intent(in) :: ndir
     real(8),intent(in) :: tw
     !
     ! local data
-    integer :: i,j,k,l,jspec
+    integer :: i,j,k,l,jspec,fh
     real(8) :: pe,delta_d1,miu,beta1
+    real(8) :: vwall(0:im,0:km)
+    character(len=64) :: filewbs
+    logical :: lexist
+    !
+    real(8),save :: beter,wallamplit,xa,xb
+    integer,save :: nmod_t,nmod_z
+    logical,save :: lfirstcal=.true.
     !
     beta1=0.075d0
     !
@@ -3751,14 +3785,69 @@ module bc
       !
       if(jrk==0) then
         !
+        if(lfirstcal) then
+          !
+          if(mpirank==0) then
+            !
+            filewbs='datin/wallbs.dat'
+            !
+            inquire(file=trim(filewbs), exist=lexist)
+            !
+            if(lexist) then
+              fh=get_unit()
+              open(fh,file=trim(filewbs),action='read')
+              read(fh,*)
+              read(fh,*)
+              read(fh,*)wallamplit,beter,xa,xb
+              read(fh,*)
+              read(fh,*)nmod_t,nmod_z
+              close(fh)
+              print*,' >> ',trim(filewbs)
+            else
+              wallamplit=0.d0
+              beter=1.d0
+              xa=0.d0
+              xb=0.d0
+              nmod_t=0
+              nmod_z=0
+            endif
+          endif
+          !
+          call bcast(wallamplit,comm=mpi_jmin)
+          call bcast(beter,comm=mpi_jmin)
+          call bcast(xa,comm=mpi_jmin)
+          call bcast(xb,comm=mpi_jmin)
+          call bcast(nmod_t,comm=mpi_jmin)
+          call bcast(nmod_z,comm=mpi_jmin)
+          !
+          if(irk==irkm .and. krk==krkm) then
+            print*,' ------------- wall blowing & suction parameters -------------'
+            write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
+            write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
+            write(*,"(23x,2(A,1X,F12.5))")'   x extent:',xa,' ~',xb
+            write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
+            write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
+            print*,' --------------------------------------------------------------'
+          endif
+          !
+          lfirstcal=.false.
+          !
+        endif
+        ! if(ndims==3) then
+          vwall=wallbs(beter,wallamplit,xa,xb,nmod_t,nmod_z)
+        ! else
+        !   vwall=0.d0
+        ! endif
+        !
         j=0
+        !
         do k=0,km
         do i=0,im
           !
           pe=num1d3*(4.d0*prs(i,1,k)-prs(i,2,k))
           !
           vel(i,j,k,1)=0.d0
-          vel(i,j,k,2)=0.d0
+          vel(i,j,k,2)=vwall(i,k)
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe
           tmp(i,j,k)  =tw
@@ -3877,6 +3966,118 @@ module bc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This function is to get wall normall blowing and suction velocity.|
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-09-2021: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  function wallbs(beter,wallamplit,xa,xb,nmod_t,nmod_z) result(vwall)
+    !
+    ! arguments
+    real(8),intent(in) :: beter,wallamplit,xa,xb
+    integer,intent(in) :: nmod_t,nmod_z
+    real(8) :: vwall(0:im,0:km)
+    !
+    ! local data
+    integer :: i,k,l,m,seed_size
+    real(8) :: theter,fx,gz,ht,zl,tm
+    integer,allocatable :: seed(:)
+    !
+    real(8),save :: sqrt27,z0,t0,lz
+    real(8),save :: randomv(15)
+    logical,save :: lfirstcal=.true.
+    !
+    if(lfirstcal) then
+      !
+      ! beter=0.02d0
+      ! !
+      ! xa=5.d0
+      ! xb=40.d0
+      ! !
+      ! nmod_z=3
+      ! nmod_t=2
+      !
+      lz=zmax-zmin
+      !
+      sqrt27=1.d0/sqrt(27.d0)
+      z0=0.2d0/(1.d0-0.8d0**nmod_z)
+      t0=0.2d0/(1.d0-0.8d0**nmod_t)
+      !
+      ! call random_seed() ! initialize with system generated seed
+      call random_seed(size=seed_size) ! find out size of seed
+      allocate(seed(seed_size))
+      ! call random_seed(get=seed) ! get system generated seed
+      ! write(*,*) seed            ! writes system generated seed
+      seed=0
+      call random_seed(put=seed) ! set current seed
+      ! call random_seed(get=seed) ! get current seed
+      ! write(*,*) seed            ! writes 0
+      deallocate(seed)           ! safe
+      !
+      do m=1,15
+        call random_number(randomv(m))
+        ! write(*,*)mpirank,'|',m,randomv(m)
+      end do
+      !
+      lfirstcal=.false.
+      !
+    endif
+    !
+    do k=0,km
+    do i=0,im
+      !
+      if(x(i,0,k,1)<=xb .and. x(i,0,k,1)>=xa) then
+        !
+        theter=2.d0*pi*(x(i,0,k,1)-xa)/(xb-xa)
+        fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*sqrt27
+        !
+        if(km==0) then
+          gz=1.d0
+        else
+          gz=0.d0
+          do l=1,nmod_z
+            !
+            if(l==1) then
+              zl=z0
+            else
+              zl=zl*0.8d0
+            end if
+            !
+            gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/lz+randomv(l)))
+            !
+          end do
+        endif
+        !
+        ht=0.d0
+        do m=1,nmod_t
+          !
+          if(m==1) then
+            tm=t0
+          else
+            tm=tm*0.8d0
+          end if
+          !
+          ht=ht+tm*dsin(2.d0*pi*m*(beter*time+randomv(m+10)))
+          !
+        end do
+        !
+        vwall(i,k)=wallamplit*uinf*fx*gz*ht
+      else
+        vwall(i,k)=0.d0
+      end if
+      !
+    end do
+    end do
+    !
+    return
+    !
+  end function wallbs
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine wallbs.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to obtain the inlet flow for jet.              |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -3965,6 +4166,47 @@ module bc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to obtain the inlet flow by reading a inlet    |
+  !| profile.                                                          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-09-2021: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine profileinflow
+    !
+    use fludyna, only : mixinglayervel,thermal
+    use parallel,only : mpi_imin
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: radi
+    ! real(8),allocatable
+    !
+    i=0
+    do k=0,km
+    do j=0,jm
+      !
+      rho_in(j,k)  =rho_prof(j)
+      vel_in(j,k,1)=vel_prof(j,1)
+      vel_in(j,k,2)=vel_prof(j,2)
+      vel_in(j,k,3)=0.d0
+      tmp_in(j,k)  =tmp_prof(j)
+      prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+      !
+      if(num_species>0) then
+        spc_in(j,k,:)=1.d0
+      endif
+      !
+    enddo
+    enddo
+    !
+  end subroutine profileinflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine profileinflow.                          |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to obtain the inlet of freestream flow.        |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -3998,7 +4240,7 @@ module bc
     !
   end subroutine freestreaminflow
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine jetinflow.                              |
+  !| The end of the subroutine freestreaminflow.                       |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -4006,7 +4248,7 @@ module bc
   !| pq1-----pq2---|---gq1-----gq2                                     |
   !+-------------------------------------------------------------------+
   !| ref: Motheau, Almgreny & Bell, Navier-StokesCharacteristic        |
-  !|      Boundary Conditions Using Ghost Cells, AIAA J., 2017, 55(10) |                                                |
+  !|      Boundary Conditions Using Ghost Cells, AIAA J., 2017, 55(10) |
   !| ref: Gross & Fasel, Characteristic Ghost-Cell Boundary Condition, |
   !|      AIAA J., 2007, 45(1).                                        |
   !| ref: Yoo,et al. Characteristic boundary conditions for direct     |

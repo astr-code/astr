@@ -2296,7 +2296,8 @@ module solver
     ! End calculating along j
     !!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    if(ndims==3) then
+    ! if(ndims==3) then
+    if(.false.) then
       ! Calculating along k direction.
       !
       allocate(ff(-hm:km+hm,2:ncolm),df(0:km,2:ncolm))

@@ -22,6 +22,7 @@ module parallel
     module procedure bcast_log
     module procedure bcast_int_ary
     module procedure bcast_int_ary2
+    module procedure bcast_int_ary3
     module procedure bcast_r8_ary
     module procedure bcast_r8_ary2
     module procedure bcast_r8_ary3
@@ -98,6 +99,7 @@ module parallel
   character(len=8) :: mpirankname
   logical :: lio
   integer :: status(mpi_status_size)
+  integer :: mpi_imin,mpi_jmin,group_imin,group_jmin,mpi_group_world
   character(mpi_max_processor_name) :: processor_name
   !
   contains
@@ -296,6 +298,7 @@ module parallel
     integer :: ierr,nproc
     integer :: n,n1,n2
     integer :: nsi,nsj,nsk,fh
+    !
     ! integer :: n,n1,n2,ns,i2,j2,k2,nar1,nsi,nsj,nsk,ina,jna,kna
     ! integer :: ispa,jspa,kspa
     ! real(8) :: var1
@@ -432,8 +435,9 @@ module parallel
     use commvar,   only : is,ie,js,je,ks,ke
     !
     ! local data
-    integer :: n,nn,nsize1,nsize,ierr,fh
+    integer :: n,nn,nsize1,nsize,ierr,fh,ni,nj,nk,newsize
     integer,allocatable:: ntemp(:,:),nrank(:,:,:)
+    integer,allocatable :: rank_use(:)
     integer,allocatable,dimension(:) :: nrect,irkg,jrkg,krkg,          &
                                         img,jmg,kmg,i0g,j0g,k0g
     !
@@ -716,12 +720,52 @@ module parallel
       !
     end if 
     !
-    ! n=(irkm+1)*(jrkm+1)*(krkm+1)
-    ! call MPI_BCAST(nrank,n,mpi_integer,0,mpi_comm_world,ierr)
-    !
     if(lio) write(*,'(A,I0,A)')'  ** rank ',mpirank,' is the I/O rank'
     !
+    call bcast(nrank)
+    !
+    allocate(rank_use(jsize*ksize))
+    n=0
+    do nk=0,ksize-1
+    do nj=0,jsize-1
+      n=n+1
+      rank_use(n)=nrank(0,nj,nk)
+    end do
+    end do
+    !
+    call mpi_comm_group(mpi_comm_world,mpi_group_world,ierr)
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_imin,ierr)
+    call mpi_comm_create(mpi_comm_world,group_imin,mpi_imin,ierr)
+    !
+    if(irk==0) call mpi_comm_size(mpi_imin,newsize,ierr)
+    if(mpirank==0) write(*,'(A,I0)') &
+      '  ** new communicator: mpi_imin  ... created, size: ',newsize
+    !
+    deallocate(rank_use)
+    !
+    allocate(rank_use(isize*ksize))
+    n=0
+    do nk=0,ksize-1
+    do ni=0,isize-1
+      n=n+1
+      rank_use(n)=nrank(ni,0,nk)
+    end do
+    end do
+    !
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jmin,ierr)
+    call mpi_comm_create(mpi_comm_world,group_jmin,mpi_jmin,ierr)
+    !
+    if(jrk==0) call mpi_comm_size(mpi_jmin,newsize,ierr)
+    if(mpirank==0) write(*,'(A,I0)') &
+      '  ** new communicator: mpi_jmin  ... created, size: ',newsize
+    !
+    deallocate(rank_use)
+    !
+    deallocate(nrank)
+    !
     ! print*,mpirank,'|',im,jm,km
+    !
+    ! call mpistop
     !
     call mpi_barrier(mpi_comm_world,ierr)
     !
@@ -811,15 +855,21 @@ module parallel
     !
   end subroutine bcast_chafix_ary
   !
-  subroutine bcast_int(vario)
+  subroutine bcast_int(vario,comm)
     !
     ! arguments
     integer,intent(inout) :: vario
+    integer,intent(in),optional :: comm
     !
     ! local data
     integer :: ierr
     !
-    call MPI_BCAST(vario,1,mpi_integer,0,mpi_comm_world,ierr)
+    if(present(comm)) then
+      call mpi_bcast(vario,1,mpi_integer,0,comm,ierr)
+    else
+      call mpi_bcast(vario,1,mpi_integer,0,mpi_comm_world,ierr)
+    endif
+    !
     !
   end subroutine bcast_int
   !
@@ -851,15 +901,35 @@ module parallel
     !
   end subroutine bcast_int_ary2
   !
-  subroutine bcast_r8(vario)
+  subroutine bcast_int_ary3(vario)
+    !
+    ! arguments
+    integer,intent(inout) :: vario(:,:,:)
+    !
+    ! local data
+    integer :: nsize,ierr
+    !
+    nsize=size(vario,1)*size(vario,2)*size(vario,3)
+    !
+    call MPI_BCAST(vario,nsize,mpi_integer,0,mpi_comm_world,ierr)
+    !
+  end subroutine bcast_int_ary3
+  !
+  subroutine bcast_r8(vario,comm)
     !
     ! arguments
     real(8),intent(inout) :: vario
+    integer,intent(in),optional :: comm
     !
     ! local data
     integer :: ierr
     !
-    call MPI_BCAST(vario,1,mpi_real8,0,mpi_comm_world,ierr)
+    if(present(comm)) then
+      call mpi_bcast(vario,1,mpi_real8,0,comm,ierr)
+    else
+      call mpi_bcast(vario,1,mpi_real8,0,mpi_comm_world,ierr)
+    endif
+    !
     !
   end subroutine bcast_r8
   !

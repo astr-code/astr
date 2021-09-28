@@ -479,7 +479,7 @@ module statistic
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
           endif
-          write(*,'(A)')'   ** create new flowstate.dat'
+          write(*,'(A)')'  ** create new flowstate.dat'
           !
         endif
         !

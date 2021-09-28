@@ -30,10 +30,14 @@ module initialisation
     use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart,   &
                         lavg,turbmode
     use commarray,only: vel,rho,prs,spc,q,tke,omg
-    use readwrite,only: readcont,readflowini3d,readcheckpoint,         &
-                        readmeanflow,readmonc
+    use readwrite,only: readcont,readflowini3d,readflowini2d,          &
+                        readcheckpoint,readmeanflow,readmonc
     use fludyna,  only: updateq
     use statistic,only: nsamples
+    !
+    if(trim(flowtype)=='bl') then
+      call blprofile
+    endif
     !
     if(lrestart) then
       !
@@ -54,6 +58,10 @@ module initialisation
           omg=0.d0
         endif
         !
+      elseif(ninit==2) then
+        !
+        call readflowini2d
+        !
       else
         !
         select case(trim(flowtype))
@@ -73,6 +81,8 @@ module initialisation
           call mixlayerini
         case('shuosher')
           call shuosherini
+        case('bl')
+          call blini
         case('windtunn')
           call wtini
         case default
@@ -834,7 +844,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| The end of the subroutine jetini.                                 |
   !+-------------------------------------------------------------------+
-  
+  !!
   !+-------------------------------------------------------------------+
   !| This subroutine is used to generate a initial mixing layer flow.  |
   !+-------------------------------------------------------------------+
@@ -892,6 +902,89 @@ module initialisation
   end subroutine mixlayerini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine mixlayerini.                            |
+  !+-------------------------------------------------------------------+
+  !  
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used initilise a boundary layer flow.          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-09-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine blini
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: radi
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  = rho_prof(j)
+      !
+      vel(i,j,k,1)= vel_prof(j,1)
+      vel(i,j,k,2)= vel_prof(j,2)
+      !
+      tmp(i,j,k)  = tmp_prof(j)
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>1) then
+        spc(i,j,k,1)=0.d0
+        !
+        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    !
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+    !                                prs(0:im,0:jm,0:km)  ,'p',          &
+    !                                tmp(0:im,0:jm,0:km)  ,'t' )
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D BL flow initialised.'
+    !
+  end subroutine blini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine blini.                                  |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is read the boundary layer profile.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-09-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine blprofile
+    !
+    use readwrite,only: readprofile
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    !
+    allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
+              vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
+    !
+    call readprofile('datin/inlet.prof',dir='j',                     &
+                              var1=rho_prof,     var2=vel_prof(:,1), &
+                              var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
+    !
+  end subroutine blprofile
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine blprofile.                              |
   !+-------------------------------------------------------------------+
   !  
   !+-------------------------------------------------------------------+

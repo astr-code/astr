@@ -144,6 +144,8 @@ module readwrite
         typedefine='                              mixing layer'
       case('shuosher')
         typedefine='                         shu-osher problem'
+      case('bl')
+        typedefine='                       boundary layer flow'
       case('windtunn')
         typedefine='                   a numerical wind tunnel'
       case default
@@ -837,44 +839,55 @@ module readwrite
   !| -------------                                                     |
   !| 13-08-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readprofile(filename,dir,var1,var2,var3,var4,var5)
+  subroutine readprofile(filename,dir,var1,var2,var3,var4,var5,skipline)
     !
     use commvar,   only : im,jm,km,ia,ja,ka
     use parallel,  only : ptabupd,pscatter
     !
     ! arguments
     character(len=*),intent(in) :: filename,dir
+    integer,intent(in),optional :: skipline
     real(8),optional,intent(out) ::  var1(0:),var2(0:),var3(0:),       &
                                      var4(0:),var5(0:)
     !
     ! local data
-    integer :: fh,ios,i,j,n,offset
+    integer :: fh,ios,i,j,n,offset,nsk,nvar
     real(8),allocatable,dimension(:,:) :: data,scat
     integer :: table(0:mpirankmax),displs(0:mpirankmax)
     character(len=32) :: c1
     !
+    if(present(skipline)) then
+      nsk=skipline
+    else
+      nsk=0
+    endif
+    !
     fh=get_unit()
     !
     if( present(var5) ) then
-      n=5
+      nvar=5
     elseif( present(var4)  ) then
-      n=4
+      nvar=4
     elseif( present(var3) ) then
-      n=3
+      nvar=3
     elseif( present(var2) ) then
-      n=2
+      nvar=2
     elseif( present(var1) ) then
-      n=1
+      nvar=1
     else
-      stop ' !! ERROR 1  define n @  readprofile '
+      stop ' !! ERROR 1  define nvar @  readprofile '
     endif
-    allocate(data(1:n,0:ja))
+    !
+    allocate(data(1:nvar,0:ja))
     !
     if(dir=='j') then
       !
       if(mpirank==0) then
         !
         open(fh,file=filename,action='read',form='formatted')
+        do n=1,nsk
+          read(fh,*)
+        enddo
         !
         ios=0
         do while(ios==0)
@@ -893,7 +906,7 @@ module readwrite
         !
         ! start from real number
         do j=0,ja
-          read(fh,*)(data(i,j),i=1,n)
+          read(fh,*)(data(i,j),i=1,nvar)
         enddo
         !
         close(fh)
@@ -903,7 +916,7 @@ module readwrite
       !
       call ptabupd(var=jm+1,table=table)
       !
-      call ptabupd(var=jg0*n,table=displs)
+      call ptabupd(var=jg0*nvar,table=displs)
       !
       call pscatter(data,scat,table,offset=displs,rank=0)
       !
@@ -966,6 +979,58 @@ module readwrite
   end subroutine readflowini3d
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of subroutine readflowini3d.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to read a initial flow filed.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine readflowini2d
+    !
+    use commvar,   only : im,jm,km,num_species
+    use commarray, only : rho,vel,prs,tmp,spc
+    use fludyna,   only : thermal
+    use hdf5io
+    !
+    ! local data
+    !
+    integer :: jsp,i,j,k
+    character(len=2) :: spname
+    !
+    call h5io_init(filename='datin/flowini2d.h5',mode='read')
+    !
+    call h5read(varname='ro', var=rho(0:im,0:jm,0))
+    call h5read(varname='u1', var=vel(0:im,0:jm,0,1))
+    call h5read(varname='u2', var=vel(0:im,0:jm,0,2))
+    call h5read(varname='t',  var=tmp(0:im,0:jm,0))
+    ! do jsp=1,num_species
+    !    write(spname,'(i2.2)')jsp
+    !   call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+    ! enddo
+    !
+    call h5io_end
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  =rho(i,j,0)  
+      vel(i,j,k,1)=vel(i,j,0,1)
+      vel(i,j,k,2)=vel(i,j,0,2)
+      vel(i,j,k,3)=0.d0
+      tmp(i,j,k)  =tmp(i,j,0)
+      prs(i,j,k)  =thermal(temperature=tmp(i,j,k),density=rho(i,j,k)) 
+      !
+      do jsp=1,num_species
+        spc(i,j,k,jsp)=0.d0 !spc(i,j,0,jsp)
+      enddo
+      !
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine readflowini2d
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of subroutine readflowini2d.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
@@ -1333,12 +1398,12 @@ module readwrite
                                          filename='outdat/auxiliary.h5')
     endif
     !
-    ! if(limmbou .and. mpirank==imbroot) then
-    !   ! call imboundarydata 
-    !   !
-    !   call writecylimmbou
-    !   !
-    ! endif
+    if(limmbou .and. mpirank==imbroot) then
+      ! call imboundarydata 
+      !
+      call writecylimmbou
+      !
+    endif
     !
     ! if(irk==0 .and. jrk==jrkm) then
     !     print*,'------------------------------------'

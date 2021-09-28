@@ -333,6 +333,8 @@ module mainloop
       !
       call boucon
       !
+      call qswap(ctime(7))
+      !
       call rhscal(ctime(4))
       !
       if(nrk==1) then

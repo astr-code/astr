@@ -84,6 +84,8 @@ module geom
     !
     if(mpirank==0) then
       !
+      ! change the geometry of the solid if stltransform is defined.
+      !
       infile='datin/stltransform.dat'
       inquire(file=trim(infile), exist=lexist)
       !
