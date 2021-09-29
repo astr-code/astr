@@ -19,7 +19,8 @@ module statistic
   logical :: lmeanallocated=.false.
   logical :: liosta=.false.
   real(8) :: time_sbeg
-  real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms
+  real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
+             wallheatflux
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8),allocatable :: max_q(:),min_q(:)
   !
@@ -335,6 +336,11 @@ module statistic
     if(trim(flowtype)=='tgv') then
       enstophy=enstophycal()
       kenergy =kenergycal()
+    elseif(trim(flowtype)=='bl') then
+      fbcx=fbcxbl()
+      massflux=massfluxcal()
+      wrms=wrmscal()
+      wallheatflux=whfbl()
     elseif(trim(flowtype)=='channel') then
       !
       fbcx=fbcxchan()
@@ -357,6 +363,7 @@ module statistic
       call bcast(force)
       !
     elseif(trim(flowtype)=='cylinder') then
+      !
       vel_incom=0.d0
       prs_incom=0.d0
       rho_incom=0.d0
@@ -475,6 +482,9 @@ module statistic
           elseif(trim(flowtype)=='channel') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                        'massflux','fbcx','forcex','wrms'
+          elseif(trim(flowtype)=='bl') then
+            write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
+                                 'massflux','fbcx','wallheatflux','wrms'
           else
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -492,6 +502,9 @@ module statistic
       elseif(trim(flowtype)=='channel') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,     &
                                              massflux,fbcx,force(1),wrms
+      elseif(trim(flowtype)=='bl') then
+        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,     &
+                                         massflux,fbcx,wallheatflux,wrms
       elseif(trim(flowtype)=='cylinder') then
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,     &
                                           vel_incom,prs_incom,rho_incom
@@ -509,6 +522,9 @@ module statistic
           elseif(trim(flowtype)=='channel') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
                                                   'fbcx','forcex','wrms'
+          elseif(trim(flowtype)=='bl') then
+            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
+                                            'fbcx','wallheatflux','wrms'
           elseif(trim(flowtype)=='cylinder') then
             write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf',        &
                                                         'p_inf','ro_inf'
@@ -516,7 +532,7 @@ module statistic
             write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
                                  'q1max','q2max','q3max','q4max','q5max'
           endif
-          write(*,'(2X,77A)')('-',i=1,76)
+          write(*,'(2X,78A)')('-',i=1,76)
         endif
         !
         if(trim(flowtype)=='tgv') then
@@ -524,6 +540,9 @@ module statistic
         elseif(trim(flowtype)=='channel') then
           write(*,"(2X,I7,5(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
                                           force(1),wrms
+        elseif(trim(flowtype)=='bl') then
+          write(*,"(2X,I7,5(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
+                                          wallheatflux,wrms
         elseif(trim(flowtype)=='cylinder') then
           write(*,"(2X,I7,4(1X,E13.6E2))")nstep,time,                  &
                                           vel_incom,prs_incom,rho_incom
@@ -662,7 +681,7 @@ module statistic
     endif
     !
     vout=0.d0
-    do k=1,km
+    do k=k1,k2
     do j=1,jm
     do i=1,im
       vout=vout+vel(i,j,k,3)*vel(i,j,k,3)
@@ -677,6 +696,141 @@ module statistic
   end function wrmscal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine wrmscal.                                |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to return wall skin-friction of bl flow.         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 29-09-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  real(8) function fbcxbl()
+    !
+    use commvar,  only : reynolds
+    use commarray,only : tmp,dvel,x
+    use parallel, only : jrk,jrkm
+    use fludyna,  only : miucal
+    use commfunc, only : arquad
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: miu,norm,area
+    real(8) :: tau(0:im,0:km)
+    !
+    fbcxbl=0.d0
+    !
+    if(jrk==0) then
+      !
+      j=0
+      !
+      do k=0,km
+      do i=0,im
+        miu=miucal(tmp(i,j,k))/reynolds
+        !
+        tau(i,k)=miu*dvel(i,j,k,1,2)
+      enddo
+      enddo
+      !
+      if(ndims==2) then
+        !
+        k=0
+        do i=1,im
+          area=abs(x(i,j,k,1)-x(i-1,j,k,1))
+          fbcxbl=fbcxbl+0.5d0*area*(tau(i,k)+tau(i-1,k))
+          norm=norm+area
+        enddo
+        !
+      elseif(ndims==3) then
+        do k=1,km
+        do i=1,im
+          area=arquad(x(i-1,j-1,k,:),x(i,j-1,k,:),x(i,j,k,:),x(i-1,j,k,:))
+          fbcxbl=fbcxbl+0.25d0*area*(tau(i,k)+tau(i-1,k)+tau(i,k-1)+tau(i-1,k-1))
+          norm=norm+area
+        enddo
+        enddo
+      else
+        print*,' !! ndims=',ndims
+        stop ' !! error @ fbcxbl !!'
+      endif
+      !
+    endif
+    !
+    fbcxbl=psum(fbcxbl)/psum(norm)
+    !
+    return
+    !
+  end function fbcxbl
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine fbcxbl.                                 |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This function is to return wall wallheatflux of bl flow.          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 29-09-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  real(8) function whfbl()
+    !
+    use commvar,  only : reynolds,const5,prandtl
+    use commarray,only : tmp,dtmp,x
+    use parallel, only : jrk,jrkm
+    use fludyna,  only : miucal
+    use commfunc, only : arquad
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: miu,hcc,norm,area
+    real(8) :: qw(0:im,0:km)
+    !
+    whfbl=0.d0
+    !
+    if(jrk==0) then
+      !
+      j=0
+      !
+      do k=0,km
+      do i=0,im
+        miu=miucal(tmp(i,j,k))/reynolds
+        hcc=(miu/prandtl)/const5
+        !
+        qw(i,k)=hcc*dtmp(i,j,k,2)
+      enddo
+      enddo
+      !
+      if(ndims==2) then
+        !
+        k=0
+        do i=1,im
+          area=abs(x(i,j,k,1)-x(i-1,j,k,1))
+          whfbl=whfbl+0.5d0*area*(qw(i,k)+qw(i-1,k))
+          norm=norm+area
+        enddo
+        !
+      elseif(ndims==3) then
+        do k=1,km
+        do i=1,im
+          area=arquad(x(i-1,j-1,k,:),x(i,j-1,k,:),x(i,j,k,:),x(i-1,j,k,:))
+          whfbl=whfbl+0.25d0*area*(qw(i,k)+qw(i-1,k)+qw(i,k-1)+qw(i-1,k-1))
+          norm=norm+area
+        enddo
+        enddo
+      else
+        print*,' !! ndims=',ndims
+        stop ' !! error @ whfbl !!'
+      endif
+      !
+    endif
+    !
+    whfbl=psum(whfbl)/psum(norm)
+    !
+    return
+    !
+  end function whfbl
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine whfbl.                                  |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -745,6 +899,64 @@ module statistic
   !| The end of the subroutine fbcxchan.                               |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This function is to return mass flux of flow.                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 29-09-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  real(8) function massfluxcal()
+    !
+    use commvar,  only : voldom
+    use commarray,only : x,q,rho,cell
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: dy,var1,norm
+    !
+    massfluxcal=0.d0
+    !
+    if(ndims==2) then
+      !
+      k=0
+      do j=1,jm
+      do i=1,im
+        var1=0.25d0*(q(i-1,j-1,k,2)+q(i,j-1,k,2)+q(i-1,j,k,2)+q(i,j,k,2))
+        !
+        massfluxcal=massfluxcal+var1*cell(i,j,k)%vol
+        !
+      enddo
+      enddo
+      !
+    elseif(ndims==3) then
+      !
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        var1=0.125d0*( q(i-1,j-1,k,2)  +q(i,j-1,k,2)  +q(i-1,j,k,2)  +q(i,j,k,2) + &
+                       q(i-1,j-1,k-1,2)+q(i,j-1,k-1,2)+q(i-1,j,k-1,2)+q(i,j,k-1,2) )
+        !
+        massfluxcal=massfluxcal+var1*cell(i,j,k)%vol
+        !
+      enddo
+      enddo
+      enddo
+      !
+    else
+      print*,' !! ndims=',ndims
+      stop ' !! error @ massfluxcal !!'
+    endif
+    !
+    massfluxcal=psum(massfluxcal)/voldom
+    !
+    return
+    !
+  end function massfluxcal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine massfluxcal.                            |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This function is to return mass flux of channel flow.             |
   !+-------------------------------------------------------------------+
