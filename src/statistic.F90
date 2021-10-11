@@ -532,7 +532,7 @@ module statistic
             write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
                                  'q1max','q2max','q3max','q4max','q5max'
           endif
-          write(*,'(2X,78A)')('-',i=1,76)
+          write(*,'(2X,78A)')('-',i=1,77)
         endif
         !
         if(trim(flowtype)=='tgv') then

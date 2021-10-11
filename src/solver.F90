@@ -191,7 +191,7 @@ module solver
     use commarray, only : qrhs,x,q
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
                           recon_schem,limmbou
-    use commcal,   only : ShockSolid
+    use commcal,   only : ShockSolid,ducrossensor
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -212,9 +212,13 @@ module solver
       firstcall=.false.
     endif
     !
+    call gradcal
+    !
     if(mod(nconv,2)==0) then
       call convrsdcal6(subtime=ctime(9))
     else
+      !
+      if(recon_schem==5) call ducrossensor
       !
       if(conschm(4:4)=='e') then
         call convrsduwd(subtime=ctime(9))
@@ -1790,41 +1794,24 @@ module solver
   ! End of the subroutine ConvRsdCal6.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! This subroutine is used to calculate the diffusion term with 6-order
-  ! Compact Central scheme.
-  !   sixth-order Compact Central scheme.
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! Writen by Fang Jian, 2009-06-09.
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine diffrsdcal6(subtime)
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calculate gradients of flow variables.      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 08-10-2021  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
+  !+-------------------------------------------------------------------+
+  subroutine gradcal
     !
-    use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
-                          conschm,ndims,num_species,num_modequ,        &
-                          reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode
-    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
-                          rho,vor,omg,tke,miut,dtke,domg,res12
+    use commvar,   only : im,jm,km,ndims,num_species,num_modequ,npdci, &
+                          npdcj,npdck,turbmode,difschm
+    use commarray, only : vel,tmp,spc,omg,tke,dvel,dtmp,dspc,dxi,dtke, &
+                          domg
     use commfunc,  only : ddfc
-    use fludyna,   only : miucal
-    use models,    only : komega,src_komega
-    use tecio
-    !
-    ! arguments
-    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k,n,ncolm
     real(8),allocatable :: df(:,:),ff(:,:)
-    real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
-    real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
-    real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
-    real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
-    real(8) :: detk
-    !
-    real(8) :: time_beg
-    !
-    if(present(subtime)) time_beg=ptime() 
     !
     dvel=0.d0
     dtmp=0.d0
@@ -2042,6 +2029,49 @@ module solver
       enddo
       deallocate(ff,df)
     endif
+    !
+    return
+    !
+  end subroutine gradcal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine gradcal.                                |
+  !+-------------------------------------------------------------------+
+  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the diffusion term with 6-order
+  ! Compact Central scheme.
+  !   sixth-order Compact Central scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2009-06-09.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine diffrsdcal6(subtime)
+    !
+    use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
+                          conschm,ndims,num_species,num_modequ,        &
+                          reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
+                          turbmode
+    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
+                          rho,vor,omg,tke,miut,dtke,domg,res12
+    use commfunc,  only : ddfc
+    use fludyna,   only : miucal
+    use models,    only : komega,src_komega
+    use tecio
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
+    ! local data
+    integer :: i,j,k,n,ncolm
+    real(8),allocatable :: df(:,:),ff(:,:)
+    real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
+    real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
+    real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
+    real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
+    real(8) :: detk
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
@@ -2608,7 +2638,7 @@ module solver
   !!
 
   !!
-  subroutine gradcal
+  subroutine gradtest
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie
@@ -2691,7 +2721,7 @@ module solver
     !
     deallocate(dq)
     !
-  end subroutine gradcal
+  end subroutine gradtest
   !
 end module solver
 !+---------------------------------------------------------------------+

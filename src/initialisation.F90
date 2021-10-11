@@ -27,8 +27,8 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine flowinit
     !
-    use commvar,  only: flowtype,nstep,time,filenumb,ninit,lrestart,   &
-                        lavg,turbmode
+    use commvar,  only: flowtype,nstep,time,filenumb,fnumslic,ninit,   &
+                        lrestart,lavg,turbmode
     use commarray,only: vel,rho,prs,spc,q,tke,omg
     use readwrite,only: readcont,readflowini3d,readflowini2d,          &
                         readcheckpoint,readmeanflow,readmonc
@@ -41,7 +41,7 @@ module initialisation
     !
     if(lrestart) then
       !
-      call readcheckpoint
+      call readcheckpoint('checkpoint')
       !
       call updateq
       !
@@ -98,12 +98,11 @@ module initialisation
       time=0.d0
       !
       filenumb=0
+      fnumslic=0
       !
     endif
     !
     call readcont
-    !
-    call readmonc
     !
     if(lavg) then
       !

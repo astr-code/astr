@@ -34,7 +34,7 @@ module commvar
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
   logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lavg,lfftk,    &
-             limmbou
+             limmbou,lwslic
   character(len=3) :: rkscheme
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
@@ -43,6 +43,7 @@ module commvar
   !|                     | .f. means Euler equations are solved.       |
   !|             lfilter | to activate filer flag                      |
   !|              lwrite | write samples or not.                       |
+  !|              lwslic | write slices or not.                        |
   !|                lavg | average the flow field or not .             |
   !|               lfftk | to use fft in the k direction.              |
   !|             limmbou | to use immersed boundary method             |
@@ -65,7 +66,8 @@ module commvar
   !|              voldom | total volume of the domain.                 |
   !|     dxyzmax,dxyzmin | characteristic grid spacing.                |
   !+---------------------+---------------------------------------------+
-  integer :: nstep,maxstep,nwrite,nlstep,filenumb,nmonitor
+  integer :: nstep,maxstep,nwrite,ninst,nlstep,filenumb,nmonitor,fnumslic
+  integer :: islice,jslice,kslice
   integer,allocatable :: imon(:,:)
   real(8) :: time,deltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
@@ -77,9 +79,12 @@ module commvar
   !|             maxstep | the max step to run.                        |
   !|              nwrite | frequency of output                         |
   !|              nlstep | frequency of list flowstate.                |
+  !|               ninst | frequency of write slices.                  |
+  !|islice,jslice,kslice | position of slices.                         |
   !|            nmonitor | number of montors                           |
   !|                imon | monitor coordinates                         |
   !|            filenumb | filenumber                                  |
+  !|            fnumslic | file number for slices                      |
   !|                time | total time of computation.                  |
   !|              deltat | time step.                                  |
   !|               ref_t | reference temperature.                      |

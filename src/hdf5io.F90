@@ -12,7 +12,8 @@ module hdf5io
   use h5lt
 #endif
   !
-  use parallel, only : lio,mpirank,ig0,jg0,kg0
+  use parallel, only : lio,irk,jrk,krk,mpirank,ig0,jg0,kg0,            &
+                       mpi_comm_world,mpi_info_null
   !
   implicit none
   !
@@ -29,6 +30,7 @@ module hdf5io
   !
   Interface h5write
     !
+    module procedure h5wa2d_r8
     module procedure h5wa3d_r8
     module procedure h5w_int4
     module procedure h5w_real8
@@ -63,14 +65,14 @@ module hdf5io
   !| -------------                                                     |
   !| 03-Jun-2020 | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine h5io_init(filename,mode)
+  subroutine h5io_init(filename,mode,comm)
     !
-    use mpi, only: mpi_comm_world,mpi_info_null
     use parallel, only: mpirank
     !
     ! arguments
     character(len=*),intent(in) :: filename
     character(len=*),intent(in) :: mode
+    integer,intent(in),optional :: comm
     ! h5file_id is returned
     !
 #ifdef HDF5
@@ -85,8 +87,12 @@ module hdf5io
     call h5pcreate_f(h5p_file_access_f,plist_id,h5error)
     if(h5error.ne.0)  stop ' !! error in h5io_init call h5pcreate_f'
     !
-    call h5pset_fapl_mpio_f(plist_id,mpi_comm_world,mpi_info_null,     &
+    if(present(comm)) then
+      call h5pset_fapl_mpio_f(plist_id,comm,mpi_info_null,h5error)
+    else
+      call h5pset_fapl_mpio_f(plist_id,mpi_comm_world,mpi_info_null,   &
                                                                 h5error)
+    endif
     if(h5error.ne.0)  stop ' !! error in h5io_init call h5pset_fapl_mpio_f'
     !
     if(mode=='write') then
@@ -152,7 +158,6 @@ module hdf5io
   !+-------------------------------------------------------------------+
   subroutine h5ra3d_r8(varname,var)
     !
-    use mpi, only: mpi_comm_world,mpi_info_null
     !
     ! arguments
     character(LEN=*),intent(in) :: varname
@@ -207,7 +212,6 @@ module hdf5io
   !
   subroutine h5ra3d_i4(varname,var)
     !
-    use mpi, only: mpi_comm_world,mpi_info_null
     !
     ! arguments
     character(LEN=*),intent(in) :: varname
@@ -339,7 +343,6 @@ module hdf5io
   !
   subroutine h5ra2d_r8(varname,var)
     !
-    use mpi, only: mpi_comm_world,mpi_info_null
     !
     ! arguments
     character(LEN=*),intent(in) :: varname
@@ -471,7 +474,6 @@ module hdf5io
     dim(2)=size(var,2)
     dim(3)=size(var,3)
     !
-    dimt=dim
     dimat=(/ia+1,ja+1,ka+1/)
     !
     dimt=dim
@@ -501,6 +503,73 @@ module hdf5io
 #endif
     !
   end subroutine h5wa3d_r8
+  !
+  subroutine h5wa2d_r8(varname,var,dir)
+    !
+    use commvar, only: ia,ja,ka
+    use parallel,only: lio,ig0,jg0,kg0
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(in) :: var(:,:)
+    character(len=1),intent(in) :: dir
+    !
+#ifdef HDF5
+    ! local data
+    integer :: dim(2),dima
+    integer(hsize_t), dimension(2) :: offset
+    integer :: h5error
+    !
+    integer(hid_t) :: dset_id,filespace,memspace,plist_id
+    integer(hsize_t) :: dimt(2),dimat(2)
+    !
+    dim(1)=size(var,1)
+    dim(2)=size(var,2)
+    !
+    if(dir=='i') then
+      dimat=(/ja+1,ka+1/)
+      !
+      offset=(/jg0,kg0/)
+    elseif(dir=='j') then
+      dimat=(/ia+1,ka+1/)
+      !
+      offset=(/ig0,kg0/)
+    elseif(dir=='k') then
+      dimat=(/ia+1,ja+1/)
+      !
+      offset=(/ig0,jg0/)
+    else
+      stop ' !! error in dir @ h5wa2d_r8'
+    endif
+    !
+    dimt=dim
+    !
+    call h5screate_simple_f(2,dimat,filespace,h5error)
+    call h5dcreate_f(h5file_id,varname,H5T_NATIVE_DOUBLE,filespace,    &
+                                                       dset_id,h5error)
+    call h5screate_simple_f(2,dimt,memspace,h5error)
+    call h5sclose_f(filespace,h5error)
+    call h5dget_space_f(dset_id,filespace,h5error)
+    call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,offset,     &
+                                                          dimt,h5error)
+    call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,h5error) 
+    !
+    call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,h5error)
+    call h5dwrite_f(dset_id,H5T_NATIVE_DOUBLE,var,dimt,h5error,       &
+                    file_space_id=filespace,mem_space_id=memspace,    &
+                                                     xfer_prp=plist_id)
+    call h5sclose_f(filespace,h5error)
+    call h5sclose_f(memspace,h5error)
+    call h5dclose_f(dset_id,h5error)
+    call h5pclose_f(plist_id,h5error)
+    !
+    if(dir=='i' .and. jrk==0 .and. krk==0) print*,' << ',varname
+    if(dir=='j' .and. irk==0 .and. krk==0) print*,' << ',varname
+    if(dir=='k' .and. irk==0 .and. jrk==0) print*,' << ',varname
+    !
+#endif
+    !
+  end subroutine h5wa2d_r8
   !+-------------------------------------------------------------------+
   !| This end of the function h5wa3d_r8.                               |
   !+-------------------------------------------------------------------+

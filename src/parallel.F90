@@ -94,12 +94,14 @@ module parallel
   end interface
   !
   integer :: mpirank,mpisize,mpirankmax
-  integer :: isize,jsize,ksize,irkm,jrkm,krkm,irk,jrk,krk,ig0,jg0,kg0
+  integer :: isize,jsize,ksize,irkm,jrkm,krkm,irk,jrk,krk,ig0,jg0,kg0, &
+             irk_islice
   integer :: mpileft,mpiright,mpidown,mpiup,mpifront,mpiback,mpitag
   character(len=8) :: mpirankname
   logical :: lio
   integer :: status(mpi_status_size)
-  integer :: mpi_imin,mpi_jmin,group_imin,group_jmin,mpi_group_world
+  integer :: mpi_imin,mpi_jmin,group_imin,group_jmin,mpi_group_world,  &
+             mpi_islice,group_islice
   character(mpi_max_processor_name) :: processor_name
   !
   contains
@@ -432,10 +434,10 @@ module parallel
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine parallelini
     !
-    use commvar,   only : is,ie,js,je,ks,ke
+    use commvar,   only : is,ie,js,je,ks,ke,islice,jslice,kslice
     !
     ! local data
-    integer :: n,nn,nsize1,nsize,ierr,fh,ni,nj,nk,newsize
+    integer :: n,nn,nsize1,nsize,ierr,fh,ni,nj,nk,newsize,nrk
     integer,allocatable:: ntemp(:,:),nrank(:,:,:)
     integer,allocatable :: rank_use(:)
     integer,allocatable,dimension(:) :: nrect,irkg,jrkg,krkg,          &
@@ -725,6 +727,7 @@ module parallel
     call bcast(nrank)
     !
     allocate(rank_use(jsize*ksize))
+    rank_use=-1
     n=0
     do nk=0,ksize-1
     do nj=0,jsize-1
@@ -741,7 +744,48 @@ module parallel
     if(mpirank==0) write(*,'(A,I0)') &
       '  ** new communicator: mpi_imin  ... created, size: ',newsize
     !
+    ! set sub communicator for islice
+    irk_islice=-1
+    if(mpirank==0) then
+      !
+      do nrk=0,mpirankmax
+        !
+        if(islice>=i0g(nrk) .and. islice<i0g(nrk)+img(nrk)) then
+          irk_islice=irkg(nrk)
+          print*,' ** islice is at irk=',irk_islice
+          exit
+        endif
+        !
+      enddo
+      !
+    endif
+    !
+    call bcast(irk_islice)
+    !
+    if(irk_islice>0) then
+      !
+      rank_use=-1
+      n=0
+      do nk=0,ksize-1
+      do nj=0,jsize-1
+        n=n+1
+        rank_use(n)=nrank(irk_islice,nj,nk)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_islice,ierr)
+      call mpi_comm_create(mpi_comm_world,group_islice,mpi_islice,ierr)
+      if(irk==irk_islice) then
+        call mpi_comm_size(mpi_islice,newsize,ierr)
+        if(jrk==0 .and. krk==0) then
+          print*,' ** new communicator: mpi_islice  ... created, size: ',newsize
+        endif
+      endif
+      !
+    endif
+    !
     deallocate(rank_use)
+    ! end of set sub communicator for islice
     !
     allocate(rank_use(isize*ksize))
     n=0
@@ -762,10 +806,6 @@ module parallel
     deallocate(rank_use)
     !
     deallocate(nrank)
-    !
-    ! print*,mpirank,'|',im,jm,km
-    !
-    ! call mpistop
     !
     call mpi_barrier(mpi_comm_world,ierr)
     !

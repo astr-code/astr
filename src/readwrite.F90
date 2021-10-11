@@ -90,6 +90,7 @@ module readwrite
       !
       call system('mkdir testout/')
       call system('mkdir outdat/')
+      call system('mkdir bakup/')
       !
     endif
     !
@@ -339,10 +340,12 @@ module readwrite
       if(lrestart) then
         write(*,'(2X,A62)')' restart a previous computation'
       else
-        if(ninit==2) then
-          write(*,'(2X,A62)')' initialise by rading a flowini2d file'
+        if(ninit==1) then
+          write(*,'(2X,A62)')'          initialise by using a profile'
+        elseif(ninit==2) then
+          write(*,'(2X,A62)')' initialise by reading a flowini2d file'
         elseif(ninit==3) then
-          write(*,'(2X,A62)')' initialise by rading a flowini3d file'
+          write(*,'(2X,A62)')' initialise by reading a flowini3d file'
         else
           write(*,'(2X,A62)')' initialise by a user defined way'
         endif
@@ -509,8 +512,9 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readcont
     !
-    use commvar, only: maxstep,nwrite,deltat,nlstep,lwrite,lavg,navg
-    use parallel,only : bcast
+    use commvar, only: maxstep,nwrite,deltat,nlstep,lwrite,lavg,navg,  &
+                       ninst,lwslic
+    use parallel,only: bcast
     !
     ! local data
     character(len=64) :: inputfile
@@ -524,9 +528,9 @@ module readwrite
       !
       open(fh,file=trim(inputfile),action='read')
       read(fh,'(////)')
-      read(fh,*)lwrite,lavg
+      read(fh,*)lwrite,lwslic,lavg
       read(fh,'(/)')
-      read(fh,*)maxstep,nwrite,nlstep,navg
+      read(fh,*)maxstep,nwrite,ninst,nlstep,navg
       read(fh,'(/)')
       read(fh,*)deltat
       close(fh)
@@ -535,11 +539,13 @@ module readwrite
     endif
     !
     call bcast(lwrite)
+    call bcast(lwslic)
     call bcast(lavg)
     call bcast(maxstep)
     call bcast(nwrite)
     call bcast(nlstep)
     call bcast(navg)
+    call bcast(ninst)
     call bcast(deltat)
     !
   end subroutine readcont
@@ -556,7 +562,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readmonc
     !
-    use commvar, only : nmonitor,imon
+    use commvar, only : nmonitor,imon,islice,jslice,kslice,ia,ja,ka
     use parallel,only : bcast
     use commcal, only : monitorsearch
     !
@@ -632,9 +638,39 @@ module readwrite
         !
       endif
       !
+      inputfile='datin/slice.dat'
+      inquire(file=trim(inputfile), exist=lexist)
+      if(lexist) then
+        !
+        fh=get_unit()
+        open(fh,file=trim(inputfile),action='read')
+        read(fh,*)
+        read(fh,*)islice,jslice,kslice
+        close(fh)
+        print*,' >> ',trim(inputfile),' ... done'
+        !
+      else
+        islice=-1
+        jslice=-1
+        kslice=-1
+      endif
+      !
+      if(islice>=0 .and. islice<=ia) then
+        write(*,'(A,I0,A)')'  ** silce cut at i: ',islice,' is to save'
+      endif
+      if(jslice>=0 .and. jslice<=ja) then
+        write(*,'(A,I0,A)')'  ** silce cut at j: ',jslice,' is to save'
+      endif
+      if(kslice>=0 .and. kslice<=ka) then
+        write(*,'(A,I0,A)')'  ** silce cut at k: ',kslice,' is to save'
+      endif
+      !
     endif
     !
     call bcast(ncou)
+    call bcast(islice)
+    call bcast(jslice)
+    call bcast(kslice)
     !
     if(ncou>0) then
       !
@@ -952,7 +988,7 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine readflowini3d
     !
-    use commvar,   only : im,jm,km,num_species
+    use commvar,   only : im,jm,km,num_species,time
     use commarray, only : rho,vel,prs,tmp,spc
     use hdf5io
     !
@@ -962,7 +998,8 @@ module readwrite
     character(len=2) :: spname
     !
     call h5io_init(filename='datin/flowini3d.h5',mode='read')
-    !
+    ! 
+    call h5read(varname='time',var=time)
     call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
     call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1))
     call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2))
@@ -1040,22 +1077,26 @@ module readwrite
   !| -------------                                                     |
   !| 24-06-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readcheckpoint
+  subroutine readcheckpoint(folder)
     !
-    use commvar, only: nstep,filenumb,time,flowtype,num_species,       &
-                       im,jm,km,force,numq,turbmode
+    use commvar, only: nstep,filenumb,fnumslic,time,flowtype,          &
+                       num_species,im,jm,km,force,numq,turbmode
     use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut
     use statistic,only : massflux,massflux_target,nsamples
     use hdf5io
+    !
+    ! arguments
+    character(len=*),intent(in) :: folder
     !
     ! local data
     integer :: nstep_1,jsp
     character(len=2) :: spname,qname
     character(len=128) :: infilename
     !
-    call h5io_init(filename='checkpoint/auxiliary.h5',mode='read')
+    call h5io_init(filename=folder//'/auxiliary.h5',mode='read')
     call h5read(varname='nstep',var=nstep)
     call h5read(varname='filenumb',var=filenumb)
+    call h5read(varname='fnumslic',var=fnumslic)
     if(flowtype=='channel') then
       call h5read(varname='massflux',var=massflux)
       call h5read(varname='massflux_target',var=massflux_target)
@@ -1064,7 +1105,7 @@ module readwrite
     call h5read(varname='nsamples',var=nsamples)
     call h5io_end
     !
-    call h5io_init(filename='checkpoint/flowfield.h5',mode='read')
+    call h5io_init(filename=folder//'/flowfield.h5',mode='read')
     call h5read(varname='nstep',var=nstep_1)
     !
     if(nstep_1==nstep) then
@@ -1276,6 +1317,30 @@ module readwrite
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to bakup files.                           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 29-09-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine bakupfile(file)
+    !
+    ! arguments
+    character(len=*),intent(in),optional :: file
+    !
+    ! local data
+    logical :: lexist
+    !
+    inquire(file=file, exist=lexist)
+    !
+    if(lexist) call system('mv -v '//file//' bakup/')
+    !
+  end subroutine bakupfile
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine bakupfile.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to dump flow field data                   |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -1284,8 +1349,9 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine output(subtime)
     !
-    use commvar, only: time,nstep,filenumb,num_species,im,jm,km,       &
-                       lwrite,lavg,force,numq,imbroot,limmbou,turbmode
+    use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
+                       km,lwrite,lavg,force,numq,imbroot,limmbou,      &
+                       turbmode
     use commarray,only : x,rho,vel,prs,tmp,spc,q
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
@@ -1346,7 +1412,10 @@ module readwrite
     ! write(21)force
     ! close(21)
     ! if(lio) print*,' << ',trim(outfilename)
-    ! !
+    !
+    if(lio) call bakupfile('outdat/auxiliary.h5')
+    if(lio) call bakupfile(trim(outfilename))
+    !
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
@@ -1388,6 +1457,8 @@ module readwrite
                           filename='outdat/auxiliary.h5',newfile=.true.)
       call h5srite(varname='filenumb',var=filenumb,                    &
                                          filename='outdat/auxiliary.h5')
+      call h5srite(varname='fnumslic',var=fnumslic,                    &
+                                         filename='outdat/auxiliary.h5')
       call h5srite(varname='massflux',var=massflux,                    &
                                          filename='outdat/auxiliary.h5')
       call h5srite(varname='massflux_target',var=massflux_target,      &
@@ -1413,6 +1484,8 @@ module readwrite
 
     if(liosta) then
       !
+      if(lio) call bakupfile(file='outdat/meanflow.h5')
+      !
       call h5io_init('outdat/meanflow.h5',mode='write')
       call h5write(varname='rom',var=rom(0:im,0:jm,0:km))
       call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km))
@@ -1422,6 +1495,7 @@ module readwrite
       call h5write(varname='tm ',var=tm (0:im,0:jm,0:km))
       call h5io_end
       !
+      if(lio) call bakupfile(file='outdat/2ndsta.h5')
       call h5io_init('outdat/2ndsta.h5',mode='write')
       call h5write(varname='u11',var=u11(0:im,0:jm,0:km))
       call h5write(varname='u22',var=u22(0:im,0:jm,0:km))
@@ -1437,6 +1511,7 @@ module readwrite
       call h5write(varname='tu3',var=tu2(0:im,0:jm,0:km))
       call h5io_end
       !
+      if(lio) call bakupfile(file='outdat/3rdsta.h5')
       call h5io_init('outdat/3rdsta.h5',mode='write')
       call h5write(varname='u111',var=u111(0:im,0:jm,0:km))
       call h5write(varname='u222',var=u222(0:im,0:jm,0:km))
@@ -1450,6 +1525,7 @@ module readwrite
       call h5write(varname='u123',var=u123(0:im,0:jm,0:km))
       call h5io_end
       !
+      if(lio) call bakupfile(file='outdat/budget.h5')
       call h5io_init('outdat/budget.h5',mode='write')
       call h5write(varname='disspa', var=disspa(0:im,0:jm,0:km))
       call h5write(varname='predil', var=predil(0:im,0:jm,0:km))
@@ -1528,6 +1604,63 @@ module readwrite
     return
     !
   end subroutine output
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine output.                                 |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write slice cut.                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 10-10-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine writeslice
+    !
+    use parallel, only: mpi_islice,irk_islice
+    use commvar,  only: fnumslic,nstep,time,islice,im,jm,km
+    use commarray,only: rho,vel,prs,tmp
+    use hdf5io
+    !
+    ! local data
+    character(len=5) :: stepname
+    character(len=14) :: filename
+    integer :: i
+    !
+    if(irk==irk_islice) then
+      !
+      i=islice-ig0
+      !
+      if(i<0 .or. i>im) then
+        print*,' !! islice location error !! i=',i
+        stop
+      endif
+      !
+      write(stepname,'(i5.5)')fnumslic
+      !
+      filename='islice'//stepname//'.h5'
+      !
+      call h5io_init(filename='islice/'//filename,mode='write',        &
+                                                        comm=mpi_islice)
+      call h5write(varname='ro',var=rho(i,0:jm,0:km),  dir='i')
+      call h5write(varname='u1',var=vel(i,0:jm,0:km,1),dir='i')
+      call h5write(varname='u2',var=vel(i,0:jm,0:km,2),dir='i')
+      call h5write(varname='u3',var=vel(i,0:jm,0:km,3),dir='i')
+      call h5write(varname='p', var=prs(i,0:jm,0:km)  ,dir='i')
+      call h5write(varname='t', var=tmp(i,0:jm,0:km)  ,dir='i')
+      !
+      call h5io_end
+      !
+      if(jrk==0 .and. krk==0) then
+        call h5srite(filename='islice/'//filename,varname='nstep',var=nstep)
+        call h5srite(filename='islice/'//filename,varname='time', var=time)
+      endif
+      !
+    endif
+    !
+    fnumslic=fnumslic+1
+    !
+  end subroutine writeslice
   !+-------------------------------------------------------------------+
   !| The end of the subroutine output.                                 |
   !+-------------------------------------------------------------------+

@@ -17,6 +17,7 @@ module mainloop
   implicit none
   !
   integer :: loop_counter=0
+  integer :: fhand_err
   !
   contains
   !
@@ -39,9 +40,14 @@ module mainloop
     !
     time_start=ptime()
     !
+    fhand_err=get_unit()
+    open(fhand_err,file='errnode.log')
+    !
     do while(nstep<=maxstep)
       !
       time_beg=ptime()
+      !
+      call crashcheck
       !
       if(rkscheme=='rk3') then
         call rk3
@@ -246,8 +252,6 @@ module mainloop
       !
       call updatefvar
       !
-      call crashcheck
-      !
       ! call tecbin('testout/tecinit'//mpirankname//'.plt',              &
       !                                    x(0:im,0:jm,-hm:km+hm,1),'x', &
       !                                    x(0:im,0:jm,-hm:km+hm,2),'y', &
@@ -287,12 +291,13 @@ module mainloop
   subroutine rk4
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep,limmbou,turbmode
+                         ctime,hm,lavg,navg,nstep,limmbou,turbmode,    &
+                         ninst,lwslic
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
-    use readwrite,only : output,writemon
+    use readwrite,only : output,writemon,writeslice
     use bc,       only : boucon,immbody
     !
     !
@@ -344,12 +349,6 @@ module mainloop
           rhsav(0:im,0:jm,0:km,m)=0.d0
         enddo
         !
-        if(loop_counter==nwrite) then
-          !
-          call output(ctime(6))
-          !
-        endif
-        !
         call statcal(ctime(5))
         !
         call statout
@@ -365,6 +364,16 @@ module mainloop
             nsamples=0
             liosta=.false.
           endif
+          !
+          if(lwslic .and. mod(nstep,ninst)==0) then
+            call writeslice
+          endif
+          !
+        endif
+        !
+        if(loop_counter==nwrite) then
+          !
+          call output(ctime(6))
           !
         endif
         !
@@ -398,7 +407,8 @@ module mainloop
       !
       call updatefvar
       !
-      call crashcheck
+      ! call crashcheck
+      call crashfix
       !
     enddo
     !
@@ -422,9 +432,11 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine crashcheck
     !
-    use commvar,   only : hm
-    use commarray, only : q,rho,tmp,prs,x,nodestat
-    use parallel, only : por
+    use commvar,  only: hm,nstep
+    use commarray,only: q,rho,tmp,prs,x,nodestat
+    use parallel, only: por
+    use fludyna,  only: updateq
+    use readwrite,only: readcheckpoint
     !
     ! local data
     integer :: i,j,k,l,fh,ii,jj,kk
@@ -444,11 +456,11 @@ module mainloop
         if(q(i,j,k,1)>=0.d0 .and. q(i,j,k,5)>=0.d0) then
           continue
         else
-          print*,' !! non-positive density/energy identified !!'
-          write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
-                             mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
-          write(*,'(A,I0)')'   ** nodestat: ',nodestat(i,j,k)
-          write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,1:5)
+          write(fhand_err,'(A,I0)')'error node cant wiped at nstep=',nstep
+          write(fhand_err,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'mpirank= ',mpirank, &
+                                               ' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+          write(fhand_err,'(A,I0)')'nodestat: ',nodestat(i,j,k)
+          write(fhand_err,'(A,5(1X,E13.6E2))')'q= ',q(i,j,k,1:5)
           !
           do kk=-1,1
           do jj=-1,1
@@ -456,7 +468,8 @@ module mainloop
             if(ii==0 .and. jj==0 .and. kk==0) then
               continue
             else
-              write(*,'(3(1X,I0),5(1X,E13.6E2),1X,I0)')ii,jj,kk,q(i+ii,j+jj,k+kk,1:5),nodestat(i+ii,j+jj,k+kk)
+              write(fhand_err,'(3(1X,I0),5(1X,E13.6E2),1X,I0)')ii,jj,kk,  &
+                             q(i+ii,j+jj,k+kk,1:5),nodestat(i+ii,j+jj,k+kk)
             endif
           enddo
           enddo
@@ -478,8 +491,17 @@ module mainloop
     ltocrash=por(ltocrash)
     !
     if(ltocrash) then
+      !
       if(lio) print*,' !! COMPUTATION CRASHED !!'
-      call mpistop
+      if(lio) print*,' !! FTECH AN BAKUP FLOW FIELD !!'
+      !
+      call readcheckpoint('bakup')
+      !
+      call updateq
+      !
+      loop_counter=0
+      !
+      ! call mpistop
     endif
     !
     return
@@ -487,6 +509,108 @@ module mainloop
   end subroutine crashcheck
   !+-------------------------------------------------------------------+
   !| The end of the subroutine crashcheck.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to wipe the point where the result is not good.|
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-10-2020: Created by J. Fang @ Warrington                      |
+  !+-------------------------------------------------------------------+
+  subroutine crashfix
+    !
+    use commvar,   only : numq,nstep
+    use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
+    use parallel, only : por,ig0,jg0,kg0,psum
+    use fludyna,   only: q2fvar
+    !
+    ! local data
+    integer :: i,j,k,l,fh,ii,jj,kk
+    real(8) :: qavg(numq)
+    integer :: norm,counter
+    !
+    counter=0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(nodestat(i,j,k)<=0.d0) then
+        ! only check fluid points
+        if(rho(i,j,k)>=0.d0 .and. prs(i,j,k)>=0.d0 .and. tmp(i,j,k)>=0.d0) then
+          continue
+        else
+          !
+          ! print*,' !! non-positive density/energy identified !!'
+          ! write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
+          !                    mpirank,' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+          ! write(*,'(A,I0)')'   ** nodestat: ',nodestat(i,j,k)
+          ! write(*,'(A,5(1X,E13.6E2))')'   ** q= ',q(i,j,k,1:5)
+          ! !
+          qavg=0.d0
+          norm=0
+          do kk=-1,1
+          do jj=-1,1
+          do ii=-1,1
+            !
+            if(ii==0 .and. jj==0 .and. kk==0) then
+              continue
+            elseif( ig0+i+ii<0 .or. ig0+i+ii>ia .or.  &
+                    jg0+j+jj<0 .or. jg0+j+jj>ja ) then
+              continue
+            else
+              if(rho(i+ii,j+jj,k+kk)>=0.d0 .and. prs(i+ii,j+jj,k+kk)>=0.d0 .and. tmp(i+ii,j+jj,k+kk)>=0.d0) then
+                qavg(:)=qavg(:)+q(i+ii,j+jj,k+kk,:)
+                norm=norm+1
+              endif
+            endif
+            !
+          enddo
+          enddo
+          enddo
+          !
+          if(norm>=1) then
+            !
+            write(fhand_err,'(A,I0)')' error nodes identified and wiped at nstep=',nstep
+            write(fhand_err,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'mpirank= ', mpirank,    &
+                                                    ' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
+            write(fhand_err,'(3(A,E13.6E2))')'rho=',rho(i,j,k),' prs=',prs(i,j,k),        &
+                                                               ' tmp=',tmp(i,j,k)
+            write(fhand_err,'(2(A,5(1X,E13.6E2)))')'q= ',q(i,j,k,1:5),' -> ',qavg/dble(norm)
+            !
+            q(i,j,k,:)=qavg/dble(norm)
+            !
+            call q2fvar(q=q(i,j,k,:),                       &
+                                       density=rho(i,j,k),  &
+                                      velocity=vel(i,j,k,:),&
+                                      pressure=prs(i,j,k),  &
+                                   temperature=tmp(i,j,k),  &
+                                       species=spc(i,j,k,:) )
+            !
+            counter=counter+1
+            !
+          endif
+          !
+        endif
+        !
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    counter=psum(counter)
+    !
+    if(lio .and. counter>1) then
+      write(*,'(A,I0,A)')'  !! ',counter,' error nodes were wiped.'
+    endif
+    !
+    return
+    !
+  end subroutine crashfix
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine crashfix.                               |
   !+-------------------------------------------------------------------+
   !
 end module mainloop

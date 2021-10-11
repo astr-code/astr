@@ -41,6 +41,8 @@ program astr
     !
     call readinput
     !
+    call readmonc
+    !
     call mpisizedis
     !
     call parapp

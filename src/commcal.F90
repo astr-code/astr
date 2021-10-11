@@ -56,9 +56,9 @@ module commcal
       csj=css*sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
       csk=css*sqrt(dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+dxi(i,j,k,3,3)**2)
       !
-      deltai=max(ubar,ubar-csi,ubar+csi)
-      deltaj=max(vbar,vbar-csj,vbar+csj)
-      deltak=max(wbar,wbar-csk,wbar+csk)
+      deltai=max(deltai,ubar,ubar-csi,ubar+csi)
+      deltaj=max(deltaj,vbar,vbar-csj,vbar+csj)
+      deltak=max(deltak,wbar,wbar-csk,wbar+csk)
       !
     enddo
     enddo
@@ -175,6 +175,114 @@ module commcal
   end subroutine monitorsearch
   !+-------------------------------------------------------------------+
   !| The end of the subroutine monitorsearch.                          |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to be a shock senor.                      |
+  !+-------------------------------------------------------------------+
+  !! Ref1: F. Ducros, J. Comp. Phys. 1999, 152:517-549.                |
+  !! Ref2: S. C. Lo, Int. J. Num. Meth. Fluid., 2009.                  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 08-10-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine ducrossensor
+    !
+    use commvar,  only : im,jm,km,is,ie,js,je,ks,ke,hm
+    use commarray,only : ssf,lshock,dvel,prs
+    use parallel, only : dataswap,pmin,pmax,psum,lio
+    !
+    ! local data
+    logical,save :: firstcall=.true.
+    real(8) :: div2,vort,vortx,vorty,vortz,dpdi,dpdj,dpdk
+    real(8) :: ssfmin,ssfmax,ssfavg,norm
+    integer :: i,j,k,i1,j1,k1,ii,jj,kk
+    !
+    if(firstcall) then
+      !
+      allocate(ssf(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+      allocate(lshock(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+      !
+      firstcall=.false.
+      !
+    endif
+    !
+    ssfmin= 1.d10
+    ssfmax=-1.d10
+    ssfavg=0.d0
+    norm=0.d0
+    do k=ks,ke
+    do j=js,je
+    do i=is,ie
+      !
+      div2=(dvel(i,j,k,1,1)+dvel(i,j,k,2,2)+dvel(i,j,k,3,3))**2
+      !
+      vortx=dvel(i,j,k,3,2)-dvel(i,j,k,2,3)
+      vorty=dvel(i,j,k,1,3)-dvel(i,j,k,3,1)
+      vortz=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
+      vort=vortx*vortx+vorty*vorty+vortz*vortz
+      !
+      dpdi= abs(prs(i+1,j,k)-2.d0*prs(i,j,k)+prs(i-1,j,k)) /  &
+               (prs(i+1,j,k)+2.d0*prs(i,j,k)+prs(i-1,j,k))
+      dpdj= abs(prs(i,j+1,k)-2.d0*prs(i,j,k)+prs(i,j-1,k)) /  &
+               (prs(i,j+1,k)+2.d0*prs(i,j,k)+prs(i,j-1,k))
+      dpdk= abs(prs(i,j,k+1)-2.d0*prs(i,j,k)+prs(i,j,k-1)) /  &
+               (prs(i,j,k+1)+2.d0*prs(i,j,k)+prs(i,j,k-1))
+      !
+      ssf(i,j,k)=div2/(div2+vort+1.d-30) * max(dpdi,dpdj,dpdk)
+      !
+      ssfmin=min(ssfmin,ssf(i,j,k))
+      ssfmax=max(ssfmax,ssf(i,j,k))
+      !
+      ssfavg=ssfavg+ssf(i,j,k)
+      norm=norm+1.d0
+      !
+    enddo
+    enddo
+    enddo
+    !
+    ssfmin=pmin(ssfmin)
+    ssfmax=pmax(ssfmax)
+    ssfavg=psum(ssfavg)/psum(norm)
+    !
+    if(lio) then
+      print*,' ------------- shock sensor -------------'
+      write(*,"(18x,A,1X,F12.5)")'  max ssf:',ssfmax
+      write(*,"(18x,A,1X,F12.5)")'  min ssf:',ssfmin
+      write(*,"(18x,A,1X,F12.5)")'  avg ssf:',ssfavg
+      print*,' ----------------------------------------'
+    endif
+    !
+    call dataswap(ssf)
+    !
+    do k=ks,ke
+    do j=js,je
+    do i=is,ie
+      !
+      do k1=-3,4
+      do j1=-3,4
+      do i1=-3,4
+        !
+        ii=i+i1
+        jj=j+j1
+        kk=k+k1
+        !
+
+        !
+      enddo
+      enddo
+      enddo
+      !
+    enddo
+    enddo
+    enddo
+    !
+    return
+    !
+  end subroutine ducrossensor
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine ducrossensor.                           |
   !+-------------------------------------------------------------------+
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

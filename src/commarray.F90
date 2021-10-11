@@ -20,10 +20,10 @@ module commarray
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax
   integer,allocatable,dimension(:,:,:) :: nodestat
-  logical,allocatable,dimension(:,:,:) :: lsolid
+  logical,allocatable,dimension(:,:,:) :: lsolid,lshock
   type(nodcel),allocatable,dimension(:,:,:) :: cell
   !
-  real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12
+  real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12,ssf
   real(8),allocatable,dimension(:,:,:,:) :: dtke,domg
   !
   !+---------------------+---------------------------------------------+

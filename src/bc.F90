@@ -3833,11 +3833,12 @@ module bc
           lfirstcal=.false.
           !
         endif
-        ! if(ndims==3) then
+        !
+        if(ndims==3) then
           vwall=wallbs(beter,wallamplit,xa,xb,nmod_t,nmod_z)
-        ! else
-        !   vwall=0.d0
-        ! endif
+        else
+          vwall=0.d0
+        endif
         !
         j=0
         !
@@ -4002,7 +4003,12 @@ module bc
       !
       sqrt27=1.d0/sqrt(27.d0)
       z0=0.2d0/(1.d0-0.8d0**nmod_z)
-      t0=0.2d0/(1.d0-0.8d0**nmod_t)
+      !
+      if(nmod_t==0) then
+        t0=0
+      else
+        t0=0.2d0/(1.d0-0.8d0**nmod_t)
+      endif
       !
       ! call random_seed() ! initialize with system generated seed
       call random_seed(size=seed_size) ! find out size of seed
@@ -4049,18 +4055,22 @@ module bc
           end do
         endif
         !
-        ht=0.d0
-        do m=1,nmod_t
-          !
-          if(m==1) then
-            tm=t0
-          else
-            tm=tm*0.8d0
-          end if
-          !
-          ht=ht+tm*dsin(2.d0*pi*m*(beter*time+randomv(m+10)))
-          !
-        end do
+        if(nmod_t==0) then
+          ht=1.d0
+        else
+          ht=0.d0
+          do m=1,nmod_t
+            !
+            if(m==1) then
+              tm=t0
+            else
+              tm=tm*0.8d0
+            end if
+            !
+            ht=ht+tm*dsin(2.d0*pi*m*(beter*time+randomv(m+10)))
+            !
+          end do
+        endif
         !
         vwall(i,k)=wallamplit*uinf*fx*gz*ht
       else
@@ -4176,7 +4186,6 @@ module bc
   subroutine profileinflow
     !
     use fludyna, only : mixinglayervel,thermal
-    use parallel,only : mpi_imin
     !
     ! local data
     integer :: i,j,k
