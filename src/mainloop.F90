@@ -160,18 +160,19 @@ module mainloop
   subroutine rk3
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep
+                         ctime,hm,lavg,navg,nstep,limmbou,turbmode,    &
+                         ninst,lwslic
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
-    use statistic,only : statcal,statout,meanflowcal,nsamples,liosta
-    use readwrite,only : output
-    use bc,       only : boucon
+    use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
+    use readwrite,only : output,writemon,writeslice
+    use bc,       only : boucon,immbody
     !
     ! logical data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    integer :: irk,i,j,k,m
+    integer :: nrk,i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
     !
@@ -197,7 +198,7 @@ module mainloop
     !
     allocate(qsave(0:im,0:jm,0:km,1:numq))
     !
-    do irk=1,3
+    do nrk=1,3
       !
       qrhs=0.d0
       !
@@ -205,19 +206,24 @@ module mainloop
       !
       call boucon
       !
+      call qswap(ctime(7))
+      !
       call rhscal(ctime(4))
       !
-      if(irk==1) then
+      if(nrk==1) then
         !
         do m=1,numq
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
         enddo
         !
-        if(loop_counter.ne.0) then
+        call statcal(ctime(5))
+        !
+        call statout
+        !
+        if(nstep==0 .or. loop_counter.ne.0) then
+          ! the first step after reading ehecking out doesn't need to do this
           !
-          call statcal(ctime(5))
-          !
-          call statout
+          call writemon
           !
           if(lavg) then
             if(mod(nstep,navg)==0) call meanflowcal(ctime(5))
@@ -226,10 +232,13 @@ module mainloop
             liosta=.false.
           endif
           !
+          if(lwslic .and. mod(nstep,ninst)==0) then
+            call writeslice
+          endif
+          !
         endif
         !
-        !
-        if(loop_counter==nwrite .or. loop_counter==0) then
+        if(loop_counter==nwrite) then
           !
           call output(ctime(6))
           !
@@ -238,10 +247,10 @@ module mainloop
       endif
       !
       do m=1,numq
-        q(0:im,0:jm,0:km,m)=rkcoe(1,irk)*qsave(0:im,0:jm,0:km,m)+      &
-                            rkcoe(2,irk)*q(0:im,0:jm,0:km,m)*          &
+        q(0:im,0:jm,0:km,m)=rkcoe(1,nrk)*qsave(0:im,0:jm,0:km,m)+      &
+                            rkcoe(2,nrk)*q(0:im,0:jm,0:km,m)*          &
                                      jacob(0:im,0:jm,0:km)+            &
-                            rkcoe(3,irk)*qrhs(0:im,0:jm,0:km,m)*deltat
+                            rkcoe(3,nrk)*qrhs(0:im,0:jm,0:km,m)*deltat
         !
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
       enddo
@@ -252,17 +261,7 @@ module mainloop
       !
       call updatefvar
       !
-      ! call tecbin('testout/tecinit'//mpirankname//'.plt',              &
-      !                                    x(0:im,0:jm,-hm:km+hm,1),'x', &
-      !                                    x(0:im,0:jm,-hm:km+hm,2),'y', &
-      !                                    x(0:im,0:jm,-hm:km+hm,3),'z', &
-      !                                  rho(0:im,0:jm,-hm:km+hm),'ro',  &
-      !                                  vel(0:im,0:jm,-hm:km+hm,1),'u', &
-      !                                  vel(0:im,0:jm,-hm:km+hm,2),'v', &
-      !                                  prs(0:im,0:jm,-hm:km+hm),'p',   &
-      !                                  spc(0:im,0:jm,-hm:km+hm,1),'T' )
-      ! call mpistop
-      !
+      call crashfix
     enddo
     !
     deallocate(qsave)
