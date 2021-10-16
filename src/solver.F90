@@ -212,7 +212,7 @@ module solver
       firstcall=.false.
     endif
     !
-    call gradcal
+    call gradcal(subtime=ctime(10))
     !
     if(mod(nconv,2)==0) then
       call convrsdcal6(subtime=ctime(9))
@@ -1801,17 +1801,25 @@ module solver
   !| -------------                                                     |
   !| 08-10-2021  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
   !+-------------------------------------------------------------------+
-  subroutine gradcal
+  subroutine gradcal(subtime)
     !
-    use commvar,   only : im,jm,km,ndims,num_species,num_modequ,npdci, &
-                          npdcj,npdck,turbmode,difschm
-    use commarray, only : vel,tmp,spc,omg,tke,dvel,dtmp,dspc,dxi,dtke, &
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims,    &
+                          num_species,num_modequ,is,ie,js,je,ks,ke,    &
+                          turbmode
+    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,omg,tke,dtke, &
                           domg
     use commfunc,  only : ddfc
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k,n,ncolm
     real(8),allocatable :: df(:,:),ff(:,:)
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     dvel=0.d0
     dtmp=0.d0
@@ -2029,6 +2037,8 @@ module solver
       enddo
       deallocate(ff,df)
     endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
     !
@@ -2326,8 +2336,7 @@ module solver
     ! End calculating along j
     !!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    ! if(ndims==3) then
-    if(.false.) then
+    if(ndims==3) then
       ! Calculating along k direction.
       !
       allocate(ff(-hm:km+hm,2:ncolm),df(0:km,2:ncolm))

@@ -3803,6 +3803,14 @@ module bc
               read(fh,*)nmod_t,nmod_z
               close(fh)
               print*,' >> ',trim(filewbs)
+              !
+              print*,' ------------- wall blowing & suction parameters -------------'
+              write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
+              write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
+              write(*,"(23x,2(A,1X,F12.5))")'   x extent:',xa,' ~',xb
+              write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
+              write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
+              print*,' --------------------------------------------------------------'
             else
               wallamplit=0.d0
               beter=1.d0
@@ -3820,21 +3828,12 @@ module bc
           call bcast(nmod_t,comm=mpi_jmin)
           call bcast(nmod_z,comm=mpi_jmin)
           !
-          if(irk==irkm .and. krk==krkm) then
-            print*,' ------------- wall blowing & suction parameters -------------'
-            write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
-            write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
-            write(*,"(23x,2(A,1X,F12.5))")'   x extent:',xa,' ~',xb
-            write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
-            write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
-            print*,' --------------------------------------------------------------'
-          endif
           !
           lfirstcal=.false.
           !
         endif
         !
-        if(ndims==3) then
+        if(ndims==3 .and. wallamplit>1.d-10) then
           vwall=wallbs(beter,wallamplit,xa,xb,nmod_t,nmod_z)
         else
           vwall=0.d0
