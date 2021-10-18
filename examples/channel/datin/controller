@@ -1,0 +1,28 @@
+############################################################
+#               control file for ASTRR code                #
+############################################################
+
+# lwrite,lwslic,lavg
+f,f,f
+
+#maxstep,nwrite,ninst,nlstep,navg
+100000000,10000,10,10,20
+
+# deltat
+0.8d-3
+
++----------------------------------------------------------+
+| This file will be read each time after checkpoint        |
++--------------+-------------------------------------------+
+|       lwrite | to write a sequence of flowfield files.   |
+|       lwslic | to write a sequence of slice cut files.   |
+|         lavg | to conduct on-fly stastistics.            |
++--------------+-------------------------------------------+
+|      maxstep | max step to run.                          |
+|       nwrite | frequency of dumping checkpoint.          |
+|        ninst | frequency of writing slice.               |
+|       nlstep | frequency of listing computing state.     |
+|         navg | frequency of calculating statistics.      |
++--------------+-------------------------------------------+
+|       deltat | time step.                                |
++--------------+-------------------------------------------+

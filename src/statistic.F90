@@ -285,8 +285,8 @@ module statistic
       sgmam23(i,j,k)=sgmam23(i,j,k)+s23
       !
       visdif1(i,j,k)=visdif1(i,j,k)+s11*u+s12*v+s13*w
-      visdif1(i,j,k)=visdif1(i,j,k)+s12*u+s22*v+s23*w
-      visdif1(i,j,k)=visdif1(i,j,k)+s13*u+s23*v+s33*w
+      visdif2(i,j,k)=visdif2(i,j,k)+s12*u+s22*v+s23*w
+      visdif3(i,j,k)=visdif3(i,j,k)+s13*u+s23*v+s33*w
       !
       disspa(i,j,k)=disspa(i,j,k)+s11*d11+s12*d12+s13*d13+           &
                                   s12*d21+s22*d22+s23*d23+           &

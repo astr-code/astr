@@ -135,21 +135,36 @@ module pp
       !
       call gridchannel(320,128,128,trim(folder))
       !
-      open(fh,file=trim(folder)//'/datin/contr.dat',form='formatted')
+      open(fh,file=trim(folder)//'/datin/controller',form='formatted')
       write(fh,'(A)')'############################################################'
       write(fh,'(A)')'#               control file for ASTRR code                #'
       write(fh,'(A)')'############################################################'
       write(fh,*)
-      write(fh,'(A)')'# lwrite,lavg                : switch for IO and on-fly sta'
+      write(fh,'(A)')'# lwrite,lwslic,lavg'
       write(fh,'(A)')'f,f'
       write(fh,*)
-      write(fh,'(A)')'# maxstep,nwrite,nlstep,navg : parameters'
-      write(fh,'(A)')'1000,100,1,20'
+      write(fh,'(A)')'# maxstep,nwrite,ninst,nlstep,navg'
+      write(fh,'(A)')'1000,100,20,1,20'
       write(fh,*)
-      write(fh,'(A)')'# deltat                    : time step'
+      write(fh,'(A)')'# deltat '
       write(fh,'(A)')'1.d-3'
+      write(fh,'(A)')'+----------------------------------------------------------+'
+      write(fh,'(A)')'| This file will be read each time after checkpoint        |'
+      write(fh,'(A)')'+--------------+-------------------------------------------+'
+      write(fh,'(A)')'|       lwrite | to write a sequence of flowfield files.   |'
+      write(fh,'(A)')'|       lwslic | to write a sequence of slice cut files.   |'
+      write(fh,'(A)')'|         lavg | to conduct on-fly stastistics.            |'
+      write(fh,'(A)')'+--------------+-------------------------------------------+'
+      write(fh,'(A)')'|      maxstep | max step to run.                          |'
+      write(fh,'(A)')'|       nwrite | frequency of dumping checkpoint.          |'
+      write(fh,'(A)')'|        ninst | frequency of writing slice.               |'
+      write(fh,'(A)')'|       nlstep | frequency of listing computing state.     |'
+      write(fh,'(A)')'|         navg | frequency of calculating statistics.      |'
+      write(fh,'(A)')'+--------------+-------------------------------------------+'
+      write(fh,'(A)')'|       deltat | time step.                                |'
+      write(fh,'(A)')'+--------------+-------------------------------------------+'
       close(fh)
-      print*,' << ',trim(folder),'/datin/contr.dat'
+      print*,' << ',trim(folder),'/datin/controller'
       !
       call system('cp -v ./bin/astr ./'//trim(folder))
       !

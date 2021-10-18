@@ -520,7 +520,7 @@ module readwrite
     character(len=64) :: inputfile
     integer :: fh
     !
-    inputfile='datin/contr.dat'
+    inputfile='datin/controller'
     !
     if(mpirank==0) then
       !
