@@ -341,12 +341,14 @@ module hdf5io
     !
   end subroutine h5r_real8_1d
   !
-  subroutine h5ra2d_r8(varname,var)
+  subroutine h5ra2d_r8(varname,var,dir,display)
     !
     !
     ! arguments
     character(LEN=*),intent(in) :: varname
     real(8),intent(inout) :: var(:,:)
+    character(len=1),intent(in) :: dir
+    logical,intent(in),optional :: display
     !
 #ifdef HDF5
     ! local data
@@ -354,15 +356,31 @@ module hdf5io
     integer :: dim(2)
     integer(hsize_t), dimension(2) :: offset
     integer :: h5error
+    logical :: lexplicit
     !
     integer(hid_t) :: dset_id,filespace,memspace,plist_id
     integer(hsize_t) :: dimt(2)
+    !
+    if (present(display)) then
+       lexplicit = display
+    else
+       lexplicit = .true.
+    end if
     !
     dim(1)=size(var,1)
     dim(2)=size(var,2)
     !
     dimt=dim
-    offset=(/ig0,jg0/)
+    !
+    if(dir=='i') then
+      offset=(/jg0,kg0/)
+    elseif(dir=='j') then
+      offset=(/ig0,kg0/)
+    elseif(dir=='k') then
+      offset=(/ig0,jg0/)
+    else
+      stop ' !! error in dir @ h5wa2d_r8'
+    endif
     !
     ! read the data
     !
@@ -388,7 +406,7 @@ module hdf5io
     !
     call h5pclose_f(plist_id,h5error)
     !
-    if(lio) print*,' >> ',varname
+    if(lio .and. lexplicit) print*,' >> ',varname
     !
 #endif
     !

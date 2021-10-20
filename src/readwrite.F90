@@ -111,11 +111,12 @@ module readwrite
     use parallel,only : mpirank,isize,jsize,ksize,mpistop
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
                         diffterm,ref_t,reynolds,mach,num_species,      &
-                        flowtype,ndims,lfilter,alfa_filter,bctype,     &
-                        twall,lfftk,kcutoff,ninit,rkscheme,            &
+                        flowtype,ndims,lfilter,alfa_filter,            &
+                        lfftk,kcutoff,ninit,rkscheme,                  &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,turbmode
+    use bc,      only : bctype,twall,turbinf
     !
     ! local data
     character(len=42) :: typedefine
@@ -289,7 +290,7 @@ module readwrite
         if(bctype(n)==1) then
           write(*,'(45X,I0,2(A))')bctype(n),' periodic at: ',bcdir(n)
         elseif(bctype(n)==41) then
-          write(*,'(24X,I0,3(A),F6.3)')bctype(n),' isothermal wall at ',bcdir(n),&
+          write(*,'(24X,I0,3(A),F6.3)')bctype(n),' isothermal wall at ',bcdir(n), &
                                                      ' Twall= ',twall(n)
         elseif(bctype(n)==51) then
           write(*,'(44X,I0,2(A))')bctype(n),' farfield at: ',bcdir(n)
@@ -297,6 +298,17 @@ module readwrite
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
+          write(*,'(45X,(A))',advance='no')'inflow turbulence : '
+          !
+          if(turbinf=='none') then
+            write(*,'(A)')' no inflow turbulence'
+          elseif(turbinf=='intp') then
+            write(*,'(A)')' interpolation of database'
+          else
+            print*,' !! turbinf: ',turbinf
+            stop ' !! ERROR in defining turbinf @ bc 11 !!'
+          endif
+          !
         elseif(bctype(n)==12) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc inflow  at: ',bcdir(n)
         elseif(bctype(n)==13) then
@@ -372,13 +384,14 @@ module readwrite
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
-                        lreadgrid,lfftk,gridfile,bctype,twall,kcutoff, &
+                        lreadgrid,lfftk,gridfile,kcutoff,              &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,turbmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
+    use bc,      only : bctype,twall,turbinf
     !
     ! local data
     character(len=64) :: inputfile
@@ -431,6 +444,10 @@ module readwrite
         if(bctype(n)==41) then
           backspace(fh)
           read(fh,*)bctype(n),twall(n)
+        endif
+        if(bctype(n)==11) then
+          backspace(fh)
+          read(fh,*)bctype(n),turbinf
         endif
       enddo
       read(fh,'(/)')
@@ -496,6 +513,8 @@ module readwrite
     call bcast(spg_jmax)
     call bcast(spg_kmin)
     call bcast(spg_kmax)
+    !
+    call bcast(turbinf)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+
@@ -1035,10 +1054,10 @@ module readwrite
     !
     call h5io_init(filename='datin/flowini2d.h5',mode='read')
     !
-    call h5read(varname='ro', var=rho(0:im,0:jm,0))
-    call h5read(varname='u1', var=vel(0:im,0:jm,0,1))
-    call h5read(varname='u2', var=vel(0:im,0:jm,0,2))
-    call h5read(varname='t',  var=tmp(0:im,0:jm,0))
+    call h5read(varname='ro', var=rho(0:im,0:jm,0),  dir='k')
+    call h5read(varname='u1', var=vel(0:im,0:jm,0,1),dir='k')
+    call h5read(varname='u2', var=vel(0:im,0:jm,0,2),dir='k')
+    call h5read(varname='t',  var=tmp(0:im,0:jm,0),  dir='k')
     ! do jsp=1,num_species
     !    write(spname,'(i2.2)')jsp
     !   call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
@@ -1082,8 +1101,9 @@ module readwrite
     use commvar, only: nstep,filenumb,fnumslic,time,flowtype,          &
                        num_species,im,jm,km,force,numq,turbmode
     use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut
-    use statistic,only : massflux,massflux_target,nsamples
+    use statistic, only : massflux,massflux_target,nsamples
     use hdf5io
+    use bc,        only : ninflowslice
     !
     ! arguments
     character(len=*),intent(in) :: folder
@@ -1097,6 +1117,7 @@ module readwrite
     call h5read(varname='nstep',var=nstep)
     call h5read(varname='filenumb',var=filenumb)
     call h5read(varname='fnumslic',var=fnumslic)
+    call h5read(varname='ninflowslice',var=ninflowslice)
     if(flowtype=='channel') then
       call h5read(varname='massflux',var=massflux)
       call h5read(varname='massflux_target',var=massflux_target)
@@ -1364,6 +1385,7 @@ module readwrite
                          sgmam12,sgmam13,sgmam23,                      &
                          disspa,predil,visdif1,visdif2,visdif3,        &
                          massflux,massflux_target
+    use bc,       only : ninflowslice
     !
     use hdf5io
     !
@@ -1458,6 +1480,8 @@ module readwrite
       call h5srite(varname='filenumb',var=filenumb,                    &
                                          filename='outdat/auxiliary.h5')
       call h5srite(varname='fnumslic',var=fnumslic,                    &
+                                         filename='outdat/auxiliary.h5')
+      call h5srite(varname='ninflowslice',var=ninflowslice,            &
                                          filename='outdat/auxiliary.h5')
       call h5srite(varname='massflux',var=massflux,                    &
                                          filename='outdat/auxiliary.h5')

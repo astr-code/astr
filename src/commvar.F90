@@ -108,12 +108,8 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|             cputime | computational time statistics.              |
   !+---------------------+---------------------------------------------+
-  integer :: bctype(6)
-  real(8) :: twall(6)
   real(8) :: force(3)
   !+---------------------+---------------------------------------------+
-  !|              bctype | define type of boundary condition.          |
-  !|               twall | wall temperature.                           |
   !|               force | body force.                                 |
   !+---------------------+---------------------------------------------+
   logical :: lisponge,ljsponge,lksponge

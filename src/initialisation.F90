@@ -34,6 +34,7 @@ module initialisation
                         readcheckpoint,readmeanflow,readmonc
     use fludyna,  only: updateq
     use statistic,only: nsamples
+    use bc,       only: ninflowslice
     !
     if(trim(flowtype)=='bl') then
       call blprofile
@@ -95,6 +96,7 @@ module initialisation
       call updateq
       !
       nstep=0
+      ninflowslice=3
       time=0.d0
       !
       filenumb=0

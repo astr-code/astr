@@ -3208,7 +3208,32 @@ module commfunc
   !+-------------------------------------------------------------------+
   !| The end of the function extrapolate.                              |
   !+-------------------------------------------------------------------+
-
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This function is used for cubic interpolation.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function cubic(y1,y2,y3,y4,x1,delta,xx)
+    !
+    real(8) :: cubic
+    real(8),intent(in) :: y1,y2,y3,y4,x1,delta,xx
+    real(8) :: a,b,c,d,varx
+    !
+    a=(y4-3.d0*y3+3.d0*y2-y1)/(6.d0*delta**3)
+    b=((y3-2.d0*y2+y1)-6.d0*a*delta**3)/(2.d0*delta**2)
+    c=(y2-y1-a*delta**3-b*delta**2)/delta
+    d=y1
+    !
+    varx=xx-x1
+    !
+    cubic=a*varx**3+b*varx**2+c*varx+d
+    !
+    return
+    !
+  end function cubic
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function cubic.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine offers the interface's values with standard  upwind 
   ! scheme.

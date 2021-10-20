@@ -497,21 +497,16 @@ module statistic
       endif
       !
       if(trim(flowtype)=='tgv') then
-        write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,     &
-                                                        enstophy,kenergy
+        write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,enstophy,kenergy
       elseif(trim(flowtype)=='channel') then
-        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,     &
-                                             massflux,fbcx,force(1),wrms
+        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
       elseif(trim(flowtype)=='bl') then
-        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,     &
-                                         massflux,fbcx,wallheatflux,wrms
+        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
       elseif(trim(flowtype)=='cylinder') then
-        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,     &
-                                          vel_incom,prs_incom,rho_incom
+        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
       else
         ! general flowstate
-        write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,     &
-                                                        (max_q(i),i=1,5)
+        write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
       endif
       !
       if(mod(nstep,nlstep)==0) then
@@ -520,34 +515,27 @@ module statistic
           if(trim(flowtype)=='tgv') then
             write(*,"(2X,A7,3(1X,A13))")'nstep','time','enstophy','kenergy'
           elseif(trim(flowtype)=='channel') then
-            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
-                                                  'fbcx','forcex','wrms'
+            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','forcex','wrms'
           elseif(trim(flowtype)=='bl') then
-            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux',     &
-                                            'fbcx','wallheatflux','wrms'
+            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','wallheatflux','wrms'
           elseif(trim(flowtype)=='cylinder') then
-            write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf',        &
-                                                        'p_inf','ro_inf'
+            write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
           else
-            write(*,"(2X,A7,6(1X,A13))")'nstep','time',                &
-                                 'q1max','q2max','q3max','q4max','q5max'
+            write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
           endif
           write(*,'(2X,78A)')('-',i=1,77)
         endif
         !
         if(trim(flowtype)=='tgv') then
-          write(*,"(2X,I7,3(1X,E13.6E2))")nstep,time,enstophy,kenergy
+          write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time,enstophy,kenergy
         elseif(trim(flowtype)=='channel') then
-          write(*,"(2X,I7,5(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
-                                          force(1),wrms
+          write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
         elseif(trim(flowtype)=='bl') then
-          write(*,"(2X,I7,5(1X,E13.6E2))")nstep,time,massflux,fbcx,    &
-                                          wallheatflux,wrms
+          write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
         elseif(trim(flowtype)=='cylinder') then
-          write(*,"(2X,I7,4(1X,E13.6E2))")nstep,time,                  &
-                                          vel_incom,prs_incom,rho_incom
+          write(*,"(2X,I7,1X,F13.7,3(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         else
-          write(*,"(2X,I7,6(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
+          write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
         !
       endif

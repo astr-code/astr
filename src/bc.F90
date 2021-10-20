@@ -20,8 +20,17 @@ module bc
   !
   implicit none
   !
+  integer :: ninflowslice
   real(8) :: pout
   real(8) :: uinf_j0,uinf_jm
+  integer :: bctype(6)
+  real(8) :: twall(6)
+  character(len=4) :: turbinf
+  !+---------------------+---------------------------------------------+
+  !|              bctype | define type of boundary condition.          |
+  !|               twall | wall temperature.                           |
+  !|             turbinf | method of generating inflow turbulence.     |
+  !+---------------------+---------------------------------------------+
   real(8),allocatable :: rho_in(:,:),vel_in(:,:,:),tmp_in(:,:),        &
                          prs_in(:,:),spc_in(:,:,:)
   real(8),allocatable :: rho_prof(:),vel_prof(:,:),tmp_prof(:),        &
@@ -29,6 +38,7 @@ module bc
   real(8),allocatable,dimension(:,:,:) :: bvec_i0,bvec_im,             &
                                           bvec_j0,bvec_jm,             &
                                           bvec_k0,bvec_km
+  real(8),allocatable,target :: flowvarins(:,:,:,:),timeins(:)
   !
   contains
   !
@@ -81,7 +91,6 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine geombc
     !
-    use commvar, only : bctype
     use commfunc,  only : gradextrp
     !
     ! local data
@@ -155,7 +164,7 @@ module bc
   !
   subroutine xyzbc
     !
-    use commvar,  only : bctype,npdci,npdcj,npdck
+    use commvar,  only : npdci,npdcj,npdck
     use commfunc, only : gradextrp
     !
     ! local data
@@ -228,7 +237,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine boucon(subtime)
     !
-    use commvar, only : bctype,twall,limmbou
+    use commvar, only : limmbou
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -302,8 +311,7 @@ module bc
     !
     use commtype,  only : sboun
     !
-    use commvar,   only : twall,pinf,immbond,num_species,              &
-                          num_icell_rank,num_ighost_rank
+    use commvar,   only : pinf,immbond,num_species,num_icell_rank,num_ighost_rank
     use commarray, only : nodestat,vel,x
     use commcal,   only : ijkin,ijkcellin
     use fludyna,   only : fvar2q,q2fvar,thermal
@@ -846,7 +854,11 @@ module bc
         elseif(trim(flowtype)=='mixlayer') then
           call mixlayerinflow
         elseif(trim(flowtype)=='bl') then
-          call profileinflow
+          !
+          if(turbinf=='none') then
+            call profileinflow
+          endif
+          !
         else
           call freestreaminflow
         endif
@@ -856,11 +868,19 @@ module bc
       endif
       !
       i=0
+      !
+      if(trim(flowtype)=='bl') then
+        !
+        if(turbinf=='intp')  call inflowintp
+        !
+      endif
+      !
       do k=0,km
       do j=0,jm
         !
         css=sos(tmp(i,j,k))
-        ub =vel(i,j,k,1)
+        ub =vel_in(j,k,1)
+        ! ub =vel(i,j,k,1)
         !
         if(ub>=css) then
           ! supersonic inlet
@@ -900,7 +920,7 @@ module bc
           !
         else
           print*,mpirank,'|',i,j,k
-          print*,ub,css
+          print*,'ub=',ub,'vel_in=',vel_in(j,k,:),'css=',css
           stop ' !! velocity at inflow error 1 !! @ inflow'
         endif
         !
@@ -987,6 +1007,231 @@ module bc
   end subroutine inflow
   !+-------------------------------------------------------------------+
   !| The end of the subroutine inflow.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to interpolate the inflow turbulence.          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 20-10-2021: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine inflowintp
+    !
+    use commvar, only : time,nstep
+    use commfunc,only : cubic
+    use parallel,only : mpi_imin
+    use fludyna, only : thermal
+    use hdf5io
+    use tecio
+    !
+    ! local data
+    real(8),pointer,dimension(:,:,:) :: vp1,vp2,vp3,vp4
+    integer,save :: nstep_save=-1
+    logical,save :: loadiniflow=.true.
+    integer :: n,n2,n0,i,j,k
+    character(len=5) :: isname
+    integer :: nvp(0:3)
+    real(8) :: vartime(0:3)
+    real(8) :: time0,deltime,var0
+    !
+    if(nstep>nstep_save) then
+      !
+      nstep_save=nstep
+      !
+      if(loadiniflow) then
+        !
+        allocate(flowvarins(0:jm,0:km,1:5,0:3),timeins(0:3) )
+        !
+        do n=0,3
+          !
+          if(ninflowslice<=3) then
+            write(isname,'(i5.5)')n
+          else 
+            write(isname,'(i5.5)')n+ninflowslice-3
+          endif
+          !
+          call h5io_init(filename='inflow/islice'//isname//'.h5',mode='read',comm=mpi_imin)
+          !
+          call h5read(varname='time',var=timeins(n))
+          call h5read(varname='ro', var=flowvarins(0:jm,0:km,1,n),dir='i',display=.false.)
+          call h5read(varname='u1', var=flowvarins(0:jm,0:km,2,n),dir='i',display=.false.)
+          call h5read(varname='u2', var=flowvarins(0:jm,0:km,3,n),dir='i',display=.false.)
+          call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
+          call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
+          !
+          call h5io_end
+          ! 
+        enddo
+        !
+        time0=timeins(0)
+        deltime=timeins(1)-timeins(0)
+        !
+        vp1=>flowvarins(0:jm,0:km,1:5,0)
+        vp2=>flowvarins(0:jm,0:km,1:5,1)
+        vp3=>flowvarins(0:jm,0:km,1:5,2)
+        vp4=>flowvarins(0:jm,0:km,1:5,3)
+        !
+        do k=0,km
+        do j=0,jm
+          !
+          rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
+                              vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
+                                         time0,deltime,time) + rho_prof(j)
+          vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
+                              vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
+                                         time0,deltime,time)
+          !
+          if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
+            vel_in(j,k,1)=vel_prof(j,1)
+          else
+            vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
+          endif
+          !
+          vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
+                              vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
+                                         time0,deltime,time) + vel_prof(j,2)
+          vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
+                              vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
+                                         time0,deltime,time)
+          tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
+                              vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
+                                         time0,deltime,time) + tmp_prof(j)
+          prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+          !
+        end do
+        end do
+        !
+        ! call tecbin('Testout/tecyz'//mpirankname//'.plt',                &
+        !                                   x(0,0:jm,0:km,1),'x',          &
+        !                                   x(0,0:jm,0:km,2),'y',          &
+        !                                   x(0,0:jm,0:km,3),'z',          &
+        !                                   rho_in(0:jm,0:km),'ro',        &
+        !                                   vel_in(0:jm,0:km,1),'u',       &
+        !                                   vel_in(0:jm,0:km,2),'v',       &
+        !                                   vel_in(0:jm,0:km,3),'w',       &
+        !                                   tmp_in(0:jm,0:km),'t')
+        ! !
+        ! if(mpirank==0) then
+        !   !
+        !   print*,'time0',time0
+        !   print*,'deltime',deltime
+        !   print*,'timeins',timeins
+        !   !
+        ! end if
+        !
+        loadiniflow=.false.
+        !
+      else
+        !
+        do n=0,3
+          !
+          nvp(n)=n
+          vartime(n)=timeins(n)
+          !
+        end do
+        !
+        do n=0,3
+          do n2=n,3
+            !
+            if(vartime(n)>vartime(n2)) then
+              var0=vartime(n)
+              vartime(n)=vartime(n2)
+              vartime(n2)=var0
+              !
+              n0=nvp(n)
+              nvp(n)=nvp(n2)
+              nvp(n2)=n0
+            end if
+            !
+          end do
+        end do
+        !
+        vp1=>flowvarins(:,:,:,nvp(0))
+        vp2=>flowvarins(:,:,:,nvp(1))
+        vp3=>flowvarins(:,:,:,nvp(2))
+        vp4=>flowvarins(:,:,:,nvp(3))
+        !
+        time0=timeins(nvp(0))
+        deltime=timeins(nvp(1))-timeins(nvp(0))
+        !
+        ! to load next inflow slice
+        if(time>timeins(nvp(2))) then
+          !
+          ninflowslice=ninflowslice+1
+          !
+          write(isname,'(i5.5)')ninflowslice
+          !
+          call h5io_init(filename='inflow/islice'//isname//'.h5',      &
+                                              mode='read',comm=mpi_imin)
+          !
+          n=nvp(0)
+          call h5read(varname='time',var=timeins(n))
+          call h5read(varname='ro', var=flowvarins(0:jm,0:km,1,n),dir='i',display=.false.)
+          call h5read(varname='u1', var=flowvarins(0:jm,0:km,2,n),dir='i',display=.false.)
+          call h5read(varname='u2', var=flowvarins(0:jm,0:km,3,n),dir='i',display=.false.)
+          call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
+          call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
+          !
+          call h5io_end
+          ! 
+          vp1=>flowvarins(:,:,:,nvp(1))
+          vp2=>flowvarins(:,:,:,nvp(2))
+          vp3=>flowvarins(:,:,:,nvp(3))
+          vp4=>flowvarins(:,:,:,nvp(0))
+          !
+          time0=timeins(nvp(1))
+          !
+          if(lio) then
+            write(*,'(5(F12.6,A))')timeins(nvp(1)),' <',               &
+                                   timeins(nvp(2)),' < |',time,'| <',  &
+                                   timeins(nvp(3)),' <',timeins(nvp(0)),''
+          endif
+          !
+        endif
+        !
+        do k=0,km
+        do j=0,jm
+          !
+          rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
+                              vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
+                                         time0,deltime,time) + rho_prof(j)
+          vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
+                              vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
+                                         time0,deltime,time)
+          !
+          if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
+            vel_in(j,k,1)=vel_prof(j,1)
+          else
+            vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
+          endif
+          !
+          vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
+                              vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
+                                         time0,deltime,time) + vel_prof(j,2)
+          vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
+                              vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
+                                         time0,deltime,time)
+          tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
+                              vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
+                                         time0,deltime,time) + tmp_prof(j)
+          !
+          prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+          !
+        end do
+        end do
+        !
+      endif
+      !
+    else
+      !
+      return
+      !
+    endif
+    !
+  end subroutine inflowintp
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine inflowintp.                             |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
