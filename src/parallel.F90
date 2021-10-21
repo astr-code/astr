@@ -95,13 +95,14 @@ module parallel
   !
   integer :: mpirank,mpisize,mpirankmax
   integer :: isize,jsize,ksize,irkm,jrkm,krkm,irk,jrk,krk,ig0,jg0,kg0, &
-             irk_islice
+             irk_islice,jrk_jslice,krk_kslice
   integer :: mpileft,mpiright,mpidown,mpiup,mpifront,mpiback,mpitag
   character(len=8) :: mpirankname
   logical :: lio
   integer :: status(mpi_status_size)
   integer :: mpi_imin,mpi_jmin,group_imin,group_jmin,mpi_group_world,  &
-             mpi_islice,group_islice
+             mpi_islice,group_islice,mpi_jslice,group_jslice,          &
+             mpi_kslice,group_kslice
   character(mpi_max_processor_name) :: processor_name
   !
   contains
@@ -762,7 +763,7 @@ module parallel
     !
     call bcast(irk_islice)
     !
-    if(irk_islice>0) then
+    if(irk_islice>=0) then
       !
       rank_use=-1
       n=0
@@ -786,6 +787,96 @@ module parallel
     !
     deallocate(rank_use)
     ! end of set sub communicator for islice
+    !
+    ! set sub communicator for jslice
+    allocate(rank_use(isize*ksize))
+    !
+    jrk_jslice=-1
+    if(mpirank==0) then
+      !
+      do nrk=0,mpirankmax
+        !
+        if(jslice>=j0g(nrk) .and. jslice<j0g(nrk)+jmg(nrk)) then
+          jrk_jslice=jrkg(nrk)
+          print*,' ** jslice is at jrk=',jrk_jslice
+          exit
+        endif
+        !
+      enddo
+      !
+    endif
+    !
+    call bcast(jrk_jslice)
+    !
+    if(jrk_jslice>=0) then
+      !
+      rank_use=-1
+      n=0
+      do nk=0,ksize-1
+      do ni=0,isize-1
+        n=n+1
+        rank_use(n)=nrank(ni,jrk_jslice,nk)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jslice,ierr)
+      call mpi_comm_create(mpi_comm_world,group_jslice,mpi_jslice,ierr)
+      if(jrk==jrk_jslice) then
+        call mpi_comm_size(mpi_jslice,newsize,ierr)
+        if(irk==0 .and. krk==0) then
+          print*,' ** new communicator: mpi_jslice  ... created, size: ',newsize
+        endif
+      endif
+      !
+    endif
+    !
+    deallocate(rank_use)
+    ! end of set sub communicator for jslice
+    !
+    ! set sub communicator for kslice
+    allocate(rank_use(isize*jsize))
+    !
+    krk_kslice=-1
+    if(mpirank==0) then
+      !
+      do nrk=0,mpirankmax
+        !
+        if(kslice>=k0g(nrk) .and. kslice<k0g(nrk)+kmg(nrk)) then
+          krk_kslice=krkg(nrk)
+          print*,' ** kslice is at krk=',krk_kslice
+          exit
+        endif
+        !
+      enddo
+      !
+    endif
+    !
+    call bcast(krk_kslice)
+    !
+    if(krk_kslice>=0) then
+      !
+      rank_use=-1
+      n=0
+      do nj=0,jsize-1
+      do ni=0,isize-1
+        n=n+1
+        rank_use(n)=nrank(ni,nj,krk_kslice)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_kslice,ierr)
+      call mpi_comm_create(mpi_comm_world,group_kslice,mpi_kslice,ierr)
+      if(krk==krk_kslice) then
+        call mpi_comm_size(mpi_kslice,newsize,ierr)
+        if(irk==0 .and. jrk==0) then
+          print*,' ** new communicator: mpi_kslice  ... created, size: ',newsize
+        endif
+      endif
+      !
+    endif
+    !
+    deallocate(rank_use)
+    ! end of set sub communicator for kslice
     !
     allocate(rank_use(isize*ksize))
     n=0

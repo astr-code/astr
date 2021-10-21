@@ -298,10 +298,10 @@ module readwrite
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
-          write(*,'(45X,(A))',advance='no')'inflow turbulence : '
+          write(*,'(18X,(A))',advance='no')'inflow turbulence : '
           !
           if(turbinf=='none') then
-            write(*,'(A)')' no inflow turbulence'
+            write(*,'(A)')'      no inflow turbulence'
           elseif(turbinf=='intp') then
             write(*,'(A)')' interpolation of database'
           else
@@ -1641,15 +1641,16 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine writeslice
     !
-    use parallel, only: mpi_islice,irk_islice
-    use commvar,  only: fnumslic,nstep,time,islice,im,jm,km
+    use parallel, only: irk_islice,jrk_jslice,krk_kslice,mpi_islice,   &
+                        mpi_jslice,mpi_kslice
+    use commvar,  only: fnumslic,nstep,time,islice,jslice,kslice,im,jm,km
     use commarray,only: rho,vel,prs,tmp
     use hdf5io
     !
     ! local data
     character(len=5) :: stepname
     character(len=14) :: filename
-    integer :: i
+    integer :: i,j,k
     !
     if(irk==irk_islice) then
       !
@@ -1678,6 +1679,68 @@ module readwrite
       if(jrk==0 .and. krk==0) then
         call h5srite(filename='islice/'//filename,varname='nstep',var=nstep)
         call h5srite(filename='islice/'//filename,varname='time', var=time)
+      endif
+      !
+    endif
+    !
+    if(jrk==jrk_jslice) then
+      !
+      j=jslice-jg0
+      !
+      if(j<0 .or. j>jm) then
+        print*,' !! jslice location error !! j=',j
+        stop
+      endif
+      !
+      write(stepname,'(i5.5)')fnumslic
+      !
+      filename='jslice'//stepname//'.h5'
+      !
+      call h5io_init(filename='jslice/'//filename,mode='write',        &
+                                                        comm=mpi_jslice)
+      call h5write(varname='ro',var=rho(0:im,j,0:km),  dir='j')
+      call h5write(varname='u1',var=vel(0:im,j,0:km,1),dir='j')
+      call h5write(varname='u2',var=vel(0:im,j,0:km,2),dir='j')
+      call h5write(varname='u3',var=vel(0:im,j,0:km,3),dir='j')
+      call h5write(varname='p', var=prs(0:im,j,0:km)  ,dir='j')
+      call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
+      !
+      call h5io_end
+      !
+      if(irk==0 .and. krk==0) then
+        call h5srite(filename='jslice/'//filename,varname='nstep',var=nstep)
+        call h5srite(filename='jslice/'//filename,varname='time', var=time)
+      endif
+      !
+    endif
+    !
+    if(krk==krk_kslice) then
+      !
+      k=kslice-kg0
+      !
+      if(k<0 .or. k>km) then
+        print*,' !! kslice location error !! k=',k
+        stop
+      endif
+      !
+      write(stepname,'(i5.5)')fnumslic
+      !
+      filename='kslice'//stepname//'.h5'
+      !
+      call h5io_init(filename='kslice/'//filename,mode='write',        &
+                                                        comm=mpi_kslice)
+      call h5write(varname='ro',var=rho(0:im,0:jm,k),  dir='k')
+      call h5write(varname='u1',var=vel(0:im,0:jm,k,1),dir='k')
+      call h5write(varname='u2',var=vel(0:im,0:jm,k,2),dir='k')
+      call h5write(varname='u3',var=vel(0:im,0:jm,k,3),dir='k')
+      call h5write(varname='p', var=prs(0:im,0:jm,k)  ,dir='k')
+      call h5write(varname='t', var=tmp(0:im,0:jm,k)  ,dir='k')
+      !
+      call h5io_end
+      !
+      if(irk==0 .and. jrk==0) then
+        call h5srite(filename='kslice/'//filename,varname='nstep',var=nstep)
+        call h5srite(filename='kslice/'//filename,varname='time', var=time)
       endif
       !
     endif

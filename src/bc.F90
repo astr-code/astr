@@ -1182,11 +1182,11 @@ module bc
           !
           time0=timeins(nvp(1))
           !
-          if(lio) then
-            write(*,'(5(F12.6,A))')timeins(nvp(1)),' <',               &
-                                   timeins(nvp(2)),' < |',time,'| <',  &
-                                   timeins(nvp(3)),' <',timeins(nvp(0)),''
-          endif
+          ! if(lio) then
+          !   write(*,'(5(F12.6,A))')timeins(nvp(1)),' <',               &
+          !                          timeins(nvp(2)),' < |',time,'| <',  &
+          !                          timeins(nvp(3)),' <',timeins(nvp(0)),''
+          ! endif
           !
         endif
         !
