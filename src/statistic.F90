@@ -336,7 +336,7 @@ module statistic
     if(trim(flowtype)=='tgv') then
       enstophy=enstophycal()
       kenergy =kenergycal()
-    elseif(trim(flowtype)=='bl') then
+    elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
       fbcx=fbcxbl()
       massflux=massfluxcal()
       wrms=wrmscal()
@@ -482,7 +482,7 @@ module statistic
           elseif(trim(flowtype)=='channel') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                        'massflux','fbcx','forcex','wrms'
-          elseif(trim(flowtype)=='bl') then
+          elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','wallheatflux','wrms'
           else
@@ -500,7 +500,7 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,enstophy,kenergy
       elseif(trim(flowtype)=='channel') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
-      elseif(trim(flowtype)=='bl') then
+      elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
       elseif(trim(flowtype)=='cylinder') then
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
@@ -516,7 +516,7 @@ module statistic
             write(*,"(2X,A7,3(1X,A13))")'nstep','time','enstophy','kenergy'
           elseif(trim(flowtype)=='channel') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','forcex','wrms'
-          elseif(trim(flowtype)=='bl') then
+          elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','wallheatflux','wrms'
           elseif(trim(flowtype)=='cylinder') then
             write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
@@ -530,7 +530,7 @@ module statistic
           write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time,enstophy,kenergy
         elseif(trim(flowtype)=='channel') then
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
-        elseif(trim(flowtype)=='bl') then
+        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
         elseif(trim(flowtype)=='cylinder') then
           write(*,"(2X,I7,1X,F13.7,3(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom

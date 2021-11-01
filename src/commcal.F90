@@ -187,22 +187,29 @@ module commcal
   !| -------------                                                     |
   !| 08-10-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine ducrossensor
+  subroutine ducrossensor(subtime)
     !
-    use commvar,  only : im,jm,km,is,ie,js,je,ks,ke,hm
+    use commvar,  only : im,jm,km,is,ie,js,je,ks,ke,ia,ja,ka,hm,      &
+                         npdci,npdcj,npdck,shkcrt
     use commarray,only : ssf,lshock,dvel,prs
-    use parallel, only : dataswap,pmin,pmax,psum,lio
+    use parallel, only : dataswap,pmin,pmax,psum,lio,ptime
+    !
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     logical,save :: firstcall=.true.
     real(8) :: div2,vort,vortx,vorty,vortz,dpdi,dpdj,dpdk
-    real(8) :: ssfmin,ssfmax,ssfavg,norm
-    integer :: i,j,k,i1,j1,k1,ii,jj,kk
+    real(8) :: ssfmin,ssfmax,ssfavg,norm,ssfmax_local
+    integer :: i,j,k,i1,j1,k1,ii,jj,kk,ip1,jp1,kp1,im1,jm1,km1,nshknod
+    !
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     if(firstcall) then
       !
       allocate(ssf(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
-      allocate(lshock(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+      allocate(lshock(0:im,0:jm,0:km))
       !
       firstcall=.false.
       !
@@ -212,9 +219,9 @@ module commcal
     ssfmax=-1.d10
     ssfavg=0.d0
     norm=0.d0
-    do k=ks,ke
-    do j=js,je
-    do i=is,ie
+    do k=0,km
+    do j=0,jm
+    do i=0,im
       !
       div2=(dvel(i,j,k,1,1)+dvel(i,j,k,2,2)+dvel(i,j,k,3,3))**2
       !
@@ -223,12 +230,23 @@ module commcal
       vortz=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
       vort=vortx*vortx+vorty*vorty+vortz*vortz
       !
-      dpdi= abs(prs(i+1,j,k)-2.d0*prs(i,j,k)+prs(i-1,j,k)) /  &
-               (prs(i+1,j,k)+2.d0*prs(i,j,k)+prs(i-1,j,k))
-      dpdj= abs(prs(i,j+1,k)-2.d0*prs(i,j,k)+prs(i,j-1,k)) /  &
-               (prs(i,j+1,k)+2.d0*prs(i,j,k)+prs(i,j-1,k))
-      dpdk= abs(prs(i,j,k+1)-2.d0*prs(i,j,k)+prs(i,j,k-1)) /  &
-               (prs(i,j,k+1)+2.d0*prs(i,j,k)+prs(i,j,k-1))
+      ip1=i+1; im1=i-1
+      jp1=j+1; jm1=j-1
+      kp1=k+1; km1=k-1
+      !
+      if(npdci==1 .and. im1<0)  im1=0
+      if(npdcj==1 .and. jm1<0)  jm1=0
+      if(npdck==1 .and. km1<0)  km1=0
+      if(npdci==2 .and. ip1>im) ip1=im
+      if(npdcj==2 .and. jp1>jm) jp1=jm
+      if(npdck==2 .and. kp1>km) kp1=km
+      !
+      dpdi= abs(prs(ip1,j,k)-2.d0*prs(i,j,k)+prs(im1,j,k)) /  &
+               (prs(ip1,j,k)+2.d0*prs(i,j,k)+prs(im1,j,k))
+      dpdj= abs(prs(i,jp1,k)-2.d0*prs(i,j,k)+prs(i,jm1,k)) /  &
+               (prs(i,jp1,k)+2.d0*prs(i,j,k)+prs(i,jm1,k))
+      dpdk= abs(prs(i,j,kp1)-2.d0*prs(i,j,k)+prs(i,j,km1)) /  &
+               (prs(i,j,kp1)+2.d0*prs(i,j,k)+prs(i,j,km1))
       !
       ssf(i,j,k)=div2/(div2+vort+1.d-30) * max(dpdi,dpdj,dpdk)
       !
@@ -242,41 +260,73 @@ module commcal
     enddo
     enddo
     !
-    ssfmin=pmin(ssfmin)
-    ssfmax=pmax(ssfmax)
-    ssfavg=psum(ssfavg)/psum(norm)
-    !
-    if(lio) then
-      print*,' ------------- shock sensor -------------'
-      write(*,"(18x,A,1X,F12.5)")'  max ssf:',ssfmax
-      write(*,"(18x,A,1X,F12.5)")'  min ssf:',ssfmin
-      write(*,"(18x,A,1X,F12.5)")'  avg ssf:',ssfavg
-      print*,' ----------------------------------------'
-    endif
+    ! ssfmin=pmin(ssfmin)
+    ! ssfmax=pmax(ssfmax)
+    ! ssfavg=psum(ssfavg)/psum(norm)
     !
     call dataswap(ssf)
     !
-    do k=ks,ke
-    do j=js,je
-    do i=is,ie
+    nshknod=0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
       !
-      do k1=-3,4
-      do j1=-3,4
-      do i1=-3,4
+      ssfmax_local=0.d0
+      do i1=-hm+1,hm
         !
         ii=i+i1
+        !
+        if(npdci==1 .and. ii<0)  ii=0
+        if(npdci==2 .and. ii>im) ii=im
+        !
+        ssfmax_local=max(ssfmax_local,ssf(ii,j,k))
+        !
+      enddo
+      do j1=-hm+1,hm
+        !
         jj=j+j1
+        !
+        if(npdcj==1 .and. jj<0)  jj=0
+        if(npdcj==2 .and. jj>jm) jj=jm
+        !
+        ssfmax_local=max(ssfmax_local,ssf(i,jj,k))
+        !
+      enddo
+      do k1=-hm+1,hm
+        !
         kk=k+k1
         !
-
+        if(npdck==1 .and. kk<0)  kk=0
+        if(npdck==2 .and. kk>km) kk=km
+        !
+        ssfmax_local=max(ssfmax_local,ssf(i,j,kk))
         !
       enddo
-      enddo
-      enddo
+      !
+      if(ssfmax_local>shkcrt) then
+        lshock(i,j,k)=.true.
+        nshknod=nshknod+1
+      else
+        lshock(i,j,k)=.false.
+      endif
       !
     enddo
     enddo
     enddo
+    !
+    ! nshknod=psum(nshknod)
+    ! !
+    ! if(lio) then
+    !   print*,' ------------- shock sensor -------------'
+    !   write(*,"(18x,A,1X,F12.5)")'      max ssf: ',ssfmax
+    !   write(*,"(18x,A,1X,F12.5)")'      min ssf: ',ssfmin
+    !   write(*,"(18x,A,1X,F12.5)")'      avg ssf: ',ssfavg
+    !   write(*,"(18x,2(A,1X,I0))")'  shock nodes: ',nshknod,'/',(ia+1)*(ja+1)*(ka+1)
+    !   print*,' ----------------------------------------'
+    ! endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
     !

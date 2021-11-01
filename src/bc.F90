@@ -24,7 +24,7 @@ module bc
   real(8) :: pout
   real(8) :: uinf_j0,uinf_jm
   integer :: bctype(6)
-  real(8) :: twall(6)
+  real(8) :: twall(6),xrhjump,angshk
   character(len=4) :: turbinf
   !+---------------------+---------------------------------------------+
   !|              bctype | define type of boundary condition.          |
@@ -35,6 +35,8 @@ module bc
                          prs_in(:,:),spc_in(:,:,:)
   real(8),allocatable :: rho_prof(:),vel_prof(:,:),tmp_prof(:),        &
                          prs_prof(:),spc_prof(:,:)
+  real(8),allocatable :: rho_far(:),vel_far(:,:),tmp_far(:),           & 
+                         prs_far(:),spc_far(:,:)
   real(8),allocatable,dimension(:,:,:) :: bvec_i0,bvec_im,             &
                                           bvec_j0,bvec_jm,             &
                                           bvec_k0,bvec_km
@@ -853,7 +855,7 @@ module bc
           call jetinflow
         elseif(trim(flowtype)=='mixlayer') then
           call mixlayerinflow
-        elseif(trim(flowtype)=='bl') then
+        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
           !
           if(turbinf=='none') then
             call profileinflow
@@ -869,7 +871,7 @@ module bc
       !
       i=0
       !
-      if(trim(flowtype)=='bl') then
+      if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
         !
         if(turbinf=='intp')  call inflowintp
         !
@@ -1486,7 +1488,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine farfield(ndir)
     !
-    use fludyna,   only : thermal,fvar2q,q2fvar,sos
+    use fludyna,   only : thermal,fvar2q,q2fvar,sos,postshock
     use commfunc,  only : extrapolate
     !
     ! arguments
@@ -1585,26 +1587,30 @@ module bc
       !
       j=jm
       !
-      ! if(lfirstcal) then
-      !   !
-      !   allocate(bvec_jm(0:im,0:km,1:3))
-      !   !
-      !   do k=0,km
-      !   do i=0,im
-      !     var1=sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+              &
-      !                dxi(i,j,k,2,3)**2 )
-      !     !
-      !     bvec_jm(i,k,1)=dxi(i,j,k,2,1)/var1
-      !     bvec_jm(i,k,2)=dxi(i,j,k,2,2)/var1
-      !     bvec_jm(i,k,3)=dxi(i,j,k,2,3)/var1
-      !     !
-      !     ! print*,bvec_im(:,j,k)
-      !   enddo
-      !   enddo
-      !   !
-      !   lfirstcal=.false.
-      !   !
-      ! endif
+      if(lfirstcal) then
+        !
+        allocate(rho_far(0:im),vel_far(0:im,1:3),tmp_far(0:im),        & 
+                 prs_far(0:im))
+        !
+        do i=0,im
+          !
+          if(x(i,j,0,1)<=xrhjump) then
+            rho_far(i)=rho_prof(jm)
+            vel_far(i,:)=vel_prof(jm,:)
+            tmp_far(i)=tmp_prof(jm)
+            prs_far(i)=prs_prof(jm)
+          else
+            call postshock(rho_prof(jm),vel_prof(jm,1),vel_prof(jm,2), &
+                           prs_prof(jm),tmp_prof(jm),                  &
+                           rho_far(i),vel_far(i,1),vel_far(i,2),       &
+                           prs_far(i),tmp_far(i),angshk)
+          endif
+          !
+        enddo
+        !
+        lfirstcal=.false.
+        !
+      endif
       !
       do k=0,km
       do i=0,im
@@ -1627,11 +1633,23 @@ module bc
         !
         if(vel(i,j,k,2)<=0.d0) then
           ! subsonic inflow
-          vel(i,j,k,1)=uinf
-          vel(i,j,k,2)=-0.5d0*(pinf-pe)/(rho(i,j,k)*css)+0.5d0*(vinf+ve)
-          vel(i,j,k,3)=winf
-          prs(i,j,k)  =0.5d0*(pinf+pe)-0.5d0*rho(i,j,k)*css*(vinf-ve)
-          rho(i,j,k)  =roinf*(prs(i,j,k)/pinf)**(1.d0/gamma)
+          ! vel(i,j,k,1)=uinf
+          ! vel(i,j,k,2)=-0.5d0*(pinf-pe)/(rho(i,j,k)*css)+0.5d0*(vinf+ve)
+          ! vel(i,j,k,3)=winf
+          ! prs(i,j,k)  =0.5d0*(pinf+pe)-0.5d0*rho(i,j,k)*css*(vinf-ve)
+          ! rho(i,j,k)  =roinf*(prs(i,j,k)/pinf)**(1.d0/gamma)
+          ! !
+          ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+          ! !
+          ! spc(i,j,k,:)=0.d0
+          !
+          vel(i,j,k,1)=vel_far(i,1)
+          vel(i,j,k,2)=-0.5d0*(prs_far(i)-pe)/(rho(i,j,k)*css) +       &
+                                                 0.5d0*(vel_far(i,2)+ve)
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =0.5d0*(prs_far(i)+pe) -                         &
+                                  0.5d0*rho(i,j,k)*css*(vel_far(i,2)-ve)
+          rho(i,j,k)  =rho_far(i)*(prs(i,j,k)/prs_far(i))**(1.d0/gamma)
           !
           tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           !
@@ -1640,7 +1658,8 @@ module bc
         else
           ! subsonic outflow
           !
-          prs(i,j,k)=pinf
+          ! prs(i,j,k)=pinf
+          prs(i,j,k)=prs_far(i)
           rho(i,j,k)=roe+(prs(i,j,k)-pe)/csse/csse
           !
           vel(i,j,k,1)=ue
@@ -2391,7 +2410,8 @@ module bc
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
-          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          LODi(5)=kinout*(prs(i,j,k)-prs_prof(jm))/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
         !                   dxi(i,j,k,2,3)**2 )

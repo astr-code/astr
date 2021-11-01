@@ -116,7 +116,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,turbmode
-    use bc,      only : bctype,twall,turbinf
+    use bc,      only : bctype,twall,turbinf,xrhjump,angshk
     !
     ! local data
     character(len=42) :: typedefine
@@ -148,6 +148,8 @@ module readwrite
         typedefine='                         shu-osher problem'
       case('bl')
         typedefine='                       boundary layer flow'
+      case('swbli')
+        typedefine='     shock-wave/boundary layer interaction'
       case('windtunn')
         typedefine='                   a numerical wind tunnel'
       case default
@@ -290,10 +292,12 @@ module readwrite
         if(bctype(n)==1) then
           write(*,'(45X,I0,2(A))')bctype(n),' periodic at: ',bcdir(n)
         elseif(bctype(n)==41) then
-          write(*,'(24X,I0,3(A),F6.3)')bctype(n),' isothermal wall at ',bcdir(n), &
-                                                     ' Twall= ',twall(n)
+          write(*,'(37X,I0,2(A))')bctype(n),' isothermal wall at: ',bcdir(n)
+          write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
         elseif(bctype(n)==51) then
           write(*,'(44X,I0,2(A))')bctype(n),' farfield at: ',bcdir(n)
+          write(*,'(30X,A,F12.6)')'      angle of shock: ',angshk
+          write(*,'(30X,A,F12.6)')' R-H jump point at x: ',xrhjump
         elseif(bctype(n)==52) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
@@ -388,13 +392,14 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,turbmode
+                        bfacmpld,shkcrt,turbmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
-    use bc,      only : bctype,twall,turbinf
+    use bc,      only : bctype,twall,turbinf,xrhjump,angshk
     !
     ! local data
     character(len=64) :: inputfile
+    character(len=5) :: char
     integer :: n,fh
     !
     if(mpirank==0) then
@@ -433,7 +438,7 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)conschm,difschm,rkscheme
       read(fh,'(/)')
-      read(fh,*)recon_schem,lchardecomp,bfacmpld
+      read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
       read(fh,*)num_species
       read(fh,'(/)')
@@ -448,6 +453,10 @@ module readwrite
         if(bctype(n)==11) then
           backspace(fh)
           read(fh,*)bctype(n),turbinf
+        endif
+        if(bctype(n)==51) then
+          backspace(fh)
+          read(fh,*)bctype(n),xrhjump,angshk
         endif
       enddo
       read(fh,'(/)')
@@ -494,6 +503,7 @@ module readwrite
     !
     call bcast(alfa_filter)
     call bcast(bfacmpld)
+    call bcast(shkcrt)
     call bcast(kcutoff)
     !
     call bcast(ref_t)
@@ -515,6 +525,8 @@ module readwrite
     call bcast(spg_kmax)
     !
     call bcast(turbinf)
+    call bcast(xrhjump)
+    call bcast(angshk)
     !
   end subroutine readinput
   !+-------------------------------------------------------------------+
@@ -1373,7 +1385,7 @@ module readwrite
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwrite,lavg,force,numq,imbroot,limmbou,      &
                        turbmode
-    use commarray,only : x,rho,vel,prs,tmp,spc,q
+    use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
                          rom,u1m,u2m,u3m,pm,tm,                        &
@@ -1392,12 +1404,13 @@ module readwrite
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
+    real(8),allocatable :: rshock(:,:,:)
     !
     ! local data
     character(len=4) :: stepname
     character(len=2) :: spname,qname
     character(len=64) :: outfilename
-    integer :: jsp,i,fh,ios
+    integer :: jsp,i,fh,ios,j,k
     logical :: lfopen
     real(8) :: time_beg
     !
@@ -1452,6 +1465,28 @@ module readwrite
         call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
       enddo
     endif
+    !
+    if(allocated(ssf)) then
+      call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km))
+    endif
+    if(allocated(lshock)) then
+      allocate(rshock(0:im,0:jm,0:km))
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(lshock(i,j,k)) then
+          rshock(i,j,k)=1.d0
+        else
+          rshock(i,j,k)=0.d0
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
+    endif
+    !
     if(trim(turbmode)=='k-omega') then
       call h5write(varname='k',     var=tke(0:im,0:jm,0:km))
       call h5write(varname='omega', var=omg(0:im,0:jm,0:km))
@@ -1661,6 +1696,8 @@ module readwrite
         stop
       endif
       !
+      call system('mkdir islice/')
+      !
       write(stepname,'(i5.5)')fnumslic
       !
       filename='islice'//stepname//'.h5'
@@ -1692,6 +1729,8 @@ module readwrite
         stop
       endif
       !
+      call system('mkdir jslice/')
+      !
       write(stepname,'(i5.5)')fnumslic
       !
       filename='jslice'//stepname//'.h5'
@@ -1722,6 +1761,8 @@ module readwrite
         print*,' !! kslice location error !! k=',k
         stop
       endif
+      !
+      call system('mkdir kslice/')
       !
       write(stepname,'(i5.5)')fnumslic
       !
@@ -1926,6 +1967,8 @@ module readwrite
                             ctime(4),' - ',100.d0*ctime(4)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Convc   : ',    &
                             ctime(9),' - ',100.d0*ctime(9)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'        - ssf   : ',    &
+                          ctime(12),' - ',100.d0*ctime(12)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
                           ctime(10),' - ',100.d0*ctime(10)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - filter    : ',    &

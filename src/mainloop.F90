@@ -63,6 +63,8 @@ module mainloop
         !
         call cflcal(deltat)
         !
+        if(lio) write(*,'(A,I0)')'  ** next dumpping nstep: ',nstep+nwrite
+        !
         call timerept
         !
         loop_counter=0
@@ -201,6 +203,8 @@ module mainloop
     do nrk=1,3
       !
       qrhs=0.d0
+      !
+      if(limmbou) call immbody(ctime(11))
       !
       call qswap(ctime(7))
       !

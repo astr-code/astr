@@ -190,7 +190,7 @@ module solver
     !
     use commarray, only : qrhs,x,q
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
-                          recon_schem,limmbou
+                          recon_schem,limmbou,lchardecomp
     use commcal,   only : ShockSolid,ducrossensor
     !
     ! arguments
@@ -218,7 +218,7 @@ module solver
       call convrsdcal6(subtime=ctime(9))
     else
       !
-      if(recon_schem==5) call ducrossensor
+      if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
       !
       if(conschm(4:4)=='e') then
         call convrsduwd(subtime=ctime(9))
@@ -331,7 +331,7 @@ module solver
     use commvar,  only: im,jm,km,hm,numq,num_species,                  &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
                         recon_schem,lchardecomp,conschm,bfacmpld
-    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid,lshock
     use fludyna,  only: sos
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,     &
                         weno5z,weno7z,mp5ld,mp7ld
@@ -354,9 +354,11 @@ module solver
     !
     real(8) :: time_beg
     !
-    logical :: lsh,lso
+    logical :: lsh,lso,sson
     !
     if(present(subtime)) time_beg=ptime() 
+    !
+    sson=allocated(lshock)
     !
     eps=0.04d0
     gm2=0.5d0/gamma
@@ -475,6 +477,32 @@ module solver
       ! Average and flux split as well as i+1/2 construction.
       do i=is-1,ie
         !
+        ! if(i==is-1) then
+        !   lso=lsolid(i+1,j,k)
+        ! elseif(i==ie) then
+        !   lso=lsolid(i,j,k)
+        ! else
+        !   lso=lsolid(i,j,k) .or. lsolid(i+1,j,k)
+        ! end if
+        !
+        lso=.false.
+        !
+        if(sson) then
+          !
+          if(i<0) then
+            lsh=lshock(i+1,j,k)
+          elseif(i+1>im) then
+            lsh=lshock(i,j,k)
+          else
+            lsh=lshock(i,j,k) .or. lshock(i+1,j,k)
+          endif
+          !
+        else
+          !
+          lsh=.true.
+          !
+        endif
+        !
         if(lchardecomp) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
@@ -526,15 +554,6 @@ module solver
           end do
           !
         endif
-        !
-        if(i==is-1) then
-          lso=lsolid(i+1,j,k)
-        elseif(i==ie) then
-          lso=lsolid(i,j,k)
-        else
-          lso=lsolid(i,j,k) .or. lsolid(i+1,j,k)
-        end if
-        lsh=.false.
         !
         ! Calculating values at i+1/2 using shock-capturing scheme.
         !
@@ -738,6 +757,30 @@ module solver
       ! Average and flux split as well as i+1/2 construction.
       do j=js-1,je
         !
+        ! if(j==js-1) then
+        !   lso=lsolid(i,j+1,k)
+        ! elseif(j==je) then
+        !   lso=lsolid(i,j,k)
+        ! else
+        !   lso=lsolid(i,j,k) .or. lsolid(i,j+1,k)
+        ! end if
+        !
+        lso=.false.
+        !
+        if(sson) then
+          !
+          if(j<0) then
+            lsh=lshock(i,j+1,k)
+          elseif(j+1>jm) then
+            lsh=lshock(i,j,k)
+          else
+            lsh=lshock(i,j,k) .or. lshock(i,j+1,k)
+          endif
+          !
+        else
+          lsh=.true.
+        endif
+        !
         if(lchardecomp) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
@@ -779,16 +822,6 @@ module solver
           end do
           !
         endif
-        !
-        if(j==js-1) then
-          lso=lsolid(i,j+1,k)
-        elseif(j==je) then
-          lso=lsolid(i,j,k)
-        else
-          lso=lsolid(i,j,k) .or. lsolid(i,j+1,k)
-        end if
-        !
-        lsh=.false.
         !
         ! Calculating values at i+1/2 using shock-capturing scheme.
         do m=1,5
@@ -992,12 +1025,36 @@ module solver
       ! Average and flux split as well as i+1/2 construction.
       do k=ks-1,ke
         !
+        ! if(k==ks-1) then
+        !   lso=lsolid(i,j,k+1)
+        ! elseif(k==ke) then
+        !   lso=lsolid(i,j,k)
+        ! else
+        !   lso=lsolid(i,j,k) .or. lsolid(i,j,k+1)
+        ! end if
+        !
+        lso=.false.
+        !
+        if(sson) then
+          !
+          if(k<0) then
+            lsh=lshock(i,j,k+1)
+          elseif(k+1>km) then
+            lsh=lshock(i,j,k)
+          else
+            lsh=lshock(i,j,k) .or. lshock(i,j,k+1)
+          endif
+          !
+        else
+          lsh=.true.
+        endif
+        !
         if(lchardecomp) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
                           vel(i,j,k,:),  dxi(i,j,k,3,:),               &
                           rho(i,j,k+1),  prs(i,j,k+1),q(i,j,k+1,5),    &
-                          vel(i,j,k+1,:),dxi(i,j,k+1,2,:),REV,LEV)
+                          vel(i,j,k+1,:),dxi(i,j,k+1,3,:),REV,LEV)
           !
           ! Project to characteristic space using local eigenvector
           do m=1,5
@@ -1034,15 +1091,6 @@ module solver
           !
         endif
         !
-        if(k==ks-1) then
-          lso=lsolid(i,j,k+1)
-        elseif(k==ke) then
-          lso=lsolid(i,j,k)
-        else
-          lso=lsolid(i,j,k) .or. lsolid(i,j,k+1)
-        end if
-        !
-        lsh=.false.
         !
         ! Calculating values at i+1/2 using shock-capturing scheme.
         !

@@ -660,6 +660,51 @@ module fludyna
   !| The end of the function mixinglayervel.                           |
   !+-------------------------------------------------------------------+
   !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to cauculate the post-shock flow paramters,
+  ! by using pre-shock flow paramters and shock angle and invisid R-H
+  ! Relation.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2010-10-23.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine postshock(ropre,upre,vpre,ppre,tpre,ropos,upos,vpos,      &
+                                                          ppos,tpos,ang)
+    !
+    use commvar, only: const2,gamma,mach
+    use constdef,only: pi
+    !
+    real(8),intent(in)  :: ropre,upre,vpre,ppre,tpre,ang
+    real(8),intent(out) :: ropos,upos,vpos,ppos,tpos
+    !
+    real(8) :: csspre,unpre,utpre,machnpre,unpos,utpos,sratio,ang2
+    !
+    ang2=ang/180.d0*pi
+    !
+    csspre=dsqrt(tpre)/mach
+    !
+    unpre=upre*dsin(ang2)-vpre*dcos(ang2)
+    utpre=upre*dcos(ang2)+vpre*dsin(ang2)
+    machnpre=unpre/csspre
+    ! print*,'machnpre=',machnpre
+    ! print*,'unpre=',unpre
+    ! print*,'csspre=',csspre
+    sratio=2.d0*gamma/(gamma+1.d0)*machnpre**2-(gamma-1.d0)/(gamma+1.d0)
+    !
+    ppos=ppre*sratio
+    ropos=(sratio*(gamma+1.d0)+gamma-1.d0)/                            &
+                                  (gamma+1.d0+sratio*(gamma-1.d0))*ropre
+    tpos=ppos/ropos*const2
+    !
+    unpos=ropre*unpre/ropos
+    utpos=utpre
+    upos=unpos*dsin(ang2)+utpos*dcos(ang2)
+    vpos=-unpos*dcos(ang2)+utpos*dsin(ang2)
+    !
+  end subroutine postshock
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! end of the subroutine postshockcal.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
   !!
 end module fludyna
 !+---------------------------------------------------------------------+

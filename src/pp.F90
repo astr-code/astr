@@ -30,6 +30,7 @@ module pp
     character(len=64) :: cmd,casefolder
     !
     call readkeyboad(cmd)
+    print*,cmd
     !
     if(trim(cmd)=='init') then
       call readkeyboad(casefolder)
@@ -287,7 +288,7 @@ module pp
     print*,cmd
     !
     if(cmd=='sgen') then
-      call solidgen_sphere_tri
+      call solidgen_mvg
     elseif(cmd=='proc') then
       call readkeyboad(inputfile)
       !
@@ -314,16 +315,16 @@ module pp
     ! call solidgen_triagnle
     ! call solidgen_airfoil
     !
-    do js=1,nsolid
-      call solidrange(immbody(js))
-      !
-      call solidresc(immbody(js),resc_fact)
-      call solidrota(immbody(js),rot_theta,rot_vec)
-      call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
-                                 y=shift_cor(2)-immbody(js)%xcen(2),  &
-                                 z=shift_cor(3)-immbody(js)%xcen(3))
-      !
-    enddo
+    ! do js=1,nsolid
+    !   call solidrange(immbody(js))
+    !   !
+    !   call solidresc(immbody(js),resc_fact)
+    !   call solidrota(immbody(js),rot_theta,rot_vec)
+    !   call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
+    !                              y=shift_cor(2)-immbody(js)%xcen(2),  &
+    !                              z=shift_cor(3)-immbody(js)%xcen(3))
+    !   !
+    ! enddo
     !
     !
     !
@@ -497,6 +498,142 @@ module pp
   !| The end of the subroutine solidgen_airfoil.                       |
   !+-------------------------------------------------------------------+
   !
+  
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a mvg solid usign stl file format. |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-10-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine solidgen_mvg
+    !
+    use commtype, only : solid,triangle
+    use readwrite,only : readsolid
+    use commvar,  only : nsolid,immbody
+    use geom,     only : solidrange,solidresc,solidshif,solidimpro
+    use tecio,     only : tecsolid
+    use stlaio,    only : stla_write
+    use commfunc,  only : cross_product
+    !
+    ! local data
+    integer :: i,j,k,jf,km,jm,im,nface
+    real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
+               x1(3),x2(3),x3(3),x4(3),norm1(3),var1,var2
+    real(8) :: epsilon,delta,x0,lx,h
+    type(triangle),allocatable :: tempface(:)
+    !
+    epsilon=1.d-12
+    delta=5.85d0/7.696215d0
+    x0=10.d0*7.696215d0
+    lx=15.25286858d0
+    h=2.31d0
+    nface=0
+    !
+    print*,' ** generating solid'
+    !
+    nsolid=2
+    allocate(immbody(nsolid))
+    immbody(1)%name='mvg1'
+    !
+    allocate(tempface(12))
+    !
+    x1(1)=x0
+    x1(2)=10.d0
+    x1(3)=0.75d0/delta
+    !
+    x2(1)=x0
+    x2(2)=10.d0
+    x2(3)=0.75d0/delta+13.6d0/delta
+    !
+    x3(1)=x0+lx/delta
+    x3(2)=10.d0
+    x3(3)=0.75d0/delta+6.8d0/delta
+    !
+    x4(1)=x0+lx/delta
+    x4(2)=10.d0+h/delta
+    x4(3)=0.75d0/delta+6.8d0/delta
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/0.d0,-1.d0,0.d0/)
+    !
+    var1=6.8d0/16.7d0
+    var2=   lx/16.7d0
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x3
+    tempface(nface)%c=x4
+    tempface(nface)%normdir=(/var1,0.d0,-var2/)
+    !
+    var1=6.8d0/16.7d0
+    var2=   lx/16.7d0
+    nface=nface+1
+    tempface(nface)%a=x2
+    tempface(nface)%b=x3
+    tempface(nface)%c=x4
+    tempface(nface)%normdir=(/var1,0.d0,var2/)
+    !
+    var1=h /sqrt(lx**2+h**2)
+    var2=lx/sqrt(lx**2+h**2)
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x4
+    tempface(nface)%normdir=(/-var1,var2,0.d0/)
+    !
+    immbody(1)%num_face=nface
+    call immbody(1)%alloface()
+    immbody(1)%face(1:nface)=tempface(1:nface)
+    !
+    nface=0
+    !
+    x1(3)=x1(3)+1.5d0/delta+13.6d0/delta
+    x2(3)=x2(3)+1.5d0/delta+13.6d0/delta
+    x3(3)=x3(3)+1.5d0/delta+13.6d0/delta
+    x4(3)=x4(3)+1.5d0/delta+13.6d0/delta
+    !
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x3
+    tempface(nface)%normdir=(/0.d0,-1.d0,0.d0/)
+    !
+    var1=6.8d0/16.7d0
+    var2=   lx/16.7d0
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x3
+    tempface(nface)%c=x4
+    tempface(nface)%normdir=(/var1,0.d0,-var2/)
+    !
+    var1=6.8d0/16.7d0
+    var2=   lx/16.7d0
+    nface=nface+1
+    tempface(nface)%a=x2
+    tempface(nface)%b=x3
+    tempface(nface)%c=x4
+    tempface(nface)%normdir=(/var1,0.d0, var2/)
+    !
+    var1=h /sqrt(lx**2+h**2)
+    var2=lx/sqrt(lx**2+h**2)
+    nface=nface+1
+    tempface(nface)%a=x1
+    tempface(nface)%b=x2
+    tempface(nface)%c=x4
+    tempface(nface)%normdir=(/-var1,var2,0.d0/)
+    !
+    immbody(2)%num_face=nface
+    call immbody(2)%alloface()
+    immbody(2)%face(1:nface)=tempface(1:nface)
+    !
+    call tecsolid('tecsolid.plt',immbody)
+    !
+    print*,' ** solid generated'
+    !
+  end subroutine solidgen_mvg
   !+-------------------------------------------------------------------+
   !| This subroutine is to generate a solid usign stl file format.     |
   !+-------------------------------------------------------------------+

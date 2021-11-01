@@ -16,6 +16,8 @@ module initialisation
   !
   implicit none
   !
+  real(8) :: nomi_thick,disp_thick,mome_thick,fric_velocity
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -36,7 +38,7 @@ module initialisation
     use statistic,only: nsamples
     use bc,       only: ninflowslice
     !
-    if(trim(flowtype)=='bl') then
+    if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
       call blprofile
     endif
     !
@@ -52,6 +54,7 @@ module initialisation
         !
         call readflowini3d
         !
+        ! call blcorrect
         ! vel(:,:,:,2)=0.d0
         !
         if(trim(turbmode)=='k-omega') then
@@ -83,6 +86,8 @@ module initialisation
         case('shuosher')
           call shuosherini
         case('bl')
+          call blini
+        case('swbli')
           call blini
         case('windtunn')
           call wtini
@@ -904,7 +909,49 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| The end of the subroutine mixlayerini.                            |
   !+-------------------------------------------------------------------+
-  !  
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to correct the boundary layer initial field.   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-10-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine blcorrect
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(x(i,j,k,2)>=5.d0*nomi_thick) then
+        !
+        rho(i,j,k)  = rho_prof(j)
+        !
+        vel(i,j,k,1)= vel_prof(j,1)
+        vel(i,j,k,2)= vel_prof(j,2)
+        !
+        tmp(i,j,k)  = tmp_prof(j)
+        !
+        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        ! 
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine blcorrect
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine blcorrect.                              |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is used initilise a boundary layer flow.          |
   !+-------------------------------------------------------------------+
@@ -975,13 +1022,40 @@ module initialisation
     !
     use readwrite,only: readprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    use fludyna,  only: thermal
+    use stlaio,  only: get_unit
+    !
+    ! local data
+    integer :: fh
     !
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
+    if(lio) then
+      fh=get_unit()
+      !
+      open(fh,file='datin/inlet.prof',action='read',form='formatted')
+      read(fh,*)
+      read(fh,*)
+      read(fh,*)nomi_thick,disp_thick,mome_thick,fric_velocity
+      close(fh)
+      write(*,"(A)")'  -----------------------------------------------'
+      write(*,"(A)")'            δ          δ*           θ        utau'
+      write(*,"(1X,4(F12.7))")nomi_thick,disp_thick,mome_thick,fric_velocity
+      write(*,"(A)")'  -----------------------------------------------'
+      !
+    endif
+    !
+    call bcast(nomi_thick)
+    call bcast(disp_thick)
+    call bcast(mome_thick)
+    call bcast(fric_velocity)
+    !
     call readprofile('datin/inlet.prof',dir='j',                     &
                               var1=rho_prof,     var2=vel_prof(:,1), &
                               var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
+    !
+    prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
     !
   end subroutine blprofile
   !+-------------------------------------------------------------------+

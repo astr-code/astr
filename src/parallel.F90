@@ -100,9 +100,9 @@ module parallel
   character(len=8) :: mpirankname
   logical :: lio
   integer :: status(mpi_status_size)
-  integer :: mpi_imin,mpi_jmin,group_imin,group_jmin,mpi_group_world,  &
-             mpi_islice,group_islice,mpi_jslice,group_jslice,          &
-             mpi_kslice,group_kslice
+  integer :: mpi_imin,mpi_jmin,mpi_jmax,group_imin,group_jmin,         &
+             group_jmax,mpi_group_world,mpi_islice,group_islice,       &
+             mpi_jslice,group_jslice,mpi_kslice,group_kslice
   character(mpi_max_processor_name) :: processor_name
   !
   contains
@@ -879,6 +879,8 @@ module parallel
     ! end of set sub communicator for kslice
     !
     allocate(rank_use(isize*ksize))
+    !
+    rank_use=-1
     n=0
     do nk=0,ksize-1
     do ni=0,isize-1
@@ -893,6 +895,22 @@ module parallel
     if(jrk==0) call mpi_comm_size(mpi_jmin,newsize,ierr)
     if(mpirank==0) write(*,'(A,I0)') &
       '  ** new communicator: mpi_jmin  ... created, size: ',newsize
+    !
+    rank_use=-1
+    n=0
+    do nk=0,ksize-1
+    do ni=0,isize-1
+      n=n+1
+      rank_use(n)=nrank(ni,jsize-1,nk)
+    end do
+    end do
+    !
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jmax,ierr)
+    call mpi_comm_create(mpi_comm_world,group_jmax,mpi_jmax,ierr)
+    !
+    if(jrk==jrkm) call mpi_comm_size(mpi_jmax,newsize,ierr)
+    if(irk==0 .and. krk==0) write(*,'(A,I0)') &
+      '  ** new communicator: mpi_jmax  ... created, size: ',newsize
     !
     deallocate(rank_use)
     !
@@ -4219,10 +4237,10 @@ module parallel
         enddo
         !
         if(jrank==mpirankmax+1) then
-          stop ' ERROR 1 @ pcollecicell: all icell is 0'
           print*,' ** jrank=',jrank
           print*,' ** jb=',jb
           print*,' ** recvbuf(jb,1,:)',recvbuf(jb,1,:)
+          stop ' ERROR 1 @ pcollecicell: all icell is 0'
         endif
         !
       enddo

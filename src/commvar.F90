@@ -55,13 +55,14 @@ module commvar
   !|               npdci | to control scheme at boundary.              |
   !+---------------------+---------------------------------------------+
   real(8) :: xmax,xmin,ymax,ymin,zmax,zmin,voldom,dxyzmax,dxyzmin
-  real(8) :: alfa_filter,bfacmpld
+  real(8) :: alfa_filter,bfacmpld,shkcrt
   integer :: kcutoff
   !+---------------------+---------------------------------------------+
   !|                *mix | min coordinates                             |
   !|                *max | max coordinates                             |
   !|         alfa_filter | the parameter to control width of filter.   |
-  !|            bfacmpld | b factor for mp-ld scheme.                  |
+  !|            bfacmpld | b factor for MP-LD scheme.                  |
+  !|              shkcrt | criteria to identify shock.                 |
   !|             kcutoff | cutoff wavenumber when fft used.            |
   !|              voldom | total volume of the domain.                 |
   !|     dxyzmax,dxyzmin | characteristic grid spacing.                |
@@ -104,7 +105,7 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|            flowtype | to define the type of flow.                 |
   !+---------------------+---------------------------------------------+
-  real(8) :: ctime(11)=0.d0
+  real(8) :: ctime(32)=0.d0
   !+---------------------+---------------------------------------------+
   !|             cputime | computational time statistics.              |
   !+---------------------+---------------------------------------------+
