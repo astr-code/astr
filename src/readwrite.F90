@@ -296,8 +296,12 @@ module readwrite
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
         elseif(bctype(n)==51) then
           write(*,'(44X,I0,2(A))')bctype(n),' farfield at: ',bcdir(n)
-          write(*,'(30X,A,F12.6)')'      angle of shock: ',angshk
-          write(*,'(30X,A,F12.6)')' R-H jump point at x: ',xrhjump
+          !
+          if(trim(flowtype)=='swbli') then
+            write(*,'(30X,A,F12.6)')'      angle of shock: ',angshk
+            write(*,'(30X,A,F12.6)')' R-H jump point at x: ',xrhjump
+          endif
+          !
         elseif(bctype(n)==52) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
@@ -455,8 +459,10 @@ module readwrite
           read(fh,*)bctype(n),turbinf
         endif
         if(bctype(n)==51) then
-          backspace(fh)
-          read(fh,*)bctype(n),xrhjump,angshk
+          if(trim(flowtype)=='swbli') then
+            backspace(fh)
+            read(fh,*)bctype(n),xrhjump,angshk
+          endif
         endif
       enddo
       read(fh,'(/)')

@@ -961,13 +961,17 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blini
     !
-    use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal
+    use commvar,  only: turbmode,Reynolds
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,tke,omg
+    use fludyna,  only: thermal,miucal
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    use commfunc, only: dis2point2
     !
     ! local data
     integer :: i,j,k
-    real(8) :: radi
+    real(8) :: radi,miu,delta,beta1
+    !
+    beta1=0.075d0
     !
     do k=0,km
     do j=0,jm
@@ -986,6 +990,16 @@ module initialisation
         spc(i,j,k,1)=0.d0
         !
         spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        !
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        tke(i,j,k)=1.5d0*0.0001d0
+        !
+        ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
+        delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+        miu=miucal(tmp(i,j,k))/Reynolds
+        omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
         !
       endif
       !

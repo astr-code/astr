@@ -204,8 +204,8 @@ module parallel
       do i=1,mpisize
         !
         if(mod(mpisize,i)==0) then
-            n=n+1
-            nfactor(n)=mpisize/i
+          n=n+1
+          nfactor(n)=mpisize/i
         end if
         !
       end do
@@ -219,6 +219,7 @@ module parallel
         if(ndims==1) then
           !
           nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
+          !
           if(nfactor(n2) .ne. 1) cycle
           if(nfactor(n3) .ne. 1) cycle
           !
@@ -244,11 +245,11 @@ module parallel
         !
         if(nsize .eq. mpisize) then
           !
-          nvar1=ja*kaa*nfactor(n1)
+          nvar1=int(ja,8)*int(kaa,8)*int(nfactor(n1),8)
           !
-          nvar1=nvar1+ia*kaa*nfactor(n2)
+          nvar1=nvar1+int(ia,8)*int(kaa,8)*int(nfactor(n2),8)
           !
-          nvar1=nvar1+ia*ja*nfactor(n3)
+          nvar1=nvar1+int(ia,8)*int(ja,8)*int(nfactor(n3),8)
           !
           ! print*,nvar1,nvar2,'-',nfactor(n1),nfactor(n2),nfactor(n3)
           !
@@ -908,9 +909,11 @@ module parallel
     call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jmax,ierr)
     call mpi_comm_create(mpi_comm_world,group_jmax,mpi_jmax,ierr)
     !
-    if(jrk==jrkm) call mpi_comm_size(mpi_jmax,newsize,ierr)
-    if(irk==0 .and. krk==0) write(*,'(A,I0)') &
+    if(jrk==jrkm) then
+      call mpi_comm_size(mpi_jmax,newsize,ierr)
+      if(irk==0 .and. krk==0) write(*,'(A,I0)') &
       '  ** new communicator: mpi_jmax  ... created, size: ',newsize
+    endif
     !
     deallocate(rank_use)
     !

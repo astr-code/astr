@@ -368,6 +368,7 @@ module tecio
     write(unitf)nbrvar+3
     ! +------------+
     ! | int32*n    | variable names
+    n=1
     call ecrirebin(unitf,'x')
       if(tecinfout) write(*,'(1x,A12,I2,A4,A10)')' ** Variable',n,' is ','x'
     call ecrirebin(unitf,'y')
@@ -2138,9 +2139,10 @@ module tecio
       ndim=3
     endif
     !
+    unitf=get_unit()
+    !
     if(ndim==2) then
       !
-      unitf=get_unit()
       open(unitf,file=filename,form='formatted')
       write(unitf,'(A)')'TITLE = "FE-Volume TRIANGLE Data"'
       do jsolid=1,nsolid
@@ -2163,8 +2165,6 @@ module tecio
         write(unitf,'(2(1X,I8))')(j,j=1,asolid(jsolid)%num_edge*2)
         !
       enddo
-      close(unitf)
-      print*,' << ',filename
       !
     elseif(ndim==3) then
       open(unitf,file=filename,form='formatted')
@@ -2206,10 +2206,13 @@ module tecio
         write(unitf,'(3(1X,I8))')(j,j=1,asolid(jsolid)%num_face*3)
         !
       enddo
-      close(unitf)
-      print*,' << ',filename
       !
     endif
+    !
+    close(unitf)
+    print*,' << ',filename
+    !
+    return
     !
   end subroutine tecsolid
   !+-------------------------------------------------------------------+

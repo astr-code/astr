@@ -31,7 +31,7 @@ program astr
   !
   if(trim(cmd)=='pp') then
     !
-    ! generate an example channel flow case
+    ! do the pre/post-process
     !
     call ppentrance
     !

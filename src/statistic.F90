@@ -707,6 +707,7 @@ module statistic
     real(8) :: tau(0:im,0:km)
     !
     fbcxbl=0.d0
+    norm=0.d0
     !
     if(jrk==0) then
       !
@@ -774,6 +775,7 @@ module statistic
     real(8) :: qw(0:im,0:km)
     !
     whfbl=0.d0
+    norm=0.d0
     !
     if(jrk==0) then
       !

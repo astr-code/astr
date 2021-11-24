@@ -881,8 +881,8 @@ module commfunc
   function pfilterrhs(var,dim,ntype) result(b)
     !
     ! arguments
-    real(8),intent(in) :: var(-hm:dim+hm)
     integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: var(-hm:dim+hm)
     real(8) :: b(-hm:dim+hm)
     !
     ! local data

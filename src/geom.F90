@@ -3154,8 +3154,10 @@ module geom
     do k=0,km
     do j=0,jm
     do i=0,im
-      ! only for channel flow.
+      ! ! only for channel flow.
       dis2wall(i,j,k)=min(x(i,j,k,2),2.d0-x(i,j,k,2))
+      ! only for flat plate boundary layer flow.
+      ! dis2wall(i,j,k)=x(i,j,k,2)
     enddo
     enddo
     enddo

@@ -418,6 +418,8 @@ module pp
     ! close(12)
     ! print*,' << naca4412.dat'
     !
+    nface=0
+    !
     xc=0.d0
     yc=0.d0
     do i=1,map-1
@@ -668,6 +670,8 @@ module pp
     !
     allocate(tempface(12))
     !
+    nface=0
+    !
     x1(1)=0.d0
     x1(2)=0.d0
     x1(3)=0.d0
@@ -836,6 +840,7 @@ module pp
     immbody(1)%name='cube'
     !
     allocate(tempface(12))
+    nface=0
     !
     x1(1)=0.d0
     x1(2)=0.d0

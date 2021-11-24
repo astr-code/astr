@@ -13,7 +13,7 @@ module bc
   use commvar, only: hm,im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims, &
                      num_species,flowtype,gamma,numq,npdci,npdcj,      &
                      npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
-                     zmin,zmax,time
+                     zmin,zmax,time,num_modequ
   use commarray, only : x,dxi,jacob,prs,vel,tmp,rho,spc,q,qrhs
   use tecio
   use stlaio,  only: get_unit
@@ -833,8 +833,10 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine inflow(ndir)
     !
+    use commvar,   only : turbmode
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
+    use commarray, only : tke,omg
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -915,7 +917,7 @@ module bc
           ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           !
           do jspc=1,num_species
-            spc(i,j,k,jspc)=spc_in(j,k,jspc)
+            spc(i,j,k,jspc)=spc_in(j,k,jspc) 
           enddo
           !
           ! print*,vel_in(j,k,1),rho(i,j,k)
@@ -929,6 +931,11 @@ module bc
         call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
                    velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
                     species=spc(i,j,k,:)                               )
+        !
+        if(trim(turbmode)=='k-omega') then
+          tke(i,j,k)=0.d0
+          omg(i,j,k)=0.d0
+        endif
         !
         qrhs(i,j,k,:)=0.d0
         !
@@ -1594,16 +1601,36 @@ module bc
         !
         do i=0,im
           !
-          if(x(i,j,0,1)<=xrhjump) then
+          if(trim(flowtype)=='swbli') then
+            !
+            if(x(i,j,0,1)<=xrhjump) then
+              rho_far(i)=rho_prof(jm)
+              vel_far(i,:)=vel_prof(jm,:)
+              tmp_far(i)=tmp_prof(jm)
+              prs_far(i)=prs_prof(jm)
+            else
+              call postshock(rho_prof(jm),vel_prof(jm,1),vel_prof(jm,2), &
+                             prs_prof(jm),tmp_prof(jm),                  &
+                             rho_far(i),vel_far(i,1),vel_far(i,2),       &
+                             prs_far(i),tmp_far(i),angshk)
+            endif
+            !
+          elseif(trim(flowtype)=='bl') then
+            !
             rho_far(i)=rho_prof(jm)
             vel_far(i,:)=vel_prof(jm,:)
             tmp_far(i)=tmp_prof(jm)
             prs_far(i)=prs_prof(jm)
+            !
           else
-            call postshock(rho_prof(jm),vel_prof(jm,1),vel_prof(jm,2), &
-                           prs_prof(jm),tmp_prof(jm),                  &
-                           rho_far(i),vel_far(i,1),vel_far(i,2),       &
-                           prs_far(i),tmp_far(i),angshk)
+            !
+            rho_far(i)  =roinf
+            vel_far(i,1)=uinf
+            vel_far(i,2)=vinf
+            vel_far(i,3)=winf
+            tmp_far(i)  =tinf
+            prs_far(i)  =pinf
+            !
           endif
           !
         enddo
@@ -1852,8 +1879,10 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine outflow(ndir)
     !
+    use commvar,   only : turbmode
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
+    use commarray, only : tke,omg
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -1921,7 +1950,7 @@ module bc
           prs(i,j,k)  =pe
           rho(i,j,k)  =roe
           !
-        elseif(ub<css .and. ub>=0.d0) then
+        else !if(ub<css .and. ub>=0.d0) then
           ! subsonic outlet
           ! prs(i,j,k)= pinf
           ! rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
@@ -1933,8 +1962,8 @@ module bc
           vel(i,j,k,3)=0.d0 
           prs(i,j,k)  =pe
           rho(i,j,k)  =roe
-        else
-          stop ' !! velocity at outflow error !! @ outflow'
+        ! else
+        !   stop ' !! velocity at outflow error !! @ outflow'
         endif
         !
         vel(i,j,k,3)=we
@@ -1946,6 +1975,11 @@ module bc
                     species=spc(i,j,k,:)                               )
         !
         qrhs(i,j,k,:)=0.d0
+        !
+        if(trim(turbmode)=='k-omega') then
+          tke(i,j,k)=tke(i-1,j,k)
+          omg(i,j,k)=omg(i-1,j,k)
+        endif
         !
       enddo
       enddo
@@ -1976,7 +2010,7 @@ module bc
     integer,intent(in) :: ndir
     !
     ! local data
-    integer :: i,j,k,l,jspc,ii,n,m,jq
+    integer :: i,j,k,l,jspc,jmod,ii,n,m,jq
     real(8) :: pinv(5,5),pnor(5,5),Pmult(5,5),E(5),F(5),G(5),Rest(5),  &
                jcbi(3),LODi1(5),LODi(5)
     real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:),qfilt(:,:)
@@ -2124,6 +2158,14 @@ module bc
           do jspc=1,num_species
             Ecs(ii,5+jspc)=jacob(i,j+ii,k)*q(i,j+ii,k,5+jspc)*uu
           enddo
+          !
+          if(num_modequ>0) then
+            n=5+num_species
+            do jmod=1,num_modequ
+              Ecs(ii,n+jmod)=jacob(i,j+ii,k)*q(i,j+ii,k,n+jmod)*uu
+            enddo
+          endif
+          !
         enddo
         !
         do n=1,numq
