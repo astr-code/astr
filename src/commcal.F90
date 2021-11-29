@@ -190,7 +190,7 @@ module commcal
   subroutine ducrossensor(subtime)
     !
     use commvar,  only : im,jm,km,is,ie,js,je,ks,ke,ia,ja,ka,hm,      &
-                         npdci,npdcj,npdck,shkcrt
+                         npdci,npdcj,npdck,shkcrt,lreport
     use commarray,only : ssf,lshock,dvel,prs
     use parallel, only : dataswap,pmin,pmax,psum,lio,ptime
     !
@@ -315,16 +315,17 @@ module commcal
     enddo
     enddo
     !
-    ! nshknod=psum(nshknod)
-    ! !
-    ! if(lio) then
-    !   print*,' ------------- shock sensor -------------'
-    !   write(*,"(18x,A,1X,F12.5)")'      max ssf: ',ssfmax
-    !   write(*,"(18x,A,1X,F12.5)")'      min ssf: ',ssfmin
-    !   write(*,"(18x,A,1X,F12.5)")'      avg ssf: ',ssfavg
-    !   write(*,"(18x,2(A,1X,I0))")'  shock nodes: ',nshknod,'/',(ia+1)*(ja+1)*(ka+1)
-    !   print*,' ----------------------------------------'
-    ! endif
+    if(lreport) nshknod=psum(nshknod)
+    !
+    if(lio .and. lreport) then
+      print*,' ------------- shock sensor -------------'
+      write(*,"(18x,A,1X,F12.5)")'      max ssf: ',ssfmax
+      write(*,"(18x,A,1X,F12.5)")'      min ssf: ',ssfmin
+      write(*,"(18x,A,1X,F12.5)")'      avg ssf: ',ssfavg
+      write(*,"(18x,3(A,1X,I0),A)")'  shock nodes: ',nshknod,'/', &
+              (ia+1)*(ja+1)*(ka+1),'=',nshknod/((ia+1)*(ja+1)*(ka+1))*100,'%'
+      print*,' ----------------------------------------'
+    endif
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
     !

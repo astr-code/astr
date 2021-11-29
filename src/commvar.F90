@@ -142,6 +142,11 @@ module commvar
   !|             immbody | the immersed body.                          |
   !|             immbond | the boundary nodes of immersed body.        |
   !+---------------------+---------------------------------------------+
+  logical :: lreport
+  !+---------------------+---------------------------------------------+
+  !|             lreport | to control report of subroutines            |
+  !+---------------------+---------------------------------------------+
+
   !
   parameter(hm=5)
   !

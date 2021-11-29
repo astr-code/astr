@@ -20,7 +20,7 @@ module commarray
                                         lspg_jmin,lspg_jmax,           &
                                         lspg_kmin,lspg_kmax
   integer,allocatable,dimension(:,:,:) :: nodestat
-  logical,allocatable,dimension(:,:,:) :: lsolid,lshock
+  logical,allocatable,dimension(:,:,:) :: lsolid,lshock,crinod
   type(nodcel),allocatable,dimension(:,:,:) :: cell
   !
   real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12,ssf
@@ -120,6 +120,9 @@ module commarray
     !
     allocate(dgrid(0:im,0:jm,0:km,1:3),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating dgrid'
+    !
+    allocate(crinod(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating crinod'
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+

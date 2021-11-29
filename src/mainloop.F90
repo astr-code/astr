@@ -11,6 +11,7 @@ module mainloop
   use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
                       ptime,irk,jrk,irkm,jrkm
   use commvar,  only: im,jm,km,ia,ja,ka
+  use commarray,only: crinod
   use tecio
   use stlaio,  only: get_unit
   !
@@ -37,8 +38,14 @@ module mainloop
     !
     ! local data
     real(8) :: time_start,time_beg
+    logical,save :: firstcall = .true.
     !
     time_start=ptime()
+    !
+    if(firstcall) then
+      crinod=.false.
+      firstcall=.false.
+    endif
     !
     fhand_err=get_unit()
     open(fhand_err,file='errnode.log')
@@ -163,7 +170,7 @@ module mainloop
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
                          ctime,hm,lavg,navg,nstep,limmbou,turbmode,    &
-                         ninst,lwslic
+                         ninst,lwslic,lreport
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
@@ -201,6 +208,12 @@ module mainloop
     allocate(qsave(0:im,0:jm,0:km,1:numq))
     !
     do nrk=1,3
+      !
+      if( (loop_counter==nwrite .or. loop_counter==0) .and. nrk==1 ) then
+        lreport=.true.
+      else
+        lreport=.false.
+      endif
       !
       qrhs=0.d0
       !
@@ -266,6 +279,7 @@ module mainloop
       call updatefvar
       !
       call crashfix
+      !
     enddo
     !
     deallocate(qsave)
@@ -523,15 +537,17 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine crashfix
     !
-    use commvar,   only : numq,nstep
+    use commvar,   only : numq,nstep,lreport
     use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
-    use parallel, only : por,ig0,jg0,kg0,psum
-    use fludyna,   only: q2fvar
+    use parallel,  only : por,ig0,jg0,kg0,psum
+    use fludyna,   only : q2fvar
     !
     ! local data
     integer :: i,j,k,l,fh,ii,jj,kk
     real(8) :: qavg(numq)
     integer :: norm,counter
+    !
+    integer,save :: step_normal = 0
     !
     counter=0
     !
@@ -541,9 +557,12 @@ module mainloop
       !
       if(nodestat(i,j,k)<=0.d0) then
         ! only check fluid points
+        !
         if(rho(i,j,k)>=0.d0 .and. prs(i,j,k)>=0.d0 .and. tmp(i,j,k)>=0.d0) then
           continue
         else
+          !
+          crinod(i,j,k)=.true.
           !
           ! print*,' !! non-positive density/energy identified !!'
           ! write(*,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'   ** mpirank= ',&
@@ -605,8 +624,43 @@ module mainloop
     !
     counter=psum(counter)
     !
+    if(counter==0) then
+      step_normal=step_normal+1
+    else
+      step_normal=0
+    endif
+    !
     if(lio .and. counter>1) then
       write(*,'(A,I0,A)')'  !! ',counter,' error nodes were wiped.'
+    endif
+    !
+    if(lreport) then
+      !
+      if(lio) then
+        if(step_normal>0) then
+          write(*,'(A,I0,A)')'  ** the comput. been normal for: ',step_normal,' steps'
+        endif
+      endif
+      !
+      counter=0
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(crinod(i,j,k)) then
+          counter=counter+1
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+      counter=psum(counter)
+      !
+      if(lio) then
+        write(*,'(A,I0,A)')'  ** ',counter,' critical nodes'
+      endif
+      !
     endif
     !
     return

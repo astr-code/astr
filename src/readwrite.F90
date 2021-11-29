@@ -1391,7 +1391,7 @@ module readwrite
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwrite,lavg,force,numq,imbroot,limmbou,      &
                        turbmode
-    use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock
+    use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
                          rom,u1m,u2m,u3m,pm,tm,                        &
@@ -1410,7 +1410,7 @@ module readwrite
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
-    real(8),allocatable :: rshock(:,:,:)
+    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     ! local data
     character(len=4) :: stepname
@@ -1477,6 +1477,7 @@ module readwrite
     endif
     if(allocated(lshock)) then
       allocate(rshock(0:im,0:jm,0:km))
+      allocate(rcrinod(0:im,0:jm,0:km))
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -1487,10 +1488,18 @@ module readwrite
           rshock(i,j,k)=0.d0
         endif
         !
+        if(crinod(i,j,k)) then
+          rcrinod(i,j,k)=1.d0
+        else
+          rcrinod(i,j,k)=0.d0
+        endif
+        !
       enddo
       enddo
       enddo
+      !
       call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
+      call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km))
     endif
     !
     if(trim(turbmode)=='k-omega') then

@@ -4065,7 +4065,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine noslip(ndir,tw)
     !
-    use commvar,   only : Reynolds,turbmode
+    use commvar,   only : Reynolds,turbmode,lreport
     use commarray, only : tke,omg
     use fludyna,   only : thermal,fvar2q,q2fvar,miucal
     use commfunc,  only : dis2point2
@@ -4091,6 +4091,8 @@ module bc
     if(ndir==3) then
       !
       if(jrk==0) then
+        !
+        if(lreport) lfirstcal=.true.
         !
         if(lfirstcal) then
           !
@@ -4141,7 +4143,7 @@ module bc
         endif
         !
         if(ndims==3 .and. wallamplit>1.d-10) then
-          vwall=wallbs(beter,wallamplit,xa,xb,nmod_t,nmod_z)
+          vwall=wallbs_rand(beter,wallamplit,xa,xb,nmod_t,nmod_z)
         else
           vwall=0.d0
         endif
@@ -4178,26 +4180,10 @@ module bc
             miu=miucal(tmp(i,j,k))/Reynolds
             omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
             !
+            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
+            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            !
           endif
-          !
-          ! do l=1,hm
-          !   q(i,j-l,k,1)= q(i,j+l,k,1) ! rho   is even
-          !   q(i,j-l,k,2)=-q(i,j+l,k,2) ! rho*u is odd 
-          !   q(i,j-l,k,3)=-q(i,j+l,k,3) ! rho*v is odd 
-          !   q(i,j-l,k,4)=-q(i,j+l,k,4) ! rho*w is odd
-          !   q(i,j-l,k,5)= q(i,j+l,k,5) ! rho*E is even
-          !   !
-          !   do jspec=1,num_species
-          !     q(i,j-l,k,5+jspec)= q(i,j+l,k,5+jspec) ! rho*Yj is even
-          !   enddo
-          !   !
-          !   call q2fvar(q=q(i,j-l,k,:),density=rho(i,j-l,k),           &
-          !                             velocity=vel(i,j-l,k,:),         &
-          !                             pressure=prs(i,j-l,k),           &
-          !                          temperature=tmp(i,j-l,k),           &
-          !                              species=spc(i,j-l,k,:))
-          !   !
-          ! enddo
           !
         enddo
         enddo
@@ -4237,26 +4223,11 @@ module bc
             delta_d1=dis2point2(x(i,j,k,:),x(i,j-1,k,:))
             miu=miucal(tmp(i,j,k))/Reynolds
             omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+            !
+            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
+            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            !
           endif
-          !
-          ! do l=1,hm
-          !   q(i,j+l,k,1)= q(i,j-l,k,1) ! rho   is even
-          !   q(i,j+l,k,2)=-q(i,j-l,k,2) ! rho*u is odd 
-          !   q(i,j+l,k,3)=-q(i,j-l,k,3) ! rho*v is odd 
-          !   q(i,j+l,k,4)=-q(i,j-l,k,4) ! rho*w is odd
-          !   q(i,j+l,k,5)= q(i,j-l,k,5) ! rho*E is even
-          !   !
-          !   do jspec=1,num_species
-          !     q(i,j+l,k,5+jspec)= q(i,j-l,k,5+jspec) ! rho*Yj is even
-          !   enddo
-          !   !
-          !   call q2fvar(q=q(i,j+l,k,:),density=rho(i,j+l,k),           &
-          !                             velocity=vel(i,j+l,k,:),         &
-          !                             pressure=prs(i,j+l,k),           &
-          !                          temperature=tmp(i,j+l,k),           &
-          !                              species=spc(i,j+l,k,:))
-          !   !
-          ! enddo
           !
         enddo
         enddo
@@ -4291,7 +4262,7 @@ module bc
     real(8) :: theter,fx,gz,ht,zl,tm
     integer,allocatable :: seed(:)
     !
-    real(8),save :: sqrt27,z0,t0,lz
+    real(8),save :: sqrt27,z0,t0,lz,rfluc,rampl
     real(8),save :: randomv(15)
     logical,save :: lfirstcal=.true.
     !
@@ -4331,6 +4302,14 @@ module bc
         call random_number(randomv(m))
         ! write(*,*)mpirank,'|',m,randomv(m)
       end do
+      !
+      rampl=0.05d0
+      !
+      call random_seed(size=seed_size) ! find out size of seed
+      allocate(seed(seed_size))
+      seed=mpirank
+      call random_seed(put=seed) 
+      deallocate(seed)
       !
       lfirstcal=.false.
       !
@@ -4379,6 +4358,7 @@ module bc
         endif
         !
         vwall(i,k)=wallamplit*uinf*fx*gz*ht
+        !
       else
         vwall(i,k)=0.d0
       end if
@@ -4389,6 +4369,130 @@ module bc
     return
     !
   end function wallbs
+  !
+  function wallbs_rand(beter,wallamplit,xa,xb,nmod_t,nmod_z) result(vwall)
+    !
+    ! arguments
+    real(8),intent(in) :: beter,wallamplit,xa,xb
+    integer,intent(in) :: nmod_t,nmod_z
+    real(8) :: vwall(0:im,0:km)
+    !
+    ! local data
+    integer :: i,k,l,m,seed_size
+    real(8) :: theter,fx,gz,ht,zl,tm
+    integer,allocatable :: seed(:)
+    !
+    real(8),save :: sqrt27,z0,t0,lz,rfluc,rampl
+    real(8),save :: randomv(15)
+    logical,save :: lfirstcal=.true.
+    !
+    if(lfirstcal) then
+      !
+      ! beter=0.02d0
+      ! !
+      ! xa=5.d0
+      ! xb=40.d0
+      ! !
+      ! nmod_z=3
+      ! nmod_t=2
+      !
+      lz=zmax-zmin
+      !
+      sqrt27=1.d0/sqrt(27.d0)
+      z0=0.2d0/(1.d0-0.8d0**nmod_z)
+      !
+      if(nmod_t==0) then
+        t0=0
+      else
+        t0=0.2d0/(1.d0-0.8d0**nmod_t)
+      endif
+      !
+      ! call random_seed() ! initialize with system generated seed
+      call random_seed(size=seed_size) ! find out size of seed
+      allocate(seed(seed_size))
+      ! call random_seed(get=seed) ! get system generated seed
+      ! write(*,*) seed            ! writes system generated seed
+      seed=0
+      call random_seed(put=seed) ! set current seed
+      ! call random_seed(get=seed) ! get current seed
+      ! write(*,*) seed            ! writes 0
+      deallocate(seed)           ! safe
+      !
+      do m=1,15
+        call random_number(randomv(m))
+        ! write(*,*)mpirank,'|',m,randomv(m)
+      end do
+      !
+      rampl=0.1d0
+      !
+      call random_seed(size=seed_size) ! find out size of seed
+      allocate(seed(seed_size))
+      seed=mpirank
+      call random_seed(put=seed) 
+      deallocate(seed)
+      !
+      lfirstcal=.false.
+      !
+    endif
+    !
+    do k=0,km
+    do i=0,im
+      !
+      if(x(i,0,k,1)<=xb .and. x(i,0,k,1)>=xa) then
+        !
+        theter=2.d0*pi*(x(i,0,k,1)-xa)/(xb-xa)
+        fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*sqrt27
+        !
+        ! if(km==0) then
+        !   gz=1.d0
+        ! else
+        !   gz=0.d0
+        !   do l=1,nmod_z
+        !     !
+        !     if(l==1) then
+        !       zl=z0
+        !     else
+        !       zl=zl*0.8d0
+        !     end if
+        !     !
+        !     gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/lz+randomv(l)))
+        !     !
+        !   end do
+        ! endif
+        gz=dsin(4.d0*pi*l*(x(i,0,k,3)/lz+randomv(l)))
+        !
+        if(nmod_t==0) then
+          ht=1.d0
+        else
+          ht=0.d0
+          do m=1,nmod_t
+            !
+            if(m==1) then
+              tm=t0
+            else
+              tm=tm*0.8d0
+            end if
+            !
+            ht=ht+tm*dsin(2.d0*pi*m*(beter*time+randomv(m+10)))
+            !
+          end do
+        endif
+        !
+        call random_number(rfluc)
+        rfluc=(rfluc*2.d0-1.d0)*rampl
+        !
+        vwall(i,k)=wallamplit*uinf*fx*gz*ht*(1.d0+rfluc)
+        !
+      else
+        vwall(i,k)=0.d0
+      end if
+      !
+    end do
+    end do
+    !
+    return
+    !
+  end function wallbs_rand
   !+-------------------------------------------------------------------+
   !| The end of the subroutine wallbs.                                 |
   !+-------------------------------------------------------------------+
