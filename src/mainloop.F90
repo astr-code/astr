@@ -469,10 +469,14 @@ module mainloop
     do i=0,im
       !
       if(nodestat(i,j,k)<=0.d0) then
+        !
         ! only check fluid points
         if(q(i,j,k,1)>=0.d0 .and. q(i,j,k,5)>=0.d0) then
           continue
         else
+          !
+          crinod(i,j,k)=.true.
+          !
           write(fhand_err,'(A,I0)')'error node cant wiped at nstep=',nstep
           write(fhand_err,'(2(A,I0),2(2X,I0),A,3(1X,E13.6E2))')'mpirank= ',mpirank, &
                                                ' i,j,k= ',i,j,k,' x,y,z=',x(i,j,k,:)
@@ -540,14 +544,23 @@ module mainloop
     use commvar,   only : numq,nstep,lreport
     use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
     use parallel,  only : por,ig0,jg0,kg0,psum
-    use fludyna,   only : q2fvar
+    use fludyna,   only : q2fvar,thermal
     !
     ! local data
     integer :: i,j,k,l,fh,ii,jj,kk
     real(8) :: qavg(numq)
     integer :: norm,counter
     !
+    logical,save :: firstcall = .true.
+    real(8),save :: eps_rho,eps_prs,eps_tmp
     integer,save :: step_normal = 0
+    !
+    if(firstcall) then
+      eps_rho=1.d-5
+      eps_tmp=1.d-5
+      !
+      eps_prs=thermal(density=eps_rho,temperature=eps_tmp)
+    endif
     !
     counter=0
     !
@@ -558,7 +571,8 @@ module mainloop
       if(nodestat(i,j,k)<=0.d0) then
         ! only check fluid points
         !
-        if(rho(i,j,k)>=0.d0 .and. prs(i,j,k)>=0.d0 .and. tmp(i,j,k)>=0.d0) then
+        if(rho(i,j,k)>=eps_rho .and. prs(i,j,k)>=eps_prs .and.         &
+           tmp(i,j,k)>=eps_tmp) then
           continue
         else
           !

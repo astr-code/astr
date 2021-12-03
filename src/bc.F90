@@ -896,7 +896,8 @@ module bc
           !
           spc(i,j,k,:)=spc_in(j,k,:)
           !
-        elseif(ub<css .and. ub>=0.d0) then
+        else
+        ! elseif(ub<css .and. ub>=0.d0) then
           ! subsonic inlet
           ue  =extrapolate(vel(i+1,j,k,1),vel(i+2,j,k,1),dv=0.d0)
           pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),  dv=0.d0)
@@ -922,10 +923,10 @@ module bc
           !
           ! print*,vel_in(j,k,1),rho(i,j,k)
           !
-        else
-          print*,mpirank,'|',i,j,k
-          print*,'ub=',ub,'vel_in=',vel_in(j,k,:),'css=',css
-          stop ' !! velocity at inflow error 1 !! @ inflow'
+        ! else
+        !   print*,mpirank,'|',i,j,k
+        !   print*,'ub=',ub,'vel_in=',vel_in(j,k,:),'css=',css
+        !   stop ' !! velocity at inflow error 1 !! @ inflow'
         endif
         !
         call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
@@ -4082,7 +4083,7 @@ module bc
     character(len=64) :: filewbs
     logical :: lexist
     !
-    real(8),save :: beter,wallamplit,xa,xb
+    real(8),save :: beter,wallamplit,xa,xb,xc
     integer,save :: nmod_t,nmod_z
     logical,save :: lfirstcal=.true.
     !
@@ -4107,7 +4108,7 @@ module bc
               open(fh,file=trim(filewbs),action='read')
               read(fh,*)
               read(fh,*)
-              read(fh,*)wallamplit,beter,xa,xb
+              read(fh,*)wallamplit,beter,xa,xb,xc
               read(fh,*)
               read(fh,*)nmod_t,nmod_z
               close(fh)
@@ -4116,7 +4117,7 @@ module bc
               print*,' ------------- wall blowing & suction parameters -------------'
               write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
               write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
-              write(*,"(23x,2(A,1X,F12.5))")'   x extent:',xa,' ~',xb
+              write(*,"(23x,3(A,1X,F12.5))")'   x extent:',xa,' ~',xb,' ~',xc
               write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
               write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
               print*,' --------------------------------------------------------------'
@@ -4125,6 +4126,7 @@ module bc
               beter=1.d0
               xa=0.d0
               xb=0.d0
+              xc=0.d0
               nmod_t=0
               nmod_z=0
             endif
@@ -4134,6 +4136,7 @@ module bc
           call bcast(beter,comm=mpi_jmin)
           call bcast(xa,comm=mpi_jmin)
           call bcast(xb,comm=mpi_jmin)
+          call bcast(xc,comm=mpi_jmin)
           call bcast(nmod_t,comm=mpi_jmin)
           call bcast(nmod_z,comm=mpi_jmin)
           !
@@ -4143,7 +4146,7 @@ module bc
         endif
         !
         if(ndims==3 .and. wallamplit>1.d-10) then
-          vwall=wallbs_rand(beter,wallamplit,xa,xb,nmod_t,nmod_z)
+          vwall=wallbs_rand(beter,wallamplit,xa,xb,xc,nmod_t,nmod_z)
         else
           vwall=0.d0
         endif
@@ -4370,10 +4373,10 @@ module bc
     !
   end function wallbs
   !
-  function wallbs_rand(beter,wallamplit,xa,xb,nmod_t,nmod_z) result(vwall)
+  function wallbs_rand(beter,wallamplit,xa,xb,xc,nmod_t,nmod_z) result(vwall)
     !
     ! arguments
-    real(8),intent(in) :: beter,wallamplit,xa,xb
+    real(8),intent(in) :: beter,wallamplit,xa,xb,xc
     integer,intent(in) :: nmod_t,nmod_z
     real(8) :: vwall(0:im,0:km)
     !
@@ -4443,40 +4446,23 @@ module bc
         theter=2.d0*pi*(x(i,0,k,1)-xa)/(xb-xa)
         fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*sqrt27
         !
-        ! if(km==0) then
-        !   gz=1.d0
-        ! else
-        !   gz=0.d0
-        !   do l=1,nmod_z
-        !     !
-        !     if(l==1) then
-        !       zl=z0
-        !     else
-        !       zl=zl*0.8d0
-        !     end if
-        !     !
-        !     gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/lz+randomv(l)))
-        !     !
-        !   end do
-        ! endif
-        gz=dsin(4.d0*pi*l*(x(i,0,k,3)/lz+randomv(l)))
+        gz=dsin(2.d0*nmod_z*pi*(x(i,0,k,3)/lz))
         !
-        if(nmod_t==0) then
-          ht=1.d0
-        else
-          ht=0.d0
-          do m=1,nmod_t
-            !
-            if(m==1) then
-              tm=t0
-            else
-              tm=tm*0.8d0
-            end if
-            !
-            ht=ht+tm*dsin(2.d0*pi*m*(beter*time+randomv(m+10)))
-            !
-          end do
-        endif
+        ht=1.d0
+        !
+        call random_number(rfluc)
+        rfluc=(rfluc*2.d0-1.d0)*rampl
+        !
+        vwall(i,k)=wallamplit*uinf*fx*gz*ht*(1.d0+rfluc)
+        !
+      elseif(x(i,0,k,1)<=xc .and. x(i,0,k,1)>=xb) then
+        !
+        theter=2.d0*pi*(x(i,0,k,1)-xb)/(xc-xb)
+        fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*sqrt27
+        !
+        gz=dsin(2.d0*nmod_z*pi*(x(i,0,k,3)/lz)+0.5d0*pi)
+        !
+        ht=1.d0
         !
         call random_number(rfluc)
         rfluc=(rfluc*2.d0-1.d0)*rampl

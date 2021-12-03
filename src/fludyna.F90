@@ -179,7 +179,9 @@ module fludyna
   subroutine updateq
     !
     use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
-    use commvar,  only : im,jm,km,num_species,num_modequ,turbmode
+    use commvar,  only : im,jm,km,num_species,num_modequ,turbmode,numq
+    !
+    integer :: i,j,k,n
     !
     if(trim(turbmode)=='k-omega') then
       !
@@ -198,6 +200,21 @@ module fludyna
                      velocity=vel(0:im,0:jm,0:km,:),                   &
                      pressure=prs(0:im,0:jm,0:km),                     &
                       species=spc(0:im,0:jm,0:km,:)                    )
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        do n=1,numq
+          if(isnan(q(i,j,k,n))) then
+            print*,i,j,k,n
+            print*,q(i,j,k,n)
+          endif
+        enddo
+        !
+      enddo
+      enddo
+      enddo
       !
     else
       print*,' !! ERROR @ updatefvar'

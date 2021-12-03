@@ -260,10 +260,6 @@ module commcal
     enddo
     enddo
     !
-    ! ssfmin=pmin(ssfmin)
-    ! ssfmax=pmax(ssfmax)
-    ! ssfavg=psum(ssfavg)/psum(norm)
-    !
     call dataswap(ssf)
     !
     nshknod=0
@@ -315,16 +311,23 @@ module commcal
     enddo
     enddo
     !
-    if(lreport) nshknod=psum(nshknod)
-    !
-    if(lio .and. lreport) then
-      print*,' ------------- shock sensor -------------'
-      write(*,"(18x,A,1X,F12.5)")'      max ssf: ',ssfmax
-      write(*,"(18x,A,1X,F12.5)")'      min ssf: ',ssfmin
-      write(*,"(18x,A,1X,F12.5)")'      avg ssf: ',ssfavg
-      write(*,"(18x,3(A,1X,I0),A)")'  shock nodes: ',nshknod,'/', &
-              (ia+1)*(ja+1)*(ka+1),'=',nshknod/((ia+1)*(ja+1)*(ka+1))*100,'%'
-      print*,' ----------------------------------------'
+    if(lreport) then
+      !
+      nshknod=psum(nshknod)
+      !
+      ssfmin=pmin(ssfmin)
+      ssfmax=pmax(ssfmax)
+      ssfavg=psum(ssfavg)/psum(norm)
+      !
+      if(lio) then
+        print*,' ------------- shock sensor -------------'
+        write(*,"(18x,A,1X,F12.5)")'      max ssf: ',ssfmax
+        write(*,"(18x,A,1X,F12.5)")'      min ssf: ',ssfmin
+        write(*,"(18x,A,1X,F12.5)")'      avg ssf: ',ssfavg
+        write(*,"(18x,2(A,I0))")'  shock nodes:  ',nshknod,'/',ia*ja*ka
+        print*,' ----------------------------------------'
+      endif
+      !
     endif
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg

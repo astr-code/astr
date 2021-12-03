@@ -983,7 +983,7 @@ module readwrite
         enddo
         !
         close(fh)
-        write(*,'(3A,I0)')'  << ',filename,' using file handle : ',fh
+        write(*,'(3A,I0)')'  >> ',filename,' using file handle : ',fh
         !
       endif
       !
