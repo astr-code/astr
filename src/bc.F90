@@ -1045,6 +1045,14 @@ module bc
     real(8) :: vartime(0:3)
     real(8) :: time0,deltime,var0
     !
+    if(nstep<nstep_save) then
+      ! this can happen when the solver is recovered from a bakup
+      loadiniflow=.true.
+      nstep_save=-1
+      !
+      deallocate(flowvarins,timeins )
+    endif
+    !
     if(nstep>nstep_save) then
       !
       nstep_save=nstep
@@ -4677,7 +4685,8 @@ module bc
     real(8),parameter :: eps=1.d-10
     integer :: vnorm,css,css2,i,j,k,jspc
     real(8) :: mavg,lambda(numq)
-    real(8) :: dvel(3),dprs,drho,dtmp,dspc(num_species),lodi(5),tran(5)
+    real(8) :: dvel(3),dprs,drho,dtmp,dspc(num_species),              &
+               lodi(5+num_species),tran(5)
     real(8) :: dx,sigma,beter,kamma,dpdy,dudy,dvdy,dy,eta
     !
     if(ndir==2 .and. irk==irkm) then
