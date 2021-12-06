@@ -41,8 +41,10 @@ module gridgeneration
         call grid1d(-5.d0,5.d0)
       elseif(trim(flowtype)=='windtunn') then
         call gridcube(20.d0,10.d0,10.d0)
+      elseif(trim(flowtype)=='channel') then
+        call grichan(2.d0*pi,pi)
       else
-        print*,trim(flowtype),'not defined @ gridgen'
+        print*,trim(flowtype),'  is not defined @ gridgen'
         stop ' !! error at gridgen' 
       endif
       !
@@ -235,6 +237,73 @@ module gridgeneration
   end subroutine gridcube
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gridcube.                               |
+  !+-------------------------------------------------------------------+
+  !
+  subroutine grichan(lx,lz)
+    !
+    use commvar,  only : im,jm,km,gridfile,ia,ja,ka
+    use parallel, only : ig0,jg0,kg0,lio,pmax
+    use commarray,only : x
+    use commfunc, only : argtanh
+    !
+    real(8),intent(in) :: lx,lz
+    !
+    integer :: n,i,j,k
+    real(8) :: varc,var1,var2,Retau,dx,yy(0:jm),xmax,ymax,dymax,zmax
+    !
+    Retau=185.d0
+    !
+    ! varc=1.02d0
+    varc=1.07d0
+    do j=0,jm
+      !
+      var1=argtanh(1.d0/varc)
+      var2=2.d0*(j+jg0)/(ja)*1.d0-1.d0
+      !
+      yy(j)=1.d0*(1.d0+varc*dtanh(var1*var2))
+      !
+    end do
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      x(i,j,k,1)=lx/real(ia,8)*real(i+ig0,8)
+      !
+      x(i,j,k,2)=yy(j)
+      !
+      if(ka==0) then
+        x(i,j,k,3)=0.d0
+      else
+        x(i,j,k,3)=lz/real(ka,8)*real(k+kg0,8)
+      endif
+      !
+    end do
+    end do
+    end do
+    !
+    do j=1,jm
+      dymax=max(dymax,yy(j)-yy(j-1))
+    enddo
+    !
+    xmax=pmax(x(im,0,0,1))
+    ymax=pmax(yy(jm))
+    dymax=pmax(dymax)
+    zmax=pmax(x(im,0,0,3))
+    !
+    if(lio) then
+      !
+      print*,' ** y1+=',yy(1)*Retau,'ymax+=',dymax*Retau
+      print*,' ** dx+=',(x(1,0,0,1)-x(0,0,0,1))*Retau,'lx+=',xmax*Retau
+      print*,' ** dz+=',(x(0,0,1,3)-x(0,0,0,3))*Retau,'lz+=',zmax*Retau
+      !
+      print*,' ** channel grid generated'
+      !
+    endif
+    !
+  end subroutine grichan
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine grichan.                                |
   !+-------------------------------------------------------------------+
   !
   !

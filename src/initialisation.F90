@@ -664,10 +664,16 @@ module initialisation
     use readwrite,only: readprofile
     !
     ! local data
-    integer :: i,j,k,l
+    integer :: i,j,k,l,ii,jj
     real(8) :: theta,theter,fx,gz,zl,randomv(15),ran
     real(8) :: delta,beta1,miu
     real(8) :: yh(0:jm),nth(0:jm),r12(0:jm)
+    integer :: seed1,seed2,seed3,seed11,seed22,seed33
+    integer, parameter :: nsemini = 1000
+    real(8), dimension(3,nsemini) :: eddy, posvor
+    real(8), dimension(3) :: dim_min, dim_max
+    real(8) :: volsemini,rrand,ddx,ddy,ddz,lsem,upr,vpr,wpr,rrand1,   &
+               init_noise,um,ftent
     !
     theta=0.1d0
     !
@@ -722,54 +728,147 @@ module initialisation
       !
     elseif(ndims==3) then
       !
-      if(mpirank==0) then
-        do l=1,15
-          call random_number(randomv(l))
-        end do
-      endif
+      ! if(mpirank==0) then
+      !   do l=1,15
+      !     call random_number(randomv(l))
+      !   end do
+      ! endif
+      ! !
+      ! call bcast(randomv)
+      ! !
+      ! do k=0,km
+      ! do j=0,jm
+      ! do i=0,im
+      !   !
+      !   call random_number(ran)
+      !   ran=ran*2.d0-1.d0
+      !   !
+      !   theter=x(i,0,k,1)/(xmax-xmin)*2.d0*pi
+      !   fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*0.192450089729875d0
+      !   !
+      !   gz=0.d0
+      !   do l=1,10
+      !     !
+      !     if(l==1) then
+      !       zl=0.2d0/(1.d0-0.8d0**10)
+      !     else
+      !       zl=zl*0.8d0
+      !     end if
+      !     !
+      !     gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/(zmax-zmin)+randomv(l)))
+      !     !
+      !   end do
+      !   !
+      !   rho(i,j,k)  =roinf
+      !   vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)*(1.d0+0.3d0*fx*gz+0.1d0*ran)
+      !   vel(i,j,k,2)=0.d0
+      !   vel(i,j,k,3)=0.d0
+      !   tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
+      !                                1.5d0*(1.d0-((x(i,j,k,2)-1.d0)**4))
+      !   !
+      !   prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !   !
+      !   if(num_species>0) then
+      !     spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+      !   endif
+      !   !
+      ! enddo
+      ! enddo
+      ! enddo
       !
-      call bcast(randomv)
+      ! copied from xcompact 
+      !! Simplified version of SEM 
+      init_noise=0.03d0
       !
+      dim_min(1) = 0.d0
+      dim_min(2) = 0.d0
+      dim_min(3) = 0.d0
+      dim_max(1) = xmax
+      dim_max(2) = ymax
+      dim_max(3) = zmax
+      volsemini = xmax * ymax * zmax
+      !
+      ! 3 int to get different random numbers
+      seed1 =  2345
+      seed2 = 13456
+      seed3 = 24567
+      do jj=1,nsemini
+        !
+        ! Vortex Position
+        do ii=1,3
+          seed11 = return_30k(seed1+jj*2+ii*379)
+          seed22 = return_30k(seed2+jj*5+ii*5250)
+          seed33 = return_30k(seed3+jj*3+ii*8170)
+          rrand1  = real(r8_random(seed11, seed22, seed33),8)
+          call random_number(rrand)
+          !write(*,*) ' rr r1 ', rrand, rrand1
+          posvor(ii,jj) = dim_min(ii)+(dim_max(ii)-dim_min(ii))*rrand
+        enddo
+        !
+        ! Eddy intensity
+        do ii=1,3
+           seed11 = return_30k(seed1+jj*7+ii*7924)
+           seed22 = return_30k(seed2+jj*11+ii*999)
+           seed33 = return_30k(seed3+jj*5+ii*5054)
+           rrand1  = real(r8_random(seed11, seed22, seed33),8)
+           call random_number(rrand)
+           !write(*,*) ' rr r1 ', rrand, rrand1
+           if (rrand <= 0.5d0) then
+              eddy(ii,jj) = -1.d0
+           else
+              eddy(ii,jj) =  1.d0
+           endif 
+        enddo
+        !
+      enddo
+      !
+      ! Loops to apply the fluctuations 
       do k=0,km
       do j=0,jm
       do i=0,im
         !
-        call random_number(ran)
-        ran=ran*2.d0-1.d0
-        !
-        theter=x(i,0,k,1)/(xmax-xmin)*2.d0*pi
-        fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*0.192450089729875d0
-        !
-        gz=0.d0
-        do l=1,10
-          !
-          if(l==1) then
-            zl=0.2d0/(1.d0-0.8d0**10)
-          else
-            zl=zl*0.8d0
-          end if
-          !
-          gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/(zmax-zmin)+randomv(l)))
-          !
-        end do
-        !
         rho(i,j,k)  =roinf
-        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)*(1.d0+0.3d0*fx*gz+0.1d0*ran)
+        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
         tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
                                      1.5d0*(1.d0-((x(i,j,k,2)-1.d0)**4))
         !
+        lsem = 0.15d0 ! For the moment we keep it constant
+        upr = 0.d0
+        vpr = 0.d0
+        wpr = 0.d0
+        do jj=1,nsemini
+          !
+          ddx = abs(x(i,j,k,1)-posvor(1,jj))
+          ddy = abs(x(i,j,k,2)-posvor(2,jj))
+          ddz = abs(x(i,j,k,3)-posvor(3,jj))
+          if (ddx < lsem .and. ddy < lsem .and. ddz < lsem) then
+            ! coefficients for the intensity of the fluctuation
+            ftent = (1.d0-ddx/lsem)*(1.d0-ddy/lsem)*(1.d0-ddz/lsem)
+            ftent = ftent / (sqrt(num2d3*lsem))**3
+            upr = upr + eddy(1,jj) * ftent
+            vpr = vpr + eddy(2,jj) * ftent
+            wpr = wpr + eddy(3,jj) * ftent
+          endif
+          !
+        enddo
+        !
+        upr = upr * sqrt(volsemini/nsemini)
+        vpr = vpr * sqrt(volsemini/nsemini)
+        wpr = wpr * sqrt(volsemini/nsemini)
+        ! 
+        um=vel(i,j,k,1)
+        !
+        vel(i,j,k,1)=upr*sqrt(num2d3*init_noise*um) + um
+        vel(i,j,k,2)=vpr*sqrt(num2d3*init_noise*um)
+        vel(i,j,k,3)=wpr*sqrt(num2d3*init_noise*um)
+        !
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
-        if(num_species>0) then
-          spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
-        endif
-        !
       enddo
       enddo
       enddo
-      !
       !
     endif
     !
@@ -777,11 +876,11 @@ module initialisation
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
     !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
     !                                rho(0:im,0:jm,0:km)  ,'ro',         &
     !                                vel(0:im,0:jm,0:km,1),'u',          &
     !                                vel(0:im,0:jm,0:km,2),'v',          &
-    !                                prs(0:im,0:jm,0:km)  ,'p',          &
-    !                                spc(0:im,0:jm,0:km,1),'Y1' )
+    !                                prs(0:im,0:jm,0:km)  ,'p' )
     
     if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D channel flow initialised.'
     !
@@ -1191,6 +1290,80 @@ module initialisation
   !| The end of the subroutine cylinderini.                            |
   !+-------------------------------------------------------------------+
   !
+  function return_30k(x) result(y)
+  
+    integer ( kind = 4 ), intent(in) :: x
+    integer ( kind = 4 )             :: y
+    integer ( kind = 4 ), parameter  :: xmax = 30000
+  
+    y = iabs(x) - int(iabs(x)/xmax)*xmax
+  end function return_30k
+  !+-------------------------------------------------------------------+
+  !| The end of the function return_30k.                               |
+  !+-------------------------------------------------------------------+
+  !
+  function r8_random ( s1, s2, s3 )
+    !*****************************************************************************80
+    !
+    !! R8_RANDOM returns a pseudorandom number between 0 and 1.
+    !
+    !  Discussion:
+    !
+    !    This function returns a pseudo-random number rectangularly distributed
+    !    between 0 and 1.   The cycle length is 6.95E+12.  (See page 123
+    !    of Applied Statistics (1984) volume 33), not as claimed in the
+    !    original article.
+    !
+    !  Licensing:
+    !
+    !    This code is distributed under the GNU LGPL license.
+    !
+    !  Modified:
+    !
+    !    08 July 2008
+    !
+    !  Author:
+    !
+    !    FORTRAN77 original version by Brian Wichman, David Hill.
+    !    FORTRAN90 version by John Burkardt.
+    !
+    !  Reference:
+    !
+    !    Brian Wichman, David Hill,
+    !    Algorithm AS 183: An Efficient and Portable Pseudo-Random
+    !    Number Generator,
+    !    Applied Statistics,
+    !    Volume 31, Number 2, 1982, pages 188-190.
+    !
+    !  Parameters:
+    !
+    !    Input/output, integer ( kind = 4 ) S1, S2, S3, three values used as the
+    !    seed for the sequence.  These values should be positive
+    !    integers between 1 and 30,000.
+    !
+    !    Output, real ( kind = 8 ) R8_RANDOM, the next value in the sequence.
+    !
+    implicit none
+
+    integer ( kind = 4 ) s1
+    integer ( kind = 4 ) s2
+    integer ( kind = 4 ) s3
+    real ( kind = 8 ) r8_random
+
+    s1 = mod ( 171 * s1, 30269 )
+    s2 = mod ( 172 * s2, 30307 )
+    s3 = mod ( 170 * s3, 30323 )
+
+    r8_random = mod ( real ( s1, kind = 8 ) / 30269.0D+00 &
+                    + real ( s2, kind = 8 ) / 30307.0D+00 &
+                    + real ( s3, kind = 8 ) / 30323.0D+00, 1.0D+00 )
+
+    return
+  end function r8_random
+  !+-------------------------------------------------------------------+
+  !| The end of the function r8_random.                                |
+  !+-------------------------------------------------------------------+
+  !!
 end module initialisation
 !+---------------------------------------------------------------------+
 !| The end of the module initialisation.                               |
