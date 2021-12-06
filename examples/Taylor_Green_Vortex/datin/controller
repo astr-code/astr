@@ -6,7 +6,7 @@
 f,f,f
 
 # maxstep,nwrite,ninst,nlstep,navg : parameters
-20000,1000,5000,1,50
+1,100,50,1,50
 
 # deltat                    : time step
 1.d-3

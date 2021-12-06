@@ -140,3 +140,16 @@ endif (HDF5_FOUND)
 # Create the ASTR executable
 add_subdirectory(src)
 
+# Create an example dir with all input.i3d example files
+option(BUILD_TESTING "Build with tests" ON)
+set(test_dir "${PROJECT_BINARY_DIR}/Test")
+add_subdirectory(examples)
+message(STATUS "Before test main ${test_dir}")
+
+if (${BUILD_TESTING})
+  include(CTest)
+  message(STATUS "MPI INCL ALSO FOUND: ${MPI_INCLUDE_PATH}")
+  message(STATUS "MPI EXEC: ${MPIEXEC_EXECUTABLE}")
+  add_test(NAME TGV COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.tgv WORKING_DIRECTORY ${test_dir}/TGV)
+  add_test(NAME Channel COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.chl WORKING_DIRECTORY ${test_dir}/Channel)
+endif()

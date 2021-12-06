@@ -44,7 +44,7 @@ module gridgeneration
       elseif(trim(flowtype)=='channel') then
         call grichan(2.d0*pi,pi)
       else
-        print*,trim(flowtype),'  is not defined @ gridgen'
+        print*,trim(flowtype),' is not defined @ gridgen'
         stop ' !! error at gridgen' 
       endif
       !
@@ -242,7 +242,7 @@ module gridgeneration
   subroutine grichan(lx,lz)
     !
     use commvar,  only : im,jm,km,gridfile,ia,ja,ka
-    use parallel, only : ig0,jg0,kg0,lio,pmax
+    use parallel, only : ig0,jg0,kg0,lio,pmax,mpistop
     use commarray,only : x
     use commfunc, only : argtanh
     !
@@ -293,11 +293,17 @@ module gridgeneration
     !
     if(lio) then
       !
-      print*,' ** y1+=',yy(1)*Retau,'ymax+=',dymax*Retau
-      print*,' ** dx+=',(x(1,0,0,1)-x(0,0,0,1))*Retau,'lx+=',xmax*Retau
-      print*,' ** dz+=',(x(0,0,1,3)-x(0,0,0,3))*Retau,'lz+=',zmax*Retau
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(18X,A)')' ** channel grid resolution **'
+      write(*,'(2(A,F13.7))')'  ** y1+=',yy(1)*Retau,                  &
+                             '   ymax+=',dymax*Retau
+      write(*,'(2(A,F13.7))')'  ** dx+=',(x(1,0,0,1)-x(0,0,0,1))*Retau,&
+                               '     lx+=',xmax*Retau
+      write(*,'(2(A,F13.7))')'  ** dz+=',(x(0,0,1,3)-x(0,0,0,3))*Retau,&
+                               '     lz+=',zmax*Retau
+      write(*,'(2X,62A)')('-',i=1,62)
       !
-      print*,' ** channel grid generated'
+      write(*,'(A)')'  ** channel grid generated'
       !
     endif
     !

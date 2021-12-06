@@ -1,12 +1,12 @@
 ############################################################
-#               control file for ASTRR code                #
+#               control file for ASTR  code                #
 ############################################################
 
 # lwrite,lavg                : switch for IO and on-fly sta
 f,f,f
 
-# maxstep,nwrite,nlstep,navg : parameters
-100000000,1000,10,10,20
+# maxstep,nwrite,ninst,nlstep,navg : parameters
+1,100,50,1,50
 
 # deltat                    : time step
 7.5d-4
