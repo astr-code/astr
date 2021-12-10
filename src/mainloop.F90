@@ -84,6 +84,8 @@ module mainloop
       !
     enddo
     !
+    call timerept
+    !
     ctime(1)=ptime()-time_start
     !
     ! call errest

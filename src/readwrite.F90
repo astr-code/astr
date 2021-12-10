@@ -1428,6 +1428,7 @@ module readwrite
       !
       outfilename='outdat/flowfield'//stepname//'.h5'
     else
+      stepname=''
       outfilename='outdat/flowfield.h5'
     endif
     !
@@ -1655,6 +1656,17 @@ module readwrite
         print*,' !! error with opening file unit:',fh
       endif
     enddo
+    !
+    if(ndims==1) then
+      !
+      open(18,file='outdat/profile'//trim(stepname)//mpirankname//'.dat')
+      write(18,"(5(1X,A15))")'x','ro','u','p','t'
+      write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
+                                  prs(i,0,0),tmp(i,0,0),i=0,im)
+      close(18)
+      print*,' << outdat/profile',trim(stepname),mpirankname,'.dat'
+      !
+    endif
     !
     ! open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
     ! write(18,"(5(1X,A15))")'x','ro','u','p','t'
@@ -1926,7 +1938,7 @@ module readwrite
   subroutine timerept
     !
     use commvar, only : nstep,maxstep,ctime,flowtype,conschm,          &
-                        difschm,rkscheme,ia,ja,ka
+                        difschm,rkscheme,ia,ja,ka,preptime
     use parallel,only : mpirankmax
     !
     ! local data
@@ -1938,6 +1950,8 @@ module readwrite
     if(lio) then
       !
       if(linit) then
+        !
+        preptime=ptime()-preptime
         !
         inquire(file='report.txt', exist=lexist)
         !
@@ -1965,6 +1979,7 @@ module readwrite
         write(hand_rp,'(4(A,I0))')'    grid size: ',ia,' x ',ja,' x ', &
                                            ka,' = ',(ia+1)*(ja+1)*(ka+1)
         write(hand_rp,'(1(A,I0))')'     mpi size: ',mpirankmax+1
+        write(hand_rp,'(2X,A,E13.6E2)')'time cost for preparation : ',preptime
         !
         linit=.false.
         !
@@ -1997,7 +2012,9 @@ module readwrite
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
       !
-      if(nstep==maxstep) then
+      flush(hand_rp)
+      !
+      if(nstep>=maxstep) then
         close(hand_rp)
         print*,' << report.txt'
       endif

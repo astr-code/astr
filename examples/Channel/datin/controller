@@ -6,7 +6,29 @@
 f,f,f
 
 # maxstep,nwrite,ninst,nlstep,navg : parameters
-1,100,50,1,50
+10,100,50,1,50
 
 # deltat                    : time step
 7.5d-4
+ 
+#+---------------+-----------------------------------------+
+#|        lwrite | to output flowfield sequence            |
+#+---------------+-----------------------------------------+
+#|        lwslce | to output flowfield at given i/j/k cut  |
+#|               | , slice.dat will be required to define  |
+#|               |  i/j/k position                         |
+#+---------------+-----------------------------------------+
+#|          lavg | to calculate statistics and also output |
+#|               | meanflow, 2order and 3order files.      |
+#+---------------+-----------------------------------------+
+#|        nwrite | frequency of outputting flow field and  |
+#|               | checkpoint                              |
+#+---------------+-----------------------------------------+
+#|         ninst | frequency of writing slices             |
+#+---------------+-----------------------------------------+
+#|        nlstep | frequency of updating log file          |
+#+---------------+-----------------------------------------+
+#|          navg | frequency of calculating statistics     |
+#+---------------+-----------------------------------------+
+#|        deltat | the time step                           |
+#+---------------+-----------------------------------------+

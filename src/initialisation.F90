@@ -485,6 +485,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine shuosherini
     !
+    use commvar,  only: mach
     use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
     use fludyna,  only: thermal
     !
@@ -502,6 +503,8 @@ module initialisation
         rho(i,j,k)  =3.857143d0
         vel(i,j,k,1)=2.629369d0
         prs(i,j,k)  =10.33333d0
+        !
+        !
       else
         rho(i,j,k)  =1.d0+0.2d0*sin(5.d0*xc) 
         vel(i,j,k,1)=0.d0

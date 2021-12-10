@@ -2049,6 +2049,7 @@ module commfunc
       !
       cc(1,dim)=1.d0
     else
+      print*,'ntype=',ntype
       print*, ' !! error in subroutine ptds_ini !'
       stop
     end if

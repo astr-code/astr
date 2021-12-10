@@ -114,6 +114,8 @@ module parallel
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine mpiinitial
     !
+    use commvar, only : preptime
+    !
     integer :: ierr,namelen
     !
     call mpi_init(ierr)
@@ -139,6 +141,8 @@ module parallel
     end if
     !
     mpitag=100
+    !
+    preptime=ptime()
     !
     call mpi_barrier(mpi_comm_world,ierr)
     !
@@ -564,46 +568,64 @@ module parallel
       is=0
       ie=im
       !
-      if(irk==0) then
-        mpileft=krk*(isize*jsize)+jrk*isize+irkm
-        mpiright=krk*(isize*jsize)+jrk*isize+irk+1
-      elseif(irk==irkm) then
-        mpileft=krk*(isize*jsize)+jrk*isize+irk-1
-        mpiright=krk*(isize*jsize)+jrk*isize+0
+      if(isize==1) then
+        !
+        mpileft =MPI_PROC_NULL
+        mpiright=MPI_PROC_NULL
+        !
       else
-        mpileft=krk*(isize*jsize)+jrk*isize+irk-1
-        mpiright=krk*(isize*jsize)+jrk*isize+irk+1
-      end if
+        !
+        if(irk==0) then
+          mpileft=krk*(isize*jsize)+jrk*isize+irkm
+          mpiright=krk*(isize*jsize)+jrk*isize+irk+1
+        elseif(irk==irkm) then
+          mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+          mpiright=krk*(isize*jsize)+jrk*isize+0
+        else
+          mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+          mpiright=krk*(isize*jsize)+jrk*isize+irk+1
+        end if
+        !
+      endif
       !
       npdci=3
       !
     else
       !
-      if(irk==0) then
-        is=1
-        ie=im
+      if(isize==1) then
         !
-        npdci=1
-        !
-        mpileft=MPI_PROC_NULL
-        mpiright=krk*(isize*jsize)+jrk*isize+irk+1
-      elseif(irk==irkm) then
-        is=0
-        ie=im-1
-        !
-        npdci=2
-        mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+        mpileft =MPI_PROC_NULL
         mpiright=MPI_PROC_NULL
+        !
       else
-        is=0
-        ie=im
         !
-        npdci=3
+        if(irk==0) then
+          is=1
+          ie=im
+          !
+          npdci=1
+          !
+          mpileft=MPI_PROC_NULL
+          mpiright=krk*(isize*jsize)+jrk*isize+irk+1
+        elseif(irk==irkm) then
+          is=0
+          ie=im-1
+          !
+          npdci=2
+          mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+          mpiright=MPI_PROC_NULL
+        else
+          is=0
+          ie=im
+          !
+          npdci=3
+          !
+          mpileft =krk*(isize*jsize)+jrk*isize+irk-1
+          mpiright=krk*(isize*jsize)+jrk*isize+irk+1
+        end if
         !
-        mpileft =krk*(isize*jsize)+jrk*isize+irk-1
-        mpiright=krk*(isize*jsize)+jrk*isize+irk+1
-      end if
-      !
+      endif
+        !
     end if
     !
     if(ljhomo) then
@@ -1946,60 +1968,64 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)*hm*3
-    !
-    allocate( sendbuf1(1:hm,0:jm,0:km,1:3),                            &
-              sendbuf2(1:hm,0:jm,0:km,1:3),                            &
-              recvbuf1(1:hm,0:jm,0:km,1:3),                            &
-              recvbuf2(1:hm,0:jm,0:km,1:3)                             )
-    !
-    ! pack the left/right send buffer
-    do n=1,hm
-      sendbuf1(n,0:jm,0:km,1:3)=x(n,0:jm,0:km,1:3)   -x(0,0:jm,0:km,1:3)
-      sendbuf2(n,0:jm,0:km,1:3)=x(im-n,0:jm,0:km,1:3)-x(im,0:jm,0:km,1:3)
-    enddo
-    !
-    ! message passing
-    call mpi_sendrecv(sendbuf1, ncou, mpi_real8, mpileft,  mpitag,     &
-                      recvbuf1, ncou, mpi_real8, mpiright, mpitag,     &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    call mpi_sendrecv(sendbuf2, ncou, mpi_real8, mpiright, mpitag,    &
-                      recvbuf2, ncou, mpi_real8, mpileft,  mpitag,     &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    !! unpack the received left the packet
-    if(mpileft==MPI_PROC_NULL) then
+    if(isize>1) then
       !
+      ncou=(jm+1)*(km+1)*hm*3
+      !
+      allocate( sendbuf1(1:hm,0:jm,0:km,1:3),                            &
+                sendbuf2(1:hm,0:jm,0:km,1:3),                            &
+                recvbuf1(1:hm,0:jm,0:km,1:3),                            &
+                recvbuf2(1:hm,0:jm,0:km,1:3)                             )
+      !
+      ! pack the left/right send buffer
       do n=1,hm
-        x(-n,0:jm,0:km,1:3)=2.d0*x(0,0:jm,0:km,1:3)-x(n,0:jm,0:km,1:3) ! even
+        sendbuf1(n,0:jm,0:km,1:3)=x(n,0:jm,0:km,1:3)   -x(0,0:jm,0:km,1:3)
+        sendbuf2(n,0:jm,0:km,1:3)=x(im-n,0:jm,0:km,1:3)-x(im,0:jm,0:km,1:3)
       enddo
       !
-    else
+      ! message passing
+      call mpi_sendrecv(sendbuf1, ncou, mpi_real8, mpileft,  mpitag,     &
+                        recvbuf1, ncou, mpi_real8, mpiright, mpitag,     &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
       !
-      do n=1,hm
-        x(-n,0:jm,0:km,1:3)=recvbuf2(n,0:jm,0:km,1:3)+x(0,0:jm,0:km,1:3)
-      enddo
+      call mpi_sendrecv(sendbuf2, ncou, mpi_real8, mpiright, mpitag,    &
+                        recvbuf2, ncou, mpi_real8, mpileft,  mpitag,     &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
       !
-    end if
-    !
-    ! unpack the received right the packet
-    if(mpiright==MPI_PROC_NULL) then
+      !! unpack the received left the packet
+      if(mpileft==MPI_PROC_NULL) then
+        !
+        do n=1,hm
+          x(-n,0:jm,0:km,1:3)=2.d0*x(0,0:jm,0:km,1:3)-x(n,0:jm,0:km,1:3) ! even
+        enddo
+        !
+      else
+        !
+        do n=1,hm
+          x(-n,0:jm,0:km,1:3)=recvbuf2(n,0:jm,0:km,1:3)+x(0,0:jm,0:km,1:3)
+        enddo
+        !
+      end if
       !
-      do n=1,hm
-        x(im+n,0:jm,0:km,1:3)=2.d0*x(im,0:jm,0:km,1:3)-x(im-n,0:jm,0:km,1:3)
-      enddo
+      ! unpack the received right the packet
+      if(mpiright==MPI_PROC_NULL) then
+        !
+        do n=1,hm
+          x(im+n,0:jm,0:km,1:3)=2.d0*x(im,0:jm,0:km,1:3)-x(im-n,0:jm,0:km,1:3)
+        enddo
+        !
+      else
+        do n=1,hm
+          x(im+n,0:jm,0:km,1:3)=recvbuf1(n,0:jm,0:km,1:3)+x(im,0:jm,0:km,1:3)
+        enddo
+        !
+      end if
       !
-    else
-      do n=1,hm
-        x(im+n,0:jm,0:km,1:3)=recvbuf1(n,0:jm,0:km,1:3)+x(im,0:jm,0:km,1:3)
-      enddo
+      deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
       !
-    end if
-    !
-    deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
+    endif
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2192,47 +2218,53 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)*hm
-    !
-    allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
-              rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      ! pack the left send buffer
-      sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+    if(isize==1) then
+      !
+    else
+      !
+      ncou=(jm+1)*(km+1)*hm
+      !
+      allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
+                rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+      endif
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send buffer
+        sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_logical,mpileft, mpitag,            &
+                        rbuf1,ncou,mpi_logical,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_logical,mpiright,mpitag,            &
+                        rbuf2,ncou,mpi_logical,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
+        !
+      end if
+        !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
+        !
+        ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
+        !                        rbuf2(0,0:jm,0:km) )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !
     endif
-    if(mpiright .ne. MPI_PROC_NULL) then
-      ! pack the right send buffer
-      sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
-    endif
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_logical,mpileft, mpitag,            &
-                      rbuf1,ncou,mpi_logical,mpiright,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_logical,mpiright,mpitag,            &
-                      rbuf2,ncou,mpi_logical,mpileft, mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiright .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from right
-      var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
-      !
-    end if
-      !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from left
-      var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
-      !
-      ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
-      !                        rbuf2(0,0:jm,0:km) )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -2398,47 +2430,53 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)*hm
-    !
-    allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
-              rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      ! pack the left send buffer
-      sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+    if(isize==1) then
+      !
+    else
+      !
+      ncou=(jm+1)*(km+1)*hm
+      !
+      allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
+                rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+      endif
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send buffer
+        sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_integer,mpileft, mpitag,            &
+                        rbuf1,ncou,mpi_integer,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_integer,mpiright,mpitag,            &
+                        rbuf2,ncou,mpi_integer,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
+        !
+      end if
+        !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
+        !
+        ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
+        !                        rbuf2(0,0:jm,0:km) )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !
     endif
-    if(mpiright .ne. MPI_PROC_NULL) then
-      ! pack the right send buffer
-      sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
-    endif
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_integer,mpileft, mpitag,            &
-                      rbuf1,ncou,mpi_integer,mpiright,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_integer,mpiright,mpitag,            &
-                      rbuf2,ncou,mpi_integer,mpileft, mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiright .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from right
-      var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
-      !
-    end if
-      !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from left
-      var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
-      !
-      ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
-      !                        rbuf2(0,0:jm,0:km) )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -2604,47 +2642,55 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)*hm
-    !
-    allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
-              rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      ! pack the left send buffer
-      sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+    if(isize==1) then
+      !
+
+      !
+    else
+      !
+      ncou=(jm+1)*(km+1)*hm
+      !
+      allocate( sbuf1(1:hm, 0:jm,0:km),sbuf2(1:hm, 0:jm,0:km),           &
+                rbuf1(1:hm, 0:jm,0:km),rbuf2(-hm:-1,0:jm,0:km) )
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbuf1(1:hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+      endif
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send buffer
+        sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
+                        rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
+                        rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
+        !
+      end if
+        !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
+        !
+        ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
+        !                        rbuf2(0,0:jm,0:km) )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !
     endif
-    if(mpiright .ne. MPI_PROC_NULL) then
-      ! pack the right send buffer
-      sbuf2(1:hm,0:jm,0:km)=var(im-hm:im-1,0:jm,0:km)
-    endif
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
-                      rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
-                      rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiright .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from right
-      var(im+1:im+hm,0:jm,0:km)=rbuf1(1:hm,0:jm,0:km)
-      !
-    end if
-      !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from left
-      var(-hm:-1,0:jm,0:km)=rbuf2(-hm:-1,0:jm,0:km)
-      !
-      ! var(0,0:jm,0:km)=0.5d0*( var(0,0:jm,0:km) +                      &
-      !                        rbuf2(0,0:jm,0:km) )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -2811,44 +2857,47 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)
-    !
-    allocate( sbuf1(0:jm,0:km),sbuf2(0:jm,0:km),           &
-              rbuf1(0:jm,0:km),rbuf2(0:jm,0:km) )
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      ! pack the left send buffer
-      sbuf1(0:jm,0:km)=var(0,0:jm,0:km)
+    if(isize==1) then
+    else 
+      ncou=(jm+1)*(km+1)
+      !
+      allocate( sbuf1(0:jm,0:km),sbuf2(0:jm,0:km),           &
+                rbuf1(0:jm,0:km),rbuf2(0:jm,0:km) )
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbuf1(0:jm,0:km)=var(0,0:jm,0:km)
+      endif
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send buffer
+        sbuf2(0:jm,0:km)=var(im,0:jm,0:km)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
+                        rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
+                        rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        var(im,0:jm,0:km)=0.5d0*(var(im,0:jm,0:km)+rbuf1(0:jm,0:km))
+        !
+      end if
+        !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        var(0,0:jm,0:km)=0.5d0*(var(0,0:jm,0:km)+rbuf2(0:jm,0:km) )
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
     endif
-    if(mpiright .ne. MPI_PROC_NULL) then
-      ! pack the right send buffer
-      sbuf2(0:jm,0:km)=var(im,0:jm,0:km)
-    endif
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
-                      rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
-                      rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiright .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from right
-      var(im,0:jm,0:km)=0.5d0*(var(im,0:jm,0:km)+rbuf1(0:jm,0:km))
-      !
-    end if
-      !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from left
-      var(0,0:jm,0:km)=0.5d0*(var(0,0:jm,0:km)+rbuf2(0:jm,0:km) )
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -3014,47 +3063,53 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! Message pass in i direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      ncou=(jm+1)*(km+1)*nx*hm
-      !
-      allocate( sbuf1(1:hm, 0:jm,0:km,1:nx),                        &
-                sbuf2(1:hm, 0:jm,0:km,1:nx),                        &
-                rbuf1(1:hm, 0:jm,0:km,1:nx),                        &
-                rbuf2(-hm:-1,0:jm,0:km,1:nx) )
-      !
-      if(mpileft .ne. MPI_PROC_NULL) then
-        ! pack the left send buffer
-        sbuf1(1:hm,0:jm,0:km,:)=var(1:hm,0:jm,0:km,:)
+      if(isize==1) then
+        !
+      else
+        !
+        ncou=(jm+1)*(km+1)*nx*hm
+        !
+        allocate( sbuf1(1:hm, 0:jm,0:km,1:nx),                        &
+                  sbuf2(1:hm, 0:jm,0:km,1:nx),                        &
+                  rbuf1(1:hm, 0:jm,0:km,1:nx),                        &
+                  rbuf2(-hm:-1,0:jm,0:km,1:nx) )
+        !
+        if(mpileft .ne. MPI_PROC_NULL) then
+          ! pack the left send buffer
+          sbuf1(1:hm,0:jm,0:km,:)=var(1:hm,0:jm,0:km,:)
+        endif
+        if(mpiright .ne. MPI_PROC_NULL) then
+          ! pack the right send buffer
+          sbuf2(1:hm,0:jm,0:km,:)=var(im-hm:im-1,0:jm,0:km,:)
+        endif
+        !
+        ! Message passing
+        call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
+                          rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
+                                                 mpi_comm_world,status,ierr)
+        mpitag=mpitag+1
+        call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
+                          rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
+                                                 mpi_comm_world,status,ierr)
+        mpitag=mpitag+1
+        !
+        if(mpiright .ne. MPI_PROC_NULL) then
+          !
+          ! unpack the received the packet from right
+          var(im+1:im+hm,0:jm,0:km,:)=rbuf1(1:hm,0:jm,0:km,:)
+          !
+        end if
+          !
+        if(mpileft .ne. MPI_PROC_NULL) then
+          !
+          ! unpack the received the packet from left
+          var(-hm:-1,0:jm,0:km,:)=rbuf2(-hm:-1,0:jm,0:km,:)
+          !
+        end if
+        !
+        deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+        !
       endif
-      if(mpiright .ne. MPI_PROC_NULL) then
-        ! pack the right send buffer
-        sbuf2(1:hm,0:jm,0:km,:)=var(im-hm:im-1,0:jm,0:km,:)
-      endif
-      !
-      ! Message passing
-      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
-                        rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
-                                               mpi_comm_world,status,ierr)
-      mpitag=mpitag+1
-      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
-                        rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
-                                               mpi_comm_world,status,ierr)
-      mpitag=mpitag+1
-      !
-      if(mpiright .ne. MPI_PROC_NULL) then
-        !
-        ! unpack the received the packet from right
-        var(im+1:im+hm,0:jm,0:km,:)=rbuf1(1:hm,0:jm,0:km,:)
-        !
-      end if
-        !
-      if(mpileft .ne. MPI_PROC_NULL) then
-        !
-        ! unpack the received the packet from left
-        var(-hm:-1,0:jm,0:km,:)=rbuf2(-hm:-1,0:jm,0:km,:)
-        !
-      end if
-      !
-      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
       !
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! Finish message pass in i direction.
@@ -3236,47 +3291,53 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)*nx*mx*hm
-    !
-    allocate( sbuf1(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
-              sbuf2(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
-              rbuf1(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
-              rbuf2(-hm:-1,0:jm,0:km,1:nx,1:mx) )
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      ! pack the left send buffer
-      sbuf1(1:hm,0:jm,0:km,:,:)=var(1:hm,0:jm,0:km,:,:)
+    if(isize==1) then
+      !
+    else
+      !
+      ncou=(jm+1)*(km+1)*nx*mx*hm
+      !
+      allocate( sbuf1(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
+                sbuf2(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
+                rbuf1(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
+                rbuf2(-hm:-1,0:jm,0:km,1:nx,1:mx) )
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbuf1(1:hm,0:jm,0:km,:,:)=var(1:hm,0:jm,0:km,:,:)
+      endif
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send buffer
+        sbuf2(1:hm,0:jm,0:km,:,:)=var(im-hm:im-1,0:jm,0:km,:,:)
+      endif
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
+                        rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
+                        rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        var(im+1:im+hm,0:jm,0:km,:,:)=rbuf1(1:hm,0:jm,0:km,:,:)
+        !
+      end if
+        !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        var(-hm:-1,0:jm,0:km,:,:)=rbuf2(-hm:-1,0:jm,0:km,:,:)
+        !
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !
     endif
-    if(mpiright .ne. MPI_PROC_NULL) then
-      ! pack the right send buffer
-      sbuf2(1:hm,0:jm,0:km,:,:)=var(im-hm:im-1,0:jm,0:km,:,:)
-    endif
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
-                      rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
-                      rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiright .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from right
-      var(im+1:im+hm,0:jm,0:km,:,:)=rbuf1(1:hm,0:jm,0:km,:,:)
-      !
-    end if
-      !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from left
-      var(-hm:-1,0:jm,0:km,:,:)=rbuf2(-hm:-1,0:jm,0:km,:,:)
-      !
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -3447,93 +3508,97 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ncou=(jm+1)*(km+1)*numq*(hm+1)
-    !
-    allocate( sbuf1(0:hm, 0:jm,0:km,1:numq),                        &
-              sbuf2(0:hm, 0:jm,0:km,1:numq),                        &
-              rbuf1(0:hm, 0:jm,0:km,1:numq),                        &
-              rbuf2(-hm:0,0:jm,0:km,1:numq) )
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      ! pack the left send buffer
-      sbuf1(0:hm,0:jm,0:km,:)=q(0:hm,0:jm,0:km,:)
-    endif
-    if(mpiright .ne. MPI_PROC_NULL) then
-      ! pack the right send buffer
-      sbuf2(0:hm,0:jm,0:km,:)=q(im-hm:im,0:jm,0:km,:)
-    endif
-    !
-    ! Message passing
-    call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
-                      rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
-                      rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
-                                             mpi_comm_world,status,ierr)
-    mpitag=mpitag+1
-    !
-    if(mpiright .ne. MPI_PROC_NULL) then
+    if(isize==1) then
+    else
+      ncou=(jm+1)*(km+1)*numq*(hm+1)
       !
-      ! unpack the received the packet from right
-      q(im+1:im+hm,0:jm,0:km,:)=rbuf1(1:hm,0:jm,0:km,:)
+      allocate( sbuf1(0:hm, 0:jm,0:km,1:numq),                        &
+                sbuf2(0:hm, 0:jm,0:km,1:numq),                        &
+                rbuf1(0:hm, 0:jm,0:km,1:numq),                        &
+                rbuf2(-hm:0,0:jm,0:km,1:numq) )
       !
-      q(im,0:jm,0:km,:)=0.5d0*( q(im,0:jm,0:km,:) +            &
-                                rbuf1(0,0:jm,0:km,:) )
-      !
-      if(trim(turbmode)=='k-omega') then
-        call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
-                                     density=rho(im:im+hm,0:jm,0:km),  &
-                                    velocity=vel(im:im+hm,0:jm,0:km,:),&
-                                    pressure=prs(im:im+hm,0:jm,0:km),  &
-                                 temperature=tmp(im:im+hm,0:jm,0:km),  &
-                                     species=spc(im:im+hm,0:jm,0:km,:),&
-                                         tke=tke(im:im+hm,0:jm,0:km),  &
-                                       omega=omg(im:im+hm,0:jm,0:km) )
-      elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
-        call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
-                                     density=rho(im:im+hm,0:jm,0:km),  &
-                                    velocity=vel(im:im+hm,0:jm,0:km,:),&
-                                    pressure=prs(im:im+hm,0:jm,0:km),  &
-                                 temperature=tmp(im:im+hm,0:jm,0:km),  &
-                                     species=spc(im:im+hm,0:jm,0:km,:) )
-      else
-        stop ' !! ERROR 1 turbmode @ qswap'
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbuf1(0:hm,0:jm,0:km,:)=q(0:hm,0:jm,0:km,:)
       endif
-      ! 
-    end if
-    !
-    if(mpileft .ne. MPI_PROC_NULL) then
-      !
-      ! unpack the received the packet from left
-      q(-hm:-1,0:jm,0:km,:)=rbuf2(-hm:-1,0:jm,0:km,:)
-      !
-      q(0,0:jm,0:km,:)=0.5d0*( q(0,0:jm,0:km,:) +              &
-                               rbuf2(0,0:jm,0:km,:) )
-      !
-      if(trim(turbmode)=='k-omega') then
-        call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
-                                       density=rho(-hm:0,0:jm,0:km),   &
-                                      velocity=vel(-hm:0,0:jm,0:km,:), &
-                                      pressure=prs(-hm:0,0:jm,0:km),   &
-                                   temperature=tmp(-hm:0,0:jm,0:km),   &
-                                       species=spc(-hm:0,0:jm,0:km,:), &
-                                           tke=tke(-hm:0,0:jm,0:km),   &
-                                         omega=omg(-hm:0,0:jm,0:km)    )
-      elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
-        call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
-                                       density=rho(-hm:0,0:jm,0:km),   &
-                                      velocity=vel(-hm:0,0:jm,0:km,:), &
-                                      pressure=prs(-hm:0,0:jm,0:km),   &
-                                   temperature=tmp(-hm:0,0:jm,0:km),   &
-                                       species=spc(-hm:0,0:jm,0:km,:)  )
-      else
-        stop ' !! ERROR 2 turbmode @ qswap'
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send buffer
+        sbuf2(0:hm,0:jm,0:km,:)=q(im-hm:im,0:jm,0:km,:)
       endif
-      ! 
-    end if
-    !
-    deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !
+      ! Message passing
+      call mpi_sendrecv(sbuf1,ncou,mpi_real8,mpileft, mpitag,            &
+                        rbuf1,ncou,mpi_real8,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbuf2,ncou,mpi_real8,mpiright,mpitag,            &
+                        rbuf2,ncou,mpi_real8,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        q(im+1:im+hm,0:jm,0:km,:)=rbuf1(1:hm,0:jm,0:km,:)
+        !
+        q(im,0:jm,0:km,:)=0.5d0*( q(im,0:jm,0:km,:) +            &
+                                  rbuf1(0,0:jm,0:km,:) )
+        !
+        if(trim(turbmode)=='k-omega') then
+          call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
+                                       density=rho(im:im+hm,0:jm,0:km),  &
+                                      velocity=vel(im:im+hm,0:jm,0:km,:),&
+                                      pressure=prs(im:im+hm,0:jm,0:km),  &
+                                   temperature=tmp(im:im+hm,0:jm,0:km),  &
+                                       species=spc(im:im+hm,0:jm,0:km,:),&
+                                           tke=tke(im:im+hm,0:jm,0:km),  &
+                                         omega=omg(im:im+hm,0:jm,0:km) )
+        elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
+          call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
+                                       density=rho(im:im+hm,0:jm,0:km),  &
+                                      velocity=vel(im:im+hm,0:jm,0:km,:),&
+                                      pressure=prs(im:im+hm,0:jm,0:km),  &
+                                   temperature=tmp(im:im+hm,0:jm,0:km),  &
+                                       species=spc(im:im+hm,0:jm,0:km,:) )
+        else
+          stop ' !! ERROR 1 turbmode @ qswap'
+        endif
+        ! 
+      end if
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        q(-hm:-1,0:jm,0:km,:)=rbuf2(-hm:-1,0:jm,0:km,:)
+        !
+        q(0,0:jm,0:km,:)=0.5d0*( q(0,0:jm,0:km,:) +              &
+                                 rbuf2(0,0:jm,0:km,:) )
+        !
+        if(trim(turbmode)=='k-omega') then
+          call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
+                                         density=rho(-hm:0,0:jm,0:km),   &
+                                        velocity=vel(-hm:0,0:jm,0:km,:), &
+                                        pressure=prs(-hm:0,0:jm,0:km),   &
+                                     temperature=tmp(-hm:0,0:jm,0:km),   &
+                                         species=spc(-hm:0,0:jm,0:km,:), &
+                                             tke=tke(-hm:0,0:jm,0:km),   &
+                                           omega=omg(-hm:0,0:jm,0:km)    )
+        elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
+          call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
+                                         density=rho(-hm:0,0:jm,0:km),   &
+                                        velocity=vel(-hm:0,0:jm,0:km,:), &
+                                        pressure=prs(-hm:0,0:jm,0:km),   &
+                                     temperature=tmp(-hm:0,0:jm,0:km),   &
+                                         species=spc(-hm:0,0:jm,0:km,:)  )
+        else
+          stop ' !! ERROR 2 turbmode @ qswap'
+        endif
+        ! 
+      end if
+      !
+      deallocate( sbuf1,sbuf2,rbuf1,rbuf2 )
+      !
+    endif
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
