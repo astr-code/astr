@@ -702,7 +702,7 @@ module parallel
           mpifront=(krk+1)*(isize*jsize)+jrk*isize+irk
         elseif(krk==krkm) then
           mpiback=(krk-1)*(isize*jsize)+jrk*isize+irk
-          mpifront=  0.d0*(isize*jsize)+jrk*isize+irk
+          mpifront=     0*(isize*jsize)+jrk*isize+irk
         else
           mpiback= (krk-1)*(isize*jsize)+jrk*isize+irk
           mpifront=(krk+1)*(isize*jsize)+jrk*isize+irk
@@ -2122,12 +2122,12 @@ module parallel
       enddo
       !
       ! Message passing
-      call MPI_SENDRECV(sendbuf1,ncou,MPI_REAL8,mpiback,mpitag,        &
-                        recvbuf1,ncou,MPI_REAL8,mpifront,mpitag,       &
+      call mpi_sendrecv(sendbuf1,ncou,mpi_real8,mpiback,mpitag,        &
+                        recvbuf1,ncou,mpi_real8,mpifront,mpitag,       &
                                              mpi_comm_world,status,ierr)
       mpitag=mpitag+1
-      call MPI_SENDRECV(sendbuf2,ncou,MPI_REAL8,mpifront,mpitag,       &
-                        recvbuf2,ncou,MPI_REAL8,mpiback,mpitag,        &
+      call mpi_sendrecv(sendbuf2,ncou,mpi_real8,mpifront,mpitag,       &
+                        recvbuf2,ncou,mpi_real8,mpiback,mpitag,        &
                                              mpi_comm_world,status,ierr)
       mpitag=mpitag+1
       !
