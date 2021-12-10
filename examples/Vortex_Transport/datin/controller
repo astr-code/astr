@@ -1,0 +1,34 @@
+############################################################
+#               control file for ASTR  code                #
+############################################################
+
+# lwrite,lavg                : switch for IO and on-fly sta
+f,f,f
+
+# maxstep,nwrite,ninst,nlstep,navg : parameters
+100,100,50,1,50
+
+# deltat                    : time step
+5.d-3
+ 
+#+---------------+-----------------------------------------+
+#|        lwrite | to output flowfield sequence            |
+#+---------------+-----------------------------------------+
+#|        lwslce | to output flowfield at given i/j/k cut  |
+#|               | , slice.dat will be required to define  |
+#|               |  i/j/k position                         |
+#+---------------+-----------------------------------------+
+#|          lavg | to calculate statistics and also output |
+#|               | meanflow, 2order and 3order files.      |
+#+---------------+-----------------------------------------+
+#|        nwrite | frequency of outputting flow field and  |
+#|               | checkpoint                              |
+#+---------------+-----------------------------------------+
+#|         ninst | frequency of writing slices             |
+#+---------------+-----------------------------------------+
+#|        nlstep | frequency of updating log file          |
+#+---------------+-----------------------------------------+
+#|          navg | frequency of calculating statistics     |
+#+---------------+-----------------------------------------+
+#|        deltat | the time step                           |
+#+---------------+-----------------------------------------+

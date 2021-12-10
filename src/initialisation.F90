@@ -557,7 +557,7 @@ module initialisation
     real(8) :: xc,yc,radi2,rvor,cvor,var1
     !
     xc=10.d0
-    yc=10.d0
+    yc=5.d0
     rvor=0.7d0 
     cvor=0.1d0*rvor
     !
