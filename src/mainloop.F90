@@ -32,12 +32,13 @@ module mainloop
   subroutine steploop
     !
     use commvar,  only: maxstep,time,deltat,nstep,nwrite,ctime,        &
-                        nlstep,rkscheme
+                        nlstep,rkscheme,nsrpt
     use readwrite,only: readcont,timerept
     use commcal,  only: cflcal
     !
     ! local data
-    real(8) :: time_start,time_beg
+    real(8) :: time_start,time_beg,time_next_step
+    integer :: hours,minus,secod
     logical,save :: firstcall = .true.
     !
     time_start=ptime()
@@ -70,7 +71,25 @@ module mainloop
         !
         call cflcal(deltat)
         !
-        if(lio) write(*,'(A,I0)')'  ** next dumpping nstep: ',nstep+nwrite
+        if(lio) then
+          !
+          write(*,'(A,I0)',advance='no')'  ** next checkpoint at step : ',nstep+nwrite
+          !
+          if(loop_counter==0) then
+            write(*,*)''
+          else
+            time_next_step=(ctime(2)-ctime(6))*dble(nwrite)/dble(nstep-nsrpt)
+            hours=int(time_next_step/3600.d0)
+            minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
+            secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
+            !
+            ! print*,ctime(2),nstep,nsrpt
+            ! print*,time_next_step,hours,minus,secod
+            !
+            write(*,'(3(A,I0))')', after ',hours,' : ',minus,' : ',secod
+          endif
+          !
+        endif
         !
         call timerept
         !
@@ -516,7 +535,7 @@ module mainloop
     if(ltocrash) then
       !
       if(lio) print*,' !! COMPUTATION CRASHED !!'
-      if(lio) print*,' !! FTECH AN BAKUP FLOW FIELD !!'
+      if(lio) print*,' !! FETCH AN BAKUP FLOW FIELD !!'
       !
       call readcheckpoint('bakup')
       !

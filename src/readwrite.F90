@@ -1938,7 +1938,7 @@ module readwrite
   subroutine timerept
     !
     use commvar, only : nstep,maxstep,ctime,flowtype,conschm,          &
-                        difschm,rkscheme,ia,ja,ka,preptime
+                        difschm,rkscheme,ia,ja,ka,preptime,nsrpt
     use parallel,only : mpirankmax
     !
     ! local data
@@ -1986,7 +1986,8 @@ module readwrite
       endif
       !
       write(hand_rp,'(2X,62A)')('-',i=1,62)
-      write(hand_rp,'(2X,A,I7)')'time report at nstep ',nstep
+      write(hand_rp,'(2X,2(A,I7))')'time report from nstep : ',nsrpt,  &
+                                                ' to nstep : ',nstep
       write(hand_rp,'(2X,62A)')('-',i=1,62)
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'total time cost : ',    &
                             ctime(2),' - ',100.d0*ctime(2)/ctime(2),' %'
@@ -2022,6 +2023,7 @@ module readwrite
     endif
     !
     ctime=0.d0
+    nsrpt=nstep
     !
   end subroutine timerept
   !+-------------------------------------------------------------------+

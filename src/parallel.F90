@@ -576,13 +576,13 @@ module parallel
       else
         !
         if(irk==0) then
-          mpileft=krk*(isize*jsize)+jrk*isize+irkm
+          mpileft =krk*(isize*jsize)+jrk*isize+irkm
           mpiright=krk*(isize*jsize)+jrk*isize+irk+1
         elseif(irk==irkm) then
-          mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+          mpileft =krk*(isize*jsize)+jrk*isize+irk-1
           mpiright=krk*(isize*jsize)+jrk*isize+0
         else
-          mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+          mpileft =krk*(isize*jsize)+jrk*isize+irk-1
           mpiright=krk*(isize*jsize)+jrk*isize+irk+1
         end if
         !
@@ -605,14 +605,14 @@ module parallel
           !
           npdci=1
           !
-          mpileft=MPI_PROC_NULL
+          mpileft =MPI_PROC_NULL
           mpiright=krk*(isize*jsize)+jrk*isize+irk+1
         elseif(irk==irkm) then
           is=0
           ie=im-1
           !
           npdci=2
-          mpileft=krk*(isize*jsize)+jrk*isize+irk-1
+          mpileft =krk*(isize*jsize)+jrk*isize+irk-1
           mpiright=MPI_PROC_NULL
         else
           is=0
@@ -672,7 +672,7 @@ module parallel
           npdcj=2
           !
           mpidown=krk*(isize*jsize)+(jrk-1)*isize+irk
-          mpiup=MPI_PROC_NULL
+          mpiup  =MPI_PROC_NULL
         else
           js=0
           je=jm
