@@ -141,7 +141,7 @@ module pp
       write(fh,'(A)')'#               control file for ASTRR code                #'
       write(fh,'(A)')'############################################################'
       write(fh,*)
-      write(fh,'(A)')'# lwrite,lwslic,lavg'
+      write(fh,'(A)')'# lwsequ,lwslic,lavg'
       write(fh,'(A)')'f,f'
       write(fh,*)
       write(fh,'(A)')'# maxstep,nwrite,ninst,nlstep,navg'

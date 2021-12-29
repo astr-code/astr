@@ -116,7 +116,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,turbmode
-    use bc,      only : bctype,twall,turbinf,xrhjump,angshk
+    use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
     ! local data
     character(len=42) :: typedefine
@@ -294,6 +294,13 @@ module readwrite
         elseif(bctype(n)==41) then
           write(*,'(37X,I0,2(A))')bctype(n),' isothermal wall at: ',bcdir(n)
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+        elseif(bctype(n)==411) then
+          write(*,'(23X,I0,2(A))')bctype(n),' slip-nonslip isothermal wall at: ',bcdir(n)
+          write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
+          write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+        elseif(bctype(n)==421) then
+          write(*,'(23X,I0,2(A))')bctype(n),'  slip-nonslip adiabatic wall at: ',bcdir(n)
+          write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
         elseif(bctype(n)==51) then
           write(*,'(44X,I0,2(A))')bctype(n),' farfield at: ',bcdir(n)
           !
@@ -399,7 +406,7 @@ module readwrite
                         bfacmpld,shkcrt,turbmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
-    use bc,      only : bctype,twall,turbinf,xrhjump,angshk
+    use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
     ! local data
     character(len=64) :: inputfile
@@ -453,6 +460,14 @@ module readwrite
         if(bctype(n)==41) then
           backspace(fh)
           read(fh,*)bctype(n),twall(n)
+        endif
+        if(bctype(n)==411) then
+          backspace(fh)
+          read(fh,*)bctype(n),xslip,twall(n)
+        endif
+        if(bctype(n)==421) then
+          backspace(fh)
+          read(fh,*)bctype(n),xslip
         endif
         if(bctype(n)==11) then
           backspace(fh)
@@ -521,6 +536,7 @@ module readwrite
     !
     call bcast(bctype)
     call bcast(twall)
+    call bcast(xslip)
     call bcast(ninit)
     !
     call bcast(spg_imin)
@@ -549,8 +565,8 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readcont
     !
-    use commvar, only: maxstep,nwrite,deltat,nlstep,lwrite,lavg,navg,  &
-                       ninst,lwslic
+    use commvar, only: deltat,lwsequ,lwslic,lavg,maxstep,feqchkpt,     &
+                       feqwsequ,feqslice,feqlist,feqavg
     use parallel,only: bcast
     !
     ! local data
@@ -565,9 +581,9 @@ module readwrite
       !
       open(fh,file=trim(inputfile),action='read')
       read(fh,'(////)')
-      read(fh,*)lwrite,lwslic,lavg
+      read(fh,*)lwsequ,lwslic,lavg
       read(fh,'(/)')
-      read(fh,*)maxstep,nwrite,ninst,nlstep,navg
+      read(fh,*)maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
       read(fh,'(/)')
       read(fh,*)deltat
       close(fh)
@@ -575,14 +591,15 @@ module readwrite
       !
     endif
     !
-    call bcast(lwrite)
+    call bcast(lwsequ)
     call bcast(lwslic)
     call bcast(lavg)
     call bcast(maxstep)
-    call bcast(nwrite)
-    call bcast(nlstep)
-    call bcast(navg)
-    call bcast(ninst)
+    call bcast(feqchkpt)
+    call bcast(feqwsequ)
+    call bcast(feqslice)
+    call bcast(feqlist)
+    call bcast(feqavg)
     call bcast(deltat)
     !
   end subroutine readcont
@@ -1380,49 +1397,32 @@ module readwrite
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is used to dump flow field data                   |
+  !| This subroutine is used to write sequence of flow field.          |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 12-02-2021  | Created by J. Fang @ Warrington                     |
+  !| 28-12-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine output(subtime)
+  subroutine writeflfed(stepsequ,subtime)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwrite,lavg,force,numq,imbroot,limmbou,      &
-                       turbmode
+                       km,lwsequ,turbmode
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
-    use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
-                         rom,u1m,u2m,u3m,pm,tm,                        &
-                         u11,u22,u33,u12,u13,u23,pp,tt,tu1,tu2,tu3,    &
-                         u111,u222,u333,u112,u113,                     &
-                         u122,u133,u223,u233,u123,                     &
-                         u1rem,u2rem,u3rem,pu1,pu2,pu3,                &
-                         sgmam11,sgmam22,sgmam33,                      &
-                         sgmam12,sgmam13,sgmam23,                      &
-                         disspa,predil,visdif1,visdif2,visdif3,        &
-                         massflux,massflux_target
-    use bc,       only : ninflowslice
-    !
     use hdf5io
     !
-    !
     ! arguments
+    integer,intent(in) :: stepsequ
     real(8),intent(inout),optional :: subtime
-    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     ! local data
+    integer :: i,j,k,jsp
     character(len=4) :: stepname
-    character(len=2) :: spname,qname
     character(len=64) :: outfilename
-    integer :: jsp,i,fh,ios,j,k
-    logical :: lfopen
-    real(8) :: time_beg
+    character(len=2) :: spname
+    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
-    if(present(subtime)) time_beg=ptime() 
-    !
-    if(lwrite) then
+    if(lwsequ .and. nstep==stepsequ) then
       write(stepname,'(i4.4)')filenumb
       filenumb=filenumb+1
       !
@@ -1431,32 +1431,6 @@ module readwrite
       stepname=''
       outfilename='outdat/flowfield.h5'
     endif
-    !
-    ! outfilename='outdat/flowfield'//mpirankname
-    ! open(21,file=trim(outfilename),form='unformatted')
-    ! write(21)nstep,time
-    ! write(21)rho,vel,prs,tmp
-    ! write(21)spc
-    ! close(21)
-    ! if(lio) print*,' << ',trim(outfilename)
-    ! !
-    ! outfilename='outdat/qdata'//mpirankname
-    ! open(21,file=trim(outfilename),form='unformatted')
-    ! write(21)nstep
-    ! write(21)q
-    ! close(21)
-    ! if(lio) print*,' << ',trim(outfilename)
-    ! !
-    ! outfilename='outdat/auxiliary'//mpirankname
-    ! open(21,file=trim(outfilename),form='unformatted')
-    ! write(21)nstep,filenumb
-    ! write(21)massflux,massflux_target
-    ! write(21)force
-    ! close(21)
-    ! if(lio) print*,' << ',trim(outfilename)
-    !
-    if(lio) call bakupfile('outdat/auxiliary.h5')
-    if(lio) call bakupfile(trim(outfilename))
     !
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
@@ -1512,10 +1486,205 @@ module readwrite
     endif
     !
     call h5io_end
+    !
     if(lio) then
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
       call h5srite(varname='time',var=time,filename=trim(outfilename))
     endif
+    !
+    if(ndims==1) then
+      !
+      open(18,file='outdat/profile'//trim(stepname)//mpirankname//'.dat')
+      write(18,"(5(1X,A15))")'x','ro','u','p','t'
+      write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
+                                  prs(i,0,0),tmp(i,0,0),i=0,im)
+      close(18)
+      print*,' << outdat/profile',trim(stepname),mpirankname,'.dat'
+      !
+    endif
+    !
+  end subroutine writeflfed
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine writeflfed.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write mean flow statistics.            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-12-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine writemeanflow
+    !
+    use commvar,  only : nstep
+    use statistic,only : nsamples,nstep_sbeg,time_sbeg,                &
+                         rom,u1m,u2m,u3m,pm,tm,                        &
+                         u11,u22,u33,u12,u13,u23,pp,tt,tu1,tu2,tu3,    &
+                         u111,u222,u333,u112,u113,                     &
+                         u122,u133,u223,u233,u123,                     &
+                         u1rem,u2rem,u3rem,pu1,pu2,pu3,                &
+                         sgmam11,sgmam22,sgmam33,                      &
+                         sgmam12,sgmam13,sgmam23,                      &
+                         disspa,predil,visdif1,visdif2,visdif3
+    use hdf5io
+    !
+    if(lio) call bakupfile(file='outdat/meanflow.h5')
+    !
+    call h5io_init('outdat/meanflow.h5',mode='write')
+    call h5write(varname='rom',var=rom(0:im,0:jm,0:km))
+    call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km))
+    call h5write(varname='u2m',var=u2m(0:im,0:jm,0:km))
+    call h5write(varname='u3m',var=u3m(0:im,0:jm,0:km))
+    call h5write(varname='pm ',var=pm (0:im,0:jm,0:km))
+    call h5write(varname='tm ',var=tm (0:im,0:jm,0:km))
+    call h5io_end
+    !
+    if(lio) call bakupfile(file='outdat/2ndsta.h5')
+    call h5io_init('outdat/2ndsta.h5',mode='write')
+    call h5write(varname='u11',var=u11(0:im,0:jm,0:km))
+    call h5write(varname='u22',var=u22(0:im,0:jm,0:km))
+    call h5write(varname='u33',var=u33(0:im,0:jm,0:km))
+    call h5write(varname='u12',var=u12(0:im,0:jm,0:km))
+    call h5write(varname='u13',var=u13(0:im,0:jm,0:km))
+    call h5write(varname='u23',var=u23(0:im,0:jm,0:km))
+    !
+    call h5write(varname='pp', var=pp(0:im,0:jm,0:km))
+    call h5write(varname='tt', var=tt(0:im,0:jm,0:km))
+    call h5write(varname='tu1',var=tu1(0:im,0:jm,0:km))
+    call h5write(varname='tu2',var=tu2(0:im,0:jm,0:km))
+    call h5write(varname='tu3',var=tu2(0:im,0:jm,0:km))
+    call h5io_end
+    !
+    if(lio) call bakupfile(file='outdat/3rdsta.h5')
+    call h5io_init('outdat/3rdsta.h5',mode='write')
+    call h5write(varname='u111',var=u111(0:im,0:jm,0:km))
+    call h5write(varname='u222',var=u222(0:im,0:jm,0:km))
+    call h5write(varname='u333',var=u333(0:im,0:jm,0:km))
+    call h5write(varname='u112',var=u112(0:im,0:jm,0:km))
+    call h5write(varname='u113',var=u113(0:im,0:jm,0:km))
+    call h5write(varname='u122',var=u122(0:im,0:jm,0:km))
+    call h5write(varname='u133',var=u133(0:im,0:jm,0:km))
+    call h5write(varname='u223',var=u223(0:im,0:jm,0:km))
+    call h5write(varname='u233',var=u233(0:im,0:jm,0:km))
+    call h5write(varname='u123',var=u123(0:im,0:jm,0:km))
+    call h5io_end
+    !
+    if(lio) call bakupfile(file='outdat/budget.h5')
+    call h5io_init('outdat/budget.h5',mode='write')
+    call h5write(varname='disspa', var=disspa(0:im,0:jm,0:km))
+    call h5write(varname='predil', var=predil(0:im,0:jm,0:km))
+    call h5write(varname='pu1',    var=pu1(0:im,0:jm,0:km))
+    call h5write(varname='pu2',    var=pu2(0:im,0:jm,0:km))
+    call h5write(varname='pu3',    var=pu3(0:im,0:jm,0:km))
+    call h5write(varname='u1rem',  var=u1rem(0:im,0:jm,0:km))
+    call h5write(varname='u2rem',  var=u2rem(0:im,0:jm,0:km))
+    call h5write(varname='u3rem',  var=u3rem(0:im,0:jm,0:km))
+    call h5write(varname='visdif1',var=visdif1(0:im,0:jm,0:km))
+    call h5write(varname='visdif2',var=visdif2(0:im,0:jm,0:km))
+    call h5write(varname='visdif3',var=visdif3(0:im,0:jm,0:km))
+    call h5write(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km))
+    call h5write(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km))
+    call h5write(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km))
+    call h5write(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km))
+    call h5write(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km))
+    call h5write(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km))
+    call h5io_end
+    !
+    if(lio) then
+      call h5srite(varname='nstep',   var=nstep,   filename='outdat/meanflow.h5')
+      call h5srite(varname='nsamples',var=nsamples,filename='outdat/meanflow.h5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/meanflow.h5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/meanflow.h5')
+      call h5srite(varname='nstep',   var=nstep,   filename='outdat/2ndsta.h5')
+      call h5srite(varname='nsamples',var=nsamples,filename='outdat/2ndsta.h5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/2ndsta.h5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/2ndsta.h5')
+      call h5srite(varname='nstep',   var=nstep,   filename='outdat/3rdsta.h5')
+      call h5srite(varname='nsamples',var=nsamples,filename='outdat/3rdsta.h5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/3rdsta.h5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/3rdsta.h5')
+      call h5srite(varname='nstep',   var=nstep,   filename='outdat/budget.h5')
+      call h5srite(varname='nsamples',var=nsamples,filename='outdat/budget.h5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/budget.h5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/budget.h5')
+    endif
+    !
+  end subroutine writemeanflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine writemeanflow.                          |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to dump all computation data              |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-02-2021  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine writechkpt(stepsequ,subtime)
+    !
+    use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
+                       km,lwsequ,lavg,force,numq,imbroot,limmbou,      &
+                       turbmode
+    use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
+    use models,   only : tke,omg,miut
+    use statistic,only : nsamples,liosta,massflux,massflux_target
+    use bc,       only : ninflowslice
+    !
+    use hdf5io
+    !
+    !
+    ! arguments
+    integer,intent(in) :: stepsequ
+    real(8),intent(inout),optional :: subtime
+    !
+    ! local data
+    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
+    character(len=2) :: spname,qname
+    integer :: jsp,i,fh,ios,j,k
+    logical :: lfopen
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
+    !
+    ! if(lwsequ) then
+    !   write(stepname,'(i4.4)')filenumb
+    !   filenumb=filenumb+1
+    !   !
+    !   outfilename='outdat/flowfield'//stepname//'.h5'
+    ! else
+    !   stepname=''
+    !   outfilename='outdat/flowfield.h5'
+    ! endif
+    !
+    ! outfilename='outdat/flowfield'//mpirankname
+    ! open(21,file=trim(outfilename),form='unformatted')
+    ! write(21)nstep,time
+    ! write(21)rho,vel,prs,tmp
+    ! write(21)spc
+    ! close(21)
+    ! if(lio) print*,' << ',trim(outfilename)
+    ! !
+    ! outfilename='outdat/qdata'//mpirankname
+    ! open(21,file=trim(outfilename),form='unformatted')
+    ! write(21)nstep
+    ! write(21)q
+    ! close(21)
+    ! if(lio) print*,' << ',trim(outfilename)
+    ! !
+    ! outfilename='outdat/auxiliary'//mpirankname
+    ! open(21,file=trim(outfilename),form='unformatted')
+    ! write(21)nstep,filenumb
+    ! write(21)massflux,massflux_target
+    ! write(21)force
+    ! close(21)
+    ! if(lio) print*,' << ',trim(outfilename)
+    !
+    if(lio) call bakupfile('outdat/auxiliary.h5')
+    if(lio) call bakupfile('outdat/flowfield.h5')
+    !
+    call writeflfed(stepsequ)
     !
     ! call h5io_init('outdat/qdata.h5',mode='write')
     ! do jsp=1,numq
@@ -1556,89 +1725,10 @@ module readwrite
     !     print*,x(0,jm,0,1),prs(0,jm,0)
     !     print*,'------------------------------------'
     ! endif
-
+    !
     if(liosta) then
       !
-      if(lio) call bakupfile(file='outdat/meanflow.h5')
-      !
-      call h5io_init('outdat/meanflow.h5',mode='write')
-      call h5write(varname='rom',var=rom(0:im,0:jm,0:km))
-      call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km))
-      call h5write(varname='u2m',var=u2m(0:im,0:jm,0:km))
-      call h5write(varname='u3m',var=u3m(0:im,0:jm,0:km))
-      call h5write(varname='pm ',var=pm (0:im,0:jm,0:km))
-      call h5write(varname='tm ',var=tm (0:im,0:jm,0:km))
-      call h5io_end
-      !
-      if(lio) call bakupfile(file='outdat/2ndsta.h5')
-      call h5io_init('outdat/2ndsta.h5',mode='write')
-      call h5write(varname='u11',var=u11(0:im,0:jm,0:km))
-      call h5write(varname='u22',var=u22(0:im,0:jm,0:km))
-      call h5write(varname='u33',var=u33(0:im,0:jm,0:km))
-      call h5write(varname='u12',var=u12(0:im,0:jm,0:km))
-      call h5write(varname='u13',var=u13(0:im,0:jm,0:km))
-      call h5write(varname='u23',var=u23(0:im,0:jm,0:km))
-      !
-      call h5write(varname='pp', var=pp(0:im,0:jm,0:km))
-      call h5write(varname='tt', var=tt(0:im,0:jm,0:km))
-      call h5write(varname='tu1',var=tu1(0:im,0:jm,0:km))
-      call h5write(varname='tu2',var=tu2(0:im,0:jm,0:km))
-      call h5write(varname='tu3',var=tu2(0:im,0:jm,0:km))
-      call h5io_end
-      !
-      if(lio) call bakupfile(file='outdat/3rdsta.h5')
-      call h5io_init('outdat/3rdsta.h5',mode='write')
-      call h5write(varname='u111',var=u111(0:im,0:jm,0:km))
-      call h5write(varname='u222',var=u222(0:im,0:jm,0:km))
-      call h5write(varname='u333',var=u333(0:im,0:jm,0:km))
-      call h5write(varname='u112',var=u112(0:im,0:jm,0:km))
-      call h5write(varname='u113',var=u113(0:im,0:jm,0:km))
-      call h5write(varname='u122',var=u122(0:im,0:jm,0:km))
-      call h5write(varname='u133',var=u133(0:im,0:jm,0:km))
-      call h5write(varname='u223',var=u223(0:im,0:jm,0:km))
-      call h5write(varname='u233',var=u233(0:im,0:jm,0:km))
-      call h5write(varname='u123',var=u123(0:im,0:jm,0:km))
-      call h5io_end
-      !
-      if(lio) call bakupfile(file='outdat/budget.h5')
-      call h5io_init('outdat/budget.h5',mode='write')
-      call h5write(varname='disspa', var=disspa(0:im,0:jm,0:km))
-      call h5write(varname='predil', var=predil(0:im,0:jm,0:km))
-      call h5write(varname='pu1',    var=pu1(0:im,0:jm,0:km))
-      call h5write(varname='pu2',    var=pu2(0:im,0:jm,0:km))
-      call h5write(varname='pu3',    var=pu3(0:im,0:jm,0:km))
-      call h5write(varname='u1rem',  var=u1rem(0:im,0:jm,0:km))
-      call h5write(varname='u2rem',  var=u2rem(0:im,0:jm,0:km))
-      call h5write(varname='u3rem',  var=u3rem(0:im,0:jm,0:km))
-      call h5write(varname='visdif1',var=visdif1(0:im,0:jm,0:km))
-      call h5write(varname='visdif2',var=visdif2(0:im,0:jm,0:km))
-      call h5write(varname='visdif3',var=visdif3(0:im,0:jm,0:km))
-      call h5write(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km))
-      call h5write(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km))
-      call h5write(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km))
-      call h5write(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km))
-      call h5write(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km))
-      call h5write(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km))
-      call h5io_end
-      !
-      if(lio) then
-        call h5srite(varname='nstep',   var=nstep,   filename='outdat/meanflow.h5')
-        call h5srite(varname='nsamples',var=nsamples,filename='outdat/meanflow.h5')
-        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/meanflow.h5')
-        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/meanflow.h5')
-        call h5srite(varname='nstep',   var=nstep,   filename='outdat/2ndsta.h5')
-        call h5srite(varname='nsamples',var=nsamples,filename='outdat/2ndsta.h5')
-        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/2ndsta.h5')
-        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/2ndsta.h5')
-        call h5srite(varname='nstep',   var=nstep,   filename='outdat/3rdsta.h5')
-        call h5srite(varname='nsamples',var=nsamples,filename='outdat/3rdsta.h5')
-        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/3rdsta.h5')
-        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/3rdsta.h5')
-        call h5srite(varname='nstep',   var=nstep,   filename='outdat/budget.h5')
-        call h5srite(varname='nsamples',var=nsamples,filename='outdat/budget.h5')
-        call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/budget.h5')
-        call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/budget.h5')
-      endif
+      call writemeanflow
       !
     endif
     !
@@ -1657,41 +1747,13 @@ module readwrite
       endif
     enddo
     !
-    if(ndims==1) then
-      !
-      open(18,file='outdat/profile'//trim(stepname)//mpirankname//'.dat')
-      write(18,"(5(1X,A15))")'x','ro','u','p','t'
-      write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
-                                  prs(i,0,0),tmp(i,0,0),i=0,im)
-      close(18)
-      print*,' << outdat/profile',trim(stepname),mpirankname,'.dat'
-      !
-    endif
-    !
-    ! open(18,file='outdat/profile'//stepname//mpirankname//'.dat')
-    ! write(18,"(5(1X,A15))")'x','ro','u','p','t'
-    ! write(18,"(5(1X,E15.7E3))")(x(i,0,0,1),rho(i,0,0),vel(i,0,0,1),  &
-    !                             prs(i,0,0),tmp(i,0,0),i=0,im)
-    ! close(18)
-    ! print*,' << outdat/profile',stepname,mpirankname,'.dat'
-    !
-    ! call tecbin('testout/tecfield'//mpirankname//'.plt',               &
-    !                                           x(0:im,0:jm,0:km,1),'x', &
-    !                                           x(0:im,0:jm,0:km,2),'y', &
-    !                                           x(0:im,0:jm,0:km,3),'z', &
-    !                                         rho(0:im,0:jm,0:km),'ro',  &
-    !                                         vel(0:im,0:jm,0:km,1),'u', &
-    !                                         vel(0:im,0:jm,0:km,2),'v', &
-    !                                         prs(0:im,0:jm,0:km),'p' )
-    !
-    !
     if(present(subtime)) subtime=subtime+ptime()-time_beg 
     !
     return
     !
-  end subroutine output
+  end subroutine writechkpt
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine output.                                 |
+  !| The end of the subroutine writechkpt.                             |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -1945,7 +2007,7 @@ module readwrite
     logical,save :: linit=.true.
     logical :: lexist
     integer :: i
-    integer,save :: hand_rp
+    integer,save :: hand_rp,repsp
     !
     if(lio) then
       !
@@ -1981,12 +2043,14 @@ module readwrite
         write(hand_rp,'(1(A,I0))')'     mpi size: ',mpirankmax+1
         write(hand_rp,'(2X,A,E13.6E2)')'time cost for preparation : ',preptime
         !
+        repsp=0
+        !
         linit=.false.
         !
       endif
       !
       write(hand_rp,'(2X,62A)')('-',i=1,62)
-      write(hand_rp,'(2X,2(A,I7))')'time report from nstep : ',nsrpt,  &
+      write(hand_rp,'(2X,2(A,I7))')'time report from nstep : ',repsp,  &
                                                 ' to nstep : ',nstep
       write(hand_rp,'(2X,62A)')('-',i=1,62)
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'total time cost : ',    &
@@ -2022,8 +2086,8 @@ module readwrite
       !
     endif
     !
+    repsp=nstep
     ctime=0.d0
-    nsrpt=nstep
     !
   end subroutine timerept
   !+-------------------------------------------------------------------+

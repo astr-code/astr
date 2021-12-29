@@ -10,7 +10,7 @@ module mainloop
   use constdef
   use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
                       ptime,irk,jrk,irkm,jrkm
-  use commvar,  only: im,jm,km,ia,ja,ka
+  use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep
   use commarray,only: crinod
   use tecio
   use stlaio,  only: get_unit
@@ -19,6 +19,7 @@ module mainloop
   !
   integer :: loop_counter=0
   integer :: fhand_err
+  integer :: nxtchkpt,nxtwsequ
   !
   contains
   !
@@ -31,8 +32,8 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine steploop
     !
-    use commvar,  only: maxstep,time,deltat,nstep,nwrite,ctime,        &
-                        nlstep,rkscheme,nsrpt
+    use commvar,  only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
+                        rkscheme,nsrpt
     use readwrite,only: readcont,timerept
     use commcal,  only: cflcal
     !
@@ -40,13 +41,20 @@ module mainloop
     real(8) :: time_start,time_beg,time_next_step
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
+    integer,dimension(8) :: value
     !
     time_start=ptime()
     !
     if(firstcall) then
+      !
       crinod=.false.
       firstcall=.false.
+      !
     endif
+    !
+    nxtchkpt=nstep+feqchkpt
+    nxtwsequ=nstep+feqwsequ
+    nsrpt   =nstep
     !
     fhand_err=get_unit()
     open(fhand_err,file='errnode.log')
@@ -65,7 +73,7 @@ module mainloop
       !
       ctime(2)=ctime(2)+ptime()-time_beg
       !
-      if(loop_counter==nwrite .or. loop_counter==0) then
+      if(loop_counter==feqchkpt .or. loop_counter==0) then
         !
         call readcont
         !
@@ -73,20 +81,66 @@ module mainloop
         !
         if(lio) then
           !
-          write(*,'(A,I0)',advance='no')'  ** next checkpoint at step : ',nstep+nwrite
+          write(*,'(A,I0)',advance='no')'  ** next checkpoint at step : ',nxtchkpt
           !
           if(loop_counter==0) then
             write(*,*)''
           else
-            time_next_step=(ctime(2)-ctime(6))*dble(nwrite)/dble(nstep-nsrpt)
+            !
+            time_next_step=(ctime(2)-ctime(6))*dble(feqchkpt)/dble(nstep-nsrpt)
             hours=int(time_next_step/3600.d0)
             minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
             secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
             !
-            ! print*,ctime(2),nstep,nsrpt
-            ! print*,time_next_step,hours,minus,secod
+            write(*,'(3(A,I0),A)',advance='no')', after ',hours,'h:',  &
+                                               minus,'m:',secod,'s'
+            call date_and_time(VALUES=value)
             !
-            write(*,'(3(A,I0))')', after ',hours,' : ',minus,' : ',secod
+            secod=secod+value(7)
+            if(secod>=60) then
+              secod=secod-60
+              minus=minus+1
+            endif
+            minus=minus+value(6)
+            if(minus>=60) then
+              minus=minus-60
+              hours=hours+1
+            endif
+            hours=hours+value(5)
+            if(hours>=24) then
+              hours=hours-24
+            endif
+            !
+            write(*,'(3(A,I0))')', estimated at ',hours,':',minus,':',secod
+            !
+            time_next_step=ctime(2)*dble(maxstep-nstep)/dble(nstep-nsrpt)
+            hours=int(time_next_step/3600.d0)
+            minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
+            secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
+            !
+            write(*,'(3(A,I0),A)',advance='no')'  ** job ends after ', &
+                                        hours,'h:',minus,'m:',secod,'s'
+            call date_and_time(VALUES=value)
+            !
+            secod=secod+value(7)
+            if(secod>=60) then
+              secod=secod-60
+              minus=minus+1
+            endif
+            minus=minus+value(6)
+            if(minus>=60) then
+              minus=minus-60
+              hours=hours+1
+            endif
+            hours=hours+value(5)
+            if(hours>=24) then
+              hours=hours-24
+            endif
+            !
+            write(*,'(3(A,I0))')', estimated at ',hours,':',minus,':',secod
+            !
+            nsrpt=nstep
+            !
           endif
           !
         endif
@@ -124,8 +178,7 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine errest
     !
-    use commvar, only : flowtype,xmin,xmax,ymin,ymax,zmin,zmax,nstep,  &
-                        time
+    use commvar, only : flowtype,xmin,xmax,ymin,ymax,zmin,zmax,time
     use commarray,only: x,vel,rho,prs,spc,tmp,q,acctest_ref
     use parallel, only: psum,pmax,mpirankname
     !
@@ -189,14 +242,12 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine rk3
     !
-    use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep,limmbou,turbmode,    &
-                         ninst,lwslic,lreport
+    use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
+                         lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
+                         feqwsequ,lwslic,lreport
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
-    use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
-    use readwrite,only : output,writemon,writeslice
     use bc,       only : boucon,immbody
     !
     ! logical data
@@ -230,7 +281,7 @@ module mainloop
     !
     do nrk=1,3
       !
-      if( (loop_counter==nwrite .or. loop_counter==0) .and. nrk==1 ) then
+      if( (loop_counter==feqchkpt .or. loop_counter==0) .and. nrk==1 ) then
         lreport=.true.
       else
         lreport=.false.
@@ -254,33 +305,7 @@ module mainloop
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
         enddo
         !
-        call statcal(ctime(5))
-        !
-        call statout
-        !
-        if(nstep==0 .or. loop_counter.ne.0) then
-          ! the first step after reading ehecking out doesn't need to do this
-          !
-          call writemon
-          !
-          if(lavg) then
-            if(mod(nstep,navg)==0) call meanflowcal(ctime(5))
-          else
-            nsamples=0
-            liosta=.false.
-          endif
-          !
-          if(lwslic .and. mod(nstep,ninst)==0) then
-            call writeslice
-          endif
-          !
-        endif
-        !
-        if(loop_counter==nwrite) then
-          !
-          call output(ctime(6))
-          !
-        endif
+        call rkfirst
         !
       endif
       !
@@ -328,14 +353,12 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine rk4
     !
-    use commvar,  only : im,jm,km,numq,deltat,lfilter,nstep,nwrite,    &
-                         ctime,hm,lavg,navg,nstep,limmbou,turbmode,    &
-                         ninst,lwslic
+    use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
+                         lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
+                         feqwsequ,lwslic
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
-    use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
-    use readwrite,only : output,writemon,writeslice
     use bc,       only : boucon,immbody
     !
     !
@@ -387,33 +410,7 @@ module mainloop
           rhsav(0:im,0:jm,0:km,m)=0.d0
         enddo
         !
-        call statcal(ctime(5))
-        !
-        call statout
-        !
-        if(nstep==0 .or. loop_counter.ne.0) then
-          ! the first step after reading ehecking out doesn't need to do this
-          !
-          call writemon
-          !
-          if(lavg) then
-            if(mod(nstep,navg)==0) call meanflowcal(ctime(5))
-          else
-            nsamples=0
-            liosta=.false.
-          endif
-          !
-          if(lwslic .and. mod(nstep,ninst)==0) then
-            call writeslice
-          endif
-          !
-        endif
-        !
-        if(loop_counter==nwrite) then
-          !
-          call output(ctime(6))
-          !
-        endif
+        call rkfirst
         !
       endif
       !
@@ -462,6 +459,78 @@ module mainloop
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to conducte operation in the fist step of rk   |
+  !| temporal advance.                                                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-Dec-2021: Created by J. Fang @ Warrington                      |
+  !+-------------------------------------------------------------------+
+  subroutine rkfirst
+    !
+    use commvar,  only : lavg,lwslic,lwsequ,feqavg,feqchkpt,feqwsequ,  &
+                         feqslice
+    use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
+    use readwrite,only : writechkpt,writemon,writeslice,writeflfed
+    !
+    call statcal(ctime(5))
+    !
+    call statout
+    !
+    if(nstep==0 .or. loop_counter.ne.0) then
+      ! the first step after reading ehecking out doesn't need to do this
+      !
+      call writemon
+      !
+      if(lavg) then
+        if(mod(nstep,feqavg)==0) call meanflowcal(ctime(5))
+      else
+        nsamples=0
+        liosta=.false.
+      endif
+      !
+      if(lwslic .and. mod(nstep,feqslice)==0) then
+        call writeslice
+      endif
+      !
+    endif
+    !
+    ! time to write checkpoint
+    if(nstep==nxtchkpt) then
+      !
+      ! the checkpoint and flowfield may be writen in the same time
+      call writechkpt(nxtwsequ,ctime(6))
+      !
+      nxtchkpt=nstep+feqchkpt
+      !
+      if(lwsequ) then
+        !
+        if(nstep==nxtwsequ) then
+          ! no need to write flow sequence again. This part has been  
+          ! done in writechkpt
+          nxtwsequ=nstep+feqwsequ
+        endif
+        !
+      else
+        nxtwsequ=nstep+feqwsequ
+      endif
+      !
+    endif
+    !
+    if(lwsequ .and. nstep==nxtwsequ) then
+      !
+      call writeflfed(nxtwsequ,ctime(6))
+      !
+      nxtwsequ=nstep+feqwsequ
+      !
+    endif
+    !
+  end subroutine rkfirst
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine rkfirst.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to check if the computational is crashed.      |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -470,7 +539,7 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine crashcheck
     !
-    use commvar,  only: hm,nstep
+    use commvar,  only: hm
     use commarray,only: q,rho,tmp,prs,x,nodestat
     use parallel, only: por
     use fludyna,  only: updateq
@@ -562,7 +631,7 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine crashfix
     !
-    use commvar,   only : numq,nstep,lreport
+    use commvar,   only : numq,lreport
     use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
     use parallel,  only : por,ig0,jg0,kg0,psum
     use fludyna,   only : q2fvar,thermal
@@ -673,7 +742,8 @@ module mainloop
       !
       if(lio) then
         if(step_normal>0) then
-          write(*,'(A,I0,A)')'  ** the comput. been normal for: ',step_normal,' steps'
+          write(*,'(A,I0,A)')'  ** the comput. been normal for: ',     &
+                                                    step_normal,' steps'
         endif
       endif
       !
