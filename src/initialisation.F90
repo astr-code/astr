@@ -111,6 +111,8 @@ module initialisation
     !
     call readcont
     !
+    call readmonc
+    !
     if(lavg) then
       !
       if(nsamples>0) then

@@ -16,6 +16,12 @@ module readwrite
   !
   implicit none
   !
+  integer :: nxtchkpt,nxtwsequ
+  !+---------------------+---------------------------------------------+
+  !|            nxtchkpt | the next nstep to checkpoint.               |
+  !|            nxtwsequ | the next nstep to write flow field.         |
+  !+---------------------+---------------------------------------------+
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -743,6 +749,8 @@ module readwrite
       nmonitor=0
     endif
     !
+    ! call mpistop
+    !
   end subroutine readmonc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readmonc.                               |
@@ -758,7 +766,7 @@ module readwrite
   subroutine writemon
     !
     use commvar, only: nmonitor,imon,nstep,time,pinf
-    use commarray, only : x,rho,vel,prs,tmp
+    use commarray, only : x,rho,vel,prs,tmp,dvel
     !
     ! local data
     integer :: n,i,j,k,ios,ns
@@ -793,10 +801,11 @@ module readwrite
             write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,              &
                                            imon(n,2)+jg0,imon(n,3)+kg0
             write(fh(n),'(A,3(1X,E15.7E3))')'#',x(i,j,k,1:3)
-            write(fh(n),"(A7,1X,A13,6(1X,A20))")'nstep','time',        &
-                                                'u','v','w','ro','p','t'
-            write(*,'(3(A),I0)')'   ** create monitor file ',          &
-                                  trim(filename),' using handle: ',fh(n)
+            write(fh(n),"(A7,1X,A13,15(1X,A20))")'nstep','time',        &
+                        'u','v','w','ro','p','t','dudx','dudy','dudz',  &
+                            'dvdx','dvdy','dvdz','dwdx','dwdy','dwdz'
+            ! write(*,'(3(A),I0)')'   ** create monitor file ',          &
+            !                       trim(filename),' using handle: ',fh(n)
           else
             !
             ios=0
@@ -826,8 +835,9 @@ module readwrite
           i=imon(n,1)
           j=imon(n,2)
           k=imon(n,3)
-          write(fh(n),"(I7,1X,E13.6E2,6(1X,E20.13E2))")nstep,time,     &
-                    vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k)
+          write(fh(n),"(I7,1X,E13.6E2,15(1X,E20.13E2))")nstep,time,     &
+              vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
+              dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         enddo
       endif
       !
@@ -1403,16 +1413,15 @@ module readwrite
   !| -------------                                                     |
   !| 28-12-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writeflfed(stepsequ,subtime)
+  subroutine writeflfed(subtime)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode
+                       km,lwsequ,turbmode,feqwsequ
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use hdf5io
     !
     ! arguments
-    integer,intent(in) :: stepsequ
     real(8),intent(inout),optional :: subtime
     !
     ! local data
@@ -1422,7 +1431,7 @@ module readwrite
     character(len=2) :: spname
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
-    if(lwsequ .and. nstep==stepsequ) then
+    if(lwsequ .and. nstep==nxtwsequ) then
       write(stepname,'(i4.4)')filenumb
       filenumb=filenumb+1
       !
@@ -1502,6 +1511,8 @@ module readwrite
       print*,' << outdat/profile',trim(stepname),mpirankname,'.dat'
       !
     endif
+    !
+    nxtwsequ=nstep+feqwsequ
     !
   end subroutine writeflfed
   !+-------------------------------------------------------------------+
@@ -1626,7 +1637,7 @@ module readwrite
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwsequ,lavg,force,numq,imbroot,limmbou,      &
-                       turbmode
+                       turbmode,feqchkpt
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
@@ -1684,7 +1695,7 @@ module readwrite
     if(lio) call bakupfile('outdat/auxiliary.h5')
     if(lio) call bakupfile('outdat/flowfield.h5')
     !
-    call writeflfed(stepsequ)
+    call writeflfed()
     !
     ! call h5io_init('outdat/qdata.h5',mode='write')
     ! do jsp=1,numq
@@ -1747,6 +1758,8 @@ module readwrite
       endif
     enddo
     !
+    nxtchkpt=nstep+feqchkpt
+    !
     if(present(subtime)) subtime=subtime+ptime()-time_beg 
     !
     return
@@ -1768,7 +1781,7 @@ module readwrite
     use parallel, only: irk_islice,jrk_jslice,krk_kslice,mpi_islice,   &
                         mpi_jslice,mpi_kslice
     use commvar,  only: fnumslic,nstep,time,islice,jslice,kslice,im,jm,km
-    use commarray,only: rho,vel,prs,tmp
+    use commarray,only: rho,vel,prs,tmp,dvel
     use hdf5io
     !
     ! local data
@@ -1799,6 +1812,16 @@ module readwrite
       call h5write(varname='u3',var=vel(i,0:jm,0:km,3),dir='i')
       call h5write(varname='p', var=prs(i,0:jm,0:km)  ,dir='i')
       call h5write(varname='t', var=tmp(i,0:jm,0:km)  ,dir='i')
+      !
+      call h5write(varname='dudx',var=dvel(i,0:jm,0:km,1,1),dir='i')
+      call h5write(varname='dudy',var=dvel(i,0:jm,0:km,1,2),dir='i')
+      call h5write(varname='dudz',var=dvel(i,0:jm,0:km,1,3),dir='i')
+      call h5write(varname='dvdx',var=dvel(i,0:jm,0:km,2,1),dir='i')
+      call h5write(varname='dvdy',var=dvel(i,0:jm,0:km,2,2),dir='i')
+      call h5write(varname='dvdz',var=dvel(i,0:jm,0:km,2,3),dir='i')
+      call h5write(varname='dwdx',var=dvel(i,0:jm,0:km,3,1),dir='i')
+      call h5write(varname='dwdy',var=dvel(i,0:jm,0:km,3,2),dir='i')
+      call h5write(varname='dwdz',var=dvel(i,0:jm,0:km,3,3),dir='i')
       !
       call h5io_end
       !
@@ -1833,6 +1856,16 @@ module readwrite
       call h5write(varname='p', var=prs(0:im,j,0:km)  ,dir='j')
       call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
       !
+      call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='i')
+      call h5write(varname='dudy',var=dvel(0:im,j,0:km,1,2),dir='i')
+      call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='i')
+      call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='i')
+      call h5write(varname='dvdy',var=dvel(0:im,j,0:km,2,2),dir='i')
+      call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='i')
+      call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='i')
+      call h5write(varname='dwdy',var=dvel(0:im,j,0:km,3,2),dir='i')
+      call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='i')
+      !
       call h5io_end
       !
       if(irk==0 .and. krk==0) then
@@ -1865,6 +1898,16 @@ module readwrite
       call h5write(varname='u3',var=vel(0:im,0:jm,k,3),dir='k')
       call h5write(varname='p', var=prs(0:im,0:jm,k)  ,dir='k')
       call h5write(varname='t', var=tmp(0:im,0:jm,k)  ,dir='k')
+      !
+      call h5write(varname='dudx',var=dvel(0:im,0:jm,k,1,1),dir='i')
+      call h5write(varname='dudy',var=dvel(0:im,0:jm,k,1,2),dir='i')
+      call h5write(varname='dudz',var=dvel(0:im,0:jm,k,1,3),dir='i')
+      call h5write(varname='dvdx',var=dvel(0:im,0:jm,k,2,1),dir='i')
+      call h5write(varname='dvdy',var=dvel(0:im,0:jm,k,2,2),dir='i')
+      call h5write(varname='dvdz',var=dvel(0:im,0:jm,k,2,3),dir='i')
+      call h5write(varname='dwdx',var=dvel(0:im,0:jm,k,3,1),dir='i')
+      call h5write(varname='dwdy',var=dvel(0:im,0:jm,k,3,2),dir='i')
+      call h5write(varname='dwdz',var=dvel(0:im,0:jm,k,3,3),dir='i')
       !
       call h5io_end
       !

@@ -19,7 +19,6 @@ module mainloop
   !
   integer :: loop_counter=0
   integer :: fhand_err
-  integer :: nxtchkpt,nxtwsequ
   !
   contains
   !
@@ -34,7 +33,7 @@ module mainloop
     !
     use commvar,  only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
                         rkscheme,nsrpt
-    use readwrite,only: readcont,timerept
+    use readwrite,only: readcont,timerept,nxtchkpt,nxtwsequ
     use commcal,  only: cflcal
     !
     ! local data
@@ -54,6 +53,7 @@ module mainloop
     !
     nxtchkpt=nstep+feqchkpt
     nxtwsequ=nstep+feqwsequ
+    !
     nsrpt   =nstep
     !
     fhand_err=get_unit()
@@ -76,6 +76,8 @@ module mainloop
       if(loop_counter==feqchkpt .or. loop_counter==0) then
         !
         call readcont
+        !
+        nxtchkpt=nstep+feqchkpt
         !
         call cflcal(deltat)
         !
@@ -471,7 +473,8 @@ module mainloop
     use commvar,  only : lavg,lwslic,lwsequ,feqavg,feqchkpt,feqwsequ,  &
                          feqslice
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
-    use readwrite,only : writechkpt,writemon,writeslice,writeflfed
+    use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
+                         nxtchkpt,nxtwsequ
     !
     call statcal(ctime(5))
     !
@@ -501,27 +504,11 @@ module mainloop
       ! the checkpoint and flowfield may be writen in the same time
       call writechkpt(nxtwsequ,ctime(6))
       !
-      nxtchkpt=nstep+feqchkpt
-      !
-      if(lwsequ) then
-        !
-        if(nstep==nxtwsequ) then
-          ! no need to write flow sequence again. This part has been  
-          ! done in writechkpt
-          nxtwsequ=nstep+feqwsequ
-        endif
-        !
-      else
-        nxtwsequ=nstep+feqwsequ
-      endif
-      !
     endif
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       !
-      call writeflfed(nxtwsequ,ctime(6))
-      !
-      nxtwsequ=nstep+feqwsequ
+      call writeflfed(ctime(6))
       !
     endif
     !
