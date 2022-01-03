@@ -556,6 +556,8 @@ module readwrite
     call bcast(xrhjump)
     call bcast(angshk)
     !
+    call readslic
+    !
   end subroutine readinput
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
@@ -620,6 +622,53 @@ module readwrite
   !| -------------                                                     |
   !| 13-07-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
+  subroutine readslic
+    !
+    use commvar, only : islice,jslice,kslice,ia,ja,ka
+    use parallel,only : bcast
+    !
+    ! local data
+    character(len=64) :: inputfile
+    logical :: lexist
+    integer :: fh
+    !
+    if(mpirank==0) then
+      !
+      inputfile='datin/slice.dat'
+      inquire(file=trim(inputfile), exist=lexist)
+      if(lexist) then
+        !
+        fh=get_unit()
+        open(fh,file=trim(inputfile),action='read')
+        read(fh,*)
+        read(fh,*)islice,jslice,kslice
+        close(fh)
+        print*,' >> ',trim(inputfile),' ... done'
+        !
+      else
+        islice=-1
+        jslice=-1
+        kslice=-1
+      endif
+      !
+      if(islice>=0 .and. islice<=ia) then
+        write(*,'(A,I0,A)')'  ** silce cut at i: ',islice,' is to save'
+      endif
+      if(jslice>=0 .and. jslice<=ja) then
+        write(*,'(A,I0,A)')'  ** silce cut at j: ',jslice,' is to save'
+      endif
+      if(kslice>=0 .and. kslice<=ka) then
+        write(*,'(A,I0,A)')'  ** silce cut at k: ',kslice,' is to save'
+      endif
+      !
+    endif
+    !
+    call bcast(islice)
+    call bcast(jslice)
+    call bcast(kslice)
+    !
+  end subroutine readslic
+  !
   subroutine readmonc
     !
     use commvar, only : nmonitor,imon,islice,jslice,kslice,ia,ja,ka
@@ -1856,15 +1905,15 @@ module readwrite
       call h5write(varname='p', var=prs(0:im,j,0:km)  ,dir='j')
       call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
       !
-      call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='i')
-      call h5write(varname='dudy',var=dvel(0:im,j,0:km,1,2),dir='i')
-      call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='i')
-      call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='i')
-      call h5write(varname='dvdy',var=dvel(0:im,j,0:km,2,2),dir='i')
-      call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='i')
-      call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='i')
-      call h5write(varname='dwdy',var=dvel(0:im,j,0:km,3,2),dir='i')
-      call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='i')
+      call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='j')
+      call h5write(varname='dudy',var=dvel(0:im,j,0:km,1,2),dir='j')
+      call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='j')
+      call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='j')
+      call h5write(varname='dvdy',var=dvel(0:im,j,0:km,2,2),dir='j')
+      call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='j')
+      call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='j')
+      call h5write(varname='dwdy',var=dvel(0:im,j,0:km,3,2),dir='j')
+      call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='j')
       !
       call h5io_end
       !
@@ -1899,15 +1948,15 @@ module readwrite
       call h5write(varname='p', var=prs(0:im,0:jm,k)  ,dir='k')
       call h5write(varname='t', var=tmp(0:im,0:jm,k)  ,dir='k')
       !
-      call h5write(varname='dudx',var=dvel(0:im,0:jm,k,1,1),dir='i')
-      call h5write(varname='dudy',var=dvel(0:im,0:jm,k,1,2),dir='i')
-      call h5write(varname='dudz',var=dvel(0:im,0:jm,k,1,3),dir='i')
-      call h5write(varname='dvdx',var=dvel(0:im,0:jm,k,2,1),dir='i')
-      call h5write(varname='dvdy',var=dvel(0:im,0:jm,k,2,2),dir='i')
-      call h5write(varname='dvdz',var=dvel(0:im,0:jm,k,2,3),dir='i')
-      call h5write(varname='dwdx',var=dvel(0:im,0:jm,k,3,1),dir='i')
-      call h5write(varname='dwdy',var=dvel(0:im,0:jm,k,3,2),dir='i')
-      call h5write(varname='dwdz',var=dvel(0:im,0:jm,k,3,3),dir='i')
+      call h5write(varname='dudx',var=dvel(0:im,0:jm,k,1,1),dir='k')
+      call h5write(varname='dudy',var=dvel(0:im,0:jm,k,1,2),dir='k')
+      call h5write(varname='dudz',var=dvel(0:im,0:jm,k,1,3),dir='k')
+      call h5write(varname='dvdx',var=dvel(0:im,0:jm,k,2,1),dir='k')
+      call h5write(varname='dvdy',var=dvel(0:im,0:jm,k,2,2),dir='k')
+      call h5write(varname='dvdz',var=dvel(0:im,0:jm,k,2,3),dir='k')
+      call h5write(varname='dwdx',var=dvel(0:im,0:jm,k,3,1),dir='k')
+      call h5write(varname='dwdy',var=dvel(0:im,0:jm,k,3,2),dir='k')
+      call h5write(varname='dwdz',var=dvel(0:im,0:jm,k,3,3),dir='k')
       !
       call h5io_end
       !

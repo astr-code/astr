@@ -476,6 +476,15 @@ module mainloop
     use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
                          nxtchkpt,nxtwsequ
     !
+    ! local data
+    integer,save :: nxtavg
+    logical,save :: firstcall = .true.
+    !
+    if(firstcall) then
+      nxtavg=nstep+feqavg
+      firstcall = .false.
+    endif
+    !
     call statcal(ctime(5))
     !
     call statout
@@ -486,10 +495,15 @@ module mainloop
       call writemon
       !
       if(lavg) then
-        if(mod(nstep,feqavg)==0) call meanflowcal(ctime(5))
+        if(nstep==nxtavg) then
+          call meanflowcal(ctime(5))
+          !
+          nxtavg=nstep+feqavg
+        endif
       else
         nsamples=0
         liosta=.false.
+        nxtavg=nstep+feqavg
       endif
       !
       if(lwslic .and. mod(nstep,feqslice)==0) then
