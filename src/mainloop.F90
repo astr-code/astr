@@ -545,9 +545,10 @@ module mainloop
     use parallel, only: por
     use fludyna,  only: updateq
     use readwrite,only: readcheckpoint
+    use statistic,only: nsamples
     !
     ! local data
-    integer :: i,j,k,l,fh,ii,jj,kk
+    integer :: i,j,k,l,fh,ii,jj,kk,nsamples_save
     logical :: ltocrash
     !
     ltocrash=.false.
@@ -607,11 +608,15 @@ module mainloop
       if(lio) print*,' !! COMPUTATION CRASHED !!'
       if(lio) print*,' !! FETCH AN BAKUP FLOW FIELD !!'
       !
+      nsamples_save=nsamples
+      !
       call readcheckpoint('bakup')
       !
       call updateq
       !
       loop_counter=0
+      !
+      nsamples=nsamples_save
       !
       ! call mpistop
     endif

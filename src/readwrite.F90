@@ -1193,7 +1193,7 @@ module readwrite
   subroutine readcheckpoint(folder)
     !
     use commvar, only: nstep,filenumb,fnumslic,time,flowtype,          &
-                       num_species,im,jm,km,force,numq,turbmode
+                       num_species,im,jm,km,force,numq,turbmode,lwsequ
     use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut
     use statistic, only : massflux,massflux_target,nsamples
     use hdf5io
@@ -1206,6 +1206,7 @@ module readwrite
     integer :: nstep_1,jsp
     character(len=2) :: spname,qname
     character(len=128) :: infilename
+    character(len=4) :: stepname
     !
     call h5io_init(filename=folder//'/auxiliary.h5',mode='read')
     call h5read(varname='nstep',var=nstep)
@@ -1220,7 +1221,14 @@ module readwrite
     call h5read(varname='nsamples',var=nsamples)
     call h5io_end
     !
-    call h5io_init(filename=folder//'/flowfield.h5',mode='read')
+    if(lwsequ) then
+      write(stepname,'(i4.4)')filenumb
+      infilename='outdat/flowfield'//stepname//'.h5'
+    else
+      infilename=folder//'/flowfield.h5'
+    endif
+    !
+    call h5io_init(filename=trim(infilename),mode='read')
     call h5read(varname='nstep',var=nstep_1)
     !
     if(nstep_1==nstep) then
@@ -1249,7 +1257,8 @@ module readwrite
       !   write(qname,'(i2.2)')jsp
       !   call h5read(varname='q'//qname,var=q(0:im,0:jm,0:km,jsp))
       ! enddo
-      ! call h5io_end
+      !
+      call h5io_end
       !
     else
       if(lio)  print*,' !! flowfield.h5 NOT consistent with auxiliary.h5'
@@ -1481,8 +1490,10 @@ module readwrite
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     if(lwsequ .and. nstep==nxtwsequ) then
-      write(stepname,'(i4.4)')filenumb
+      !
       filenumb=filenumb+1
+      !
+      write(stepname,'(i4.4)')filenumb
       !
       outfilename='outdat/flowfield'//stepname//'.h5'
     else
