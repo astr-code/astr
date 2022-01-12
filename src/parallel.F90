@@ -24,6 +24,7 @@ module parallel
     module procedure bcast_int_ary2
     module procedure bcast_int_ary3
     module procedure bcast_r8_ary
+    module procedure bcast_r8_ary_allo
     module procedure bcast_r8_ary2
     module procedure bcast_r8_ary3
     !
@@ -1120,6 +1121,21 @@ module parallel
     call MPI_BCAST(vario,nsize,mpi_real8,0,mpi_comm_world,ierr)
     !
   end subroutine bcast_r8_ary
+  !
+  subroutine bcast_r8_ary_allo(vario,nsize)
+    !
+    ! arguments
+    real(8),intent(inout),allocatable :: vario(:)
+    integer,intent(in) :: nsize
+    !
+    ! local data
+    integer :: ierr
+    !
+    if(.not.allocated(vario)) allocate(vario(nsize))
+    !
+    call MPI_BCAST(vario,nsize,mpi_real8,0,mpi_comm_world,ierr)
+    !
+  end subroutine bcast_r8_ary_allo
   !
   subroutine bcast_r8_ary2(vario,rank)
     !

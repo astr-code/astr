@@ -88,6 +88,7 @@ module commvar
   real(8) :: time,deltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
   real(8) :: ref_t,reynolds,mach,rgas,gamma,prandtl
+  real(8),allocatable :: schmidt(:)
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1
   real(8),allocatable :: spcinf(:)
@@ -107,6 +108,7 @@ module commvar
   !|                rgas | gas constant, p=ro*rgas*T.                  |
   !|               gamma | specific heat ratio.                        |
   !|             prandtl | Prandtl number.                             |
+  !|             schmidt | the Schmidt number array for each scalar.   |
   !|                uinf | infinite velocity u                         |     
   !|                vinf | infinite velocity v                         |     
   !|                winf | infinite velocity w                         |     

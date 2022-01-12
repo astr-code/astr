@@ -121,7 +121,8 @@ module readwrite
                         lfftk,kcutoff,ninit,rkscheme,                  &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
-                        lrestart,limmbou,solidfile,bfacmpld,turbmode
+                        lrestart,limmbou,solidfile,bfacmpld,turbmode,  &
+                        schmidt
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
     ! local data
@@ -194,6 +195,9 @@ module readwrite
       !
       write(*,'(2X,A59,I3)')' number of independent variables: ',numq
       write(*,'(2X,A59,I3)')' number of species: ',num_species
+      if(num_species>0) then
+      write(*,'(1X,A,12(1X,F8.6))')' schmidt number: ',(schmidt(i),i=1,num_species)
+      endif
       !
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                      *** Flow Parameters ***'
@@ -404,6 +408,15 @@ module readwrite
     !
     use commvar
     use parallel,only : bcast,mpibar
+    use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
+                        nondimen,diffterm,ref_t,reynolds,mach,         &
+                        num_species,flowtype,lfilter,alfa_filter,      &
+                        lreadgrid,lfftk,gridfile,kcutoff,              &
+                        ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
+                        spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
+                        recon_schem,lrestart,limmbou,solidfile,        &
+                        bfacmpld,shkcrt,turbmode,schmidt
+    use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
@@ -415,7 +428,7 @@ module readwrite
     ! local data
     character(len=64) :: inputfile
     character(len=5) :: char
-    integer :: n,fh
+    integer :: n,fh,i
     !
     if(mpirank==0) then
       !
@@ -466,6 +479,11 @@ module readwrite
       read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
       read(fh,*)num_species
+      if(num_species>0) then
+        allocate(schmidt(1:num_species))
+        backspace(fh)
+        read(fh,*)num_species,(schmidt(i),i=1,num_species)
+      endif
       read(fh,'(/)')
       read(fh,*)turbmode
       read(fh,'(/)')
@@ -566,6 +584,7 @@ module readwrite
     !
     call bcast(recon_schem)
     call bcast(num_species)
+    call bcast(schmidt,num_species)
     !
     call bcast(bctype)
     call bcast(twall)
