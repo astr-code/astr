@@ -2153,13 +2153,14 @@ module solver
   !   sixth-order Compact Central scheme.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2009-06-09.
+  ! Add scalar transport equation by Fang Jian, 2022-01-12.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine diffrsdcal6(subtime)
     !
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,num_modequ,        &
                           reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode
+                          turbmode,schmidt
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
     use commfunc,  only : ddfc
@@ -2171,13 +2172,15 @@ module solver
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    integer :: i,j,k,n,ncolm
+    integer :: i,j,k,n,ncolm,jspc
     real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
+    real(8),allocatable :: spcfx(:,:,:,:,:)
     real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
     real(8) :: detk
+    real(8),allocatable :: dfu(:)
     !
     real(8) :: time_beg
     !
@@ -2188,6 +2191,13 @@ module solver
     !
     sigma =0.d0
     qflux =0.d0
+    !
+    if(num_species>0) then
+      allocate( spcfx(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
+      allocate(dfu(1:num_species))
+      !
+      spcfx=0.d0
+    endif
     !
     if(trim(turbmode)=='k-omega') then
       allocate( dkflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),             &
@@ -2257,6 +2267,11 @@ module solver
         miu2=2.d0*miu
         hcc=(miu/prandtl)/const5
         detk=0.d0
+        !
+        if(num_species>0) then
+          dfu(1:num_species)=miu/schmidt(1:num_species)
+        endif
+        !
       endif
       !
       !
@@ -2277,6 +2292,16 @@ module solver
                                        sigma(i,j,k,5)*vel(i,j,k,2) +   &
                                        sigma(i,j,k,6)*vel(i,j,k,3)
       !
+      if(num_species>0) then
+        !
+        do jspc=1,num_species
+          spcfx(i,j,k,jspc,1)=dfu(jspc)*dspc(i,j,k,jspc,1)
+          spcfx(i,j,k,jspc,2)=dfu(jspc)*dspc(i,j,k,jspc,2)
+          spcfx(i,j,k,jspc,3)=dfu(jspc)*dspc(i,j,k,jspc,3)
+        enddo
+        !
+      endif
+      !
     enddo
     enddo
     enddo
@@ -2284,6 +2309,10 @@ module solver
     call dataswap(sigma,subtime=ctime(7))
     !
     call dataswap(qflux,subtime=ctime(7))
+    !
+    if(num_species>0) then
+      call dataswap(spcfx,subtime=ctime(7))
+    endif
     !
     if(trim(turbmode)=='k-omega') then
       call dataswap(dkflux,subtime=ctime(7))
@@ -2313,8 +2342,10 @@ module solver
                 qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       !
       if(num_species>0) then
-        do n=1,num_species
-          ff(:,5+n)=0.d0
+        do jspc=1,num_species
+          ff(:,5+jspc)=( spcfx(:,j,k,jspc,1)*dxi(:,j,k,1,1) +               &
+                         spcfx(:,j,k,jspc,2)*dxi(:,j,k,1,2) +               &
+                         spcfx(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
         enddo
       endif
       !
@@ -2345,8 +2376,8 @@ module solver
       qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
       !
       if(num_species>0) then
-        do n=1,num_species
-          qrhs(is:ie,j,k,5+n)=0.d0
+        do jspc=6,5+num_species
+          qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(is:ie,jspc)
         enddo
       endif
       !
@@ -2385,8 +2416,10 @@ module solver
                 qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
       !
       if(num_species>0) then
-        do n=1,num_species
-          ff(:,5+n)=0.d0
+        do jspc=1,num_species
+          ff(:,5+jspc)=( spcfx(i,:,k,jspc,1)*dxi(i,:,k,2,1) +          &
+                         spcfx(i,:,k,jspc,2)*dxi(i,:,k,2,2) +          &
+                         spcfx(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
         enddo
       endif
       !
@@ -2416,8 +2449,8 @@ module solver
       qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
       !
       if(num_species>0) then
-        do n=1,num_species
-          qrhs(i,js:je,k,5+n)=0.d0
+        do jspc=6,5+num_species
+          qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(js:je,jspc)
         enddo
       endif
       !
@@ -2457,8 +2490,10 @@ module solver
                   qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
         if(num_species>0) then
-          do n=1,num_species
-            ff(:,5+n)=0.d0
+          do jspc=1,num_species
+            ff(:,5+jspc)=( spcfx(i,j,:,jspc,1)*dxi(i,j,:,3,1) +        &
+                           spcfx(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
+                           spcfx(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
           enddo
         endif
         !
@@ -2489,8 +2524,8 @@ module solver
         qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(ks:ke,5)
         !
         if(num_species>0) then
-          do n=1,num_species
-            qrhs(i,j,ks:ke,5+n)=0.d0
+          do jspc=6,5+num_species
+            qrhs(i,j,ks:ke,jspc)=qrhs(i,j,ks:ke,jspc)+df(ks:ke,jspc)
           enddo
         endif
         !
@@ -2512,6 +2547,7 @@ module solver
     !
     deallocate(sigma,qflux)
     !
+    if(num_species>0) deallocate(spcfx)
     if(trim(turbmode)=='k-omega') deallocate(dkflux,doflux)
     
     !

@@ -1,4 +1,4 @@
-# This makefile is used to compile new HAMISH code.
+# This makefile is used to compile ASTR code.
 # The compiler: gfortran compiler
 #
 #FCFLAGS=  -Wuse-without-only -g
@@ -14,11 +14,6 @@ FCFLAGS= -O3 -fbounds-check
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
 OPTIONS3 = -DHDF5
-# OMP = -fopenmp
-# OPTIONS1 = -D__GFORTRAN__ -ffree-line-length-none
-#OPTIONS2 = -fno-range-check -fcheck=all
-#OPTIONS3 = -DEULER
-#OPTIONS3=-O3
 
 EXE=astr
 

@@ -555,7 +555,7 @@ module initialisation
     use fludyna,  only: thermal
     !
     ! local data
-    integer :: i,j,k
+    integer :: i,j,k,jspc
     real(8) :: xc,yc,radi2,rvor,cvor,var1
     !
     xc=10.d0
@@ -577,7 +577,14 @@ module initialisation
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
       !
-      if(num_species>=1) spc(i,j,k,1)=exp(-0.5d0*radi2)
+      if(num_species>=1) then
+        !
+        spc(i,j,k,1)=exp(-0.5d0*radi2)
+        do jspc=2,num_species
+          spc(i,j,k,jspc)=1.d0-spc(i,j,k,1)
+        enddo
+        !
+      endif
       !
     enddo
     enddo
@@ -613,7 +620,7 @@ module initialisation
     use fludyna,  only: thermal
     !
     ! local data
-    integer :: i,j,k
+    integer :: i,j,k,jspc
     !
     do k=0,km
     do j=0,jm
@@ -628,7 +635,16 @@ module initialisation
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
       !
-      if(num_species>1) spc(i,j,k,1)=1.d0
+      
+      if(num_species>=1) then
+        !
+        spc(i,j,k,1)=sin(x(i,j,k,1))
+        do jspc=2,num_species
+          spc(i,j,k,jspc)=1.d0-spc(i,j,k,1)
+        enddo
+        !
+      endif
+      !
     enddo
     enddo
     enddo
