@@ -2175,7 +2175,7 @@ module solver
     integer :: i,j,k,n,ncolm,jspc
     real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
-    real(8),allocatable :: spcfx(:,:,:,:,:)
+    real(8),allocatable :: yflux(:,:,:,:,:)
     real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
@@ -2193,10 +2193,10 @@ module solver
     qflux =0.d0
     !
     if(num_species>0) then
-      allocate( spcfx(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
+      allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
       allocate(dfu(1:num_species))
       !
-      spcfx=0.d0
+      yflux=0.d0
     endif
     !
     if(trim(turbmode)=='k-omega') then
@@ -2295,9 +2295,9 @@ module solver
       if(num_species>0) then
         !
         do jspc=1,num_species
-          spcfx(i,j,k,jspc,1)=dfu(jspc)*dspc(i,j,k,jspc,1)
-          spcfx(i,j,k,jspc,2)=dfu(jspc)*dspc(i,j,k,jspc,2)
-          spcfx(i,j,k,jspc,3)=dfu(jspc)*dspc(i,j,k,jspc,3)
+          yflux(i,j,k,jspc,1)=dfu(jspc)*dspc(i,j,k,jspc,1)
+          yflux(i,j,k,jspc,2)=dfu(jspc)*dspc(i,j,k,jspc,2)
+          yflux(i,j,k,jspc,3)=dfu(jspc)*dspc(i,j,k,jspc,3)
         enddo
         !
       endif
@@ -2311,7 +2311,7 @@ module solver
     call dataswap(qflux,subtime=ctime(7))
     !
     if(num_species>0) then
-      call dataswap(spcfx,subtime=ctime(7))
+      call dataswap(yflux,subtime=ctime(7))
     endif
     !
     if(trim(turbmode)=='k-omega') then
@@ -2343,9 +2343,9 @@ module solver
       !
       if(num_species>0) then
         do jspc=1,num_species
-          ff(:,5+jspc)=( spcfx(:,j,k,jspc,1)*dxi(:,j,k,1,1) +               &
-                         spcfx(:,j,k,jspc,2)*dxi(:,j,k,1,2) +               &
-                         spcfx(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+          ff(:,5+jspc)=( yflux(:,j,k,jspc,1)*dxi(:,j,k,1,1) +               &
+                         yflux(:,j,k,jspc,2)*dxi(:,j,k,1,2) +               &
+                         yflux(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
         enddo
       endif
       !
@@ -2417,9 +2417,9 @@ module solver
       !
       if(num_species>0) then
         do jspc=1,num_species
-          ff(:,5+jspc)=( spcfx(i,:,k,jspc,1)*dxi(i,:,k,2,1) +          &
-                         spcfx(i,:,k,jspc,2)*dxi(i,:,k,2,2) +          &
-                         spcfx(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+          ff(:,5+jspc)=( yflux(i,:,k,jspc,1)*dxi(i,:,k,2,1) +          &
+                         yflux(i,:,k,jspc,2)*dxi(i,:,k,2,2) +          &
+                         yflux(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
         enddo
       endif
       !
@@ -2491,9 +2491,9 @@ module solver
         !
         if(num_species>0) then
           do jspc=1,num_species
-            ff(:,5+jspc)=( spcfx(i,j,:,jspc,1)*dxi(i,j,:,3,1) +        &
-                           spcfx(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
-                           spcfx(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+            ff(:,5+jspc)=( yflux(i,j,:,jspc,1)*dxi(i,j,:,3,1) +        &
+                           yflux(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
+                           yflux(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
           enddo
         endif
         !
@@ -2547,7 +2547,7 @@ module solver
     !
     deallocate(sigma,qflux)
     !
-    if(num_species>0) deallocate(spcfx)
+    if(num_species>0) deallocate(yflux)
     if(trim(turbmode)=='k-omega') deallocate(dkflux,doflux)
     
     !
