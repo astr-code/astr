@@ -8,7 +8,7 @@ FC=h5pfc
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
-CTRDIR = /opt/cantera_2.5.1
+CTRDIR = /home/fangjian/opt/cantera_2.5.1
 
 FCFLAGS= -O3 -fbounds-check
 

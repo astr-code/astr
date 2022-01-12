@@ -2211,7 +2211,9 @@ module solver
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
     use tecio
+#ifdef COMB
     use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
+#endif
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -2262,6 +2264,7 @@ module solver
         miu=miucal(tmp(i,j,k))/reynolds
       else
         !
+#ifdef COMB
         call enthpy(tmp(i,j,k),hispec(:))
         call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
         mw=sum(wmolar(:)*xi(:))
@@ -2276,6 +2279,7 @@ module solver
           call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
                       spc=spc(i,j,k,:),rhodi=dispec(:,1))
         end select
+#endif
         !
       endif 
       !
