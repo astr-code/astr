@@ -444,7 +444,7 @@ module readwrite
       read(fh,*)lrestart
       read(fh,'(/)')
       read(fh,*)alfa_filter,kcutoff
-      !
+      ! 
       if(nondimen) then
         read(fh,'(/)')
         read(fh,*)ref_t,reynolds,mach
