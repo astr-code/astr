@@ -563,7 +563,7 @@ module mainloop
       if(nodestat(i,j,k)<=0.d0) then
         !
         ! only check fluid points
-        if(q(i,j,k,1)>=0.d0 .and. q(i,j,k,5)>=0.d0) then
+        if(q(i,j,k,1)>=0.d0) then
           continue
         else
           !
@@ -637,7 +637,7 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine crashfix
     !
-    use commvar,   only : numq,lreport
+    use commvar,   only : numq,lreport,nondimen,spcinf
     use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
     use parallel,  only : por,ig0,jg0,kg0,psum
     use fludyna,   only : q2fvar,thermal
@@ -655,7 +655,11 @@ module mainloop
       eps_rho=1.d-5
       eps_tmp=1.d-5
       !
-      eps_prs=thermal(density=eps_rho,temperature=eps_tmp)
+      if(nondimen) then 
+        eps_prs=thermal(density=eps_rho,temperature=eps_tmp)
+      else 
+        eps_prs=thermal(density=eps_rho,temperature=eps_tmp,species=spcinf)
+      endif 
     endif
     !
     counter=0
@@ -692,7 +696,8 @@ module mainloop
                     jg0+j+jj<0 .or. jg0+j+jj>ja ) then
               continue
             else
-              if(rho(i+ii,j+jj,k+kk)>=0.d0 .and. prs(i+ii,j+jj,k+kk)>=0.d0 .and. tmp(i+ii,j+jj,k+kk)>=0.d0) then
+              if(rho(i+ii,j+jj,k+kk)>=0.d0 .and. prs(i+ii,j+jj,k+kk)>=0.d0 &
+                  .and. tmp(i+ii,j+jj,k+kk)>=0.d0) then
                 qavg(:)=qavg(:)+q(i+ii,j+jj,k+kk,:)
                 norm=norm+1
               endif

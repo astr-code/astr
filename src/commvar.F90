@@ -9,6 +9,10 @@ module commvar
   !
   use commtype
   !
+#ifdef COMB
+  use cantera
+#endif
+  !
   implicit none
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
@@ -86,6 +90,7 @@ module commvar
   real(8) :: ref_t,reynolds,mach,rgas,gamma,prandtl
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1
+  real(8),allocatable :: spcinf(:)
   !+---------------------+---------------------------------------------+
   !|               nstep | the total time step number.                 |
   !|             maxstep | the max step to run.                        |
@@ -155,7 +160,13 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|             lreport | to control report of subroutines            |
   !+---------------------+---------------------------------------------+
-
+  !
+#ifdef COMB
+  type(phase_t) :: mixture
+  logical :: lcomb
+  character(len=255) :: chemfile
+  character(len=3) :: odetype
+#endif 
   !
   parameter(hm=5)
   !

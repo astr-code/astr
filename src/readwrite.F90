@@ -12,7 +12,7 @@ module readwrite
                       ptime,bcast,mpirankmax,ig0,jg0,kg0
   use commvar, only : ndims,im,jm,km
   use tecio
-  use stlaio,  only: get_unit
+  use stlaio,  only : get_unit
   !
   implicit none
   !
@@ -41,7 +41,7 @@ module readwrite
       print*,' |                                                            |'
       print*,' |              Developed by Jian Fang since 2008             |'
       print*,' |                   Re-mastered at 02-2021                   |'
-      print*,' |               <ASTR> Copyright Resvered <2008>             |'
+      print*,' |               <ASTR> Copyright Reserved <2022>             |'
       print*,' |         Advanced Simulatior for Turbulence Research        |'
       print*,' |                                                            |'
       print*,' +------------------------------------------------------------+'
@@ -94,9 +94,9 @@ module readwrite
     !
     if(lio) then
       !
-      call system('mkdir testout/')
-      call system('mkdir outdat/')
-      call system('mkdir bakup/')
+      call create_directory("testout")
+      call create_directory("outdat")
+      call create_directory("bakup")
       !
     endif
     !
@@ -402,17 +402,15 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readinput
     !
-    use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
-                        nondimen,diffterm,ref_t,reynolds,mach,         &
-                        num_species,flowtype,lfilter,alfa_filter,      &
-                        lreadgrid,lfftk,gridfile,kcutoff,              &
-                        ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
-                        spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
-                        recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode
-    use parallel,only : bcast
+    use commvar
+    use parallel,only : bcast,mpibar
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
+    !
+#ifdef COMB
+    use thermchem,only: chemrep,chemread,thermdyn
+    logical :: lfex
+#endif
     !
     ! local data
     character(len=64) :: inputfile
@@ -440,6 +438,12 @@ module readwrite
       if(lkhomo) write(*,'(A)')' k'
       read(fh,'(/)')
       read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
+#ifdef COMB
+      if(lcomb) then 
+        backspace(fh)
+        read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
+      endif
+#endif
       read(fh,'(/)')
       read(fh,*)lrestart
       read(fh,'(/)')
@@ -449,11 +453,15 @@ module readwrite
         read(fh,'(/)')
         read(fh,*)ref_t,reynolds,mach
       else
-        read(fh,'(///)')
+        read(fh,'(//)')
       endif
       !
       read(fh,'(/)')
       read(fh,*)conschm,difschm,rkscheme
+#ifdef COMB
+      backspace(fh)
+      read(fh,*)conschm,difschm,rkscheme,odetype
+#endif
       read(fh,'(/)')
       read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
@@ -496,10 +504,29 @@ module readwrite
         read(fh,'(/)')
         read(fh,'(A)')solidfile
       endif
+#ifdef COMB
+      if(.not.nondimen) then
+        read(fh,'(/)')
+        read(fh,'(A)')chemfile  
+        if(len(trim(chemfile))>1) then
+          inquire(file=trim(chemfile),exist=lfex)
+          !
+          if(.not. lfex) then
+            print*,' !! Error ',trim(chemfile),' not exist !!'
+            stop
+          endif
+          !
+        else
+          print*,' !! Error chemfile not provided in input !!'
+            stop
+        endif
+      endif 
+      !
+#endif
       close(fh)
       print*,' >> ',trim(inputfile),' ... done'
       !
-    endif
+    endif !mpirank==0
     !
     call bcast(ia)
     call bcast(ja)
@@ -558,6 +585,32 @@ module readwrite
     !
     call readslic
     !
+#ifdef COMB
+    call bcast(lcomb)
+    call bcast(odetype)
+    call bcast(chemfile)
+    !
+    call mpibar
+    !
+    ! every mpirank must read chem.dat
+    if(.not.(nondimen)) then
+      !
+      inquire(file='thermchem.txt',exist=lfex)
+        ! call system('xsltproc $FACTDIR/run/chemMech/thermchem_gen.xsl '  &
+        !   //trim(chemfile)//' > thermchem.txt')
+      call mpibar
+      !
+      call chemread(trim(chemfile))
+      !
+      call thermdyn
+      !
+      if(mpirank==0) call chemrep('./chemrep.dat')
+      if(mpirank==0) print*,' >> ',trim(chemfile),' ... done.'
+      !
+    endif
+    !
+#endif
+  !
   end subroutine readinput
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
@@ -1490,11 +1543,7 @@ module readwrite
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     if(lwsequ .and. nstep==nxtwsequ) then
-      !
       filenumb=filenumb+1
-      !
-      write(stepname,'(i4.4)')filenumb
-      !
       outfilename='outdat/flowfield'//stepname//'.h5'
     else
       stepname=''
@@ -1919,24 +1968,12 @@ module readwrite
       call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='j')
       call h5write(varname='dudy',var=dvel(0:im,j,0:km,1,2),dir='j')
       call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='j')
-      call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='j')
       call h5write(varname='dvdy',var=dvel(0:im,j,0:km,2,2),dir='j')
       call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='j')
       call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='j')
       call h5write(varname='dwdy',var=dvel(0:im,j,0:km,3,2),dir='j')
       call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='j')
-      !
-      call h5io_end
-      !
-      if(irk==0 .and. krk==0) then
-        call h5srite(filename='jslice/'//filename,varname='nstep',var=nstep)
-        call h5srite(filename='jslice/'//filename,varname='time', var=time)
-      endif
-      !
-    endif
-    !
-    if(krk==krk_kslice) then
-      !
+      
       k=kslice-kg0
       !
       if(k<0 .or. k>km) then
@@ -2520,6 +2557,20 @@ module readwrite
   !+-------------------------------------------------------------------+
   !| The end of the Function IsNum.                                    |
   !+-------------------------------------------------------------------+
+  !
+  subroutine create_directory(dir_name)
+    !
+    use parallel, only : mpirank
+    character(len=*) :: dir_name
+    logical :: file_exists
+    if(mpirank==0)then
+      inquire(file=trim(dir_name), exist=file_exists)
+      if(.not. file_exists)then
+        call execute_command_line("mkdir "//trim(dir_name))
+      endif
+    endif
+    !
+  end subroutine create_directory
   !
 end module readwrite
 !+---------------------------------------------------------------------+
