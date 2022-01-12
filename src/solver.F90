@@ -10,7 +10,7 @@ module solver
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
                        datasync,ptime,irk,jrk,krk,irkm,jrkm,krkm
-  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime
+  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,nondimen
   !
   implicit none
   !
@@ -34,7 +34,9 @@ module solver
                         uinf,vinf,winf,roinf,pinf,tinf,const1,const2,  &
                         const3,const4,const5,const6,const7,tempconst,  &
                         tempconst1,reynolds,ref_t,mach,                &
-                        num_modequ,turbmode
+                        num_modequ,turbmode,spcinf,nondimen
+    use thermchem, only: spcindex
+    use fludyna, only: thermal
     !
     if(trim(turbmode)=='k-omega') then
       num_modequ=2
@@ -72,28 +74,49 @@ module solver
       stop ' !! ndims error @ refcal'
     endif
     !
-    prandtl=0.72d0
-    gamma=1.4d0
-    rgas=287.1d0
-    !
-    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
-    const2=gamma*mach**2
-    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
-    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
-    const5=(gamma-1.d0)*mach**2
-    const6=1.d0/(gamma-1.d0)
-    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
-    !
-    uinf=1.d0
-    vinf=0.d0
-    winf=0.d0
-    tinf=1.d0
-    roinf=1.d0
-    !
-    pinf=roinf*tinf/const2
-    !
-    tempconst=110.3d0/ref_t
-    tempconst1=1.d0+tempconst
+    if(nondimen) then 
+      prandtl=0.72d0
+      gamma=1.4d0
+      rgas=287.1d0
+      !
+      const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+      const2=gamma*mach**2
+      const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+      const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+      const5=(gamma-1.d0)*mach**2
+      const6=1.d0/(gamma-1.d0)
+      const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+      !
+      uinf=1.d0
+      vinf=0.d0
+      winf=0.d0
+      tinf=1.d0
+      roinf=1.d0
+      !
+      pinf=roinf*tinf/const2
+      !
+      tempconst=110.3d0/ref_t
+      tempconst1=1.d0+tempconst
+      !
+    else 
+      !
+      prandtl=0.72d0
+      uinf=1.d0
+      vinf=0.d0
+      winf=0.d0
+      pinf=1.01325d5
+      tinf=300.d0
+      allocate(spcinf(num_species))
+      if(num_species==1) then
+        spcinf(1)=1.d0
+      else
+        spcinf(:)=0.d0
+        spcinf(spcindex('O2'))=0.233d0
+        spcinf(spcindex('N2'))=1.d0-sum(spcinf(:))
+      endif
+      roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+      !
+    endif 
     !
   end subroutine refcal
   !+-------------------------------------------------------------------+
@@ -334,6 +357,7 @@ module solver
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid,   &
                         lshock,crinod
     use fludyna,  only: sos
+    use thermchem,only : aceval
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,     &
                         weno5z,weno7z,mp5ld,mp7ld
     !
@@ -397,7 +421,11 @@ module solver
         gpd(2)=dxi(i,j,k,1,2)*var0
         gpd(3)=dxi(i,j,k,1,3)*var0
         !
-        css=sos(tmp(i,j,k))
+        if(nondimen) then 
+          css=sos(tmp(i,j,k))
+        else
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+        endif
         csa=css/var0
         lmach=uu/csa
         !
@@ -693,7 +721,11 @@ module solver
         gpd(2)=dxi(i,j,k,2,2)*var0
         gpd(3)=dxi(i,j,k,2,3)*var0
         !
-        css=sos(tmp(i,j,k))
+        if(nondimen) then 
+          css=sos(tmp(i,j,k))
+        else
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+        endif
         csa=css/var0
         lmach=uu/csa
         !
@@ -978,7 +1010,11 @@ module solver
         gpd(2)=dxi(i,j,k,3,2)*var0
         gpd(3)=dxi(i,j,k,3,3)*var0
         !
-        css=sos(tmp(i,j,k))
+        if(nondimen) then 
+          css=sos(tmp(i,j,k))
+        else
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+        endif
         csa=css/var0
         lmach=uu/csa
         !
@@ -1256,6 +1292,7 @@ module solver
                         recon_schem,lchardecomp,conschm
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use fludyna,  only: sos
+    use thermchem,only: aceval
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
     !
     ! arguments
@@ -1315,7 +1352,11 @@ module solver
         gpd(2)=dxi(i,j,k,1,2)*var0
         gpd(3)=dxi(i,j,k,1,3)*var0
         !
-        css=sos(tmp(i,j,k))
+        if(nondimen) then 
+          css=sos(tmp(i,j,k))
+        else
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+        endif
         csa=css/var0
         lmach=uu/csa
         !
@@ -1523,7 +1564,11 @@ module solver
     !     gpd(2)=dxi(i,j,k,2,2)*var0
     !     gpd(3)=dxi(i,j,k,2,3)*var0
     !     !
-    !     css=sos(tmp(i,j,k))
+          ! if(nondimen) then 
+          !   css=sos(tmp(i,j,k))
+          ! else
+          !   call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+          ! endif
     !     csa=css/var0
     !     lmach=uu/csa
     !     !
@@ -2159,13 +2204,14 @@ module solver
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,num_modequ,        &
                           reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode
+                          turbmode,nondimen
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
     use commfunc,  only : ddfc
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
     use tecio
+    use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -2174,10 +2220,14 @@ module solver
     integer :: i,j,k,n,ncolm
     real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
+    real(8),allocatable,dimension(:,:,:,:,:) :: yflux
     real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
     real(8) :: detk
+    real(8),allocatable :: dispec(:,:)
+    real(8) :: corrdiff,hispec(num_species),xi(num_species),cpe,kama, &
+               gradyi(num_species),sum1,sum2,mw,dieff(num_species),sum3
     !
     real(8) :: time_beg
     !
@@ -2185,6 +2235,11 @@ module solver
     !
     allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    !
+#ifdef COMB
+    allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:ndims) ) 
+    yflux=0.d0
+#endif
     !
     sigma =0.d0
     qflux =0.d0
@@ -2203,7 +2258,26 @@ module solver
     do j=0,jm
     do i=0,im
       !
-      miu=miucal(tmp(i,j,k))/reynolds
+      if(nondimen) then 
+        miu=miucal(tmp(i,j,k))/reynolds
+      else
+        !
+        call enthpy(tmp(i,j,k),hispec(:))
+        call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
+        mw=sum(wmolar(:)*xi(:))
+        !
+        select case(tranmod)
+          case('multi')
+            if(.not.allocated(dispec))allocate(dispec(num_species,num_species))
+            call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                        spc=spc(i,j,k,:),rhodij=dispec(:,:))
+        case default
+          if(.not.allocated(dispec)) allocate(dispec(num_species,1))
+          call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                      spc=spc(i,j,k,:),rhodi=dispec(:,1))
+        end select
+        !
+      endif 
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -2255,10 +2329,15 @@ module solver
         !
       elseif(trim(turbmode)=='none') then
         miu2=2.d0*miu
-        hcc=(miu/prandtl)/const5
+        !
+        if(nondimen) then 
+          hcc=(miu/prandtl)/const5
+        else
+          hcc=kama
+        endif 
+        !
         detk=0.d0
       endif
-      !
       !
       sigma(i,j,k,1)=miu2*(s11-skk)-detk + tau11 !s11   
       sigma(i,j,k,2)=miu2* s12           + tau12 !s12  
@@ -2276,6 +2355,43 @@ module solver
       qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
                                        sigma(i,j,k,5)*vel(i,j,k,2) +   &
                                        sigma(i,j,k,6)*vel(i,j,k,3)
+      !
+#ifdef COMB
+      !
+      ! select case(tranmod)
+      !   !  
+        
+      !   case('multi')
+      !     !
+      !     do jspec=1,num_species
+      !       sum2=sum(dispec(js,:)*(gradyi(:)-spec(:)*sum1))
+      !       !species diffusive flux
+      !       fluvis(js+2+ndims)=-1.d0*wmolar(js)/mw*sum2
+      !       !energy flux due to species diffusion
+      !       fluvis(2+ndims)=fluvis(2+ndims)-fluvis(js+2+ndims)*hispec(js)
+      !     enddo
+      !     !
+      !   case default
+      !     !
+      !     dieff(:)=dispec(:,1)+miu_sgs/pface%scsgs
+      !     !
+      !     sum2=sum(dieff(:)*(gradyi(:)-spec(:)*sum1))
+      !     !
+      !     do js=1,num_species
+      !       !Corretion diffusion velocity for continuity
+      !       corrdiff=sum2*spec(js)
+      !       !species diffusive flux
+      !       fluvis(js+2+ndims)=dieff(js)*(gradyi(js)-(spec(js)*sum1)) &
+      !                           -corrdiff
+      !       !energy flux due to species diffusion
+      !       fluvis(2+ndims)=fluvis(2+ndims)-fluvis(js+2+ndims)*hispec(js)
+      !     enddo
+      !     !
+      ! end select
+      ! !
+      ! yflux(i,j,k,:,1)=
+      !
+#endif
       !
     enddo
     enddo

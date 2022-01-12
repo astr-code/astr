@@ -437,7 +437,7 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statout
     !
-    use commvar, only : flowtype,nstep,time,nlstep,maxstep,lrestart
+    use commvar, only : flowtype,nstep,time,maxstep,lrestart,feqlist
     !
     ! local data
     logical,save :: linit=.true.
@@ -509,9 +509,9 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
       endif
       !
-      if(mod(nstep,nlstep)==0) then
+      if(mod(nstep,feqlist)==0) then
         !
-        if(mod(nstep,nprthead*nlstep)==0) then
+        if(mod(nstep,nprthead*feqlist)==0) then
           if(trim(flowtype)=='tgv') then
             write(*,"(2X,A7,3(1X,A13))")'nstep','time','enstophy','kenergy'
           elseif(trim(flowtype)=='channel') then

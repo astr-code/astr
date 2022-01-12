@@ -25,10 +25,11 @@ module commcal
   !+-------------------------------------------------------------------+
   subroutine cflcal(deltat)
     !
-    use commvar,  only: im,jm,km
-    use commarray,only: vel,rho,prs,tmp,dxi,jacob
+    use commvar,  only: im,jm,km,nondimen
+    use commarray,only: vel,rho,prs,tmp,dxi,jacob,spc
     use fludyna,  only: sos
     use parallel, only: pmax
+    use thermchem,only: aceval
     !
     ! arguments
     real(8),intent(in) :: deltat
@@ -51,7 +52,11 @@ module commcal
       wbar=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2)+    &
            dxi(i,j,k,3,3)*vel(i,j,k,3)
       !
-      css=sos(tmp(i,j,k))
+      if(nondimen) then 
+        css=sos(tmp(i,j,k))
+      else
+        call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+      endif 
       csi=css*sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
       csj=css*sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
       csk=css*sqrt(dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+dxi(i,j,k,3,3)**2)
@@ -72,9 +77,9 @@ module commcal
     !
     if(mpirank==0) then
       write(*,"(A38)")'  =========== CFL Condition==========='
-      write(*,"(A24,1x,F13.7)")'     current time step: ',deltat
+      write(*,"(A24,1x,E13.5)")'     current time step: ',deltat
       write(*,"(A24,1x,F13.7)")'           current CFL: ',cfl
-      write(*,"(A24,1x,F13.7)")'   time step for CFL=1: ',deltat/cfl
+      write(*,"(A24,1x,E13.5)")'   time step for CFL=1: ',deltat/cfl
       write(*,"(A38)")'  ===================================='
     end if
     !

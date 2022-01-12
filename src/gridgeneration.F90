@@ -23,14 +23,18 @@ module gridgeneration
   subroutine gridgen
     !
     use parallel, only : mpirank
-    use commvar,  only : flowtype,lreadgrid,limmbou,solidfile
+    use commvar,  only : flowtype,lreadgrid,limmbou,solidfile,nondimen
     use readwrite,only : readgrid,writegrid,readsolid
     !
     if(lreadgrid) then
       call readgrid
     else
       if(trim(flowtype)=='tgv') then
-        call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+        if(nondimen) then
+          call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+        else 
+          call gridcube(0.00505d0,0.00505d0,0.00505d0)
+        endif 
       elseif(trim(flowtype)=='jet') then
         call gridjet
       elseif(trim(flowtype)=='2dvort') then
@@ -48,7 +52,7 @@ module gridgeneration
         stop ' !! error at gridgen' 
       endif
       !
-      ! call writegrid
+      call writegrid
       !
     endif
     !

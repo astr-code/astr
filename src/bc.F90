@@ -24,7 +24,7 @@ module bc
   real(8) :: pout
   real(8) :: uinf_j0,uinf_jm
   integer :: bctype(6)
-  real(8) :: twall(6),xrhjump,angshk
+  real(8) :: twall(6),xrhjump,angshk,xslip
   character(len=4) :: turbinf
   !+---------------------+---------------------------------------------+
   !|              bctype | define type of boundary condition.          |
@@ -268,6 +268,14 @@ module bc
       !
       if(bctype(n)==41) then
         call noslip(n,twall(n))
+      endif
+      !
+      if(bctype(n)==411) then
+        call slipisotwall(n,twall(n))
+      endif
+      !
+      if(bctype(n)==421) then
+        call slipadibwall(n)
       endif
       !
       if(bctype(n)==51) then
@@ -4250,6 +4258,391 @@ module bc
     endif
     !
   end subroutine noslip
+  !!
+  subroutine slipisotwall(ndir,tw)
+    !
+    use commvar,   only : Reynolds,turbmode,lreport
+    use commarray, only : tke,omg
+    use fludyna,   only : thermal,fvar2q,q2fvar,miucal
+    use commfunc,  only : dis2point2
+    use parallel,  only : mpi_jmin,bcast
+    !
+    ! arguments
+    integer,intent(in) :: ndir
+    real(8),intent(in) :: tw
+    !
+    ! local data
+    integer :: i,j,k,l,jspec,fh
+    real(8) :: pe,ue,te,delta_d1,miu,beta1
+    real(8) :: vwall(0:im,0:km)
+    character(len=64) :: filewbs
+    logical :: lexist
+    !
+    real(8),save :: beter,wallamplit,xa,xb,xc
+    integer,save :: nmod_t,nmod_z
+    logical,save :: lfirstcal=.true.
+    !
+    beta1=0.075d0
+    !
+    if(ndir==3) then
+      !
+      if(jrk==0) then
+        !
+        if(lreport) lfirstcal=.true.
+        !
+        if(lfirstcal) then
+          !
+          if(mpirank==0) then
+            !
+            filewbs='datin/wallbs.dat'
+            !
+            inquire(file=trim(filewbs), exist=lexist)
+            !
+            if(lexist) then
+              fh=get_unit()
+              open(fh,file=trim(filewbs),action='read')
+              read(fh,*)
+              read(fh,*)
+              read(fh,*)wallamplit,beter,xa,xb,xc
+              read(fh,*)
+              read(fh,*)nmod_t,nmod_z
+              close(fh)
+              print*,' >> ',trim(filewbs)
+              !
+              print*,' ------------- wall blowing & suction parameters -------------'
+              write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
+              write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
+              write(*,"(23x,3(A,1X,F12.5))")'   x extent:',xa,' ~',xb,' ~',xc
+              write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
+              write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
+              print*,' --------------------------------------------------------------'
+            else
+              wallamplit=0.d0
+              beter=1.d0
+              xa=0.d0
+              xb=0.d0
+              xc=0.d0
+              nmod_t=0
+              nmod_z=0
+            endif
+          endif
+          !
+          call bcast(wallamplit,comm=mpi_jmin)
+          call bcast(beter,comm=mpi_jmin)
+          call bcast(xa,comm=mpi_jmin)
+          call bcast(xb,comm=mpi_jmin)
+          call bcast(xc,comm=mpi_jmin)
+          call bcast(nmod_t,comm=mpi_jmin)
+          call bcast(nmod_z,comm=mpi_jmin)
+          !
+          !
+          lfirstcal=.false.
+          !
+        endif
+        !
+        if(ndims==3 .and. wallamplit>1.d-10) then
+          vwall=wallbs_rand(beter,wallamplit,xa,xb,xc,nmod_t,nmod_z)
+        else
+          vwall=0.d0
+        endif
+        !
+        j=0
+        !
+        do k=0,km
+        do i=0,im
+          !
+          pe=num1d3*(4.d0*prs(i,1,k)-prs(i,2,k))
+          !
+          if(x(i,j,k,1)<=xslip) then
+            ue=num1d3*(4.d0*vel(i,1,k,1)-vel(i,2,k,1))
+            te=num1d3*(4.d0*tmp(i,1,k)-tmp(i,2,k))
+            !
+            vel(i,j,k,1)=ue
+            vel(i,j,k,2)=0.d0
+            tmp(i,j,k)  =te
+            !
+          else
+            !
+            vel(i,j,k,1)=0.d0
+            vel(i,j,k,2)=vwall(i,k)
+            tmp(i,j,k)  =tw
+            !
+          endif
+          !
+          !
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          !
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=num1d3*(4.d0*spc(i,1,k,jspec)-spc(i,2,k,jspec))
+          enddo
+          !
+          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          call fvar2q(      q=  q(i,j,k,:),                            &
+                      density=rho(i,j,k),                              &
+                     velocity=vel(i,j,k,:),                            &
+                     pressure=prs(i,j,k),                              &
+                      species=spc(i,j,k,:)                             )
+          !
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=0.d0
+            !
+            delta_d1=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+            !
+            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
+            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            !
+          endif
+            !
+        enddo
+        enddo
+        !
+      endif
+      !
+    elseif(ndir==4) then
+      !
+      if(jrk==jrkm) then
+        !
+        j=jm
+        do k=0,km
+        do i=0,im
+          pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =tw
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i,j-1,k,1)-spc(i,j-2,k,1))
+          endif
+          !
+          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          call fvar2q(      q=  q(i,j,k,:),                            &
+                      density=rho(i,j,k),                              &
+                     velocity=vel(i,j,k,:),                            &
+                     pressure=prs(i,j,k),                              &
+                      species=spc(i,j,k,:)                             )
+          !
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=0.d0
+            !
+            delta_d1=dis2point2(x(i,j,k,:),x(i,j-1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+            !
+            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
+            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
+    else
+      stop ' !! ndir not defined @ noslip'
+    endif
+    !
+  end subroutine slipisotwall
+
+  subroutine slipadibwall(ndir)
+    !
+    use commvar,   only : Reynolds,turbmode,lreport
+    use commarray, only : tke,omg
+    use fludyna,   only : thermal,fvar2q,q2fvar,miucal
+    use commfunc,  only : dis2point2
+    use parallel,  only : mpi_jmin,bcast
+    !
+    ! arguments
+    integer,intent(in) :: ndir
+    !
+    ! local data
+    integer :: i,j,k,l,jspec,fh
+    real(8) :: pe,ue,te,delta_d1,miu,beta1
+    real(8) :: vwall(0:im,0:km)
+    character(len=64) :: filewbs
+    logical :: lexist
+    !
+    real(8),save :: beter,wallamplit,xa,xb,xc
+    integer,save :: nmod_t,nmod_z
+    logical,save :: lfirstcal=.true.
+    !
+    beta1=0.075d0
+    !
+    if(ndir==3) then
+      !
+      if(jrk==0) then
+        !
+        if(lreport) lfirstcal=.true.
+        !
+        if(lfirstcal) then
+          !
+          if(mpirank==0) then
+            !
+            filewbs='datin/wallbs.dat'
+            !
+            inquire(file=trim(filewbs), exist=lexist)
+            !
+            if(lexist) then
+              fh=get_unit()
+              open(fh,file=trim(filewbs),action='read')
+              read(fh,*)
+              read(fh,*)
+              read(fh,*)wallamplit,beter,xa,xb,xc
+              read(fh,*)
+              read(fh,*)nmod_t,nmod_z
+              close(fh)
+              print*,' >> ',trim(filewbs)
+              !
+              print*,' ------------- wall blowing & suction parameters -------------'
+              write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
+              write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
+              write(*,"(23x,3(A,1X,F12.5))")'   x extent:',xa,' ~',xb,' ~',xc
+              write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
+              write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
+              print*,' --------------------------------------------------------------'
+            else
+              wallamplit=0.d0
+              beter=1.d0
+              xa=0.d0
+              xb=0.d0
+              xc=0.d0
+              nmod_t=0
+              nmod_z=0
+            endif
+          endif
+          !
+          call bcast(wallamplit,comm=mpi_jmin)
+          call bcast(beter,comm=mpi_jmin)
+          call bcast(xa,comm=mpi_jmin)
+          call bcast(xb,comm=mpi_jmin)
+          call bcast(xc,comm=mpi_jmin)
+          call bcast(nmod_t,comm=mpi_jmin)
+          call bcast(nmod_z,comm=mpi_jmin)
+          !
+          !
+          lfirstcal=.false.
+          !
+        endif
+        !
+        if(ndims==3 .and. wallamplit>1.d-10) then
+          vwall=wallbs_rand(beter,wallamplit,xa,xb,xc,nmod_t,nmod_z)
+        else
+          vwall=0.d0
+        endif
+        !
+        j=0
+        !
+        do k=0,km
+        do i=0,im
+          !
+          pe=num1d3*(4.d0*prs(i,1,k)-prs(i,2,k))
+          te=num1d3*(4.d0*tmp(i,1,k)-tmp(i,2,k))
+          !
+          if(x(i,j,k,1)<=xslip) then
+            ue=num1d3*(4.d0*vel(i,1,k,1)-vel(i,2,k,1))
+            !
+            vel(i,j,k,1)=ue
+            vel(i,j,k,2)=0.d0
+            !
+          else
+            !
+            vel(i,j,k,1)=0.d0
+            vel(i,j,k,2)=vwall(i,k)
+            !
+          endif
+          !
+          !
+          vel(i,j,k,3)=0.d0
+          tmp(i,j,k)  =te
+          prs(i,j,k)  =pe
+          !
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=num1d3*(4.d0*spc(i,1,k,jspec)-spc(i,2,k,jspec))
+          enddo
+          !
+          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          call fvar2q(      q=  q(i,j,k,:),                            &
+                      density=rho(i,j,k),                              &
+                     velocity=vel(i,j,k,:),                            &
+                     pressure=prs(i,j,k),                              &
+                      species=spc(i,j,k,:)                             )
+          !
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=0.d0
+            !
+            delta_d1=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+            !
+            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
+            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            !
+          endif
+            !
+        enddo
+        enddo
+        !
+      endif
+      !
+    elseif(ndir==4) then
+      !
+      if(jrk==jrkm) then
+        !
+        j=jm
+        do k=0,km
+        do i=0,im
+          pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
+          te=num1d3*(4.d0*tmp(i,j-1,k)-tmp(i,j-2,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =te
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i,j-1,k,1)-spc(i,j-2,k,1))
+          endif
+          !
+          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          call fvar2q(      q=  q(i,j,k,:),                            &
+                      density=rho(i,j,k),                              &
+                     velocity=vel(i,j,k,:),                            &
+                     pressure=prs(i,j,k),                              &
+                      species=spc(i,j,k,:)                             )
+          !
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=0.d0
+            !
+            delta_d1=dis2point2(x(i,j,k,:),x(i,j-1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+            !
+            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
+            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
+    else
+      stop ' !! ndir not defined @ noslip'
+    endif
+    !
+  end subroutine slipadibwall
   !+-------------------------------------------------------------------+
   !| The end of the subroutine noslip.                                 |
   !+-------------------------------------------------------------------+

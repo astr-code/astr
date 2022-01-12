@@ -9,11 +9,15 @@ module commvar
   !
   use commtype
   !
+#ifdef COMB
+  use cantera
+#endif
+  !
   implicit none
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
   integer :: hm
-  integer :: numq,num_species,ndims,navg,ninit,num_modequ
+  integer :: numq,num_species,ndims,ninit,num_modequ
   character(len=10) :: turbmode
   character(len=4) :: conschm,difschm
   character(len=64) :: gridfile,solidfile
@@ -27,14 +31,12 @@ module commvar
   !|     conschm,difschm | the scheme of solving convectional and      |
   !|                     | diffusional terms.                          |
   !|         num_species | number of species                           |
-  !|                navg | frequency of averaging.                     |
   !|               ninit | initialisation method.                      |
   !|            gridfile | the gridfile.                               |
   !|       solidbodyfile | the file contains solid body geometry .     |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid,lwrite,lavg,lfftk,    &
-             limmbou,lwslic
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
   character(len=3) :: rkscheme
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
@@ -42,12 +44,25 @@ module commvar
   !|             diffterm| if the diffusion terms is solved.           |
   !|                     | .f. means Euler equations are solved.       |
   !|             lfilter | to activate filer flag                      |
-  !|              lwrite | write samples or not.                       |
-  !|              lwslic | write slices or not.                        |
-  !|                lavg | average the flow field or not .             |
   !|               lfftk | to use fft in the k direction.              |
   !|             limmbou | to use immersed boundary method             |
   !|            rkscheme | which rk method to use.                     |
+  !+---------------------+---------------------------------------------+
+  !
+  logical :: lwsequ,lwslic,lavg
+  !+---------------------+---------------------------------------------+
+  !|              lwsequ | write flowfield sequence or not.            |
+  !|              lwslic | write slices or not.                        |
+  !|                lavg | average the flow field or not .             |
+  !+---------------------+---------------------------------------------+
+  !
+  integer :: feqchkpt,feqwsequ,feqslice,feqlist,feqavg
+  !+---------------------+---------------------------------------------+
+  !|            feqchkpt | frequency of writing checkpoint             |
+  !|            feqwsequ | frequency of writing flowfield sequence     |
+  !|            feqslice | frequency of writing slices.                |
+  !|             feqlist | frequency of listing log.                   |
+  !|              feqavg | frequency of averaging flowfield.           |
   !+---------------------+---------------------------------------------+
   !
   integer :: npdci,npdcj,npdck
@@ -67,8 +82,7 @@ module commvar
   !|              voldom | total volume of the domain.                 |
   !|     dxyzmax,dxyzmin | characteristic grid spacing.                |
   !+---------------------+---------------------------------------------+
-  integer :: nstep,nsrpt,maxstep,nwrite,ninst,nlstep,filenumb,         &
-             nmonitor,fnumslic
+  integer :: nstep,nsrpt,maxstep,filenumb,nmonitor,fnumslic
   integer :: islice,jslice,kslice
   integer,allocatable :: imon(:,:)
   real(8) :: time,deltat
@@ -76,12 +90,10 @@ module commvar
   real(8) :: ref_t,reynolds,mach,rgas,gamma,prandtl
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1
+  real(8),allocatable :: spcinf(:)
   !+---------------------+---------------------------------------------+
   !|               nstep | the total time step number.                 |
   !|             maxstep | the max step to run.                        |
-  !|              nwrite | frequency of output                         |
-  !|              nlstep | frequency of list flowstate.                |
-  !|               ninst | frequency of write slices.                  |
   !|islice,jslice,kslice | position of slices.                         |
   !|            nmonitor | number of montors                           |
   !|                imon | monitor coordinates                         |
@@ -148,7 +160,13 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|             lreport | to control report of subroutines            |
   !+---------------------+---------------------------------------------+
-
+  !
+#ifdef COMB
+  type(phase_t) :: mixture
+  logical :: lcomb
+  character(len=255) :: chemfile
+  character(len=3) :: odetype
+#endif 
   !
   parameter(hm=5)
   !
