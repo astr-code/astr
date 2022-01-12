@@ -15,7 +15,6 @@ FCFLAGS= -O3 -fbounds-check
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
 OPTIONS3 = -DHDF5
-<<<<<<< HEAD
 OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
 # OMP = -fopenmp
 
