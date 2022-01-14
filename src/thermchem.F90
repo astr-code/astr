@@ -69,7 +69,6 @@ module thermchem
     character(len=10) :: spcnm,eunit,reactype,reverse,fallofftype,phase_id
     character(len=100) :: stringline
     !
-    tranmod=''
     phase_id='gas'
     !---CANTERA---
     mixture=importPhase(cheminfile,trim(phase_id))
@@ -1460,7 +1459,7 @@ module thermchem
           !
         select case(tranmod)
           !
-          case('mix')
+          case('mixav')
             call getMixDiffCoeffs(mixture,rhodi(:))
             rhodi(:)=den*rhodi(:)
             !

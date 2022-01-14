@@ -658,15 +658,14 @@ module initialisation
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
       endif 
       !
-      
-      if(num_species>=1) then
-        !
-        spc(i,j,k,1)=sin(x(i,j,k,1))
-        do jspc=2,num_species
-          spc(i,j,k,jspc)=1.d0-spc(i,j,k,1)
-        enddo
-        !
-      endif
+      ! if(num_species>=1) then
+      !   !
+      !   spc(i,j,k,1)=sin(x(i,j,k,1))
+      !   do jspc=2,num_species
+      !     spc(i,j,k,jspc)=1.d0-spc(i,j,k,1)
+      !   enddo
+      !   !
+      ! endif
       !
     enddo
     enddo

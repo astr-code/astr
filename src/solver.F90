@@ -2220,7 +2220,7 @@ module solver
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    integer :: i,j,k,n,ncolm,jspc
+    integer :: i,j,k,n,ncolm,jspc,idir
     real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
     real(8),allocatable,dimension(:,:,:,:,:) :: yflux
@@ -2230,7 +2230,7 @@ module solver
     real(8) :: detk
     real(8),allocatable :: dispec(:,:)
     real(8) :: corrdiff,hispec(num_species),xi(num_species),cpe,kama, &
-               gradyi(num_species),sum1,sum2,mw,dieff(num_species),sum3
+               gradyi(num_species),sum1,sum2,mw
     real(8),allocatable :: dfu(:)
     !
     real(8) :: time_beg
@@ -2240,17 +2240,12 @@ module solver
     allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     !
-#ifdef COMB
-    allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:ndims) ) 
-    yflux=0.d0
-#endif
-    !
     sigma =0.d0
     qflux =0.d0
     !
     if(num_species>0) then
       allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
-      allocate(dfu(1:num_species))
+      if(nondimen) allocate(dfu(1:num_species))
       !
       yflux=0.d0
     endif
@@ -2351,10 +2346,6 @@ module solver
         !
         detk=0.d0
         !
-        if(num_species>0) then
-          dfu(1:num_species)=miu/schmidt(1:num_species)
-        endif
-        !
       endif
       !
       sigma(i,j,k,1)=miu2*(s11-skk)-detk + tau11 !s11   
@@ -2373,56 +2364,65 @@ module solver
       qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
                                        sigma(i,j,k,5)*vel(i,j,k,2) +   &
                                        sigma(i,j,k,6)*vel(i,j,k,3)
-      !
-#ifdef COMB
-      !
-      ! select case(tranmod)
-      !   !  
-        
-      !   case('multi')
-      !     !
-      !     do jspec=1,num_species
-      !       sum2=sum(dispec(js,:)*(gradyi(:)-spec(:)*sum1))
-      !       !species diffusive flux
-      !       fluvis(js+2+ndims)=-1.d0*wmolar(js)/mw*sum2
-      !       !energy flux due to species diffusion
-      !       fluvis(2+ndims)=fluvis(2+ndims)-fluvis(js+2+ndims)*hispec(js)
-      !     enddo
-      !     !
-      !   case default
-      !     !
-      !     dieff(:)=dispec(:,1)+miu_sgs/pface%scsgs
-      !     !
-      !     sum2=sum(dieff(:)*(gradyi(:)-spec(:)*sum1))
-      !     !
-      !     do js=1,num_species
-      !       !Corretion diffusion velocity for continuity
-      !       corrdiff=sum2*spec(js)
-      !       !species diffusive flux
-      !       fluvis(js+2+ndims)=dieff(js)*(gradyi(js)-(spec(js)*sum1)) &
-      !                           -corrdiff
-      !       !energy flux due to species diffusion
-      !       fluvis(2+ndims)=fluvis(2+ndims)-fluvis(js+2+ndims)*hispec(js)
-      !     enddo
-      !     !
-      ! end select
-      ! !
-      ! yflux(i,j,k,:,1)=
-      !
-#endif
+      !                                      
       if(num_species>0) then
         !
-        do jspc=1,num_species
-          yflux(i,j,k,jspc,1)=dfu(jspc)*dspc(i,j,k,jspc,1)
-          yflux(i,j,k,jspc,2)=dfu(jspc)*dspc(i,j,k,jspc,2)
-          yflux(i,j,k,jspc,3)=dfu(jspc)*dspc(i,j,k,jspc,3)
-        enddo
+        if(nondimen) then 
+          !
+          dfu(1:num_species)=miu/schmidt(1:num_species)
+          !
+          do idir=1,3
+            yflux(i,j,k,:,idir)=dfu(:)*dspc(i,j,k,:,idir)
+          enddo
+          !
+        else
+          !
+#ifdef COMB
+          !
+          do idir=1,3
+            !
+            gradyi(:)=dspc(i,j,k,:,idir)
+            !
+            sum1=mw*sum(gradyi(:)/wmolar(:))
+            !
+            select case(tranmod)
+              !
+              case('multi')
+                !
+                do jspc=1,num_species
+                  sum2=sum(dispec(jspc,:)*(gradyi(:)-spc(i,j,k,:)*sum1))
+                  !species diffusive flux
+                  yflux(i,j,k,jspc,idir)=-1.d0*wmolar(jspc)/mw*sum2
+                  !energy flux due to species diffusion
+                  qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+                enddo
+                !
+              case default
+                !
+                sum2=sum(dispec(:,1)*(gradyi(:)-spc(i,j,k,:)*sum1))
+                !
+                do jspc=1,num_species
+                  !Corretion diffusion velocity for continuity
+                  corrdiff=sum2*spc(i,j,k,jspc)
+                  !species diffusive flux
+                  yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
+                                          -corrdiff
+                  !energy flux due to species diffusion
+                  qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+                enddo
+                !
+            end select
+            !
+          enddo 
+#endif
+          !
+        endif !nondimen
         !
-      endif
+      endif !num_species>0 
       !
-    enddo
-    enddo
-    enddo
+    enddo !k
+    enddo !j
+    enddo !i
     !
     call dataswap(sigma,subtime=ctime(7))
     !

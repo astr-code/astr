@@ -195,7 +195,7 @@ module readwrite
       !
       write(*,'(2X,A59,I3)')' number of independent variables: ',numq
       write(*,'(2X,A59,I3)')' number of species: ',num_species
-      if(num_species>0) then
+      if(num_species>0 .and. nondimen) then
       write(*,'(1X,A,12(1X,F8.6))')' schmidt number: ',(schmidt(i),i=1,num_species)
       endif
       !
@@ -479,8 +479,8 @@ module readwrite
       read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
       read(fh,*)num_species
-      if(num_species>0) then
-        allocate(schmidt(1:num_species))
+      if(num_species>0 .and. nondimen) then
+        allocate(schmidt(num_species))
         backspace(fh)
         read(fh,*)num_species,(schmidt(i),i=1,num_species)
       endif
@@ -584,7 +584,7 @@ module readwrite
     !
     call bcast(recon_schem)
     call bcast(num_species)
-    call bcast(schmidt,num_species)
+    if(nondimen)call bcast(schmidt,num_species)
     !
     call bcast(bctype)
     call bcast(twall)
