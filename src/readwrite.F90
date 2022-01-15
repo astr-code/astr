@@ -421,7 +421,7 @@ module readwrite
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
 #ifdef COMB
-    use thermchem,only: chemrep,chemread,thermdyn,canteratest
+    use thermchem,only: chemrep,chemread,thermdyn
     logical :: lfex
 #endif
     !
@@ -618,8 +618,6 @@ module readwrite
         ! call system('xsltproc $FACTDIR/run/chemMech/thermchem_gen.xsl '  &
         !   //trim(chemfile)//' > thermchem.txt')
       call mpibar
-      !
-      ! call canteratest
       !
       call chemread(trim(chemfile))
       !
@@ -1565,6 +1563,7 @@ module readwrite
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       filenumb=filenumb+1
+      write(stepname,'(i4.4)')filenumb
       outfilename='outdat/flowfield'//stepname//'.h5'
     else
       stepname=''
