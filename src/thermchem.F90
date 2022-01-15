@@ -45,6 +45,25 @@ module thermchem
   !
   contains
   !
+  subroutine canteratest
+    !
+    use cantera
+    !
+    type(phase_t) :: mixture
+    logical :: lcomb
+    character(len=255) :: chemfile
+    character(len=3) :: odetype
+    character(len=10) :: phase_id
+    !
+    phase_id='gas'
+    chemfile='ES80_H2-8-16.xml'
+    !
+    !---CANTERA---
+    mixture=importPhase(trim(chemfile),trim(phase_id))
+    print*,mixture,phase_id,trim(chemfile),'+'
+    !
+  end subroutine canteratest
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine reads the chemistry data from cantera format file |
   !+-------------------------------------------------------------------+

@@ -421,7 +421,7 @@ module readwrite
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
 #ifdef COMB
-    use thermchem,only: chemrep,chemread,thermdyn
+    use thermchem,only: chemrep,chemread,thermdyn,canteratest
     logical :: lfex
 #endif
     !
@@ -618,6 +618,8 @@ module readwrite
         ! call system('xsltproc $FACTDIR/run/chemMech/thermchem_gen.xsl '  &
         !   //trim(chemfile)//' > thermchem.txt')
       call mpibar
+      !
+      ! call canteratest
       !
       call chemread(trim(chemfile))
       !

@@ -621,32 +621,40 @@ module initialisation
     use commvar,  only: nondimen
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal
+    use thermchem,only : tranmod,tranco,enthpy,convertxiyi,wmolar
     !
     ! local data
     integer :: i,j,k,jspc
-    real(8) :: l_0,u_0
+    real(8) :: l_0
+    real(8) :: cpe,miu,kama
+    real(8),allocatable :: dispec(:,:)
     !
     if(nondimen) then
       roinf=1.d0
       tinf=1.d0
       pinf=thermal(temperature=tinf,density=roinf)
       l_0=1.d0
-      u_0=1.d0
+      uinf=1.d0
     else
       tinf=347.d0
       roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
       l_0=xmax/(2.d0*pi)
-      u_0=40.d0
+      uinf=40.d0
+      !
+      if(.not.allocated(dispec)) allocate(dispec(num_species,1))
+      call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama, &
+                  spc=spcinf,rhodi=dispec(:,1))
+      if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
     endif
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       rho(i,j,k)  =roinf
-      vel(i,j,k,1)= u_0*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
-      vel(i,j,k,2)=-u_0*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
+      vel(i,j,k,1)= uinf*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
+      vel(i,j,k,2)=-uinf*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
       vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf+roinf/16.d0*(u_0**2) &
+      prs(i,j,k)  =pinf+roinf/16.d0*(uinf**2) &
                         *(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
                         *(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
       !
@@ -657,6 +665,7 @@ module initialisation
         spc(i,j,k,:)=spcinf(:)
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
       endif 
+      !
       !
       ! if(num_species>=1) then
       !   !
@@ -682,7 +691,7 @@ module initialisation
     !                                prs(0:im,0:jm,0:km)  ,'p',          &
     !                                tmp(0:im,0:jm,0:km)  ,'t' )
     !
-    if(lio)  write(*,'(A,I1,A)')'  ** 2-D vortical field initialised.'
+    if(lio)  write(*,'(A,I1,A)')'  ** 3-D TGV field initialised.'
     !
   end subroutine tgvini
   !+-------------------------------------------------------------------+
