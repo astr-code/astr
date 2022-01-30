@@ -116,7 +116,7 @@ module commvar
   !|                tinf | infinite temperature                        |      
   !|                pinf | infinite pressure                           |   
   !+---------------------+---------------------------------------------+
-  character(len=8) :: flowtype
+  character(len=16) :: flowtype
   !+---------------------+---------------------------------------------+
   !|            flowtype | to define the type of flow.                 |
   !+---------------------+---------------------------------------------+

@@ -91,6 +91,10 @@ module initialisation
           call blini
         case('windtunn')
           call wtini
+        case('0dreactor')
+          call reactorini
+        ! case('1dflame')
+        !   call onedflameini
         case default
           print*,trim(flowtype)
           stop ' !! flowtype not defined @ flowinit'
@@ -1331,6 +1335,91 @@ module initialisation
   end subroutine cylinderini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine cylinderini.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of 0D reactor.                                                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-01-2022: Created by Created by Z.X. Chen @ Peking University   |
+  !+-------------------------------------------------------------------+
+  subroutine reactorini
+    !
+    use commvar,  only: pinf
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    use thermchem,only: convertxiyi,spcindex
+    !
+#ifdef COMB
+    ! local data
+    integer :: i,j,k
+    real(8) :: xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
+      specp(num_species),arg,prgvar,masflx,specx(num_species)
+    !
+    ! tmpr=1000.d0/0.8d0
+    tmpr=1000.d0
+    ! prin=13.5d5
+    !reactants
+    specx(:)=0.d0
+    specx(spcindex('H2'))=0.2d0
+    specx(spcindex('O2'))=0.1d0
+    !
+    ! specx(spcindex('H2'))=0.2867d0
+    ! specx(spcindex('O2'))=0.1434d0
+    ! specx(spcindex('H2O'))=0.1819d0
+    !
+    specx(spcindex('N2'))=1.d0-sum(specx)
+    call convertxiyi(specx(:),specr(:),'X2Y')
+    !
+    !!
+    ! specr(:)=0.d0
+    ! specr(spcindex('nc7h16'))=0.07247482382311918d0
+    ! specr(spcindex('o2'))=0.28285951066551174d0
+    ! specr(spcindex('he'))=0.08059381448746926d0
+    ! specr(spcindex('n2'))=1.d0-sum(specr)
+    !
+    ! specr(spcindex('CH4'))=0.055d0
+    ! specr(spcindex('O2'))=0.220185d0
+    ! specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    ! print*,specr
+    ! stop
+    ! specr(1)=0.055d0
+    ! specr(2)=0.220185d0
+    ! specr(num_species)=1.d0-sum(specr)
+    ! specr(1)=0.06218387d0
+    ! specr(2)=0.21843332
+    ! specr(num_species)=1.d0-sum(specr)
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      vel(i,j,k,:)= 0.d0
+      !
+      tmp(i,j,k)  = tmpr
+      !
+      prs(i,j,k)=pinf
+      !
+      spc(i,j,k,:)=specr(:)
+      !
+      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:))
+      !
+      ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** reactor initialised.'
+    !
+#endif
+  !
+  end subroutine reactorini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine reactorini.                             |
   !+-------------------------------------------------------------------+
   !
   function return_30k(x) result(y)

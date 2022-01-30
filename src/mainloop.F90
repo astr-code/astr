@@ -19,6 +19,8 @@ module mainloop
   !
   integer :: loop_counter=0
   integer :: fhand_err
+  integer :: nstep0
+  real(8) :: time_start
   !
   contains
   !
@@ -37,12 +39,13 @@ module mainloop
     use commcal,  only: cflcal
     !
     ! local data
-    real(8) :: time_start,time_beg,time_next_step
+    real(8) :: time_beg,time_next_step
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
     integer,dimension(8) :: value
     !
     time_start=ptime()
+    nstep0=nstep
     !
     if(firstcall) then
       !
@@ -246,11 +249,17 @@ module mainloop
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
                          lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
-                         feqwsequ,lwslic,lreport
+                         feqwsequ,lwslic,lreport,flowtype,     &
+                         ndims,num_species,maxstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter
     use bc,       only : boucon,immbody
+#ifdef COMB
+    use thermchem,only : imp_euler_ode,heatrate
+    use fdnn
+    use commvar,  only : odetype
+#endif 
     !
     ! logical data
     logical,save :: firstcall = .true.
@@ -258,8 +267,22 @@ module mainloop
     integer :: nrk,i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
+    integer :: dt_ratio,jdnn,idnn
+    real(8) :: hrr
     !
     time_beg=ptime()
+    !
+#ifdef COMB
+    if(odetype=='dnn') then 
+      if(nstep==nstep0) then
+        call initialization
+        call initialize_locell(im,jm,km)
+      endif 
+      dnnidx(:,:,:)=1
+      jdnn=0
+      dt_ratio=delta_t/deltat
+    endif 
+#endif
     !
     if(firstcall) then
       !
@@ -301,6 +324,8 @@ module mainloop
       !
       call rhscal(ctime(4))
       !
+      if(flowtype(1:2)=='0d') jacob=1.d0
+      !
       if(nrk==1) then
         !
         do m=1,numq
@@ -322,17 +347,107 @@ module mainloop
       !
       if(lfilter) call filterq(ctime(8))
       !
-      call spongefilter
+      if(flowtype(1:2)/='0d') call spongefilter
       !
       call updatefvar
       !
       call crashfix
       !
-    enddo
+#ifdef COMB
+      if(odetype/='rk3' .and. nrk==3) then
+        !
+        do i=0,im 
+        do j=0,jm
+        do k=0,km
+              !
+          if(odetype=='ime') then
+            !
+            call imp_euler_ode(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:),deltat)
+            !
+            q(i,j,k,ndims+3:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
+            q(i,j,k,ndims+3:numq)=q(i,j,k,1)*q(i,j,k,ndims+3:numq) &
+                                  /sum(q(i,j,k,ndims+3:numq))
+            !
+          elseif(odetype=='dnn' .and. mod(nstep,dt_ratio)==0 .and. nstep>0) then
+            !
+            ! if(locell(jcell)%tmp<1000.d0 .or. locell(jcell)%tmp>2200.d0) then 
+            !
+            hrr=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
+            if(hrr<1.d8) then 
+              !
+              dnnidx(i,j,k)=0
+              !
+              do idnn=1,dt_ratio
+                !
+                call imp_euler_ode(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:),deltat)
+                !
+              enddo 
+              !
+            else 
+              !
+              jdnn=jdnn+1
+              inputholder(1,jdnn)=tmp(i,j,k)
+              inputholder(2,jdnn)=1.0
+              inputholder(3:num_species+1,jdnn)=spc(i,j,k,1:num_species-1)
+              !
+            endif
+            !
+          else
+            !
+            continue
+            !
+          endif !odetype
+          !
+        enddo !i
+        enddo !j
+        enddo !k
+        !
+        if(odetype=='dnn' .and. nstep>0 .and. mod(nstep,dt_ratio)==0) then
+          !
+          allocate(input(n_layer(1),jdnn),output(n_layer(1),jdnn))
+          !
+          input(:,:)=inputholder(:,1:jdnn)
+          if(jdnn/=0) output=netOneStep(input,epoch,n_layer,jdnn)
+          !
+          idnn=0
+          do i=0,im
+          do j=0,jm
+          do k=0,km
+            !
+            if(dnnidx(i,j,k)/=0) then 
+              idnn=idnn+1
+              spc(i,j,k,1:num_species-1)=output(3:num_species+1,idnn)
+              spc(i,j,k,num_species)=0.d0
+            endif 
+            !
+            q(i,j,k,ndims+3:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
+            q(i,j,k,ndims+3:numq)=q(i,j,k,1)*q(i,j,k,ndims+3:numq) &
+                                  /sum(q(i,j,k,ndims+3:numq))
+            !
+          enddo 
+          enddo
+          enddo
+          !
+        endif 
+        !
+        call updatefvar
+        !
+      endif !odetype
+#endif
+    !
+    enddo !rk
     !
     deallocate(qsave)
     !
     ctime(3)=ctime(3)+ptime()-time_beg
+    !
+#ifdef COMB
+    if(odetype=='dnn') then 
+      if(nstep==maxstep) call finalize()
+      if(allocated(input))deallocate(input,output)
+    endif
+    !
+#endif
     !
     return
     !
@@ -487,7 +602,7 @@ module mainloop
     !
     call statcal(ctime(5))
     !
-    call statout
+    call statout(time_start)
     !
     if(nstep==0 .or. loop_counter.ne.0) then
       ! the first step after reading ehecking out doesn't need to do this

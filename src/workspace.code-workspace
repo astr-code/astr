@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../FACT"
+		},
+		{
+			"path": "../../../../../../ASTR_run/test_case/Test/PSR"
+		}
+	],
+	"settings": {
+		"fortran.ignoreWarning.fortls": true
+	}
+}

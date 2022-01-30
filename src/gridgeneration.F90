@@ -47,6 +47,8 @@ module gridgeneration
         call gridcube(20.d0,10.d0,10.d0)
       elseif(trim(flowtype)=='channel') then
         call grichan(2.d0*pi,pi)
+      elseif(trim(flowtype)=='0dreactor') then
+        call gridcube(1.d0,1.d0,1.d0)
       else
         print*,trim(flowtype),' is not defined @ gridgen'
         stop ' !! error at gridgen' 

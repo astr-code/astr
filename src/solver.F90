@@ -228,38 +228,46 @@ module solver
     !
     if(present(subtime)) time_beg=ptime() 
     !
-    read(conschm(1:1),*) nconv
-    !
-    if(firstcall) then
-      if(limmbou) call ShockSolid
-      firstcall=.false.
-    endif
-    !
-    call gradcal(subtime=ctime(10))
-    !
-    if(mod(nconv,2)==0) then
-      call convrsdcal6(subtime=ctime(9))
-    else
+    if(flowtype(1:2)/='0d') then
       !
-      if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
+      read(conschm(1:1),*) nconv
       !
-      if(conschm(4:4)=='e') then
-        call convrsduwd(subtime=ctime(9))
-      elseif(conschm(4:4)=='c') then
-        call convrsdcmp(subtime=ctime(9))
-      else
-        stop ' !! error @ conschm'
+      if(firstcall) then
+        if(limmbou) call ShockSolid
+        firstcall=.false.
       endif
       !
-    endif
-    !
-    qrhs=-qrhs
-    !
-    if(diffterm) call diffrsdcal6(subtime=ctime(10))
+      call gradcal(subtime=ctime(10))
+      !
+      if(mod(nconv,2)==0) then
+        call convrsdcal6(subtime=ctime(9))
+      else
+        !
+        if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
+        !
+        if(conschm(4:4)=='e') then
+          call convrsduwd(subtime=ctime(9))
+        elseif(conschm(4:4)=='c') then
+          call convrsdcmp(subtime=ctime(9))
+        else
+          stop ' !! error @ conschm'
+        endif
+        !
+      endif
+      !
+      qrhs=-qrhs
+      !
+      if(diffterm) call diffrsdcal6(subtime=ctime(10))
+      !
+    endif 
     !
     if(trim(flowtype)=='channel') then 
       call srcchan
     endif
+    !
+#ifdef COMB
+    call srccomb
+#endif
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
@@ -341,6 +349,38 @@ module solver
   !| The end of the subroutine source1.                                |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine add a source term to the rsd of the equation to   |
+  !| drive channel flow.                                               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+#ifdef COMB
+  subroutine srccomb
+    !
+    use commvar,  only : im,jm,km,numq,num_species,odetype
+    use commarray,only : qrhs,rho,tmp,spc
+    use thermchem,only: chemrate,wirate
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    if(odetype(1:2)=='rk') then
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        call chemrate(den=rho(i,j,k),tmp=tmp(i,j,k),spc=spc(i,j,k,:))
+        qrhs(i,j,k,numq-num_species+1:numq)= &
+                        qrhs(i,j,k,numq-num_species+1:numq)+wirate(:)
+      enddo
+      enddo 
+      enddo
+    endif
+    !
+  end subroutine srccomb
+#endif 
   !+-------------------------------------------------------------------+
   !| this subroutine is to solve the convectional term with upwind     |
   !| biased schemes using Steger-Warming flux splitting scheme.        |

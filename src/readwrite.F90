@@ -124,6 +124,9 @@ module readwrite
                         lrestart,limmbou,solidfile,bfacmpld,turbmode,  &
                         schmidt
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
+#ifdef COMB
+    use commvar, only : odetype,lcomb
+#endif
     !
     ! local data
     character(len=42) :: typedefine
@@ -159,6 +162,8 @@ module readwrite
         typedefine='     shock-wave/boundary layer interaction'
       case('windtunn')
         typedefine='                   a numerical wind tunnel'
+      case('0dreactor')
+        typedefine='               a perfectly stirred reactor'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -294,6 +299,21 @@ module readwrite
       else
         stop ' !! error: rk scheme not defined !!'
       endif
+      !
+#ifdef COMB
+      if(lcomb) then
+        write(*,'(9X,A)',advance='no')'  chemistry ODE solver: '
+        if(odetype=='rk3') then
+          write(*,'(A)')'  3rd-order explicit Runge–Kutta'
+        elseif(odetype=='ime') then
+          write(*,'(A)')'  1st-order implicit Euler'
+        elseif(odetype=='dnn') then
+          write(*,'(A)')'  deep neural network model'
+        else
+          stop ' !! error: chemistry ODE solver defined !!'
+        endif
+      endif 
+#endif
       !
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                    *** Boundary Conditions ***'
@@ -452,10 +472,8 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
 #ifdef COMB
-      if(lcomb) then 
-        backspace(fh)
-        read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
-      endif
+      backspace(fh)
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
 #endif
       read(fh,'(/)')
       read(fh,*)lrestart

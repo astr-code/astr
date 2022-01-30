@@ -501,7 +501,7 @@ module fludyna
     !
     use commvar, only: numq,ndims,num_species,const1,const6,tinf
     !
-    real(8),intent(in) :: q(:,:,:,:)
+    real(8),intent(inout) :: q(:,:,:,:)
     real(8),intent(out) :: density(:,:,:)
     real(8),intent(out),optional :: temperature(:,:,:),pressure(:,:,:),&
                                     species(:,:,:,:),velocity(:,:,:,:),&
