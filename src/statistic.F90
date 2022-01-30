@@ -7,6 +7,7 @@
 !+---------------------------------------------------------------------+
 module statistic
   !
+  use constdef
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
                        zmin,zmax,nstep,deltat,force,numq,num_species
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
@@ -460,7 +461,7 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statout(time_verybegin)
     !
-    use commvar, only : flowtype,nstep,time,maxstep,lrestart,feqlist
+    use commvar, only : flowtype,nstep,time,maxstep,lrestart,feqlist,uinf
     use parallel,only : ptime
     !
     ! arguments
@@ -472,6 +473,7 @@ module statistic
     integer :: nprthead=200
     integer :: i,ferr,ns,walltime
     integer,save :: hand_fs
+    real(8) :: l_0
     ! 
     if(lio) then
       !
@@ -528,7 +530,8 @@ module statistic
       endif
       !
       if(trim(flowtype)=='tgv') then
-        write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,enstophy,kenergy
+        l_0=xmax/(2.d0*pi)
+        write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time/(l_0/uinf),enstophy,kenergy
       elseif(trim(flowtype)=='channel') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
       elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
@@ -565,7 +568,8 @@ module statistic
         endif
         !
         if(trim(flowtype)=='tgv') then
-          write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time,enstophy,kenergy
+          l_0=xmax/(2.d0*pi)
+          write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time/(l_0/uinf),enstophy,kenergy
         elseif(trim(flowtype)=='channel') then
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
@@ -602,7 +606,7 @@ module statistic
   !+-------------------------------------------------------------------+
   function enstophycal() result(vout)
     !
-    use commvar,   only : im,jm,km,ia,ja,ka
+    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf
     use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
@@ -611,6 +615,7 @@ module statistic
     ! local data
     integer :: i,j,k
     real(8) :: omega(3),omegam
+    real(8) :: l_0,u_0
     !
     vout=0.d0
     do k=1,km
@@ -631,6 +636,10 @@ module statistic
     !
     vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
     !
+    l_0=xmax/(2.d0*pi)
+    !
+    vout=vout/(roinf*(uinf/l_0)**2)
+    !
     return
     !
   end function enstophycal
@@ -647,7 +656,7 @@ module statistic
   !+-------------------------------------------------------------------+
   function kenergycal() result(vout)
     !
-    use commvar,   only : im,jm,km,ia,ja,ka
+    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf
     use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
@@ -670,6 +679,7 @@ module statistic
     enddo
     !
     vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+    vout=vout/(roinf*uinf*uinf)
     !
     return
     !

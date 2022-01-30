@@ -33,7 +33,7 @@ module gridgeneration
         if(nondimen) then
           call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
         else 
-          call gridcube(0.00505d0,0.00505d0,0.00505d0)
+          call gridcube(5.1530915662d-3,5.1530915662d-3,5.1530915662d-3)
         endif 
       elseif(trim(flowtype)=='jet') then
         call gridjet

@@ -1581,6 +1581,7 @@ module readwrite
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       filenumb=filenumb+1
+      write(stepname,'(i4.4)')filenumb
       outfilename='outdat/flowfield'//stepname//'.h5'
     else
       stepname=''
