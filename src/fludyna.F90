@@ -941,6 +941,126 @@ module fludyna
   ! end of the subroutine postshockcal.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  !+-------------------------------------------------------------------+
+  !| This function is used to assign the inflow condition for the three|
+  !| stream coaxial jet flow.                                          |
+  !+-------------------------------------------------------------------+
+  !| ref: Bouheraoua, L., Domingo, P., Ribert, G. Large-eddy simulation|
+  !| of a supersonic lifted jet flame: Analysis of the turbulent flame |
+  !| base. Combust. Flame, 2017, 179, 199-218.                         |                                               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-Feb-2022: Created by Z.X. Chen @ Hengdong                      |
+  !+-------------------------------------------------------------------+
+  subroutine multistream_inflow(stream,rovd,rho,vel,prs,tmp,spc,ubulk)
+    !
+    use commvar, only: &
+      ndims,num_species,pinf,tinf,spcinf,uinf,dj_i,dco_i
+      !
+#ifdef COMB
+    use thermchem, only: spcindex,convertxiyi
+    !
+    ! arguments
+    character(len=*),intent(in) :: stream
+    real(8),intent(in),optional :: rovd
+    real(8),intent(out),optional :: &
+      rho,prs,tmp,spc(num_species),vel(ndims),ubulk
+    !
+    !local
+    real(8) :: vel_ref(ndims),vel0(ndims),ub,spcx(num_species),h,delta &
+              ,spc_ref(num_species),tmp_ref
+    !
+    vel_ref(:)=0.d0
+    spc_ref(:)=0.d0
+    spcx(:)=0.d0
+    tmp=tinf
+    !
+    if(trim(stream)=='fuel') then
+      !
+      tmp_ref=545.d0
+      spcx(spcindex('H2'))=1.d0
+      ! spcx(spcindex('N2'))=1.d0-sum(spcx(:))
+      call convertxiyi(spcx(:),spc_ref(:),'X2Y')
+      spc(:)=spc_ref(:)
+      ! tmp=tmp_ref
+      !
+      ub=1.78d2
+      ! ub=680.d0!14.1d0
+      if(.true. .and. present(rovd)) then 
+        ! vel_ref(1)=ub*1.128d0*((1.d0-2.d0*rovd)**(1.d0/7.d0))
+        h=0.5d0
+        delta=0.05d0
+        vel_ref(1)=100.d0+0.5d0*(ub-100.d0)*(1.d0-tanh(2.d0*(rovd-h)/delta))
+        ! spc(spcindex('H2'))=spcinf(spcindex('H2'))+0.5d0*(spc_ref(spcindex('H2')) &
+        !                 -spcinf(spcindex('H2')))*(1.d0-tanh(2.d0*(rovd-h)/delta))
+        ! spc(spcindex('N2'))=1.d0-sum(spc(:))
+        ! vel_ref(1)=vel_ref(1)*1.27767d0*((1.d0-2.d0*rovd)**(1.d0/3.d0))
+        ! vel_ref(2:ndims)=0.d0*vel_ref(1)
+        !
+        tmp=tinf+0.5d0*(tmp_ref-tinf)*(1.d0-tanh(2.d0*(rovd-h)/delta))               
+        vel(:)=vel_ref(:)
+        ! if(nstep==0) vel(:)=whitenoise(vel_ref(:),vel(:),0.1d0)
+      else 
+        vel(1)=ub
+      endif 
+      !
+    elseif(trim(stream)=='hotcoflow') then
+      !
+      tmp_ref=1250.d0
+      spc_ref(spcindex('O2'))=0.24488d0
+      spc_ref(spcindex('H2O'))=0.17491d0
+      spc_ref(spcindex('N2'))=1.d0-sum(spc_ref(:))
+      ! call convertxiyi(spcx(:),spc_ref(:),'X2Y')
+      spc(:)=spc_ref(:)
+      ! tmp=tmp_ref
+      ! spc(spcindex('O2'))=0.233d0
+      ! spc(spcindex('N2'))=1.d0-sum(spc(:))
+      !
+      ub=1.42d2
+      ! ub=1.d0
+      if(.true. .and. present(rovd)) then 
+        h=0.5d0
+        delta=0.05d0
+        vel_ref(1)=100.d0+0.5d0*(ub-100.d0)*(1.d0-tanh(2.d0*(rovd-h)/delta))
+        ! spc(spcindex('O2'))=spcinf(spcindex('O2'))+0.5d0*(spc_ref(spcindex('H2')) &
+        !                 -spcinf(spcindex('H2')))*(1.d0-tanh(2.d0*(rovd-h)/delta))
+        ! vel_ref(1)=ub*1.128d0*((1.d0-2.d0*rovd)**(1.d0/7.d0))
+        ! vel_ref(1)=vel_ref(1)*1.27767d0*((1.d0-2.d0*rovd)**(1.d0/3.d0))
+        ! vel_ref(2:ndims)=0.d0*vel_ref(1)
+        !
+        tmp=tinf+0.5d0*(tmp_ref-tinf)*(1.d0-tanh(2.d0*(rovd-h)/delta))
+        vel(:)=vel_ref(:)
+        ! if(nstep==0) vel(:)=whitenoise(vel_ref(:),vel(:),0.1d0)
+      else 
+        vel(1)=ub
+      endif
+      !
+    elseif(trim(stream)=='air') then
+      !
+      tmp=tinf
+      spc(:)=spcinf(:)
+      !
+      ub=100.d0
+      vel(:)=0.d0
+      vel(1)=ub
+      !
+    else
+      stop ' !! stream type not set for the inlet boundary !!'
+    endif
+    !
+    prs=pinf
+    rho=thermal(pressure=prs,temperature=tmp,species=spc(:))
+    !
+    if(present(ubulk))ubulk=ub
+    !
+#endif
+    !
+  end subroutine multistream_inflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine multistream_inflow.                     |
+  !+-------------------------------------------------------------------+
+  !
   !!
 end module fludyna
 !+---------------------------------------------------------------------+

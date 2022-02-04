@@ -354,19 +354,19 @@ module mainloop
       call crashfix
       !
 #ifdef COMB
-      if(odetype/='rk3' .and. nrk==3) then
+      if(nrk==3) then
         !
         do i=0,im 
         do j=0,jm
         do k=0,km
               !
-          if(odetype=='ime') then
+          if(odetype=='ime' .or. odetype=='rk3') then
             !
-            call imp_euler_ode(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:),deltat)
+            if(odetype=='ime') &
+              call imp_euler_ode(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:),deltat)
             !
-            q(i,j,k,ndims+3:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
-            q(i,j,k,ndims+3:numq)=q(i,j,k,1)*q(i,j,k,ndims+3:numq) &
-                                  /sum(q(i,j,k,ndims+3:numq))
+            q(i,j,k,6:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
+            q(i,j,k,6:numq)=q(i,j,k,1)*q(i,j,k,6:numq)/sum(q(i,j,k,6:numq))
             !
           elseif(odetype=='dnn' .and. mod(nstep,dt_ratio)==0 .and. nstep>0) then
             !
@@ -420,9 +420,8 @@ module mainloop
               spc(i,j,k,num_species)=0.d0
             endif 
             !
-            q(i,j,k,ndims+3:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
-            q(i,j,k,ndims+3:numq)=q(i,j,k,1)*q(i,j,k,ndims+3:numq) &
-                                  /sum(q(i,j,k,ndims+3:numq))
+            q(i,j,k,6:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
+            q(i,j,k,6:numq)=q(i,j,k,1)*q(i,j,k,6:numq)/sum(q(i,j,k,6:numq))
             !
           enddo 
           enddo

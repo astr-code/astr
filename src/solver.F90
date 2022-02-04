@@ -228,7 +228,7 @@ module solver
     !
     if(present(subtime)) time_beg=ptime() 
     !
-    if(flowtype(1:2)/='0d') then
+    if(flowtype(2:2)/='d') then
       !
       read(conschm(1:1),*) nconv
       !
@@ -255,11 +255,11 @@ module solver
         !
       endif
       !
-      qrhs=-qrhs
-      !
-      if(diffterm) call diffrsdcal6(subtime=ctime(10))
-      !
     endif 
+    !
+    qrhs=-qrhs
+    !
+    if(diffterm) call diffrsdcal6(subtime=ctime(10))
     !
     if(trim(flowtype)=='channel') then 
       call srcchan
@@ -360,20 +360,19 @@ module solver
 #ifdef COMB
   subroutine srccomb
     !
-    use commvar,  only : im,jm,km,numq,num_species,odetype
+    use commvar,  only : im,jm,km,numq,num_species,odetype,lcomb
     use commarray,only : qrhs,rho,tmp,spc
     use thermchem,only: chemrate,wirate
     !
     ! local data
     integer :: i,j,k
     !
-    if(odetype(1:2)=='rk') then
+    if(odetype(1:2)=='rk' .and. lcomb) then
       do k=0,km
       do j=0,jm
       do i=0,im
         call chemrate(den=rho(i,j,k),tmp=tmp(i,j,k),spc=spc(i,j,k,:))
-        qrhs(i,j,k,numq-num_species+1:numq)= &
-                        qrhs(i,j,k,numq-num_species+1:numq)+wirate(:)
+        qrhs(i,j,k,6:numq)=qrhs(i,j,k,6:numq)+wirate(:)
       enddo
       enddo 
       enddo

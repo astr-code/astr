@@ -517,7 +517,7 @@ module statistic
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                   .or.flowtype=='h2supersonic') then
             write(hand_fs,"(2(A10,1X),5(A12,1X))") &
-              'nstep','clock','time','maxT','maxU','maxP','maxHRR'
+              'nstep','clock','time','maxT','maxU','maxRho','maxHRR'
           else
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -560,7 +560,7 @@ module statistic
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                   .or.flowtype=='h2supersonic') then
             write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
-              'maxU','maxP','maxHRR'
+              'maxU','maxRho','maxHRR'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
           endif

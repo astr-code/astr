@@ -20,7 +20,7 @@ module readwrite
   !+---------------------+---------------------------------------------+
   !|            nxtchkpt | the next nstep to checkpoint.               |
   !|            nxtwsequ | the next nstep to write flow field.         |
-  !+---------------------+---------------------------------------------+
+  !+---------------------+---------f------------------------------------+
   !
   contains
   !
@@ -164,6 +164,10 @@ module readwrite
         typedefine='                   a numerical wind tunnel'
       case('0dreactor')
         typedefine='               a perfectly stirred reactor'
+      case('1dflame')
+        typedefine='               a 1D premixed laminar flame'
+      case('h2supersonic')
+        typedefine='                     a supersonic H2 flame'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -1313,7 +1317,7 @@ module readwrite
     !
     if(lwsequ) then
       write(stepname,'(i4.4)')filenumb
-      infilename='outdat/flowfield'//stepname//'.h5'
+      infilename=folder//'/flowfield'//stepname//'.h5'
     else
       infilename=folder//'/flowfield.h5'
     endif
