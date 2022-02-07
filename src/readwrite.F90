@@ -241,18 +241,20 @@ module readwrite
         if(conschm(4:4)=='e') then
           select case(recon_schem)
           case(0)
-            write(*,'(24A)')'    linear upwind scheme'
+            write(*,'(24A)')'      linear construction'
           case(1)
-            write(*,'(24A)')'             WENO scheme'
+            write(*,'(24A)')'        WENO construction'
           case(2)
-            write(*,'(24A)')'           WENO-Z scheme'
+            write(*,'(24A)')'      WENO-Z construction'
           case(3)
-            write(*,'(24A)')'               MP scheme'
+            write(*,'(24A)')'          MP construction'
           case(4)
-            write(*,'(24A)')'         WENO-SYM scheme'
+            write(*,'(24A)')'    WENO-SYM construction'
           case(5)
-            write(*,'(24A)')'            MP-LD scheme'
+            write(*,'(24A)')'      MP-LD construction'
             write(*,'(A56,F8.3)')'            b factor = ',bfacmpld
+          case(6)
+            write(*,'(24A)')'      round construction'
           case default
             stop ' !! reconstruction scheme not defined !!' 
           end select
@@ -1112,7 +1114,7 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine readflowini3d
     !
-    use commvar,   only : im,jm,km,num_species,time
+    use commvar,   only : im,jm,km,num_species,time,roinf,tinf,pinf
     use commarray, only : rho,vel,prs,tmp,spc
     use hdf5io
     !
@@ -1123,13 +1125,17 @@ module readwrite
     !
     call h5io_init(filename='datin/flowini3d.h5',mode='read')
     ! 
-    call h5read(varname='time',var=time)
-    call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
+    ! call h5read(varname='time',var=time)
+    ! call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
     call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1))
     call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2))
     call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3))
-    call h5read(varname='p', var=prs(0:im,0:jm,0:km))
-    call h5read(varname='t', var=tmp(0:im,0:jm,0:km))
+    ! call h5read(varname='p', var=prs(0:im,0:jm,0:km))
+    ! call h5read(varname='t', var=tmp(0:im,0:jm,0:km))
+    !
+    rho=roinf
+    prs=pinf
+    tmp=tinf
     do jsp=1,num_species
        write(spname,'(i2.2)')jsp
       call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
@@ -1515,9 +1521,9 @@ module readwrite
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
-    call h5write(varname='u1', var=vel(0:im,0:jm,0:km,1))
-    call h5write(varname='u2', var=vel(0:im,0:jm,0:km,2))
-    call h5write(varname='u3', var=vel(0:im,0:jm,0:km,3))
+    call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1))
+    call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2))
+    call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3))
     call h5write(varname='p', var=prs(0:im,0:jm,0:km))
     call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
     if(num_species>0) then
@@ -1527,35 +1533,35 @@ module readwrite
       enddo
     endif
     !
-    if(allocated(ssf)) then
-      call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km))
-    endif
-    if(allocated(lshock)) then
-      allocate(rshock(0:im,0:jm,0:km))
-      allocate(rcrinod(0:im,0:jm,0:km))
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        !
-        if(lshock(i,j,k)) then
-          rshock(i,j,k)=1.d0
-        else
-          rshock(i,j,k)=0.d0
-        endif
-        !
-        if(crinod(i,j,k)) then
-          rcrinod(i,j,k)=1.d0
-        else
-          rcrinod(i,j,k)=0.d0
-        endif
-        !
-      enddo
-      enddo
-      enddo
-      !
-      call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
-      call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km))
-    endif
+    ! if(allocated(ssf)) then
+    !   call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km))
+    ! endif
+    ! if(allocated(lshock)) then
+    !   allocate(rshock(0:im,0:jm,0:km))
+    !   allocate(rcrinod(0:im,0:jm,0:km))
+    !   do k=0,km
+    !   do j=0,jm
+    !   do i=0,im
+    !     !
+    !     if(lshock(i,j,k)) then
+    !       rshock(i,j,k)=1.d0
+    !     else
+    !       rshock(i,j,k)=0.d0
+    !     endif
+    !     !
+    !     if(crinod(i,j,k)) then
+    !       rcrinod(i,j,k)=1.d0
+    !     else
+    !       rcrinod(i,j,k)=0.d0
+    !     endif
+    !     !
+    !   enddo
+    !   enddo
+    !   enddo
+    !   !
+    !   call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
+    !   call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km))
+    ! endif
     !
     if(trim(turbmode)=='k-omega') then
       call h5write(varname='k',     var=tke(0:im,0:jm,0:km))
