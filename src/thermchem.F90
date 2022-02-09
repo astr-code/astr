@@ -7,7 +7,10 @@
 !+---------------------------------------------------------------------+
 module thermchem
   !
-  use commvar
+  use commvar, only: num_species
+#ifdef COMB
+  use cantera
+#endif 
   !
   implicit none
   !
@@ -37,10 +40,11 @@ module thermchem
     ,rcsrif(:,:),diffmw(:,:),ovwmol(:),rgspec(:),amascp(:,:,:),amascv(:,:,:)   &
     ,amasct(:,:,:),amasch(:,:,:),amasce(:,:,:),amascs(:,:,:),amolgb(:,:,:)     &
     ,olewis(:),wirate(:)
-  !
+    !
+  type(phase_t) :: mixture
 #endif
   !
-  character(len=6) :: tranmod=''
+  character(len=5) :: tranmod=''
   logical :: ctrflag=.true.
   !
   contains
@@ -1433,6 +1437,9 @@ module thermchem
   !| 12-Oct-2020  | Created by Z.X. Chen @ Cambridge                   |
   !+-------------------------------------------------------------------+
   subroutine tranco(den,tmp,cp,mu,lam,rhodi,spc,rhodij)
+    !
+    use commvar, only: prandtl
+    use cantera
     !
     ! arguments
     real(8),intent(in) :: tmp,spc(:)

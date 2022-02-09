@@ -260,7 +260,7 @@ module solver
     !
     qrhs=-qrhs
     !
-    ! if(diffterm) call diffrsdcal6(subtime=ctime(10))
+    if(diffterm) call diffrsdcal6(subtime=ctime(10))
     !
     if(trim(flowtype)=='channel') then 
       call srcchan
@@ -2551,10 +2551,6 @@ module solver
       sigma(i,j,k,4)=miu2*(s22-skk)-detk + tau22 !s22   
       sigma(i,j,k,5)=miu2* s23           + tau23 !s23  
       sigma(i,j,k,6)=miu2*(s33-skk)-detk + tau33 !s33  
-      !
-      if(mpirank==0 .and. i==im) then
-        print*,j,miu2,miu
-      endif
       !
       qflux(i,j,k,1)=hcc*dtmp(i,j,k,1)+sigma(i,j,k,1)*vel(i,j,k,1) +   &
                                        sigma(i,j,k,2)*vel(i,j,k,2) +   &

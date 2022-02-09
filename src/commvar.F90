@@ -164,7 +164,6 @@ module commvar
   !+---------------------+---------------------------------------------+
   !
 #ifdef COMB
-  type(phase_t) :: mixture
   logical :: lcomb
   character(len=255) :: chemfile
   character(len=3) :: odetype
