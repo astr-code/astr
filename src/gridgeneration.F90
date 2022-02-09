@@ -373,11 +373,14 @@ module gridgeneration
       yn(j)=yn(j-1)+(rn(j-ja/2)-rn(j-ja/2-1))
     enddo
     !
-    in=nd+22*24
-    do i=0,in
-      xn(i)=dy*i
+    ! in=nd+22*24
+    ! do i=0,in
+    !   xn(i)=dy*i
+    ! enddo
+    ! call spongstretch(ia-in,xmax,xn(in-2:ia))
+    do i=0,ia
+      xn(i)=xmax/ia*i
     enddo
-    call spongstretch(ia-in,xmax,xn(in-2:ia))
     !
     !
     do k=0,km

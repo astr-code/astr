@@ -249,18 +249,20 @@ module readwrite
         if(conschm(4:4)=='e') then
           select case(recon_schem)
           case(0)
-            write(*,'(24A)')'    linear upwind scheme'
+            write(*,'(24A)')'      linear construction'
           case(1)
-            write(*,'(24A)')'             WENO scheme'
+            write(*,'(24A)')'        WENO construction'
           case(2)
-            write(*,'(24A)')'           WENO-Z scheme'
+            write(*,'(24A)')'      WENO-Z construction'
           case(3)
-            write(*,'(24A)')'               MP scheme'
+            write(*,'(24A)')'          MP construction'
           case(4)
-            write(*,'(24A)')'         WENO-SYM scheme'
+            write(*,'(24A)')'    WENO-SYM construction'
           case(5)
-            write(*,'(24A)')'            MP-LD scheme'
+            write(*,'(24A)')'      MP-LD construction'
             write(*,'(A56,F8.3)')'            b factor = ',bfacmpld
+          case(6)
+            write(*,'(24A)')'      round construction'
           case default
             stop ' !! reconstruction scheme not defined !!' 
           end select
@@ -1610,18 +1612,19 @@ module readwrite
     if(allocated(ssf)) then
       call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km))
     endif
-    if(allocated(lshock)) then
-      allocate(rshock(0:im,0:jm,0:km))
+    !
+    ! if(allocated(lshock)) then
+      ! allocate(rshock(0:im,0:jm,0:km))
       allocate(rcrinod(0:im,0:jm,0:km))
       do k=0,km
       do j=0,jm
       do i=0,im
         !
-        if(lshock(i,j,k)) then
-          rshock(i,j,k)=1.d0
-        else
-          rshock(i,j,k)=0.d0
-        endif
+        ! if(lshock(i,j,k)) then
+        !   rshock(i,j,k)=1.d0
+        ! else
+        !   rshock(i,j,k)=0.d0
+        ! endif
         !
         if(crinod(i,j,k)) then
           rcrinod(i,j,k)=1.d0
@@ -1633,9 +1636,9 @@ module readwrite
       enddo
       enddo
       !
-      call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
+      ! call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
       call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km))
-    endif
+    ! endif
     !
     if(trim(turbmode)=='k-omega') then
       call h5write(varname='k',     var=tke(0:im,0:jm,0:km))
@@ -1660,6 +1663,18 @@ module readwrite
                                   prs(i,0,0),tmp(i,0,0),i=0,im)
       close(18)
       print*,' << outdat/profile',trim(stepname),mpirankname,'.dat'
+      !
+    elseif(ndims==2) then
+      !
+      call tecbin('testout/tecfield'//mpirankname//'.plt',           &
+                                        x(0:im,0:jm,0,1),'x',        &
+                                        x(0:im,0:jm,0,2),'y',        &
+                                        rho(0:im,0:jm,0),'ro',       &
+                                      vel(0:im,0:jm,0,1),'u',        &
+                                      vel(0:im,0:jm,0,2),'v',        &
+                                        tmp(0:im,0:jm,0),'T',        &
+                                        prs(0:im,0:jm,0),'p',        &
+                                    rcrinod(0:im,0:jm,0),'c' )
       !
     endif
     !

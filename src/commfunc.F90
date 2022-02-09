@@ -3607,6 +3607,52 @@ module commfunc
   ! End of the function minmod4.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !Three point ROUND schemes: Reconstruction Operator on Unified    
+  ! Normalized-variable Diagram
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! added by Xi Deng, 06/02/2022
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  pure function round(u) result(uh)
+    !
+    real(8),intent(in) :: u(1:3)
+    real(8) :: uh
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! u: 3 points grid value
+    ! uh: final interface value
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: eps
+    
+    real(8) :: z0c,a1c,a2c,plc,prc,p1c,p2c,p3c
+    
+    real(8) :: wc1c,wc2c,gc
+    
+    eps=1.d-16  
+    
+    z0c=(u(2)-u(1)+eps)/(u(3)-u(1)+eps);
+    
+    
+    a1c=1.0d0+12.0d0*z0c*z0c;
+    a2c=1.0d0+5.0d0*(z0c-1.0d0)*(z0c-1.0d0);
+    plc=1100.0d0*(z0c-0.05d0)*(z0c-0.05d0)*(z0c-0.05d0)*(0.47d0-z0c)*(0.47d0-z0c)*(0.47d0-z0c)
+    prc=18000.0d0*(z0c-0.55d0)*(z0c-0.55d0)*(z0c-0.55d0)*(0.97d0-z0c)*(0.97d0-z0c)*(0.97d0-z0c)*(0.97d0-z0c)*(0.97d0-z0c)
+    p1c=0.833333333333333d0*z0c+0.333333333333333d0+max(plc,0.0d0)+max(prc,0.0d0)
+    p2c=1.5d0*z0c
+    p3c=0.5d0*z0c+0.5d0
+    wc1c=1.0d0/a1c/a1c/a1c/a1c
+    wc2c=1.0d0/a2c/a2c/a2c/a2c/a2c/a2c/a2c/a2c
+    
+    gc=(p1c*(1.0d0-wc1c)+p2c*wc1c)*(1.0d0-wc2c)+p3c*wc2c
+    
+    uh=gc*(u(3)-u(1))+u(1)
+    
+    return
+    
+  end function round
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine ROUND.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+  !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! this subroutine offers the interface's values with 5 point WENO
   ! Scheme according the points' value you give.

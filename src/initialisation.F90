@@ -1597,11 +1597,22 @@ module initialisation
       arg=-1.d0*(xc-xloc)/xwid
       val=0.5d0*(1.0d0+erf(arg))
       !
-      vel(i,j,k,1)=uinf+val*(vel0(1)-uinf)
+      !0.92135039647485750
+      ! vel(i,j,k,1)=uinf+val*(vel0(1)-uinf)
+      ! vel(i,j,k,2:ndims)=0.d0
+      ! prs(i,j,k)=pinf
+      ! tmp(i,j,k)=tinf+val*(tmp0-tinf)
+      ! spc(i,j,k,:)=spcinf(:)+val*(spc0(:)-spcinf(:))
+      vel(i,j,k,1)=uinf+0.92135039647485750*(vel0(1)-uinf)
       vel(i,j,k,2:ndims)=0.d0
       prs(i,j,k)=pinf
-      tmp(i,j,k)=tinf+val*(tmp0-tinf)
-      spc(i,j,k,:)=spcinf(:)+val*(spc0(:)-spcinf(:))
+      tmp(i,j,k)=tinf+0.92135039647485750*(tmp0-tinf)
+      spc(i,j,k,:)=spcinf(:)+0.92135039647485750*(spc0(:)-spcinf(:))
+      ! vel(i,j,k,1)=uinf
+      ! vel(i,j,k,2:ndims)=0.d0
+      ! prs(i,j,k)=pinf
+      ! tmp(i,j,k)=tinf
+      ! spc(i,j,k,:)=spcinf(:)
       !
       rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
                           species=spc(i,j,k,:))
@@ -1613,6 +1624,17 @@ module initialisation
     !
     if(lio)  write(*,'(A,I1,3(A))')  &
       '  ** ',ndims,'-D ',trim(flowtype),' initialised.'
+    !
+    call tecbin('testout/tecini'//mpirankname//'.plt',                &
+                                      x(0:im,0:jm,0:km,1),'x',        &
+                                      x(0:im,0:jm,0:km,2),'y',        &
+                                      x(0:im,0:jm,0:km,3),'z',        &
+                                      rho(0:im,0:jm,0:km),'ro',       &
+                                    vel(0:im,0:jm,0:km,1),'u',        &
+                                    vel(0:im,0:jm,0:km,2),'v',        &
+                                      tmp(0:im,0:jm,0:km),'T',        &
+                                    spc(0:im,0:jm,0:km,1),'Y1' )
+    !
     !
 #endif
     !
