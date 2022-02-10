@@ -337,6 +337,7 @@ module solver
     use fludyna,  only: sos
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,     &
                         weno5z,weno7z,mp5ld,mp7ld,round
+    use riemann,  only: flux_steger_warming
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -387,112 +388,17 @@ module solver
     do j=js,je
       !
       ! flux split by using Steger-Warming method
-      do i=iss,iee
-        !
-        uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
-           dxi(i,j,k,1,3)*vel(i,j,k,3)
-        var0=1.d0/sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
-        !
-        gpd(1)=dxi(i,j,k,1,1)*var0
-        gpd(2)=dxi(i,j,k,1,2)*var0
-        gpd(3)=dxi(i,j,k,1,3)*var0
-        !
-        css=sos(tmp(i,j,k))
-        csa=css/var0
-        lmach=uu/csa
-        !
-        lmda(1)=uu
-        lmda(2)=uu
-        lmda(3)=uu
-        lmda(4)=uu+csa
-        lmda(5)=uu-csa
-        !
-        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
-        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
-        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
-        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
-        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
-        !
-        lmdam(1)=lmda(1)-lmdap(1)
-        lmdam(2)=lmda(2)-lmdap(2)
-        lmdam(3)=lmda(3)-lmdap(3)
-        lmdam(4)=lmda(4)-lmdap(4)
-        lmdam(5)=lmda(5)-lmdap(5)
-        !
-        if(lmach>=1.d0) then
-          fswp(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswp(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-          fswp(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-          fswp(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-          fswp(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          fswm(i,1)=0.d0
-          fswm(i,2)=0.d0
-          fswm(i,3)=0.d0
-          fswm(i,4)=0.d0
-          fswm(i,5)=0.d0  
-          !
-          if(numq>5) then
-            fswp(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
-            fswm(i,6:numq)=0.d0
-          endif
-          !
-        elseif(lmach<=-1.d0) then
-          fswp(i,1)=0.d0
-          fswp(i,2)=0.d0
-          fswp(i,3)=0.d0
-          fswp(i,4)=0.d0
-          fswp(i,5)=0.d0
-          !
-          fswm(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswm(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-          fswm(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-          fswm(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-          fswm(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          if(numq>5) then
-            fswp(i,6:numq)=0.d0
-            fswm(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
-          endif
-          !
-        else
-          !
-          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
-          !
-          var1=lmdap(1)
-          var2=lmdap(4)-lmdap(5)
-          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
-          !
-          jro=jacob(i,j,k)*rho(i,j,k)
-          !
-          fswp(i,1)=jro*(var1-var3*gm2)
-          fswp(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
-          fswp(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
-          fswp(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
-          fswp(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          if(numq>5) then
-            fswp(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
-          endif
-          !
-          var1=lmdam(1)
-          var2=lmdam(4)-lmdam(5)
-          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
-          !
-          fswm(i,1)=jro*(var1-var3*gm2)                                                         
-          fswm(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
-          fswm(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
-          fswm(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
-          fswm(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          if(numq>5) then
-            fswm(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
-          endif
-          !
-          !
-        end if
-        !
-      enddo
+      !
+      call flux_steger_warming( fplus= fswp(iss:iee,:),         &
+                                fmius= fswm(iss:iee,:),         &
+                                  rho=  rho(iss:iee,j,k),       &
+                                  vel=  vel(iss:iee,j,k,:),     &
+                                  prs=  prs(iss:iee,j,k),       &
+                                  tmp=  tmp(iss:iee,j,k),       &
+                                    q=    q(iss:iee,j,k,:),     &
+                                  dxi=  dxi(iss:iee,j,k,1,:),   &
+                                jacob=jacob(iss:iee,j,k))
+      !
       ! End of flux split by using Steger-Warming method
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -743,113 +649,15 @@ module solver
     do i=is,ie
       !
       ! flux split by using Steger-Warming method
-      do j=jss,jee
-        !
-        uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2)+    &
-           dxi(i,j,k,2,3)*vel(i,j,k,3)
-        var0=1.d0/sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
-        !
-        gpd(1)=dxi(i,j,k,2,1)*var0
-        gpd(2)=dxi(i,j,k,2,2)*var0
-        gpd(3)=dxi(i,j,k,2,3)*var0
-        !
-        css=sos(tmp(i,j,k))
-        csa=css/var0
-        lmach=uu/csa
-        !
-        lmda(1)=uu
-        lmda(2)=uu
-        lmda(3)=uu
-        lmda(4)=uu+csa
-        lmda(5)=uu-csa
-        !
-        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
-        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
-        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
-        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
-        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
-        !
-        lmdam(1)=lmda(1)-lmdap(1)
-        lmdam(2)=lmda(2)-lmdap(2)
-        lmdam(3)=lmda(3)-lmdap(3)
-        lmdam(4)=lmda(4)-lmdap(4)
-        lmdam(5)=lmda(5)-lmdap(5)
-        !
-        if(lmach>=1.d0) then
-          fswp(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswp(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
-          fswp(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
-          fswp(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
-          fswp(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          fswm(j,1)=0.d0
-          fswm(j,2)=0.d0
-          fswm(j,3)=0.d0
-          fswm(j,4)=0.d0
-          fswm(j,5)=0.d0  
-          !
-          if(numq>5) then
-            fswp(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
-            fswm(j,6:numq)=0.d0
-          endif
-          !
-        elseif(lmach<=-1.d0) then
-          fswp(j,1)=0.d0
-          fswp(j,2)=0.d0
-          fswp(j,3)=0.d0
-          fswp(j,4)=0.d0
-          fswp(j,5)=0.d0
-          !
-          fswm(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswm(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
-          fswm(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
-          fswm(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
-          fswm(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          if(numq>5) then
-            fswp(j,6:numq)=0.d0
-            fswm(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
-          endif
-          !
-        else
-          !
-          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
-          !
-          var1=lmdap(1)
-          var2=lmdap(4)-lmdap(5)
-          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
-          !
-          jro=jacob(i,j,k)*rho(i,j,k)
-          !
-          fswp(j,1)=jro*(var1-var3*gm2)
-          fswp(j,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
-          fswp(j,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
-          fswp(j,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
-          fswp(j,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          if(numq>5) then
-            fswp(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
-          endif
-          !
-          var1=lmdam(1)
-          var2=lmdam(4)-lmdam(5)
-          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
-          !
-          fswm(j,1)=jro*(var1-var3*gm2)                                                         
-          fswm(j,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
-          fswm(j,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
-          fswm(j,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
-          fswm(j,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          if(numq>5) then
-            fswm(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
-          endif
-          !
-        end if
-        !
-      enddo
-      ! End of flux split by using Steger-Warming method
-      !
+      call flux_steger_warming( fplus= fswp(jss:jee,:),         &
+                                fmius= fswm(jss:jee,:),         &
+                                  rho=  rho(i,jss:jee,k),       &
+                                  vel=  vel(i,jss:jee,k,:),     &
+                                  prs=  prs(i,jss:jee,k),       &
+                                  tmp=  tmp(i,jss:jee,k),       &
+                                    q=    q(i,jss:jee,k,:),     &
+                                  dxi=  dxi(i,jss:jee,k,2,:),   &
+                                jacob=jacob(i,jss:jee,k))
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
       ! Average and flux split as well as i+1/2 construction.
@@ -1091,111 +899,15 @@ module solver
     do i=is,ie
       !
       ! flux split by using Steger-Warming method
-      do k=kss,kee
-        !
-        uu=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2)+    &
-           dxi(i,j,k,3,3)*vel(i,j,k,3)
-        var0=1.d0/sqrt(dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+dxi(i,j,k,3,3)**2)
-        !
-        gpd(1)=dxi(i,j,k,3,1)*var0
-        gpd(2)=dxi(i,j,k,3,2)*var0
-        gpd(3)=dxi(i,j,k,3,3)*var0
-        !
-        css=sos(tmp(i,j,k))
-        csa=css/var0
-        lmach=uu/csa
-        !
-        lmda(1)=uu
-        lmda(2)=uu
-        lmda(3)=uu
-        lmda(4)=uu+csa
-        lmda(5)=uu-csa
-        !
-        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
-        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
-        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
-        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
-        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
-        !
-        lmdam(1)=lmda(1)-lmdap(1)
-        lmdam(2)=lmda(2)-lmdap(2)
-        lmdam(3)=lmda(3)-lmdap(3)
-        lmdam(4)=lmda(4)-lmdap(4)
-        lmdam(5)=lmda(5)-lmdap(5)
-        !
-        if(lmach>=1.d0) then
-          fswp(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswp(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
-          fswp(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
-          fswp(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
-          fswp(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          fswm(k,1)=0.d0
-          fswm(k,2)=0.d0
-          fswm(k,3)=0.d0
-          fswm(k,4)=0.d0
-          fswm(k,5)=0.d0    
-          !
-          if(numq>5) then
-            fswp(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
-            fswm(k,6:numq)=0.d0
-          endif
-          !
-        elseif(lmach<=-1.d0) then
-          fswp(k,1)=0.d0
-          fswp(k,2)=0.d0
-          fswp(k,3)=0.d0
-          fswp(k,4)=0.d0
-          fswp(k,5)=0.d0
-          !
-          fswm(k,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswm(k,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,3,1)*prs(i,j,k) )
-          fswm(k,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,3,2)*prs(i,j,k) )
-          fswm(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
-          fswm(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          if(numq>5) then
-            fswp(k,6:numq)=0.d0
-            fswm(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
-          endif
-          !
-        else
-          !
-          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
-          !
-          var1=lmdap(1)
-          var2=lmdap(4)-lmdap(5)
-          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
-          !
-          jro=jacob(i,j,k)*rho(i,j,k)
-          !
-          fswp(k,1)=jro*(var1-var3*gm2)
-          fswp(k,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
-          fswp(k,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
-          fswp(k,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
-          fswp(k,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          if(numq>5) then
-            fswp(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
-          endif
-          !
-          var1=lmdam(1)
-          var2=lmdam(4)-lmdam(5)
-          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
-          !
-          fswm(k,1)=jro*(var1-var3*gm2)                                                         
-          fswm(k,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
-          fswm(k,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
-          fswm(k,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
-          fswm(k,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          if(numq>5) then
-            fswm(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
-          endif
-          !
-        end if
-        !
-      enddo
+      call flux_steger_warming( fplus= fswp(kss:kee,:),         &
+                                fmius= fswm(kss:kee,:),         &
+                                  rho=  rho(i,j,kss:kee),       &
+                                  vel=  vel(i,j,kss:kee,:),     &
+                                  prs=  prs(i,j,kss:kee),       &
+                                  tmp=  tmp(i,j,kss:kee),       &
+                                    q=    q(i,j,kss:kee,:),     &
+                                  dxi=  dxi(i,j,kss:kee,3,:),   &
+                                jacob=jacob(i,j,kss:kee))
       ! End of flux split by using Steger-Warming method
       !
       !
@@ -1494,91 +1206,15 @@ module solver
     do j=js,je
       !
       ! flux split by using Steger-Warming method
-      do i=iss,iee
-        !
-        uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
-           dxi(i,j,k,1,3)*vel(i,j,k,3)
-        var0=1.d0/sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
-        !
-        gpd(1)=dxi(i,j,k,1,1)*var0
-        gpd(2)=dxi(i,j,k,1,2)*var0
-        gpd(3)=dxi(i,j,k,1,3)*var0
-        !
-        css=sos(tmp(i,j,k))
-        csa=css/var0
-        lmach=uu/csa
-        !
-        lmda(1)=uu
-        lmda(2)=uu
-        lmda(3)=uu
-        lmda(4)=uu+csa
-        lmda(5)=uu-csa
-        !
-        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
-        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
-        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
-        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
-        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
-        !
-        lmdam(1)=lmda(1)-lmdap(1)
-        lmdam(2)=lmda(2)-lmdap(2)
-        lmdam(3)=lmda(3)-lmdap(3)
-        lmdam(4)=lmda(4)-lmdap(4)
-        lmdam(5)=lmda(5)-lmdap(5)
-        !
-        if(lmach>=1.d0) then
-          fswp(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswp(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-          fswp(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-          fswp(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-          fswp(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          !
-          fswm(i,1)=0.d0
-          fswm(i,2)=0.d0
-          fswm(i,3)=0.d0
-          fswm(i,4)=0.d0
-          fswm(i,5)=0.d0  
-        elseif(lmach<=-1.d0) then
-          fswp(i,1)=0.d0
-          fswp(i,2)=0.d0
-          fswp(i,3)=0.d0
-          fswp(i,4)=0.d0
-          fswp(i,5)=0.d0
-          !
-          fswm(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fswm(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
-          fswm(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
-          fswm(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
-          fswm(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-        else
-          !
-          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
-          !
-          var1=lmdap(1)
-          var2=lmdap(4)-lmdap(5)
-          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
-          !
-          jro=jacob(i,j,k)*rho(i,j,k)
-          !
-          fswp(i,1)=jro*(var1-var3*gm2)
-          fswp(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
-          fswp(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
-          fswp(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
-          fswp(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !
-          var1=lmdam(1)
-          var2=lmdam(4)-lmdam(5)
-          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
-          !
-          fswm(i,1)=jro*(var1-var3*gm2)                                                         
-          fswm(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
-          fswm(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
-          fswm(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
-          fswm(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
-          !                 
-        end if
-        !
-      enddo
+      call flux_steger_warming( fplus= fswp(iss:iee,:),         &
+                                fmius= fswm(iss:iee,:),         &
+                                  rho=  rho(iss:iee,j,k),       &
+                                  vel=  vel(iss:iee,j,k,:),     &
+                                  prs=  prs(iss:iee,j,k),       &
+                                  tmp=  tmp(iss:iee,j,k),       &
+                                    q=    q(iss:iee,j,k,:),     &
+                                  dxi=  dxi(iss:iee,j,k,1,:),   &
+                                jacob=jacob(iss:iee,j,k))
       ! End of flux split by using Steger-Warming method
       !
       ! calculating interface flux using compact upwind scheme ay i+1/2

@@ -23,6 +23,7 @@ add_executable(astr
                     parallel.F90
                     pp.F90
                     readwrite.F90
+                    riemann.F90
                     singleton.F90
                     solver.F90
                     statistic.F90

@@ -30,8 +30,8 @@ VPATH = $(SRCDIR):$(OBJDIR)
 srs=  singleton.F90 commtype.F90 stlaio.F90 constdef.F90 tecio.F90        \
       commvar.F90 commarray.F90 fludyna.F90 parallel.F90 hdf5io.F90       \
       cmdefne.F90 commfunc.F90 commcal.F90 models.F90 statistic.F90       \
-      bc.F90 readwrite.F90 gridgeneration.F90 geom.F90 solver.F90 pp.F90  \
-      initialisation.F90 mainloop.F90 astr.F90
+      bc.F90 readwrite.F90 gridgeneration.F90 geom.F90 riemann.F90        \
+      solver.F90 pp.F90 initialisation.F90 mainloop.F90 astr.F90
 OBJS=$(srs:.F90=.o)
 
 %.o:%.F90
