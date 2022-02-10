@@ -240,7 +240,20 @@ module readwrite
         !
         if(conschm(4:4)=='e') then
           select case(recon_schem)
+          case(-1)
+            write(*,'(24A)')'  1st-order construction'
           case(0)
+<<<<<<< HEAD
+            write(*,'(24A)')'     linear construction'
+          case(1)
+            write(*,'(24A)')'       WENO construction'
+          case(2)
+            write(*,'(24A)')'     WENO-Z construction'
+          case(3)
+            write(*,'(24A)')'         MP construction'
+          case(4)
+            write(*,'(24A)')'   WENO-SYM construction'
+=======
             write(*,'(24A)')'      linear construction'
           case(1)
             write(*,'(24A)')'        WENO construction'
@@ -250,6 +263,7 @@ module readwrite
             write(*,'(24A)')'          MP construction'
           case(4)
             write(*,'(24A)')'    WENO-SYM construction'
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           case(5)
             write(*,'(24A)')'      MP-LD construction'
             write(*,'(A56,F8.3)')'            b factor = ',bfacmpld

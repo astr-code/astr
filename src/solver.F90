@@ -432,6 +432,11 @@ module solver
           fswm(i,4)=0.d0
           fswm(i,5)=0.d0  
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
+            fswm(i,6:numq)=0.d0
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -448,6 +453,7 @@ module solver
                 !
                 fswm(i,n+jmod)=0.d0
               enddo
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           endif
           !
         elseif(lmach<=-1.d0) then
@@ -463,6 +469,11 @@ module solver
           fswm(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
           fswm(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(i,6:numq)=0.d0
+            fswm(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -479,6 +490,7 @@ module solver
               !
               fswm(i,n+jmod)=jacob(i,j,k)*q(i,j,k,n+jspc)*uu
             enddo
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           endif
           !
         else
@@ -497,6 +509,12 @@ module solver
           fswp(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
           fswp(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
+          endif
+          !
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -511,6 +529,7 @@ module solver
             enddo
           end if
           !
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           var1=lmdam(1)
           var2=lmdam(4)-lmdam(5)
           var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
@@ -521,6 +540,12 @@ module solver
           fswm(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
           fswm(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswm(i,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
+          endif
+          !
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -534,6 +559,7 @@ module solver
               fswm(i,n+jmod)=jacob(i,j,k)*q(i,j,k,n+jmod)*(var1-var3*gm2)
             enddo
           end if
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           !
         end if
         !
@@ -647,10 +673,22 @@ module solver
           else
             !
             if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
-              var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
-              var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+              select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
+              case default
+                var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
+                var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+              end select
             elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
               select case(recon_schem)
+<<<<<<< HEAD
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
+=======
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
               case(6) !xi
                 var1=round(flcp(m,3:5))  
                 var2=round(flcm(m,3:5))
@@ -661,9 +699,14 @@ module solver
             elseif((npdci==1 .and. i==2).or.(npdci==2 .and. i==im-3)) then
               !
               select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
               case(0)
-                var1=suw5(flcp(m,2:6))
-                var2=suw5(flcm(m,2:6))
+                ! var1=suw5(flcp(m,2:6))
+                ! var2=suw5(flcm(m,2:6))
+                var1=SUW3(Flcp(m,3:5))
+                var2=SUW3(Flcm(m,3:5))
               case(1)
                 var1=weno5(flcp(m,2:6))
                 var2=weno5(flcm(m,2:6))
@@ -687,9 +730,14 @@ module solver
             else
               !
               select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
               case(0)
-                var1=suw5(flcp(m,2:6))
-                var2=suw5(flcm(m,2:6))
+                ! var1=suw5(flcp(m,2:6))
+                ! var2=suw5(flcm(m,2:6))
+                var1=SUW3(Flcp(m,3:5))
+                var2=SUW3(Flcm(m,3:5))
               case(1)
                 var1=weno7(flcp(m,1:7))
                 var2=weno7(flcm(m,1:7))
@@ -815,6 +863,11 @@ module solver
           fswm(j,4)=0.d0
           fswm(j,5)=0.d0  
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
+            fswm(j,6:numq)=0.d0
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -831,6 +884,7 @@ module solver
               !
               fswm(j,n+jmod)=0.d0
             enddo
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           endif
           !
         elseif(lmach<=-1.d0) then
@@ -846,6 +900,11 @@ module solver
           fswm(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
           fswm(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(j,6:numq)=0.d0
+            fswm(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -862,6 +921,7 @@ module solver
               !
               fswm(j,n+jmod)=jacob(i,j,k)*q(i,j,k,n+jspc)*uu
             enddo
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           endif
           !
         else
@@ -880,6 +940,12 @@ module solver
           fswp(j,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
           fswp(j,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
+          endif
+          !
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -894,6 +960,7 @@ module solver
             enddo
           end if
           !
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           var1=lmdam(1)
           var2=lmdam(4)-lmdam(5)
           var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
@@ -904,6 +971,12 @@ module solver
           fswm(j,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
           fswm(j,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswm(j,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
+          endif
+          !
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -918,6 +991,7 @@ module solver
             enddo
           end if
           !
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
         end if
         !
       enddo
@@ -1011,7 +1085,7 @@ module solver
         ! Calculating values at i+1/2 using shock-capturing scheme.
         do m=1,numq
           !
-          if(hdiss) then
+          if(m>5) then
             !
             var1=Flcp(m,4)
             var2=Flcm(m,4)
@@ -1019,25 +1093,47 @@ module solver
           else
             !
             if((npdcj==1 .and. j==0)    .or.(npdcj==2 .and. j==jm-1)) then
-              var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
-              var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+              select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
+              case default
+                var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
+                var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+              end select
             elseif((npdcj==1 .and. j==1).or.(npdcj==2 .and. j==jm-2)) then
               !
               select case(recon_schem)
+<<<<<<< HEAD
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
+=======
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
               case(6) !xi
                 var1=round(flcp(m,3:5))  
                 var2=round(flcm(m,3:5))
               case default
+<<<<<<< HEAD
+                var1=suw3(flcp(m,3:5))
+                var2=suw3(flcm(m,3:5))
+=======
                 var1=SUW3(Flcp(m,3:5))
                 var2=SUW3(Flcm(m,3:5))
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
               end select
               !
             elseif((npdcj==1 .and. j==2).or.(npdcj==2 .and. j==jm-3)) then
               !
               select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
               case(0)
-                var1=suw5(flcp(m,2:6))
-                var2=suw5(flcm(m,2:6))
+                ! var1=suw5(flcp(m,2:6))
+                ! var2=suw5(flcm(m,2:6))
+                var1=SUW3(Flcp(m,3:5))
+                var2=SUW3(Flcm(m,3:5))
               case(1)
                 var1=weno5(flcp(m,2:6))
                 var2=weno5(flcm(m,2:6))
@@ -1061,9 +1157,14 @@ module solver
             else
               !
               select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
               case(0)
-                var1=suw5(flcp(m,2:6))
-                var2=suw5(flcm(m,2:6))
+                ! var1=suw5(flcp(m,2:6))
+                ! var2=suw5(flcm(m,2:6))
+                var1=SUW3(Flcp(m,3:5))
+                var2=SUW3(Flcm(m,3:5))
               case(1)
                 var1=weno7(flcp(m,1:7))
                 var2=weno7(flcm(m,1:7))
@@ -1190,6 +1291,11 @@ module solver
           fswm(k,4)=0.d0
           fswm(k,5)=0.d0    
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
+            fswm(k,6:numq)=0.d0
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -1206,6 +1312,7 @@ module solver
               !
               fswm(k,n+jmod)=0.d0
             enddo
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           endif
           !
         elseif(lmach<=-1.d0) then
@@ -1221,6 +1328,11 @@ module solver
           fswm(k,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,3,3)*prs(i,j,k) )
           fswm(k,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(k,6:numq)=0.d0
+            fswm(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*uu
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -1237,6 +1349,7 @@ module solver
               !
               fswm(k,n+jmod)=jacob(i,j,k)*q(i,j,k,n+jspc)*uu
             enddo
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           endif
           !
         else
@@ -1255,6 +1368,12 @@ module solver
           fswp(k,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
           fswp(k,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswp(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
+          endif
+          !
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -1269,6 +1388,7 @@ module solver
             enddo
           end if
           !
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           var1=lmdam(1)
           var2=lmdam(4)-lmdam(5)
           var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
@@ -1279,6 +1399,12 @@ module solver
           fswm(k,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
           fswm(k,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
           !
+<<<<<<< HEAD
+          if(numq>5) then
+            fswm(k,6:numq)=jacob(i,j,k)*q(i,j,k,6:numq)*(var1-var3*gm2)
+          endif
+          !
+=======
           if(num_species>0) then
             n=5
             do jspc=1,num_species
@@ -1293,6 +1419,7 @@ module solver
             enddo
           end if
           !
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
         end if
         !
       enddo
@@ -1363,10 +1490,19 @@ module solver
             !
           end do
           !
+<<<<<<< HEAD
+          do n=1,8
+            if(numq>5) then
+              Flcp(6:numq,n)=Fswp(k+n-4,6:numq)
+              Flcm(6:numq,n)=Fswm(k+5-n,6:numq)
+            endif
+          end do
+=======
           if(numq>5) then
             Flcp(6:numq,n)=Fswp(k+n-4,6:numq)
             Flcm(6:numq,n)=Fswm(k+5-n,6:numq)
           endif
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
           !
           ! End of characteristic decomposition.
           !
@@ -1396,11 +1532,23 @@ module solver
           else
             !
             if((npdck==1 .and. k==0)    .or.(npdck==2 .and. k==km-1)) then
-              var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
-              var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+              select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
+              case default
+                var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
+                var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
+              end select
             elseif((npdck==1 .and. k==1).or.(npdck==2 .and. k==km-2)) then
               !
               select case(recon_schem)
+<<<<<<< HEAD
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
+=======
+>>>>>>> 06768f49be3d1d380183032391cce588e4fccbbf
               case(6) !xi
                 var1=round(flcp(m,3:5))  
                 var2=round(flcm(m,3:5))
@@ -1412,9 +1560,14 @@ module solver
             elseif((npdck==1 .and. k==2).or.(npdck==2 .and. k==km-3)) then
               !
               select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
               case(0)
-                var1=suw5(flcp(m,2:6))
-                var2=suw5(flcm(m,2:6))
+                ! var1=suw5(flcp(m,2:6))
+                ! var2=suw5(flcm(m,2:6))
+                var1=SUW3(Flcp(m,3:5))
+                var2=SUW3(Flcm(m,3:5))
               case(1)
                 var1=weno5(flcp(m,2:6))
                 var2=weno5(flcm(m,2:6))
@@ -1438,9 +1591,14 @@ module solver
             else
               !
               select case(recon_schem)
+              case(-1)
+                var1=Flcp(m,4)
+                var2=Flcm(m,4)
               case(0)
-                var1=suw5(flcp(m,2:6))
-                var2=suw5(flcm(m,2:6))
+                ! var1=suw5(flcp(m,2:6))
+                ! var2=suw5(flcm(m,2:6))
+                var1=SUW3(Flcp(m,3:5))
+                var2=SUW3(Flcm(m,3:5))
               case(1)
                 var1=weno7(flcp(m,1:7))
                 var2=weno7(flcm(m,1:7))
@@ -2828,6 +2986,67 @@ module solver
   ! End of the subroutine diffrsdcal6.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  subroutine filter2e(phi)
+    !
+    use commvar,  only : is,ie,je,js,je,ks,ke,im,jm,km
+    !
+    real(8),intent(inout) :: phi(-hm:im+hm,-hm:jm+hm,-hm:km+hm) 
+    !
+    integer :: i,j,k
+    real(8),allocatable :: phtemp(:,:,:)
+    !
+    call dataswap(phi)
+    !
+    allocate(phtemp(is:ie,js:je,ks:ke))
+    do k=ks,ke
+    do i=is,ie
+      !
+      do j=js,je
+        phtemp(i,j,k)=0.01d0*(0.25d0*(phi(i,j-1,k)+phi(i,j+1,k))+0.5d0*phi(i,j,k))  + &
+                      0.99d0*phi(i,j,k)
+      enddo
+      !
+    enddo
+    enddo
+    !
+    phi(is:ie,js:je,ks:ke)=phtemp(is:ie,js:je,ks:ke)
+    !
+    return
+    !
+  end subroutine filter2e
+  !
+  subroutine filter4e(phi)
+    !
+    use commvar,  only : is,ie,je,js,je,ks,ke,im,jm,km
+    !
+    real(8),intent(inout) :: phi(-hm:im+hm,-hm:jm+hm,-hm:km+hm) 
+    !
+    integer :: i,j,k
+    real(8),allocatable :: phtemp(:,:,:)
+    !
+    call dataswap(phi)
+    !
+    allocate(phtemp(is:ie,js:je,ks:ke))
+    do k=ks,ke
+    do i=is,ie
+      !
+      do j=js+1,je-1
+        phtemp(i,j,k)= 0.0001d0*(0.625d0*phi(i,j,k)               + &
+                               0.25d0*(phi(i,j-1,k)+phi(i,j+1,k)) - &
+                              0.06250*(phi(i,j-2,k)+phi(i,j+3,k)))+ &
+                       0.9999d0*phi(i,j,k)
+  
+      enddo
+      !
+    enddo
+    enddo
+    !
+    phi(is:ie,js:je,ks:ke)=phtemp(is:ie,js:je,ks:ke)
+    !
+    return
+    !
+  end subroutine filter4e
+  !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used for spatial filter the conservative variable
   ! for stabilizing the computation.
@@ -2927,7 +3146,7 @@ module solver
   subroutine filterq(subtime)
     !
     use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
-                         alfa_filter,ndims,is,ie,js,je,ks,ke
+                         alfa_filter,ndims,is,ie,js,je,ks,ke,turbmode
     use commarray,only : q
     use commfunc, only : spafilter10,spafilter6exp
     !
@@ -3039,6 +3258,17 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in k direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !
+    ! call filter2e(q(:,:,:,1))
+    ! call filter2e(q(:,:,:,2))
+    ! call filter2e(q(:,:,:,3))
+    ! call filter2e(q(:,:,:,4))
+    ! call filter2e(q(:,:,:,5))
+    ! call filter2e(q(:,:,:,6))
+    if(trim(turbmode)=='k-omega') then
+      call filter2e(q(:,:,:,7))
+    endif
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
     !

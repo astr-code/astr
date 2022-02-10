@@ -249,7 +249,7 @@ module mainloop
                          feqwsequ,lwslic,lreport
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
-    use solver,   only : rhscal,filterq,spongefilter
+    use solver,   only : rhscal,filterq,spongefilter,filter2e
     use bc,       only : boucon,immbody
     !
     ! logical data

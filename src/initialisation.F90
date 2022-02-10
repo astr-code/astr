@@ -730,7 +730,7 @@ module initialisation
         endif
         !
         if(trim(turbmode)=='k-omega') then
-          tke(i,j,k)=1.5d0*0.0001d0
+          tke(i,j,k)=1.5d0*0.0001d0*10.d0
           !
           ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
           delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
