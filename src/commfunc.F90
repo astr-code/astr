@@ -50,6 +50,101 @@ module commfunc
   contains
   !
   !+-------------------------------------------------------------------+
+  !| This function is to return the explicit reconstructed value of a  !
+  !| input  function.                                                  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 08-02-2021  | Created by J. Fang @ Warrington.                    |
+  !+-------------------------------------------------------------------+
+  function recons_exp(f,inode,dim,ntype,reschem,shock,solid) result(fc)
+    !
+    use commvar,  only: bfacmpld
+    !
+    ! arguments
+    real(8),intent(in) :: f(1:8)
+    integer,intent(in) :: inode,dim,ntype,reschem
+    logical,intent(in) :: shock,solid
+    real(8) :: fc
+    !
+    ! local data
+    !
+    if((ntype==1 .and. inode==0)    .or.(ntype==2 .and. inode==dim-1)) then
+      !
+      select case(reschem)
+      case(-1)
+        fc=f(4)
+      case default
+        fc=0.5d0*(f(4)+f(5))
+      end select
+      !
+    elseif((ntype==1 .and. inode==1).or.(ntype==2 .and. inode==dim-2)) then
+      !
+      select case(reschem)
+      case(-1)
+        fc=f(4)
+      case default
+        fc=SUW3(f(3:5))
+      end select
+      !
+    elseif((ntype==1 .and. inode==2).or.(ntype==2 .and. inode==dim-3)) then
+      !
+      select case(reschem)
+      case(-1)
+        fc=f(4)
+      case(0)
+        fc=suw5(f(2:6))
+      case(1)
+        fc=weno5(f(2:6))
+      case(2)
+        fc=weno5z(f(2:6))
+      case(3)
+        fc=mp5(f(2:6))
+      ! case(4)
+      !   call weno7sym(f(1:8),var1)
+      case(5)
+        fc=mp5ld(f(2:7),bfacmpld,shock,solid)
+      case(6) !xi
+        fc=round(f(3:5))  
+      case default
+        print*,' !! 1 Reconstruction scheme not defined @ recons_exp !!'
+        stop
+      end select
+      !
+    else
+      !
+      select case(reschem)
+      case(-1)
+        fc=f(4)
+      case(0)
+        fc=suw7(f(1:7))
+      case(1)
+        fc=weno7(f(1:7))
+      case(2)
+        fc=weno7z(f(1:7))
+      case(3)
+        fc=mp7(f(1:7))
+      ! case(4)
+      !   call weno7sym(f(1:8),var1)
+      case(5)
+        fc=mp7ld(f(1:8),bfacmpld,shock,solid)
+      case(6) !xi
+        fc=round(f(3:5))
+      case default
+        print*,' !! 2 Reconstruction scheme not defined @ recons_exp !!'
+        stop
+      end select
+      !
+    endif
+    !
+    return
+    !
+  end function recons_exp
+  !+-------------------------------------------------------------------+
+  !| The end of the function recons.                                   |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This function is to return the reconstructed value of a input     |
   !| function.                                                         |
   !+-------------------------------------------------------------------+

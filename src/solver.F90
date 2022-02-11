@@ -335,8 +335,7 @@ module solver
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid,   &
                         lshock,crinod
     use fludyna,  only: sos
-    use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,     &
-                        weno5z,weno7z,mp5ld,mp7ld,round
+    use commfunc, only: recons_exp
     use riemann,  only: flux_steger_warming
     !
     ! arguments
@@ -507,89 +506,12 @@ module solver
             !
           else
             !
-            if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case default
-                var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
-                var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
-              end select
-            elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              case default
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              end select
-            elseif((npdci==1 .and. i==2).or.(npdci==2 .and. i==im-3)) then
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(0)
-                ! var1=suw5(flcp(m,2:6))
-                ! var2=suw5(flcm(m,2:6))
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              case(1)
-                var1=weno5(flcp(m,2:6))
-                var2=weno5(flcm(m,2:6))
-              case(2)
-                var1=weno5z(flcp(m,2:6))
-                var2=weno5z(flcm(m,2:6))
-              case(3)
-                var1=mp5(flcp(m,2:6))
-                var2=mp5(flcm(m,2:6))
-              ! case(4)
-              !   call weno7sym(flcp(m,1:8),var1)
-              !   call weno7sym(flcm(m,1:8),var2)
-              case(5)
-                var1=mp5ld(flcp(m,2:7),bfacmpld,lsh,lso)
-                var2=mp5ld(flcm(m,2:7),bfacmpld,lsh,lso)
-              case(6) !xi
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              end select
-              !
-            else
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(0)
-                ! var1=suw5(flcp(m,2:6))
-                ! var2=suw5(flcm(m,2:6))
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              case(1)
-                var1=weno7(flcp(m,1:7))
-                var2=weno7(flcm(m,1:7))
-              case(2)
-                var1=weno7z(flcp(m,1:7))
-                var2=weno7z(flcm(m,1:7))
-              case(3)
-                var1=mp7(flcp(m,1:7))
-                var2=mp7(flcm(m,1:7))
-              ! case(4)
-              !   call weno7sym(flcp(m,1:8),var1)
-              !   call weno7sym(flcm(m,1:8),var2)
-              case(5)
-                var1=mp7ld(flcp(m,1:8),bfacmpld,lsh,lso)
-                var2=mp7ld(flcm(m,1:8),bfacmpld,lsh,lso)
-              case(6) !xi
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              end select
-              !
-            endif
+            var1=recons_exp(   f=Flcp(m,:), inode=i,       &
+                             dim=im,        ntype=npdci,   &
+                             reschem=recon_schem,shock=lsh,solid=lso)
+            var2=recons_exp(   f=Flcm(m,:), inode=i,       &
+                             dim=im,        ntype=npdci,   &
+                             reschem=recon_schem,shock=lsh,solid=lso)
             !
           endif
           !
@@ -746,99 +668,19 @@ module solver
         ! Calculating values at i+1/2 using shock-capturing scheme.
         do m=1,numq
           !
-          if(m>5) then
+          if(hdiss) then
             !
             var1=Flcp(m,4)
             var2=Flcm(m,4)
             !
           else
             !
-            if((npdcj==1 .and. j==0)    .or.(npdcj==2 .and. j==jm-1)) then
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case default
-                var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
-                var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
-              end select
-            elseif((npdcj==1 .and. j==1).or.(npdcj==2 .and. j==jm-2)) then
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(6) !xi
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              case default
-                var1=suw3(flcp(m,3:5))
-                var2=suw3(flcm(m,3:5))
-              end select
-              !
-            elseif((npdcj==1 .and. j==2).or.(npdcj==2 .and. j==jm-3)) then
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(0)
-                ! var1=suw5(flcp(m,2:6))
-                ! var2=suw5(flcm(m,2:6))
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              case(1)
-                var1=weno5(flcp(m,2:6))
-                var2=weno5(flcm(m,2:6))
-              case(2)
-                var1=weno5z(flcp(m,2:6))
-                var2=weno5z(flcm(m,2:6))
-              case(3)
-                var1=mp5(flcp(m,2:6))
-                var2=mp5(flcm(m,2:6))
-              ! case(4)
-              !   call weno7sym(flcp(m,1:8),var1)
-              !   call weno7sym(flcm(m,1:8),var2)
-              case(5)
-                var1=mp5ld(flcp(m,2:7),bfacmpld,lsh,lso)
-                var2=mp5ld(flcm(m,2:7),bfacmpld,lsh,lso)
-              case(6) !xi
-                var1=round(flcp(m,3:5))
-                var2=round(flcm(m,3:5))
-              end select
-              !
-            else
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(0)
-                ! var1=suw5(flcp(m,2:6))
-                ! var2=suw5(flcm(m,2:6))
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              case(1)
-                var1=weno7(flcp(m,1:7))
-                var2=weno7(flcm(m,1:7))
-              case(2)
-                var1=weno7z(flcp(m,1:7))
-                var2=weno7z(flcm(m,1:7))
-              case(3)
-                var1=mp7(flcp(m,1:7))
-                var2=mp7(flcm(m,1:7))
-              ! case(4)
-              !   call weno7sym(flcp(m,1:8),var1)
-              !   call weno7sym(flcm(m,1:8),var2)
-              case(5)
-                var1=mp7ld(flcp(m,1:8),bfacmpld,lsh,lso)
-                var2=mp7ld(flcm(m,1:8),bfacmpld,lsh,lso)
-              case(6) !xi
-                var1=round(flcp(m,3:5))
-                var2=round(flcm(m,3:5))
-              end select
-              !
-            endif
+            var1=recons_exp(   f=Flcp(m,:), inode=j,       &
+                             dim=jm,        ntype=npdcj,   &
+                             reschem=recon_schem,shock=lsh,solid=lso)
+            var2=recons_exp(   f=Flcm(m,:), inode=j,       &
+                             dim=jm,        ntype=npdcj,   &
+                             reschem=recon_schem,shock=lsh,solid=lso)
             !
           endif
           !
@@ -1009,93 +851,12 @@ module solver
             !
           else
             !
-            if((npdck==1 .and. k==0)    .or.(npdck==2 .and. k==km-1)) then
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case default
-                var1=0.5d0*(Flcp(m,4)+Flcp(m,5))
-                var2=0.5d0*(Flcm(m,4)+Flcm(m,5))
-              end select
-            elseif((npdck==1 .and. k==1).or.(npdck==2 .and. k==km-2)) then
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(6) !xi
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              case default
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              end select
-              !
-            elseif((npdck==1 .and. k==2).or.(npdck==2 .and. k==km-3)) then
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(0)
-                ! var1=suw5(flcp(m,2:6))
-                ! var2=suw5(flcm(m,2:6))
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              case(1)
-                var1=weno5(flcp(m,2:6))
-                var2=weno5(flcm(m,2:6))
-              case(2)
-                var1=weno5z(flcp(m,2:6))
-                var2=weno5z(flcm(m,2:6))
-              case(3)
-                var1=mp5(flcp(m,2:6))
-                var2=mp5(flcm(m,2:6))
-              ! case(4)
-              !   call weno7sym(flcp(m,1:8),var1)
-              !   call weno7sym(flcm(m,1:8),var2)
-              case(5)
-                var1=mp5ld(flcp(m,2:7),bfacmpld,lsh,lso)
-                var2=mp5ld(flcm(m,2:7),bfacmpld,lsh,lso)
-              case(6) !xi
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              end select
-              !
-            else
-              !
-              select case(recon_schem)
-              case(-1)
-                var1=Flcp(m,4)
-                var2=Flcm(m,4)
-              case(0)
-                ! var1=suw5(flcp(m,2:6))
-                ! var2=suw5(flcm(m,2:6))
-                var1=SUW3(Flcp(m,3:5))
-                var2=SUW3(Flcm(m,3:5))
-              case(1)
-                var1=weno7(flcp(m,1:7))
-                var2=weno7(flcm(m,1:7))
-              case(2)
-                var1=weno7z(flcp(m,1:7))
-                var2=weno7z(flcm(m,1:7))
-              case(3)
-                var1=mp7(flcp(m,1:7))
-                var2=mp7(flcm(m,1:7))
-              ! case(4)
-              !   call weno7sym(flcp(m,1:8),var1)
-              !   call weno7sym(flcm(m,1:8),var2)
-              case(5)
-                var1=mp7ld(flcp(m,1:8),bfacmpld,lsh,lso)
-                var2=mp7ld(flcm(m,1:8),bfacmpld,lsh,lso)
-              case(6) !xi
-                var1=round(flcp(m,3:5))  
-                var2=round(flcm(m,3:5))
-              ! stop
-              end select
-              !
-            endif
+            var1=recons_exp(   f=Flcp(m,:), inode=k,       &
+                             dim=km,        ntype=npdck,   &
+                             reschem=recon_schem,shock=lsh,solid=lso)
+            var2=recons_exp(   f=Flcm(m,:), inode=k,       &
+                             dim=km,        ntype=npdck,   &
+                             reschem=recon_schem,shock=lsh,solid=lso)
             !
           endif
           !
@@ -1158,6 +919,7 @@ module solver
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use fludyna,  only: sos
     use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+    use riemann,  only: flux_steger_warming
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
