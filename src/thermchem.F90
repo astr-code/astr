@@ -73,7 +73,7 @@ module thermchem
     character(len=10) :: spcnm,eunit,reactype,reverse,fallofftype,phase_id
     character(len=100) :: stringline
     !
-    phase_id='gas'
+    phase_id='gas_mix'
     !---CANTERA---
     mixture=importPhase(cheminfile,trim(phase_id))
     if(speciesIndex(mixture,'O')<0 .and. &
@@ -1439,7 +1439,6 @@ module thermchem
   subroutine tranco(den,tmp,cp,mu,lam,rhodi,spc,rhodij)
     !
     use commvar, only: prandtl
-    use cantera
     !
     ! arguments
     real(8),intent(in) :: tmp,spc(:)
@@ -1457,7 +1456,10 @@ module thermchem
       !
       lam=thermalConductivity(mixture)
       !
+      print*,tmp,den,spc(:),lam,mixture
       if(present(mu)) mu=viscosity(mixture)
+      print*,'mu=',mu
+      stop
       !
       if(present(rhodi) .or. present(rhodij)) then
         !

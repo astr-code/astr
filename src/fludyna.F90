@@ -955,11 +955,10 @@ module fludyna
   !+-------------------------------------------------------------------+
   subroutine multistream_inflow(stream,rovd,rho,vel,prs,tmp,spc,ubulk)
     !
-    use commvar, only: &
-      ndims,num_species,pinf,tinf,spcinf,uinf,dj_i,dco_i
-      !
+    use commvar
 #ifdef COMB
     use thermchem, only: spcindex,convertxiyi
+#endif
     !
     ! arguments
     character(len=*),intent(in) :: stream
@@ -967,6 +966,7 @@ module fludyna
     real(8),intent(out),optional :: &
       rho,prs,tmp,spc(num_species),vel(ndims),ubulk
     !
+#ifdef COMB
     !local
     real(8) :: vel_ref(ndims),vel0(ndims),ub,spcx(num_species),h,delta &
               ,spc_ref(num_species),tmp_ref

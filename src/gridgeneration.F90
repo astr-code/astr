@@ -331,6 +331,7 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   subroutine gridsupersonicjet
     !
+#ifdef COMB
     use commvar, only: dj_i,dco_i,im,jm,km,ia,ja,ka
     use parallel, only : ig0,jg0,kg0
     use commarray,only : x
@@ -399,6 +400,7 @@ module gridgeneration
     !
     return
     !
+#endif
   end subroutine gridsupersonicjet
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gridjet.                                |

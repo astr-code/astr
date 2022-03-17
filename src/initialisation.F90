@@ -629,7 +629,9 @@ module initialisation
     use commvar,  only: nondimen
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal
+#ifdef COMB
     use thermchem,only : tranmod,tranco,enthpy,convertxiyi,wmolar
+#endif
     !
     ! local data
     integer :: i,j,k,jspc
@@ -644,6 +646,7 @@ module initialisation
       l_0=1.d0
       uinf=1.d0
     else
+#ifdef COMB
       tinf=347.d0
       roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
       l_0=xmax/(2.d0*pi)
@@ -653,6 +656,7 @@ module initialisation
       call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama, &
                   spc=spcinf,rhodi=dispec(:,1))
       if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+#endif
     endif
     !
     do k=0,km
@@ -1537,13 +1541,13 @@ module initialisation
   !| 04-Feb-2022: Created by Z.X. Chen @ Peking University             |
   !+-------------------------------------------------------------------+
   subroutine h2supersonic
+#ifdef COMB
     !
     use commvar,  only: &
       pinf,uinf,tinf,num_species,dj_i,dj_o,dco_i,flowtype,ymax
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal,multistream_inflow
     !
-#ifdef COMB
     use thermchem,only: convertxiyi,spcindex
     !
     ! local data
