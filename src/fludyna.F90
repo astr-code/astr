@@ -164,12 +164,20 @@ module fludyna
   !| -------------                                                     |
   !| 04-Aug-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  subroutine updatefvar
+  subroutine updatefvar(subtime)
     !
     use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
     use commvar,  only : im,jm,km,num_species,num_modequ,turbmode
+    use parallel, only : ptime
     !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
+    ! local data
     integer :: i,j,k
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime()
     !
     if(trim(turbmode)=='k-omega') then
       !
@@ -213,6 +221,8 @@ module fludyna
       print*,' !! ERROR @ updatefvar'
       stop
     endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
   end subroutine updatefvar
   !+-------------------------------------------------------------------+

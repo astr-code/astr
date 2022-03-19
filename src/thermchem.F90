@@ -73,7 +73,7 @@ module thermchem
     character(len=10) :: spcnm,eunit,reactype,reverse,fallofftype,phase_id
     character(len=100) :: stringline
     !
-    phase_id='gas_mix'
+    phase_id='gas'
     !---CANTERA---
     mixture=importPhase(cheminfile,trim(phase_id))
     if(speciesIndex(mixture,'O')<0 .and. &

@@ -2263,6 +2263,8 @@ module readwrite
                           ctime(12),' - ',100.d0*ctime(12)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
                           ctime(10),' - ',100.d0*ctime(10)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - React   : ',    &
+                          ctime(13),' - ',100.d0*ctime(13)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - filter    : ',    &
                             ctime(8),' - ',100.d0*ctime(8)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io        : ',    &
@@ -2271,8 +2273,14 @@ module readwrite
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
                           ctime(11),' - ',100.d0*ctime(11)/ctime(2),' %'
-      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - q_sum       : ',    &
+                         ctime(14), ' - ',100.d0*ctime(14)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - q2var       : ',    &
+                         ctime(15), ' - ',100.d0*ctime(15)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - crfix       : ',    &
+                         ctime(16), ' - ',100.d0*ctime(16)/ctime(2),' %'
       !
       flush(hand_rp)
       !

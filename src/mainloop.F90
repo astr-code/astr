@@ -268,7 +268,7 @@ module mainloop
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
-    real(8) :: hrr
+    real(8) :: hrr,time_beg_2
     !
     time_beg=ptime()
     !
@@ -316,15 +316,17 @@ module mainloop
       !
       if(limmbou) call immbody(ctime(11))
       !
-      call qswap(ctime(7))
+      if(flowtype(1:2)/='0d') call qswap(ctime(7))
       !
-      call boucon
+      if(flowtype(1:2)/='0d') call boucon
       !
-      call qswap(ctime(7))
+      if(flowtype(1:2)/='0d') call qswap(ctime(7))
       !
       call rhscal(ctime(4))
       !
       if(flowtype(1:2)=='0d') jacob=1.d0
+      !
+      time_beg_2=ptime()
       !
       if(nrk==1) then
         !
@@ -345,16 +347,20 @@ module mainloop
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
       enddo
       !
+      ctime(14)=ctime(14)+ptime()-time_beg_2
+      !
       if(lfilter) call filterq(ctime(8))
       !
       if(flowtype(1:2)/='0d') call spongefilter
       !
-      call updatefvar
+      call updatefvar(ctime(15))
       !
-      call crashfix
+      call crashfix(ctime(16))
       !
 #ifdef COMB
       if(nrk==3) then
+        !
+        time_beg_2=ptime()
         !
         do i=0,im 
         do j=0,jm
@@ -429,7 +435,9 @@ module mainloop
           !
         endif 
         !
-        call updatefvar
+        ctime(13)=ctime(13)+ptime()-time_beg_2
+        !
+        call updatefvar(ctime(15))
         !
       endif !odetype
 #endif
@@ -749,12 +757,15 @@ module mainloop
   !| -------------                                                     |
   !| 04-10-2020: Created by J. Fang @ Warrington                      |
   !+-------------------------------------------------------------------+
-  subroutine crashfix
+  subroutine crashfix(subtime)
     !
     use commvar,   only : numq,lreport,nondimen,spcinf
     use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
-    use parallel,  only : por,ig0,jg0,kg0,psum
+    use parallel,  only : por,ig0,jg0,kg0,psum,ptime
     use fludyna,   only : q2fvar,thermal
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k,l,fh,ii,jj,kk
@@ -762,8 +773,10 @@ module mainloop
     integer :: norm,counter
     !
     logical,save :: firstcall = .true.
-    real(8),save :: eps_rho,eps_prs,eps_tmp
+    real(8),save :: eps_rho,eps_prs,eps_tmp,time_beg
     integer,save :: step_normal = 0
+    !
+    if(present(subtime)) time_beg=ptime()
     !
     if(firstcall) then
       eps_rho=1.d-5
@@ -892,6 +905,8 @@ module mainloop
       endif
       !
     endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
     !

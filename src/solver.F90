@@ -229,7 +229,7 @@ module solver
     !
     if(present(subtime)) time_beg=ptime() 
     !
-    ! if(flowtype(2:2)/='d') then
+    if(flowtype(1:2)/='0d') then
       !
       read(conschm(1:1),*) nconv
       !
@@ -256,7 +256,7 @@ module solver
         !
       endif
       !
-    ! endif 
+    endif !flowtype
     !
     qrhs=-qrhs
     !
@@ -267,7 +267,7 @@ module solver
     endif
     !
 #ifdef COMB
-    call srccomb
+    call srccomb(subtime=ctime(13))
 #endif
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
@@ -370,14 +370,21 @@ module solver
   !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
 #ifdef COMB
-  subroutine srccomb
+  subroutine srccomb(subtime)
     !
     use commvar,  only : im,jm,km,numq,num_species,odetype,lcomb
     use commarray,only : qrhs,rho,tmp,spc
-    use thermchem,only: chemrate,wirate
+    use thermchem,only : chemrate,wirate
+    use parallel, only : ptime 
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     if(odetype(1:2)=='rk' .and. lcomb) then
       do k=0,km
@@ -389,6 +396,8 @@ module solver
       enddo 
       enddo
     endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
   end subroutine srccomb
 #endif 
