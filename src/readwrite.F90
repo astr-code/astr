@@ -261,7 +261,8 @@ module readwrite
             stop ' !! reconstruction scheme not defined !!' 
           end select
         elseif(conschm(4:4)=='c') then
-            write(*,'(24A)')'               MP scheme'
+            write(*,'(24A)')'      MP-LD construction'
+            write(*,'(A56,F8.3)')'            b factor = ',bfacmpld
         endif
         !
       endif

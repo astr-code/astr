@@ -699,6 +699,8 @@ module commfunc
   !+-------------------------------------------------------------------+
   function coeffcompac(scheme) result(alfa)
     !
+    use commvar,  only: bfacmpld
+    !
     integer,intent(in) :: scheme
     real(8),allocatable :: alfa(:)
     !
@@ -715,10 +717,17 @@ module commfunc
     elseif(scheme==553) then
       allocate(alfa(5))
       alfa(1)=0.5d0
-      alfa(2)=0.5d0
-      alfa(3)=num1d6
-      alfa(4)=0.5d0
-      alfa(5)=num1d6
+      alfa(2)=0.5d0 -1.d0/6.d0*bfacmpld
+      alfa(3)=num1d6+1.d0/6.d0*bfacmpld
+      alfa(4)=0.5d0 -1.d0/6.d0*bfacmpld
+      alfa(5)=num1d6+1.d0/6.d0*bfacmpld
+    elseif(scheme==753) then
+      allocate(alfa(5))
+      alfa(1)=0.5d0
+      alfa(2)=0.5d0 -1.d0/6.d0*bfacmpld
+      alfa(3)=num1d6+1.d0/6.d0*bfacmpld
+      alfa(4)=0.5d0 -1.d0/8.d0*bfacmpld
+      alfa(5)=0.25d0+1.d0/8.d0*bfacmpld
     else
       stop ' !! scheme not defined @ coef_diffcompac'
     endif
@@ -1829,6 +1838,8 @@ module commfunc
   !
   function ptds_recon_rhs(vin,dim,ns,ntype,windir) result(vout)
     !
+    use commvar,  only: bfacmpld
+    !
     integer,intent(in) :: dim,ns,ntype
     real(8),intent(in) :: vin(-hm:dim+hm)
     character(len=1),intent(in) :: windir
@@ -1846,18 +1857,90 @@ module commfunc
         vout(0)=0.25d0*vin(l)+1.25d0*vin(l+1)
         if(windir=='+') then
           do l=1,dim
-            vout(l)=num1d18*vin(l-1)+num19d18*vin(l)+num5d9*vin(l+1)
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                              num1d36*bfacmpld *vin(l+2)
           end do
           l=dim+1
           vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
                    27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
         elseif(windir=='-') then
           do l=1,dim
-            vout(l)=num1d18*vin(l+2)+num19d18*vin(l+1)+num5d9*vin(l)
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                              num1d36*bfacmpld *vin(l-1)
           end do
           l=dim+1
           vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
                    27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+        endif
+        !
+      elseif(ns==753) then
+        ! ns==553 3-5-7-...-7-5-3
+        !
+        ! 3rd-order compact upwind
+        l=0
+        vout(0)=0.25d0*vin(l)+1.25d0*vin(l+1)
+        !
+        if(windir=='+') then
+          !
+          ! 5th-order compact upwind near boundary
+          l=1
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                            num1d36*bfacmpld *vin(l+2)
+          !
+          ! 7th-order compact upwind
+          do l=2,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l-2) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l-1) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l)   +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l+1) +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l+2)     &
+                             - 0.5d0*bfacmpld *vin(l+3))/240.d0
+          end do
+          !
+          ! 7th-order explicit upwind
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          !
+        elseif(windir=='-') then
+          !
+          ! 5th-order compact upwind near boundary
+          l=1
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                            num1d36*bfacmpld *vin(l-1)
+          !
+          ! 7th-order compact upwind
+          do l=2,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l+3) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l+2) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l+1) +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l)   +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l-1)     &
+                             - 0.5d0*bfacmpld *vin(l-2))/240.d0
+          end do
+          !
+          ! 7th-order explicit upwind for interface
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
         endif
         !
       end if
@@ -1873,31 +1956,110 @@ module commfunc
           vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
                    27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
           do l=-1,dim-2
-            vout(l)=num1d18*vin(l-1)+num19d18*vin(l)+num5d9*vin(l+1)
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                              num1d36*bfacmpld *vin(l+2)
           end do
         elseif(windir=='-') then
           l=-2
           vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
                    27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
           do l=-1,dim-2
-            vout(l)=num1d18*vin(l+2)+num19d18*vin(l+1)+num5d9*vin(l)
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                              num1d36*bfacmpld *vin(l-1)
           end do
         endif
         l=dim-1
         vout(l)=0.25d0*vin(l+1)+1.25d0*vin(l)
         !
+      elseif(ns==753) then
+        ! ns==753 3-5-7-...-7-5-3
+        !
+        if(windir=='+') then
+          !
+          l=-2
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          ! 7th-order compact upwind
+          do l=-1,dim-3
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l-2) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l-1) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l)   +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l+1) +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l+2)     &
+                             - 0.5d0*bfacmpld *vin(l+3))/240.d0
+          end do
+          !
+          ! 5th-order compact upwind near the boundary
+          l=dim-2
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                            num1d36*bfacmpld *vin(l+2)
+          !
+        elseif(windir=='-') then
+          !
+          ! 7th-order explicit upwind for interface
+          l=-2
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+          ! 7th-order compact upwind
+          do l=-1,dim-3
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l+3) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l+2) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l+1) +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l)   +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l-1)     &
+                             - 0.5d0*bfacmpld *vin(l-2))/240.d0
+          end do
+          !
+          ! 5th-order compact upwind near the boundary
+          l=dim-2
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                            num1d36*bfacmpld *vin(l-1)
+          !
+        endif
+        !
+        ! 3rd-order compact upwind at the boundary
+        l=dim-1
+        vout(l)=0.25d0*vin(l+1)+1.25d0*vin(l)
+        !
+      else
+        print*,' ** ntype: ',ntype
+        print*, ' !! error 2 in subroutine ptds_recon_rhs !'
+        stop
       endif
       !
     elseif(ntype==3) then
+      !
       ! inner block
       if(ns/100==5) then
         !
         if(windir=='+') then
+          !
           l=-2
           vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
                    27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
           do l=-1,dim
-            vout(l)=num1d18*vin(l-1)+num19d18*vin(l)+num5d9*vin(l+1)
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                              num1d36*bfacmpld *vin(l+2)
           end do
           l=dim+1
           vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
@@ -1907,14 +2069,83 @@ module commfunc
           vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
                    27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
           do l=-1,dim
-            vout(l)=num1d18*vin(l+2)+num19d18*vin(l+1)+num5d9*vin(l)
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                              num1d36*bfacmpld *vin(l-1)
           end do
           l=dim+1
           vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
                    27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
         endif
         !
+      elseif(ns/100==7) then
+        !
+        if(windir=='+') then
+          !
+          ! 7th-order explicit upwind for interface
+          l=-2
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          ! 
+          ! 7th-order compact scheme
+          do l=-1,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l-2) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l-1) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l)   +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l+1) +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l+2)     &
+                             - 0.5d0*bfacmpld *vin(l+3))/240.d0
+          end do
+          !
+          ! 7th-order explicit upwind for interface
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          !
+        elseif(windir=='-') then
+          !
+          ! 7th-order explicit upwind for interface
+          l=-2
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+          ! 7th-order compact scheme
+          do l=-1,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l+3) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l+2) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l+1) +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l)   +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l-1)     &
+                             - 0.5d0*bfacmpld *vin(l-2))/240.d0
+          end do
+          ! 7th-order explicit upwind for interface
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+        endif
+        !
       endif
+      !
     else
       print*,' ** ntype: ',ntype
       print*, ' !! error in subroutine ptds_recon_rhs !'
@@ -1925,9 +2156,9 @@ module commfunc
   function ptds_recon_cal(bd,af,cc,dim,ntype,windir) result(xd)
     !
     integer,intent(in) :: dim,ntype
-    real(8),intent(in) :: af(5),bd(-2:dim+1),cc(1:2,-2:dim)
+    real(8),intent(in) :: af(5),bd(-2:dim+1),cc(1:2,-2:dim+1)
     character(len=1),intent(in) :: windir
-    real(8),allocatable :: xd(:)
+    real(8) :: xd(-1:dim)
     !
     ! local data
     integer :: l
@@ -1944,9 +2175,6 @@ module commfunc
     !
     if(ntype==1) then
       ! the block with boundary at i==0
-      !
-      ! inner block
-      allocate(xd(0:dim))
       !
       yd(0)=bd(0)*cc(1,0)
       if(windir=='+') then
@@ -1971,8 +2199,6 @@ module commfunc
       !
     elseif(ntype==2) then
       ! the block with boundary at i==im
-      !
-      allocate(xd(-1:dim-1))
       !
       yd(-2)=bd(-2)*cc(1,-2)
       if(windir=='+') then
@@ -2001,7 +2227,6 @@ module commfunc
     elseif(ntype==3) then
       !
       ! inner block
-      allocate(xd(-1:dim))
       !
       yd(-2)=bd(-2)*cc(1,-2)
       if(windir=='+') then

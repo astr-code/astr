@@ -7,6 +7,7 @@
 !+---------------------------------------------------------------------+
 module statistic
   !
+  use constdef
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
                        zmin,zmax,nstep,deltat,force,numq
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
@@ -20,7 +21,7 @@ module statistic
   logical :: liosta=.false.
   real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
-             wallheatflux
+             wallheatflux,dissipation
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8),allocatable :: max_q(:),min_q(:)
   !
@@ -133,7 +134,6 @@ module statistic
     use commvar,   only : reynolds,nstep,time
     use commarray, only : rho,vel,prs,tmp,dvel
     use fludyna,   only : miucal
-    use constdef
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -336,6 +336,7 @@ module statistic
     if(trim(flowtype)=='tgv') then
       enstophy=enstophycal()
       kenergy =kenergycal()
+      dissipation=diss_rate_cal()
     elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
       fbcx=fbcxbl()
       massflux=massfluxcal()
@@ -477,8 +478,8 @@ module statistic
           ! a new flowstat file
           !
           if(trim(flowtype)=='tgv') then
-            write(hand_fs,"(A7,1X,A13,2(1X,A20))")'nstep','time',      &
-                                                    'enstophy','kenergy'
+            write(hand_fs,"(A7,1X,A13,3(1X,A20))")'nstep','time',      &
+                                      'kenergy','enstophy','dissipation'
           elseif(trim(flowtype)=='channel') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                        'massflux','fbcx','forcex','wrms'
@@ -497,7 +498,7 @@ module statistic
       endif
       !
       if(trim(flowtype)=='tgv') then
-        write(hand_fs,"(I7,1X,E13.6E2,2(1X,E20.13E2))")nstep,time,enstophy,kenergy
+        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,kenergy,enstophy,dissipation
       elseif(trim(flowtype)=='channel') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
       elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
@@ -637,6 +638,62 @@ module statistic
   !| The end of the subroutine kenergycal.                             |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This function is to return spatial averaged dissipation rate.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  function diss_rate_cal() result(vout)
+    !
+    use commvar,  only : im,jm,km,ia,ja,ka,reynolds
+    use commarray,only : tmp,dvel
+    use fludyna,  only : miucal
+    !
+    real(8) :: vout
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: var1,miu
+    real(8) :: du11,du12,du13,du21,du22,du23,du31,du32,du33,           &
+               s11,s12,s13,s22,s23,s33,div
+    !
+    vout=0.d0
+    !
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      ! 
+      miu=miucal(tmp(i,j,k))/reynolds
+      !
+      du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2); du13=dvel(i,j,k,1,3)
+      du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2); du23=dvel(i,j,k,2,3)
+      du31=dvel(i,j,k,3,1); du32=dvel(i,j,k,3,2); du33=dvel(i,j,k,3,3)
+      !
+      s11=du11; s12=0.5d0*(du12+du21); s13=0.5d0*(du13+du31)
+                s22=du22;              s23=0.5d0*(du23+du32)
+                                       s33=du33
+      !
+      div=s11+s22+s33
+      !
+      var1=2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)- &
+                                                          num1d3*div**2)
+      !
+      vout=vout+var1
+      !
+    enddo
+    enddo
+    enddo
+    !
+    vout=psum(vout)/dble(ia*ja*ka)
+    !
+    return
+    !
+  end function diss_rate_cal
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine diss_rate_cal.                          |
+  !+-------------------------------------------------------------------+
   !+-------------------------------------------------------------------+
   !| This function is to return rms spanwise velocity fluctuation.     |
   !+-------------------------------------------------------------------+
