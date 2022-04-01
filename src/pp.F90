@@ -27,7 +27,7 @@ module pp
     use cmdefne
     !
     ! local data
-    character(len=64) :: cmd,casefolder
+    character(len=64) :: cmd,casefolder,inputfile,outputfile
     !
     call readkeyboad(cmd)
     print*,cmd
@@ -37,6 +37,10 @@ module pp
       call examplegen(trim(casefolder))
     elseif(trim(cmd)=='solid') then
       call solidpp
+    elseif(trim(cmd)=='datacon') then
+      call readkeyboad(inputfile)
+      call readkeyboad(outputfile)
+      call stream2struc(trim(inputfile),trim(outputfile))
     endif
     ! generate an example channel flow case
     ! 
@@ -178,6 +182,127 @@ module pp
   end subroutine examplegen
   !+-------------------------------------------------------------------+
   !| The end of the subroutine examplegen.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to convert a streammed data to a          |
+  !| structured data.                                                  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 31-03-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine stream2struc(infile,outfile)
+    !
+    use hdf5io
+    !
+    character(len=*),intent(in) :: infile,outfile
+    !
+    integer :: fh,isize,jsize,ksize,rankmax,jrank,vai1,irp,jrp,krp,    &
+               asizemax,ima,jma,kma,i,j,k,n,nstep
+    real(8) :: time
+    integer,allocatable :: im(:),jm(:),km(:),i0(:),j0(:),k0(:),        &
+                           offset(:),asize(:)
+    !
+    real(8),allocatable,dimension(:) :: data_1d
+    real(8),allocatable,dimension(:,:,:) :: data_3d
+    !
+    fh=get_unit()
+    open(fh,file='datin/parallel.info',form='formatted',action='read')
+    read(fh,*)
+    read(fh,*)isize,jsize,ksize
+    rankmax=isize*jsize*ksize-1
+    print*,' ** rankmax=',rankmax
+    allocate(im(0:rankmax),jm(0:rankmax),km(0:rankmax),                &
+             i0(0:rankmax),j0(0:rankmax),k0(0:rankmax),                &
+             offset(0:rankmax),asize(0:rankmax))
+    read(fh,*)
+    do jrank=0,rankmax
+      read(fh,*)vai1,irp,jrp,krp,im(jrank),jm(jrank),km(jrank),        &
+                i0(jrank),j0(jrank),k0(jrank)
+    enddo
+    close(fh)
+    print*,' >> datin/parallel.info'
+    !
+    do jrank=0,rankmax
+      asize(jrank)=(im(jrank)+1)*(jm(jrank)+1)*(km(jrank)+1)
+    enddo
+    !
+    offset(0)=0
+    do jrank=1,rankmax
+      offset(jrank)=offset(jrank-1)+asize(jrank-1)
+    enddo
+    !
+    asizemax=offset(rankmax)+asize(rankmax)
+    !
+    ima=i0(rankmax)+im(rankmax)
+    jma=j0(rankmax)+jm(rankmax)
+    kma=k0(rankmax)+km(rankmax)
+    !
+    print*,' **     stream data size:',asizemax
+    print*,' ** structured data size:',ima,jma,kma
+    ! !
+    allocate( data_1d(1:asizemax),data_3d(0:ima,0:jma,0:kma) )
+    !
+    call h5sread(varname='nstep',var=nstep,filename=infile)
+    call h5srite(var=nstep,varname='nstep',filename=outfile,newfile=.true.)
+    !
+    call h5sread(varname='time',var=time,filename=infile)
+    call h5srite(var=time,varname='time',filename=outfile)
+    !
+    call h5sread(varname='ro',var=data_1d,dim=asizemax,filename=infile)
+    call datacon_1d_3d
+    call h5srite(var=data_3d,varname='ro',filename=outfile)
+    !
+    call h5sread(varname='u1',var=data_1d,dim=asizemax,filename=infile)
+    call datacon_1d_3d
+    call h5srite(var=data_3d,varname='u1',filename=outfile)
+    !
+    call h5sread(varname='u2',var=data_1d,dim=asizemax,filename=infile)
+    call datacon_1d_3d
+    call h5srite(var=data_3d,varname='u2',filename=outfile)
+    !
+    call h5sread(varname='u3',var=data_1d,dim=asizemax,filename=infile)
+    call datacon_1d_3d
+    call h5srite(var=data_3d,varname='u3',filename=outfile)
+    !
+    call h5sread(varname= 'p',var= data_1d,dim=asizemax,filename=infile)
+    call datacon_1d_3d
+    call h5srite(var= data_3d,varname= 'p',filename=outfile)
+    !
+    call h5sread(varname= 't',var= data_1d,dim=asizemax,filename=infile)
+    call datacon_1d_3d
+    call h5srite(var= data_3d,varname= 't',filename=outfile)
+    !
+    contains
+    !
+    subroutine datacon_1d_3d
+      !
+      print*,' ** converting 1-D array to 3-D array ... '
+      do jrank=0,rankmax
+        !
+        n=offset(jrank)
+        !
+        do k=k0(jrank),k0(jrank)+km(jrank)
+        do j=j0(jrank),j0(jrank)+jm(jrank)
+        do i=i0(jrank),i0(jrank)+im(jrank)
+          !
+          n=n+1
+          !
+          data_3d(i,j,k)=data_1d(n)
+          !
+        enddo
+        enddo
+        enddo
+        !
+      enddo
+      print*,' ** converting data done'
+      !
+    end subroutine datacon_1d_3d
+    !
+  end subroutine stream2struc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine stream2struc.                           |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

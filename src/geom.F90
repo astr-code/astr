@@ -858,72 +858,65 @@ module geom
     !
     if(lio) print*,' ** state of grid nodes calculated'
     !
-    ! ! search for near-boundary ghost nodes (1-5)
-    ! allocate(marker(0:im,0:jm,0:km))
-    ! n=0
-    ! do while(n<5)
-    !   !
-    !   marker=.false.
-    !   !
-    !   do k=0,km
-    !   do j=0,jm
-    !   do i=0,im
-    !     !
-    !     if(nodestat(i,j,k)==5) then
-    !       ! solid nodes
-    !       !
-    !       do ii=-1,1,2
-    !         if(nodestat(i+ii,j,k)==n) then
-    !           marker(i,j,k)=.true.
-    !           exit
-    !         endif
-    !       enddo
-    !       !
-    !       do jj=-1,1,2
-    !         if(nodestat(i,j+jj,k)==n) then
-    !           marker(i,j,k)=.true.
-    !           exit
-    !         endif
-    !       enddo
-    !       !
-    !       if(ndims==3) then
-    !         do kk=-1,1,2
-    !           if(nodestat(i,j,k+kk)==n) then
-    !             marker(i,j,k)=.true.
-    !             exit
-    !           endif
-    !         enddo
-    !       endif
-    !       !
-    !     endif
-    !     !
-    !   enddo
-    !   enddo
-    !   enddo
-    !   !
-    !   do k=0,km
-    !   do j=0,jm
-    !   do i=0,im
-    !     !
-    !     if(marker(i,j,k)) nodestat(i,j,k)=n+1
-    !     !
-    !   enddo
-    !   enddo
-    !   enddo
-    !   !
-    !   call dataswap(nodestat)
-    !   !
-    !   n=n+1
-    !   !
-    ! enddo
+    ! search for near-boundary ghost nodes (1-5)
+    allocate(marker(0:im,0:jm,0:km))
+    n=0
+    do while(n<5)
+      !
+      marker=.false.
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(nodestat(i,j,k)==5) then
+          ! solid nodes
+          !
+          do ii=-1,1,2
+            if(nodestat(i+ii,j,k)==n) then
+              marker(i,j,k)=.true.
+              exit
+            endif
+          enddo
+          !
+          do jj=-1,1,2
+            if(nodestat(i,j+jj,k)==n) then
+              marker(i,j,k)=.true.
+              exit
+            endif
+          enddo
+          !
+          if(ndims==3) then
+            do kk=-1,1,2
+              if(nodestat(i,j,k+kk)==n) then
+                marker(i,j,k)=.true.
+                exit
+              endif
+            enddo
+          endif
+          !
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(marker(i,j,k)) nodestat(i,j,k)=n+1
+        !
+      enddo
+      enddo
+      enddo
+      !
+      call dataswap(nodestat)
+      !
+      n=n+1
+      !
+    enddo
     !
-    call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
-                               x(0:im,0:jm,0:km,1),'x',           &
-                               x(0:im,0:jm,0:km,2),'y',           &
-                               x(0:im,0:jm,0:km,3),'z',           &
-                               nodestat(0:im,0:jm,0:km),'ns' )
-    !
-    call mpistop
     ! search for near-boundary force nodes (1-5)
     !
     marker=.false.
@@ -1010,8 +1003,13 @@ module geom
       nodestat(:,:,km+1:km+hm)=10
     endif
     !
-    !
     if(lio) print*,' ** near-boundary ghost nodes identified'
+    !
+    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
+    !                            x(0:im,0:jm,0:km,1),'x',           &
+    !                            x(0:im,0:jm,0:km,2),'y',           &
+    !                            x(0:im,0:jm,0:km,3),'z',           &
+    !                            nodestat(0:im,0:jm,0:km),'ns' )
     !
     ! set cell state.
     if(ndims==2) then
@@ -1090,7 +1088,6 @@ module geom
     else 
       stop ' !! ERROR in ndims @ solidgeom'
     endif
-    !
     !
     if(lio) print*,' ** cell state set'
     !

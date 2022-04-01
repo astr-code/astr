@@ -32,8 +32,8 @@ f
 # num_species : number of species
 0
 
-# turbmode
-none
+# turbmode,iomode                                       : turbulence model
+none,s
 
 # bctype                                                : Boundary condition definition 
 1

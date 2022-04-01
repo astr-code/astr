@@ -98,6 +98,8 @@ module readwrite
       call system('mkdir outdat/')
       call system('mkdir bakup/')
       !
+      call system('mkdir monitor/')
+      !
     endif
     !
   end subroutine fileini
@@ -122,7 +124,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,schmidt
+                        turbmode,iomode,schmidt
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
     ! local data
@@ -380,6 +382,19 @@ module readwrite
       !
       write(*,'(2X,62A)')('-',i=1,62)
       !
+      write(*,'(2X,A)')'                          *** i/o model ***'
+      if(iomode=='s') then
+        write(*,'(35X,A)')'                stream output'
+      elseif(iomode=='h') then
+        write(*,'(35X,A)')'            structured output'
+      else
+        print*,' !! ERROR in defining iomode: ',iomode
+        stop
+      endif
+      !
+      write(*,'(2X,62A)')('-',i=1,62)
+      !
+      write(*,'(2X,A)')'                 *** Initialising method model ***'
       if(lrestart) then
         write(*,'(2X,A62)')' restart a previous computation'
       else
@@ -419,7 +434,7 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,schmidt
+                        bfacmpld,shkcrt,turbmode,iomode,schmidt
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -474,7 +489,7 @@ module readwrite
         read(fh,*)num_species,(schmidt(i),i=1,num_species)
       endif
       read(fh,'(/)')
-      read(fh,*)turbmode
+      read(fh,*)turbmode,iomode
       read(fh,'(/)')
       do n=1,6
         read(fh,*)bctype(n)
@@ -532,6 +547,7 @@ module readwrite
     !
     call bcast(flowtype)
     call bcast(turbmode)
+    call bcast(iomode)
     !
     call bcast(conschm)
     call bcast(difschm)
@@ -830,23 +846,26 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine writemon
     !
-    use commvar, only: nmonitor,imon,nstep,time,pinf
+    use commvar, only: nmonitor,imon,nstep,time,pinf,deltat
     use commarray, only : x,rho,vel,prs,tmp,dvel
     !
     ! local data
     integer :: n,i,j,k,ios,ns
-    integer,allocatable,save :: fh(:)
+    integer,allocatable,save :: fh(:),record(:)
     logical,save :: firstcall = .true.
     logical :: lexist
     character(len=4) :: moname
     character(len=64) :: filename
     character(len=32) :: c1
+    real(8) :: rtime
     !
     if(nmonitor>0) then
       !
       if(firstcall) then
         !
-        allocate(fh(nmonitor))
+        allocate(fh(nmonitor),record(1:nmonitor))
+        !
+        record=0
         !
         do n=1,nmonitor
           !
@@ -855,39 +874,49 @@ module readwrite
           k=imon(n,3)
           !
           write(moname,'(i4.4)')imon(n,4)
-          filename='monitor'//moname//'.dat'
+          filename='monitor/monitor'//moname//'.dat'
           !
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename))
+          open(fh(n),file=trim(filename),access='direct',recl=8*17)
+          !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
-            write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,              &
-                                           imon(n,2)+jg0,imon(n,3)+kg0
-            write(fh(n),'(A,3(1X,E15.7E3))')'#',x(i,j,k,1:3)
-            write(fh(n),"(A7,1X,A13,15(1X,A20))")'nstep','time',        &
-                        'u','v','w','ro','p','t','dudx','dudy','dudz',  &
-                            'dvdx','dvdy','dvdz','dwdx','dwdy','dwdz'
+            ! write(fh(n),'(A,3(1X,I0))')'#',imon(n,1)+ig0,              &
+            !                                imon(n,2)+jg0,imon(n,3)+kg0
+            ! write(fh(n),'(A,3(1X,E15.7E3))')'#',x(i,j,k,1:3)
+            ! write(fh(n),"(A7,1X,A13,15(1X,A20))")'nstep','time',        &
+            !             'u','v','w','ro','p','t','dudx','dudy','dudz',  &
+            !                 'dvdx','dvdy','dvdz','dwdx','dwdy','dwdz'
             ! write(*,'(3(A),I0)')'   ** create monitor file ',          &
             !                       trim(filename),' using handle: ',fh(n)
           else
             !
-            ios=0
-            do while(ios==0)
-              read(fh(n),*,iostat=ios)c1
+            ! ios=0
+            ! do while(ios==0)
+            !   read(fh(n),*,iostat=ios)c1
+            !   !
+            !   if(IsNum(c1)==1) then
+            !     read(c1,*)ns
+            !     !
+            !     if(ns==nstep) exit
+            !     !
+            !   endif
+            !   !
+            ! enddo
+            ! if(ios<0) backspace(fh(n))
+            !
+            ns=0
+            do while(ns<nstep-1)
+              record(n)=record(n)+1
               !
-              if(IsNum(c1)==1) then
-                read(c1,*)ns
-                !
-                if(ns==nstep) exit
-                !
-              endif
-              !
+              read(fh(n),rec=record(n))ns,rtime
+              ! if(n==3) print*,mpirank,'|',record(n),ns,rtime
             enddo
-            if(ios<0) backspace(fh(n))
-            write(*,'(3(A),I0)')'   ** resume monitor file ',          &
-                                  trim(filename),' at step: ',ns
+            !
+            write(*,*)'   ** resume monitor file ',          &
+                                  trim(filename),' at nstep: ',ns
             !
           endif
           !
@@ -895,16 +924,21 @@ module readwrite
         !
         firstcall=.false.
         !
-      else
-        do n=1,nmonitor
-          i=imon(n,1)
-          j=imon(n,2)
-          k=imon(n,3)
-          write(fh(n),"(I7,1X,E13.6E2,15(1X,E20.13E2))")nstep,time,     &
-              vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
-              dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
-        enddo
       endif
+      !
+      do n=1,nmonitor
+        i=imon(n,1)
+        j=imon(n,2)
+        k=imon(n,3)
+        ! write(fh(n),"(I7,1X,E13.6E2,15(1X,E20.13E2))")nstep,time,     &
+        !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
+        !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
+        record(n)=record(n)+1
+        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
+                               tmp(i,j,k),dvel(i,j,k,:,:)
+        ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
+        !                        tmp(i,j,k),dvel(i,j,k,:,:)
+      enddo
       !
     else
       return
@@ -1129,20 +1163,20 @@ module readwrite
     call h5io_init(filename='datin/flowini3d.h5',mode='read')
     ! 
     ! call h5read(varname='time',var=time)
-    ! call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
+    call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
     call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1))
     call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2))
     call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3))
-    ! call h5read(varname='p', var=prs(0:im,0:jm,0:km))
-    ! call h5read(varname='t', var=tmp(0:im,0:jm,0:km))
+    call h5read(varname='p', var=prs(0:im,0:jm,0:km))
+    call h5read(varname='t', var=tmp(0:im,0:jm,0:km))
     !
-    rho=roinf
-    prs=pinf
-    tmp=tinf
-    do jsp=1,num_species
-       write(spname,'(i2.2)')jsp
-      call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
-    enddo
+    ! rho=roinf
+    ! prs=pinf
+    ! tmp=tinf
+    ! do jsp=1,num_species
+    !    write(spname,'(i2.2)')jsp
+    !   call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+    ! enddo
     !
     call h5io_end
     !
@@ -1494,7 +1528,7 @@ module readwrite
   subroutine writeflfed(subtime)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ
+                       km,lwsequ,turbmode,feqwsequ,iomode
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use hdf5io
@@ -1515,25 +1549,37 @@ module readwrite
       !
       write(stepname,'(i4.4)')filenumb
       !
-      outfilename='outdat/flowfield'//stepname//'.h5'
+      outfilename='outdat/flowfield'//stepname//'.'//iomode//'5'
     else
       stepname=''
-      outfilename='outdat/flowfield.h5'
+      outfilename='outdat/flowfield.'//iomode//'5'
     endif
     !
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
-    call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
-    call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1))
-    call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2))
-    call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3))
-    call h5write(varname='p', var=prs(0:im,0:jm,0:km))
-    call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
-    if(num_species>0) then
-      do jsp=1,num_species
-         write(spname,'(i2.2)')jsp
-        call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
-      enddo
+    if(iomode=='s') then
+      call h5write(varname='ro',var=rho(0:im,0:jm,0:km),char='s')
+      call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),char='s')
+      call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),char='s')
+      call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),char='s')
+      call h5write(varname='p', var=prs(0:im,0:jm,0:km),char='s')
+      call h5write(varname='t', var=tmp(0:im,0:jm,0:km),char='s')
+    elseif(iomode=='h') then
+      call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
+      call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1))
+      call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2))
+      call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3))
+      call h5write(varname='p', var=prs(0:im,0:jm,0:km))
+      call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
+      if(num_species>0) then
+        do jsp=1,num_species
+           write(spname,'(i2.2)')jsp
+          call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+        enddo
+      endif
+    else
+      print*,' !! iomode error: ',iomode
+      stop
     endif
     !
     ! if(allocated(ssf)) then
@@ -1807,7 +1853,7 @@ module readwrite
     if(limmbou .and. mpirank==imbroot) then
       ! call imboundarydata 
       !
-      call writecylimmbou
+      ! call writecylimmbou
       !
     endif
     !

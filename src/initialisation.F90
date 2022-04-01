@@ -659,7 +659,7 @@ module initialisation
     !                                prs(0:im,0:jm,0:km)  ,'p',          &
     !                                tmp(0:im,0:jm,0:km)  ,'t' )
     !
-    if(lio)  write(*,'(A,I1,A)')'  ** 2-D vortical field initialised.'
+    if(lio)  write(*,'(A,I1,A)')'  ** 2-',ndims,'D TGV initialised.'
     !
   end subroutine tgvini
   !+-------------------------------------------------------------------+

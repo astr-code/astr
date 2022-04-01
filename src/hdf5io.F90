@@ -38,6 +38,14 @@ module hdf5io
     !
   end Interface h5write
   !
+  Interface h5sread
+    !
+    module procedure h5_readarray1d
+    module procedure h5_read1rl8
+    module procedure h5_read1int
+    !
+  end Interface h5sread
+  !
   Interface h5srite
     !
     module procedure h5_write1int
@@ -535,9 +543,11 @@ module hdf5io
     !
 #ifdef HDF5
     ! local data
-    integer :: dim(1),dima,jrank
+    real(8),allocatable :: var_1d(:)
+    integer :: dima,jrank,i,j,k,n
     integer :: data_size(0:mpirankmax)
     integer :: h5error
+    integer,save :: dim(1)
     !
     integer(hid_t) :: dset_id,filespace,memspace,plist_id
     integer(hsize_t),dimension(1),save :: offset
@@ -563,7 +573,7 @@ module hdf5io
       enddo
       !
       offset(1)=0
-      do jrank=0,mpirankmax-1
+      do jrank=0,mpirank-1
         offset(1)=offset(1)+data_size(jrank)
       enddo
       !
@@ -571,6 +581,17 @@ module hdf5io
       !
       dimt=dim
     endif
+    !
+    allocate(var_1d(1:dim(1)))
+    n=0
+    do k=1,size_sav(3)
+    do j=1,size_sav(2)
+    do i=1,size_sav(1)
+      n=n+1
+      var_1d(n)=var(i,j,k)
+    enddo
+    enddo
+    enddo
     !
     call h5screate_simple_f(1,dimat,filespace,h5error)
     call h5dcreate_f(h5file_id,varname,H5T_NATIVE_DOUBLE,filespace,    &
@@ -583,13 +604,15 @@ module hdf5io
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,h5error) 
     !
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,h5error)
-    call h5dwrite_f(dset_id,H5T_NATIVE_DOUBLE,var,dimt,h5error,       &
+    call h5dwrite_f(dset_id,H5T_NATIVE_DOUBLE,var_1d,dimt,h5error,    &
                     file_space_id=filespace,mem_space_id=memspace,    &
                                                      xfer_prp=plist_id)
     call h5sclose_f(filespace,h5error)
     call h5sclose_f(memspace,h5error)
     call h5dclose_f(dset_id,h5error)
     call h5pclose_f(plist_id,h5error)
+    !
+    deallocate(var_1d)
     !
     if(lio) print*,' << ',varname
     !
@@ -997,6 +1020,177 @@ module hdf5io
   end subroutine h5_writearray3d
   !+-------------------------------------------------------------------+
   !| This end of the subroutine h5_writearray3d.                       |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to remove a dataset from a hdf5 file.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 31-03-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine h5delete(varname)
+    !
+    character(len=*),intent(in) :: varname
+    !
+    ! local data
+    integer :: h5error
+    !
+    call h5ldelete_f(h5file_id,varname,h5error)
+    !
+    print*,' ** dataset: ',varname,'removed'
+    !
+  end subroutine h5delete
+  !+-------------------------------------------------------------------+
+  !| This end of the subroutine h5delete.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to read 1-D array via hdf5 interface.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 31-03-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine h5_readarray1d(varname,var,dim,filename,explicit)
+    !
+    real(8),intent(out) :: var(:)
+    integer,intent(in) :: dim
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit
+    logical :: lexplicit
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    !
+    call h5open_f(h5error)
+    !
+    call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+
+    ! open an existing dataset.
+    call h5dopen_f(file_id,varname,dset_id1,h5error)
+    !
+    dimt=(/dim/)
+    !
+    ! read the dataset.
+    call h5dread_f(dset_id1,h5t_native_double,var,dimt,h5error)
+
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1d 1'
+    !
+    ! close the dataset
+    call h5dclose_f(dset_id1, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1d 2'
+    ! close the file.
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1d 3'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1d 4'
+    !
+    if(lexplicit)  print*,' >> ',varname,' from ',filename,' ... done'
+    !
+  end subroutine h5_readarray1d
+  !
+  subroutine h5_read1int(var,varname,filename,explicit)
+    !
+    integer,intent(out) :: var
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit
+    logical :: lexplicit
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: v(1)
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    !
+    dimt=(/1/)
+    !
+    call h5open_f(h5error)
+    print*,' ** open hdf5 interface'
+    !
+    call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    !
+    call h5ltread_dataset_f(file_id,varname,h5t_native_integer,v,dimt,h5error)
+    !
+    call h5fclose_f(file_id,h5error)
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1dint 1'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    !
+    var=v(1)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1dint 2'
+    !
+    if(lexplicit)  print*,' >> ',varname,' from ',filename,' ... done'
+    !
+  end subroutine h5_read1int
+  !
+  subroutine h5_read1rl8(var,varname,filename,explicit)
+    !
+    real(8),intent(out) :: var
+    character(len=*),intent(in) :: varname,filename
+    logical,intent(in), optional:: explicit
+    logical :: lexplicit
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    real(8) :: v(1)
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    !
+    dimt=(/1/)
+    !
+    call h5open_f(h5error)
+    if(lexplicit)  print*,' ** open hdf5 interface'
+    !
+    call h5fopen_f(filename,h5f_acc_rdwr_f,file_id,h5error)
+    !
+    call h5ltread_dataset_f(file_id,varname,h5t_native_double,v,dimt,h5error)
+    !
+    call h5fclose_f(file_id,h5error)
+    !
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1dint 1'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    !
+    var=v(1)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray1dint 2'
+    !
+    if(lexplicit)  print*,' >> ',varname,' from ',filename,' ... done'
+    !
+  end subroutine h5_read1rl8
+  !+-------------------------------------------------------------------+
+  !| This end of the subroutine h5_readarray1d.                        |
   !+-------------------------------------------------------------------+
   !
 end module hdf5io
