@@ -32,7 +32,6 @@ module hdf5io
     !
     module procedure h5wa2d_r8
     module procedure h5wa3d_r8
-    module procedure h5wa3d_r8_seq
     module procedure h5w_int4
     module procedure h5w_real8
     !
@@ -479,7 +478,24 @@ module hdf5io
     !
   end subroutine h5w_real8
   !
-  subroutine h5wa3d_r8(varname,var)
+  subroutine h5wa3d_r8(varname,var,mode)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(in) :: var(:,:,:)
+    character(len=1),intent(in) :: mode
+    !
+    if(mode=='h') then
+      call h5wa3d_r8_struct(varname,var)
+    elseif(mode=='s') then
+      call h5wa3d_r8_stream(varname,var)
+    else
+      stop ' !! error @  h5wa3d_r8'
+    endif
+    !
+  end subroutine h5wa3d_r8
+  !
+  subroutine h5wa3d_r8_struct(varname,var)
     !
     use commvar, only: ia,ja,ka
     use parallel,only: lio,ig0,jg0,kg0
@@ -529,9 +545,9 @@ module hdf5io
     !
 #endif
     !
-  end subroutine h5wa3d_r8
+  end subroutine h5wa3d_r8_struct
   !
-  subroutine h5wa3d_r8_seq(varname,var,char)
+  subroutine h5wa3d_r8_stream(varname,var)
     !
     use commvar, only: ia,ja,ka
     use parallel,only: lio,ig0,jg0,kg0,mpirankmax,ptabupd,mpistop
@@ -539,7 +555,6 @@ module hdf5io
     ! arguments
     character(LEN=*),intent(in) :: varname
     real(8),intent(in) :: var(:,:,:)
-    character(len=1),intent(in) :: char
     !
 #ifdef HDF5
     ! local data
@@ -618,7 +633,7 @@ module hdf5io
     !
 #endif
     !
-  end subroutine h5wa3d_r8_seq
+  end subroutine h5wa3d_r8_stream
   !
   subroutine h5wa2d_r8(varname,var,dir)
     !

@@ -507,7 +507,7 @@ module mainloop
       endif
       !
       if(lwslic .and. mod(nstep,feqslice)==0) then
-        call writeslice
+        call writeslice(ctime(13))
       endif
       !
     endif

@@ -10,7 +10,7 @@ module readwrite
   use constdef
   use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
                       ptime,bcast,mpirankmax,ig0,jg0,kg0
-  use commvar, only : ndims,im,jm,km
+  use commvar, only : ndims,im,jm,km,iomode
   use tecio
   use stlaio,  only: get_unit
   !
@@ -100,6 +100,9 @@ module readwrite
       !
       call system('mkdir monitor/')
       !
+      call system('mkdir islice/')
+      call system('mkdir jslice/')
+      call system('mkdir kslice/')
     endif
     !
   end subroutine fileini
@@ -124,7 +127,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,iomode,schmidt
+                        turbmode,schmidt
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
     ! local data
@@ -434,7 +437,7 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,iomode,schmidt
+                        bfacmpld,shkcrt,turbmode,schmidt
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -916,7 +919,8 @@ module readwrite
             enddo
             !
             write(*,*)'   ** resume monitor file ',          &
-                                  trim(filename),' at nstep: ',ns
+                            trim(filename),' at nstep: ',ns, &
+                                         'record:',record(n)
             !
           endif
           !
@@ -1484,9 +1488,9 @@ module readwrite
     use hdf5io
     !
     call h5io_init('./grid.h5',mode='write')
-    call h5write(varname='x',var=x(0:im,0:jm,0:km,1))
-    call h5write(varname='y',var=x(0:im,0:jm,0:km,2))
-    call h5write(varname='z',var=x(0:im,0:jm,0:km,3))
+    call h5write(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
+    call h5write(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
+    call h5write(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
     call h5io_end
     !
   end subroutine writegrid
@@ -1528,7 +1532,7 @@ module readwrite
   subroutine writeflfed(subtime)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ,iomode
+                       km,lwsequ,turbmode,feqwsequ
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use hdf5io
@@ -1557,29 +1561,17 @@ module readwrite
     !
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
-    if(iomode=='s') then
-      call h5write(varname='ro',var=rho(0:im,0:jm,0:km),char='s')
-      call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),char='s')
-      call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),char='s')
-      call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),char='s')
-      call h5write(varname='p', var=prs(0:im,0:jm,0:km),char='s')
-      call h5write(varname='t', var=tmp(0:im,0:jm,0:km),char='s')
-    elseif(iomode=='h') then
-      call h5write(varname='ro',var=rho(0:im,0:jm,0:km))
-      call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1))
-      call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2))
-      call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3))
-      call h5write(varname='p', var=prs(0:im,0:jm,0:km))
-      call h5write(varname='t', var=tmp(0:im,0:jm,0:km))
-      if(num_species>0) then
-        do jsp=1,num_species
-           write(spname,'(i2.2)')jsp
-          call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
-        enddo
-      endif
-    else
-      print*,' !! iomode error: ',iomode
-      stop
+    call h5write(varname='ro',var=rho(0:im,0:jm,0:km),  mode=iomode)
+    call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),mode=iomode)
+    call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),mode=iomode)
+    call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),mode=iomode)
+    call h5write(varname='p', var=prs(0:im,0:jm,0:km),  mode=iomode)
+    call h5write(varname='t', var=tmp(0:im,0:jm,0:km),  mode=iomode)
+    if(num_species>0) then
+      do jsp=1,num_species
+         write(spname,'(i2.2)')jsp
+        call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode=iomode)
+      enddo
     endif
     !
     ! if(allocated(ssf)) then
@@ -1613,11 +1605,11 @@ module readwrite
     ! endif
     !
     if(trim(turbmode)=='k-omega') then
-      call h5write(varname='k',     var=tke(0:im,0:jm,0:km))
-      call h5write(varname='omega', var=omg(0:im,0:jm,0:km))
-      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km))
+      call h5write(varname='k',     var=tke(0:im,0:jm,0:km),mode=iomode)
+      call h5write(varname='omega', var=omg(0:im,0:jm,0:km),mode=iomode)
+      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
     elseif(trim(turbmode)=='udf1') then
-      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km))
+      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
     endif
     !
     call h5io_end
@@ -1654,7 +1646,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine writemeanflow
     !
-    use commvar,  only : nstep
+    use commvar,  only : nstep,iomode
     use statistic,only : nsamples,nstep_sbeg,time_sbeg,                &
                          rom,u1m,u2m,u3m,pm,tm,                        &
                          u11,u22,u33,u12,u13,u23,pp,tt,tu1,tu2,tu3,    &
@@ -1666,85 +1658,85 @@ module readwrite
                          disspa,predil,visdif1,visdif2,visdif3
     use hdf5io
     !
-    if(lio) call bakupfile(file='outdat/meanflow.h5')
+    if(lio) call bakupfile(file='outdat/meanflow.'//iomode//'5')
     !
-    call h5io_init('outdat/meanflow.h5',mode='write')
-    call h5write(varname='rom',var=rom(0:im,0:jm,0:km))
-    call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km))
-    call h5write(varname='u2m',var=u2m(0:im,0:jm,0:km))
-    call h5write(varname='u3m',var=u3m(0:im,0:jm,0:km))
-    call h5write(varname='pm ',var=pm (0:im,0:jm,0:km))
-    call h5write(varname='tm ',var=tm (0:im,0:jm,0:km))
+    call h5io_init('outdat/meanflow.'//iomode//'5',mode='write')
+    call h5write(varname='rom',var=rom(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u1m',var=u1m(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u2m',var=u2m(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u3m',var=u3m(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='pm ',var=pm (0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='tm ',var=tm (0:im,0:jm,0:km),mode=iomode)
     call h5io_end
     !
-    if(lio) call bakupfile(file='outdat/2ndsta.h5')
-    call h5io_init('outdat/2ndsta.h5',mode='write')
-    call h5write(varname='u11',var=u11(0:im,0:jm,0:km))
-    call h5write(varname='u22',var=u22(0:im,0:jm,0:km))
-    call h5write(varname='u33',var=u33(0:im,0:jm,0:km))
-    call h5write(varname='u12',var=u12(0:im,0:jm,0:km))
-    call h5write(varname='u13',var=u13(0:im,0:jm,0:km))
-    call h5write(varname='u23',var=u23(0:im,0:jm,0:km))
+    if(lio) call bakupfile(file='outdat/2ndsta.'//iomode//'5')
+    call h5io_init('outdat/2ndsta.'//iomode//'5',mode='write')
+    call h5write(varname='u11',var=u11(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u22',var=u22(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u33',var=u33(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u12',var=u12(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u13',var=u13(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u23',var=u23(0:im,0:jm,0:km),mode=iomode)
     !
-    call h5write(varname='pp', var=pp(0:im,0:jm,0:km))
-    call h5write(varname='tt', var=tt(0:im,0:jm,0:km))
-    call h5write(varname='tu1',var=tu1(0:im,0:jm,0:km))
-    call h5write(varname='tu2',var=tu2(0:im,0:jm,0:km))
-    call h5write(varname='tu3',var=tu2(0:im,0:jm,0:km))
+    call h5write(varname='pp', var=pp(0:im,0:jm,0:km) ,mode=iomode)
+    call h5write(varname='tt', var=tt(0:im,0:jm,0:km) ,mode=iomode)
+    call h5write(varname='tu1',var=tu1(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='tu2',var=tu2(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='tu3',var=tu2(0:im,0:jm,0:km),mode=iomode)
     call h5io_end
     !
-    if(lio) call bakupfile(file='outdat/3rdsta.h5')
-    call h5io_init('outdat/3rdsta.h5',mode='write')
-    call h5write(varname='u111',var=u111(0:im,0:jm,0:km))
-    call h5write(varname='u222',var=u222(0:im,0:jm,0:km))
-    call h5write(varname='u333',var=u333(0:im,0:jm,0:km))
-    call h5write(varname='u112',var=u112(0:im,0:jm,0:km))
-    call h5write(varname='u113',var=u113(0:im,0:jm,0:km))
-    call h5write(varname='u122',var=u122(0:im,0:jm,0:km))
-    call h5write(varname='u133',var=u133(0:im,0:jm,0:km))
-    call h5write(varname='u223',var=u223(0:im,0:jm,0:km))
-    call h5write(varname='u233',var=u233(0:im,0:jm,0:km))
-    call h5write(varname='u123',var=u123(0:im,0:jm,0:km))
+    if(lio) call bakupfile(file='outdat/3rdsta.'//iomode//'5')
+    call h5io_init('outdat/3rdsta.'//iomode//'5',mode='write')
+    call h5write(varname='u111',var=u111(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u222',var=u222(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u333',var=u333(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u112',var=u112(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u113',var=u113(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u122',var=u122(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u133',var=u133(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u223',var=u223(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u233',var=u233(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='u123',var=u123(0:im,0:jm,0:km),mode=iomode)
     call h5io_end
     !
-    if(lio) call bakupfile(file='outdat/budget.h5')
-    call h5io_init('outdat/budget.h5',mode='write')
-    call h5write(varname='disspa', var=disspa(0:im,0:jm,0:km))
-    call h5write(varname='predil', var=predil(0:im,0:jm,0:km))
-    call h5write(varname='pu1',    var=pu1(0:im,0:jm,0:km))
-    call h5write(varname='pu2',    var=pu2(0:im,0:jm,0:km))
-    call h5write(varname='pu3',    var=pu3(0:im,0:jm,0:km))
-    call h5write(varname='u1rem',  var=u1rem(0:im,0:jm,0:km))
-    call h5write(varname='u2rem',  var=u2rem(0:im,0:jm,0:km))
-    call h5write(varname='u3rem',  var=u3rem(0:im,0:jm,0:km))
-    call h5write(varname='visdif1',var=visdif1(0:im,0:jm,0:km))
-    call h5write(varname='visdif2',var=visdif2(0:im,0:jm,0:km))
-    call h5write(varname='visdif3',var=visdif3(0:im,0:jm,0:km))
-    call h5write(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km))
-    call h5write(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km))
-    call h5write(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km))
-    call h5write(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km))
-    call h5write(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km))
-    call h5write(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km))
+    if(lio) call bakupfile(file='outdat/budget.'//iomode//'5')
+    call h5io_init('outdat/budget.'//iomode//'5',mode='write')
+    call h5write(varname='disspa', var=disspa(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='predil', var=predil(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='pu1',    var=pu1(0:im,0:jm,0:km)   ,mode=iomode)
+    call h5write(varname='pu2',    var=pu2(0:im,0:jm,0:km)   ,mode=iomode)
+    call h5write(varname='pu3',    var=pu3(0:im,0:jm,0:km)   ,mode=iomode)
+    call h5write(varname='u1rem',  var=u1rem(0:im,0:jm,0:km) ,mode=iomode)
+    call h5write(varname='u2rem',  var=u2rem(0:im,0:jm,0:km) ,mode=iomode)
+    call h5write(varname='u3rem',  var=u3rem(0:im,0:jm,0:km) ,mode=iomode)
+    call h5write(varname='visdif1',var=visdif1(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='visdif2',var=visdif2(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='visdif3',var=visdif3(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km),mode=iomode)
+    call h5write(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km),mode=iomode)
     call h5io_end
     !
     if(lio) then
-      call h5srite(varname='nstep',   var=nstep,   filename='outdat/meanflow.h5')
-      call h5srite(varname='nsamples',var=nsamples,filename='outdat/meanflow.h5')
-      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/meanflow.h5')
-      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/meanflow.h5')
-      call h5srite(varname='nstep',   var=nstep,   filename='outdat/2ndsta.h5')
-      call h5srite(varname='nsamples',var=nsamples,filename='outdat/2ndsta.h5')
-      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/2ndsta.h5')
-      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/2ndsta.h5')
-      call h5srite(varname='nstep',   var=nstep,   filename='outdat/3rdsta.h5')
-      call h5srite(varname='nsamples',var=nsamples,filename='outdat/3rdsta.h5')
-      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/3rdsta.h5')
-      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/3rdsta.h5')
-      call h5srite(varname='nstep',   var=nstep,   filename='outdat/budget.h5')
-      call h5srite(varname='nsamples',var=nsamples,filename='outdat/budget.h5')
-      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/budget.h5')
-      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/budget.h5')
+      call h5srite(varname='nstep',     var=nstep,     filename='outdat/meanflow.'//iomode//'5')
+      call h5srite(varname='nsamples',  var=nsamples,  filename='outdat/meanflow.'//iomode//'5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename='outdat/meanflow.'//iomode//'5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename='outdat/meanflow.'//iomode//'5')
+      call h5srite(varname='nstep',     var=nstep,     filename=  'outdat/2ndsta.'//iomode//'5')
+      call h5srite(varname='nsamples',  var=nsamples,  filename=  'outdat/2ndsta.'//iomode//'5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename=  'outdat/2ndsta.'//iomode//'5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename=  'outdat/2ndsta.'//iomode//'5')
+      call h5srite(varname='nstep',     var=nstep,     filename=  'outdat/3rdsta.'//iomode//'5')
+      call h5srite(varname='nsamples',  var=nsamples,  filename=  'outdat/3rdsta.'//iomode//'5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename=  'outdat/3rdsta.'//iomode//'5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename=  'outdat/3rdsta.'//iomode//'5')
+      call h5srite(varname='nstep',     var=nstep,     filename=  'outdat/budget.'//iomode//'5')
+      call h5srite(varname='nsamples',  var=nsamples,  filename=  'outdat/budget.'//iomode//'5')
+      call h5srite(varname='nstep_sbeg',var=nstep_sbeg,filename=  'outdat/budget.'//iomode//'5')
+      call h5srite(varname='time_sbeg', var=time_sbeg, filename=  'outdat/budget.'//iomode//'5')
     endif
     !
   end subroutine writemeanflow
@@ -1763,7 +1755,7 @@ module readwrite
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwsequ,lavg,force,numq,imbroot,limmbou,      &
-                       turbmode,feqchkpt
+                       turbmode,feqchkpt,iomode
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
@@ -1819,7 +1811,7 @@ module readwrite
     ! if(lio) print*,' << ',trim(outfilename)
     !
     if(lio) call bakupfile('outdat/auxiliary.h5')
-    if(lio) call bakupfile('outdat/flowfield.h5')
+    if(lio) call bakupfile('outdat/flowfield.'//iomode//'5')
     !
     call writeflfed()
     !
@@ -1902,18 +1894,24 @@ module readwrite
   !| -------------                                                     |
   !| 10-10-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writeslice
+  subroutine writeslice(subtime)
     !
     use parallel, only: irk_islice,jrk_jslice,krk_kslice,mpi_islice,   &
                         mpi_jslice,mpi_kslice
     use commvar,  only: fnumslic,nstep,time,islice,jslice,kslice,im,jm,km
-    use commarray,only: rho,vel,prs,tmp,dvel
+    use commarray,only: rho,vel,prs,tmp,dvel,dtmp
     use hdf5io
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     character(len=5) :: stepname
     character(len=14) :: filename
     integer :: i,j,k
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     if(irk==irk_islice) then
       !
@@ -1924,15 +1922,13 @@ module readwrite
         stop
       endif
       !
-      call system('mkdir islice/')
-      !
       write(stepname,'(i5.5)')fnumslic
       !
       filename='islice'//stepname//'.h5'
       !
       call h5io_init(filename='islice/'//filename,mode='write',        &
                                                         comm=mpi_islice)
-      call h5write(varname='ro',var=rho(i,0:jm,0:km),  dir='i')
+      ! call h5write(varname='ro',var=rho(i,0:jm,0:km),  dir='i')
       call h5write(varname='u1',var=vel(i,0:jm,0:km,1),dir='i')
       call h5write(varname='u2',var=vel(i,0:jm,0:km,2),dir='i')
       call h5write(varname='u3',var=vel(i,0:jm,0:km,3),dir='i')
@@ -1967,30 +1963,29 @@ module readwrite
         stop
       endif
       !
-      call system('mkdir jslice/')
-      !
       write(stepname,'(i5.5)')fnumslic
       !
       filename='jslice'//stepname//'.h5'
       !
       call h5io_init(filename='jslice/'//filename,mode='write',        &
                                                         comm=mpi_jslice)
-      call h5write(varname='ro',var=rho(0:im,j,0:km),  dir='j')
-      call h5write(varname='u1',var=vel(0:im,j,0:km,1),dir='j')
-      call h5write(varname='u2',var=vel(0:im,j,0:km,2),dir='j')
-      call h5write(varname='u3',var=vel(0:im,j,0:km,3),dir='j')
+      ! call h5write(varname='ro',var=rho(0:im,j,0:km),  dir='j')
+      ! call h5write(varname='u1',var=vel(0:im,j,0:km,1),dir='j')
+      ! call h5write(varname='u2',var=vel(0:im,j,0:km,2),dir='j')
+      ! call h5write(varname='u3',var=vel(0:im,j,0:km,3),dir='j')
       call h5write(varname='p', var=prs(0:im,j,0:km)  ,dir='j')
-      call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
+      ! call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
       !
-      call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='j')
+      ! call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='j')
       call h5write(varname='dudy',var=dvel(0:im,j,0:km,1,2),dir='j')
-      call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='j')
-      call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='j')
+      ! call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='j')
+      ! call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='j')
       call h5write(varname='dvdy',var=dvel(0:im,j,0:km,2,2),dir='j')
-      call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='j')
-      call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='j')
+      ! call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='j')
+      ! call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='j')
       call h5write(varname='dwdy',var=dvel(0:im,j,0:km,3,2),dir='j')
-      call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='j')
+      ! call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='j')
+      call h5write(varname='dtdy',var=dtmp(0:im,j,0:km,2),dir='j')
       !
       call h5io_end
       !
@@ -2010,15 +2005,13 @@ module readwrite
         stop
       endif
       !
-      call system('mkdir kslice/')
-      !
       write(stepname,'(i5.5)')fnumslic
       !
       filename='kslice'//stepname//'.h5'
       !
       call h5io_init(filename='kslice/'//filename,mode='write',        &
                                                         comm=mpi_kslice)
-      call h5write(varname='ro',var=rho(0:im,0:jm,k),  dir='k')
+      ! call h5write(varname='ro',var=rho(0:im,0:jm,k),  dir='k')
       call h5write(varname='u1',var=vel(0:im,0:jm,k,1),dir='k')
       call h5write(varname='u2',var=vel(0:im,0:jm,k,2),dir='k')
       call h5write(varname='u3',var=vel(0:im,0:jm,k,3),dir='k')
@@ -2045,6 +2038,10 @@ module readwrite
     endif
     !
     fnumslic=fnumslic+1
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg 
+    !
+    return
     !
   end subroutine writeslice
   !+-------------------------------------------------------------------+
@@ -2239,6 +2236,8 @@ module readwrite
                             ctime(8),' - ',100.d0*ctime(8)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io        : ',    &
                             ctime(6),' - ',100.d0*ctime(6)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io slices : ',    &
+                          ctime(13),' - ',100.d0*ctime(13)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - sta       : ',    &
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &

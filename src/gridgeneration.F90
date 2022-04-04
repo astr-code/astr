@@ -48,7 +48,7 @@ module gridgeneration
         stop ' !! error at gridgen' 
       endif
       !
-      call writegrid
+      ! call writegrid
       !
     endif
     !

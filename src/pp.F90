@@ -33,21 +33,65 @@ module pp
     print*,cmd
     !
     if(trim(cmd)=='init') then
+      !
       call readkeyboad(casefolder)
       call examplegen(trim(casefolder))
+      ! generate an example channel flow case
+      !
     elseif(trim(cmd)=='solid') then
       call solidpp
     elseif(trim(cmd)=='datacon') then
+      !
       call readkeyboad(inputfile)
-      call readkeyboad(outputfile)
-      call stream2struc(trim(inputfile),trim(outputfile))
+      !
+      if(trim(inputfile)=='all') then
+        call stream2struc('outdat/flowfield')
+        call stream2struc('outdat/meanflow')
+        call stream2struc('outdat/2ndsta')
+        call stream2struc('outdat/3rdsta')
+        call stream2struc('outdat/budget')
+      else
+        call stream2struc(trim(inputfile))
+      endif
+      !
+    elseif(trim(cmd)=='parinfo') then
+      !
+      call parallelifogen
+      !
+    else
+      stop ' !! pp command not defined. @ ppentrance'
     endif
-    ! generate an example channel flow case
     ! 
     !
   end subroutine ppentrance
   !+-------------------------------------------------------------------+
   !| The end of the subroutine preprocess.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate parallel.info file.                |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-04-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine parallelifogen
+    !
+    use readwrite, only: readinput
+    use parallel,  only: mpisizedis,parapp,mpisize,mpirankmax
+    !
+    call readinput
+    !
+    mpisize=128*128
+    mpirankmax=mpisize-1
+    !
+    call mpisizedis
+    !
+    call parapp
+    !
+  end subroutine parallelifogen
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine parallelifogen.                         |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -192,11 +236,11 @@ module pp
   !| -------------                                                     |
   !| 31-03-2022  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine stream2struc(infile,outfile)
+  subroutine stream2struc(fname)
     !
     use hdf5io
     !
-    character(len=*),intent(in) :: infile,outfile
+    character(len=*),intent(in) :: fname
     !
     integer :: fh,isize,jsize,ksize,rankmax,jrank,vai1,irp,jrp,krp,    &
                asizemax,ima,jma,kma,i,j,k,n,nstep
@@ -244,41 +288,125 @@ module pp
     ! !
     allocate( data_1d(1:asizemax),data_3d(0:ima,0:jma,0:kma) )
     !
-    call h5sread(varname='nstep',var=nstep,filename=infile)
-    call h5srite(var=nstep,varname='nstep',filename=outfile,newfile=.true.)
+    call h5sread(varname='nstep',var=nstep,filename=fname//'.s5')
+    call h5srite(var=nstep,varname='nstep',filename=fname//'.h5',newfile=.true.)
     !
-    call h5sread(varname='time',var=time,filename=infile)
-    call h5srite(var=time,varname='time',filename=outfile)
-    !
-    call h5sread(varname='ro',var=data_1d,dim=asizemax,filename=infile)
-    call datacon_1d_3d
-    call h5srite(var=data_3d,varname='ro',filename=outfile)
-    !
-    call h5sread(varname='u1',var=data_1d,dim=asizemax,filename=infile)
-    call datacon_1d_3d
-    call h5srite(var=data_3d,varname='u1',filename=outfile)
-    !
-    call h5sread(varname='u2',var=data_1d,dim=asizemax,filename=infile)
-    call datacon_1d_3d
-    call h5srite(var=data_3d,varname='u2',filename=outfile)
-    !
-    call h5sread(varname='u3',var=data_1d,dim=asizemax,filename=infile)
-    call datacon_1d_3d
-    call h5srite(var=data_3d,varname='u3',filename=outfile)
-    !
-    call h5sread(varname= 'p',var= data_1d,dim=asizemax,filename=infile)
-    call datacon_1d_3d
-    call h5srite(var= data_3d,varname= 'p',filename=outfile)
-    !
-    call h5sread(varname= 't',var= data_1d,dim=asizemax,filename=infile)
-    call datacon_1d_3d
-    call h5srite(var= data_3d,varname= 't',filename=outfile)
+    if(fname=='outdat/flowfield') then
+      !
+      call h5sread(varname='time',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='time',filename=fname//'.h5')
+      !
+      call data3d_rcw(varname='ro')
+      call data3d_rcw(varname='u1')
+      call data3d_rcw(varname='u2')
+      call data3d_rcw(varname='u3')
+      call data3d_rcw(varname='p')
+      call data3d_rcw(varname='t')
+      !
+    elseif(fname=='outdat/meanflow') then
+      !
+      call h5sread(varname='nsamples',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nsamples',filename=fname//'.h5')
+      !
+      call h5sread(varname='nstep_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nstep_sbeg',filename=fname//'.h5')
+      !
+      call h5sread(varname='time_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='time_sbeg',filename=fname//'.h5')
+      !
+      call data3d_rcw(varname='rom')
+      call data3d_rcw(varname='u1m')
+      call data3d_rcw(varname='u2m')
+      call data3d_rcw(varname='u3m')
+      call data3d_rcw(varname='pm')
+      call data3d_rcw(varname='tm')
+      !
+    elseif(fname=='outdat/2ndsta') then
+      !
+      call h5sread(varname='nsamples',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nsamples',filename=fname//'.h5')
+      !
+      call h5sread(varname='nstep_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nstep_sbeg',filename=fname//'.h5')
+      !
+      call h5sread(varname='time_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='time_sbeg',filename=fname//'.h5')
+      !
+      call data3d_rcw(varname= 'pp')
+      call data3d_rcw(varname= 'tt')
+      call data3d_rcw(varname='tu1')
+      call data3d_rcw(varname='tu2')
+      call data3d_rcw(varname='tu3')
+      call data3d_rcw(varname='u11')
+      call data3d_rcw(varname='u12')
+      call data3d_rcw(varname='u13')
+      call data3d_rcw(varname='u22')
+      call data3d_rcw(varname='u23')
+      call data3d_rcw(varname='u33')
+      !
+    elseif(fname=='outdat/3rdsta') then
+      !
+      call h5sread(varname='nsamples',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nsamples',filename=fname//'.h5')
+      !
+      call h5sread(varname='nstep_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nstep_sbeg',filename=fname//'.h5')
+      !
+      call h5sread(varname='time_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='time_sbeg',filename=fname//'.h5')
+      !
+      call data3d_rcw(varname='u111')
+      call data3d_rcw(varname='u112')
+      call data3d_rcw(varname='u113')
+      call data3d_rcw(varname='u122')
+      call data3d_rcw(varname='u123')
+      call data3d_rcw(varname='u133')
+      call data3d_rcw(varname='u222')
+      call data3d_rcw(varname='u223')
+      call data3d_rcw(varname='u233')
+      call data3d_rcw(varname='u333')
+      !
+    elseif(fname=='outdat/budget') then
+      !
+      call h5sread(varname='nsamples',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nsamples',filename=fname//'.h5')
+      !
+      call h5sread(varname='nstep_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='nstep_sbeg',filename=fname//'.h5')
+      !
+      call h5sread(varname='time_sbeg',var=time,filename=fname//'.s5')
+      call h5srite(var=time,varname='time_sbeg',filename=fname//'.h5')
+      !
+      call data3d_rcw(varname= 'predil')
+      call data3d_rcw(varname=    'pu1')
+      call data3d_rcw(varname=    'pu2')
+      call data3d_rcw(varname=    'pu3')
+      call data3d_rcw(varname='sgmam11')
+      call data3d_rcw(varname='sgmam12')
+      call data3d_rcw(varname='sgmam13')
+      call data3d_rcw(varname='sgmam22')
+      call data3d_rcw(varname='sgmam23')
+      call data3d_rcw(varname='sgmam33')
+      call data3d_rcw(varname=  'u1rem')
+      call data3d_rcw(varname=  'u2rem')
+      call data3d_rcw(varname=  'u3rem')
+      call data3d_rcw(varname='visdif1')
+      call data3d_rcw(varname='visdif2')
+      call data3d_rcw(varname='visdif3')
+      !
+    else
+      stop ' !! file name error @ stream2struc'
+    endif
     !
     contains
     !
-    subroutine datacon_1d_3d
+    subroutine data3d_rcw(varname)
       !
-      print*,' ** converting 1-D array to 3-D array ... '
+      character(len=*),intent(in) :: varname
+      !
+      call h5sread(varname=varname,var= data_1d,dim=asizemax,filename=fname//'.s5')
+      !
+      write(*,'(A)',advance='no')'  ** data converting ... '
       do jrank=0,rankmax
         !
         n=offset(jrank)
@@ -295,10 +423,15 @@ module pp
         enddo
         enddo
         !
+        write(*,'(1A1,A,I4,A,$)')char(13),'  ** data converting ... ', &
+                                                100*jrank/rankmax,'  % '
+        !
       enddo
-      print*,' ** converting data done'
+      write(*,*)''
       !
-    end subroutine datacon_1d_3d
+      call h5srite(var=data_3d,varname=varname,filename=fname//'.h5')
+      !
+    end subroutine data3d_rcw
     !
   end subroutine stream2struc
   !+-------------------------------------------------------------------+
