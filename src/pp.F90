@@ -30,7 +30,7 @@ module pp
     character(len=64) :: cmd,casefolder,inputfile,outputfile
     !
     call readkeyboad(cmd)
-    print*,cmd
+    print*,' ** pp command: ',cmd
     !
     if(trim(cmd)=='init') then
       !

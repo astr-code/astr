@@ -18,6 +18,7 @@ module mainloop
   implicit none
   !
   integer :: loop_counter=0
+  integer :: nxtbakup,feqbakup=5
   integer :: fhand_err
   !
   contains
@@ -53,6 +54,7 @@ module mainloop
     !
     nxtchkpt=nstep+feqchkpt
     nxtwsequ=nstep+feqwsequ
+    nxtbakup=nstep+feqbakup
     !
     nsrpt   =nstep
     !
@@ -548,7 +550,7 @@ module mainloop
     use statistic,only: nsamples
     !
     ! local data
-    integer :: i,j,k,l,fh,ii,jj,kk,nsamples_save
+    integer :: i,j,k,l,fh,ii,jj,kk
     logical :: ltocrash
     !
     ltocrash=.false.
@@ -608,17 +610,28 @@ module mainloop
       if(lio) print*,' !! COMPUTATION CRASHED !!'
       if(lio) print*,' !! FETCH AN BAKUP FLOW FIELD !!'
       !
-      nsamples_save=nsamples
-      !
-      call readcheckpoint('bakup')
-      !
-      call updateq
+      call databakup('recovery')
+      ! call readcheckpoint(folder='bakup')
       !
       loop_counter=0
       !
-      nsamples=nsamples_save
-      !
       ! call mpistop
+    else
+      !
+      ! if not crash, backup data
+      !
+      if(nstep==nxtbakup) then
+        !
+        call databakup('backup')
+        !
+        nxtbakup=nstep+feqbakup
+        !
+        feqbakup=feqbakup*2
+        !
+        feqbakup=min(500,feqbakup) ! the max frequency of back is set to 500
+        !
+      endif
+      !
     endif
     !
     return
@@ -629,11 +642,153 @@ module mainloop
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to backup or recovery data                     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 06-04-2022: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine databakup(mode)
+    !
+    use commvar,  only:  filenumb,fnumslic,time,flowtype,force,numq
+    use bc,       only : ninflowslice
+    use statistic,only : massflux,massflux_target
+    use commarray,only : q 
+    use fludyna,  only : updatefvar
+    !
+    ! argument
+    character(len=*),intent(in) :: mode
+    !
+    ! lcoal data
+    type :: databack
+      integer :: nstep,filenumb,fnumslic,ninflowslice
+      real(8) :: time,massflux,massflux_target,force(3)
+      real(8),allocatable :: q(:,:,:,:)
+    end type databack
+    !
+    type(databack),save :: dat_a,dat_b
+    character(len=1),save :: datpnt='o'
+    !
+    if(mode=='backup') then
+      !
+      if(datpnt=='o') datpnt='a'
+      !
+      if(datpnt=='a') then
+        !
+        dat_a%nstep        =nstep       
+        dat_a%filenumb     =filenumb    
+        dat_a%fnumslic     =fnumslic    
+        dat_a%ninflowslice =ninflowslice
+        dat_a%time         =time        
+        if(flowtype=='channel') then
+          dat_a%massflux       =massflux
+          dat_a%massflux_target=massflux_target
+          dat_a%force          =force
+        endif
+        !
+        if(.not. allocated(dat_a%q)) then
+          allocate(dat_a%q(0:im,0:jm,0:km,1:numq))
+          !
+          dat_a%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
+        endif
+        !
+        if(lio) write(*,'(A,I0)')'  ** data backed at nstep= ',nstep
+        !
+        datpnt='b'
+        !
+      elseif(datpnt=='b') then
+        !
+        dat_b%nstep        =nstep       
+        dat_b%filenumb     =filenumb    
+        dat_b%fnumslic     =fnumslic    
+        dat_b%ninflowslice =ninflowslice
+        dat_b%time         =time        
+        if(flowtype=='channel') then
+          dat_b%massflux       =massflux
+          dat_b%massflux_target=massflux_target
+          dat_b%force          =force
+        endif
+        !
+        if(.not. allocated(dat_b%q)) then
+          allocate(dat_b%q(0:im,0:jm,0:km,1:numq))
+          !
+          dat_b%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
+        endif
+        !
+        if(lio) write(*,'(A,I0)')'  ** data backed at nstep= ',nstep
+        !
+        datpnt='a'
+        !
+      else
+        print*,' !! datpnt: ',datpnt
+        stop ' !! error 1 of datpnt @ databakup'
+      endif
+      !
+    elseif(mode=='recovery') then
+      !
+      if(datpnt=='o') then
+        print*,' !! not backup data avaliable !!'
+        stop
+      elseif(datpnt=='a') then
+        !
+        nstep       =dat_a%nstep       
+        filenumb    =dat_a%filenumb    
+        fnumslic    =dat_a%fnumslic    
+        ninflowslice=dat_a%ninflowslice
+        time        =dat_a%time        
+        if(flowtype=='channel') then
+          massflux       =dat_a%massflux       
+          massflux_target=dat_a%massflux_target
+          force          =dat_a%force          
+        endif
+        !
+        q(0:im,0:jm,0:km,1:numq)=dat_a%q(0:im,0:jm,0:km,1:numq)
+        !
+        if(lio) write(*,'(A,I0,A)')'  ** data recovered to nstep= ',nstep,' from dat_a'
+        !
+        datpnt='b'
+        !
+      elseif(datpnt=='b') then
+        !
+        nstep       =dat_b%nstep       
+        filenumb    =dat_b%filenumb    
+        fnumslic    =dat_b%fnumslic    
+        ninflowslice=dat_b%ninflowslice
+        time        =dat_b%time        
+        if(flowtype=='channel') then
+          massflux       =dat_b%massflux       
+          massflux_target=dat_b%massflux_target
+          force          =dat_b%force          
+        endif
+        !
+        q(0:im,0:jm,0:km,1:numq)=dat_b%q(0:im,0:jm,0:km,1:numq)
+        !
+        if(lio) write(*,'(A,I0,A)')'  ** data recovered to nstep= ',nstep,' from dat_b'
+        !
+        datpnt='a'
+        !
+      else
+        print*,' !! datpnt: ',datpnt
+        stop ' !! error 2 of datpnt @ databakup'
+      endif
+      !
+      call updatefvar
+      !
+    else
+      stop ' !! mode error @ databakup'
+    endif
+    !
+  end subroutine databakup
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine databakup.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to wipe the point where the result is not good.|
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 04-10-2020: Created by J. Fang @ Warrington                      |
+  !| 04-10-2020: Created by J. Fang @ Warrington                       |
   !+-------------------------------------------------------------------+
   subroutine crashfix
     !

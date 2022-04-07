@@ -13,7 +13,7 @@ module hdf5io
 #endif
   !
   use parallel, only : lio,irk,jrk,krk,mpirank,ig0,jg0,kg0,            &
-                       mpi_comm_world,mpi_info_null
+                       mpi_comm_world,mpi_info_null,mpistop
   !
   implicit none
   !
@@ -156,6 +156,33 @@ module hdf5io
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is a interface of read 3D data array using hdf5   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-04-2022 | Created by J. Fang STFC Daresbury Laboratory         |
+  !+-------------------------------------------------------------------+
+  subroutine h5ra3d_r8(varname,var,mode)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(inout) :: var(:,:,:)
+    character(len=1),intent(in) :: mode
+    !
+    if(mode=='h') then
+      call h5ra3d_r8_struct(varname,var)
+    elseif(mode=='s') then
+      call h5ra3d_r8_stream(varname,var)
+    else
+      stop ' !! error @  h5wa3d_r8'
+    endif
+    !
+  end subroutine h5ra3d_r8
+  !+-------------------------------------------------------------------+
+  !| This end of the subroutine h5ra3d_r8.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to read 3D real8 araay using hdf5         |
   !| the only data needed is h5file_id                                 |
   !+-------------------------------------------------------------------+
@@ -164,7 +191,7 @@ module hdf5io
   !| 03-Jun-2020 | Created by J. Fang STFC Daresbury Laboratory        |
   !| 30-Jun-2021 | Add h5ra3d_i4 to read 3-d integer array by J. Fang  |
   !+-------------------------------------------------------------------+
-  subroutine h5ra3d_r8(varname,var)
+  subroutine h5ra3d_r8_struct(varname,var)
     !
     !
     ! arguments
@@ -216,7 +243,99 @@ module hdf5io
     !
 #endif
     !
-  end subroutine h5ra3d_r8
+  end subroutine h5ra3d_r8_struct
+  !
+  subroutine h5ra3d_r8_stream(varname,var)
+    !
+    use parallel,only: lio,mpirankmax,ptabupd
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(inout) :: var(:,:,:)
+    !
+#ifdef HDF5
+    ! local data
+    real(8),allocatable :: var_1d(:)
+    integer :: dima,jrank,i,j,k,n
+    integer :: data_size(0:mpirankmax)
+    integer :: h5error
+    integer,save :: dim(1)
+    !
+    integer(hid_t) :: dset_id,filespace,memspace,plist_id
+    integer(hsize_t),dimension(1),save :: offset,dimt,dimat
+    integer,save :: size_sav(3)=0
+    !
+    ! read the data
+    if( size_sav(1)==size(var,1) .and. size_sav(2)==size(var,2) .and. & 
+        size_sav(3)==size(var,3) ) then
+      continue
+    else
+      size_sav(1)=size(var,1)
+      size_sav(2)=size(var,2)
+      size_sav(3)=size(var,3)
+      !
+      dim(1)=size_sav(1)*size_sav(2)*size_sav(3)
+      !
+      call ptabupd(var=dim(1),table=data_size)
+      !
+      dima=0
+      do jrank=0,mpirankmax
+        dima=dima+data_size(jrank)
+      enddo
+      !
+      offset(1)=0
+      do jrank=0,mpirank-1
+        offset(1)=offset(1)+data_size(jrank)
+      enddo
+      !
+      dimat=dima
+      !
+      dimt=dim
+    endif
+    !
+    ! print*,mpirank,'|',offset(1),offset(1)+dimt
+    !
+    allocate(var_1d(1:dim(1)))
+    !
+    call h5dopen_f(h5file_id,varname,dset_id,h5error)
+    call h5screate_simple_f(1,dimt,memspace,h5error)
+    call h5dget_space_f(dset_id,filespace,h5error)
+    call h5sselect_hyperslab_f(filespace,h5s_select_set_f,offset,      &
+                                                           dimt,h5error)
+    ! Create property list for collective dataset read
+    call h5pcreate_f(h5p_dataset_xfer_f,plist_id,h5error)
+    call h5pset_dxpl_mpio_f(plist_id,h5fd_mpio_collective_f,h5error)
+    !
+    ! Read 1-d array
+    call h5dread_f(dset_id,h5t_native_double,var_1d,dimt,h5error,      &
+                   mem_space_id=memspace,file_space_id=filespace,      &
+                                                      xfer_prp=plist_id)
+    !Close dataspace
+    call h5sclose_f(filespace,h5error)
+    !
+    call h5sclose_f(memspace,h5error)
+    !
+    call h5dclose_f(dset_id,h5error)
+    !
+    call h5pclose_f(plist_id,h5error)
+    !
+    n=0
+    do k=1,size_sav(3)
+    do j=1,size_sav(2)
+    do i=1,size_sav(1)
+      n=n+1
+      var(i,j,k)=var_1d(n)
+    enddo
+    enddo
+    enddo
+    !
+    deallocate(var_1d)
+    !
+    if(lio) print*,' >> ',varname
+    !
+#endif
+    !
+  end subroutine h5ra3d_r8_stream
   !
   subroutine h5ra3d_i4(varname,var)
     !
@@ -549,8 +668,7 @@ module hdf5io
   !
   subroutine h5wa3d_r8_stream(varname,var)
     !
-    use commvar, only: ia,ja,ka
-    use parallel,only: lio,ig0,jg0,kg0,mpirankmax,ptabupd,mpistop
+    use parallel,only: lio,mpirankmax,ptabupd
     !
     ! arguments
     character(LEN=*),intent(in) :: varname
@@ -567,7 +685,7 @@ module hdf5io
     integer(hid_t) :: dset_id,filespace,memspace,plist_id
     integer(hsize_t),dimension(1),save :: offset
     integer(hsize_t),save :: dimt(1),dimat(1)
-    integer,save :: size_sav(3)
+    integer,save :: size_sav(3)=0
     !
     if( size_sav(1)==size(var,1) .and. size_sav(2)==size(var,2) .and. & 
         size_sav(3)==size(var,3) ) then

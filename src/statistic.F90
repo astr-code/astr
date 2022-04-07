@@ -205,7 +205,7 @@ module statistic
       visdif2=0.d0
       visdif3=0.d0
       !
-      if(lio) print*,' ** meanflow initilised, nsamples=',nsamples
+      if(lio) print*,' ** meanflow initilised, nsamples=',nsamples,'nstep=',nstep
       !
       nstep_sbeg=nstep
       time_sbeg=time
@@ -302,7 +302,7 @@ module statistic
     !
     liosta=.true.
     !
-    if(lio) print*,' ** meanflow calculated, nsamples=',nsamples
+    if(lio) print*,' ** meanflow calculated, nsamples=',nsamples,'nstep=',nstep
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
     !

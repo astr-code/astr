@@ -44,7 +44,7 @@ module initialisation
     !
     if(lrestart) then
       !
-      call readcheckpoint('checkpoint')
+      call readcheckpoint(folder='checkpoint',mode='h')
       !
       call updateq
       !
@@ -116,7 +116,7 @@ module initialisation
     if(lavg) then
       !
       if(nsamples>0) then
-        call readmeanflow
+        call readmeanflow(mode='h')
       endif
       !
     endif

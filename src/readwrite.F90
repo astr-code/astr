@@ -969,9 +969,9 @@ module readwrite
     use hdf5io
     !
     call h5io_init(filename=trim(gridfile),mode='read')
-    call h5read(varname='x',var=x(0:im,0:jm,0:km,1))
-    call h5read(varname='y',var=x(0:im,0:jm,0:km,2))
-    call h5read(varname='z',var=x(0:im,0:jm,0:km,3))
+    call h5read(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
+    call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
+    call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
     call h5io_end
     !
     return
@@ -1167,12 +1167,12 @@ module readwrite
     call h5io_init(filename='datin/flowini3d.h5',mode='read')
     ! 
     ! call h5read(varname='time',var=time)
-    call h5read(varname='ro',var=rho(0:im,0:jm,0:km))
-    call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1))
-    call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2))
-    call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3))
-    call h5read(varname='p', var=prs(0:im,0:jm,0:km))
-    call h5read(varname='t', var=tmp(0:im,0:jm,0:km))
+    call h5read(varname='ro',var=rho(0:im,0:jm,0:km)   ,mode='h')
+    call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1),mode='h')
+    call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2),mode='h')
+    call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3),mode='h')
+    call h5read(varname='p', var=prs(0:im,0:jm,0:km)   ,mode='h')
+    call h5read(varname='t', var=tmp(0:im,0:jm,0:km)   ,mode='h')
     !
     ! rho=roinf
     ! prs=pinf
@@ -1248,7 +1248,7 @@ module readwrite
   !| -------------                                                     |
   !| 24-06-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readcheckpoint(folder)
+  subroutine readcheckpoint(folder,mode)
     !
     use commvar, only: nstep,filenumb,fnumslic,time,flowtype,          &
                        num_species,im,jm,km,force,numq,turbmode,lwsequ
@@ -1259,12 +1259,20 @@ module readwrite
     !
     ! arguments
     character(len=*),intent(in) :: folder
+    character(len=1),intent(in),optional :: mode
     !
     ! local data
     integer :: nstep_1,jsp
+    character(len=1) :: modeio
     character(len=2) :: spname,qname
     character(len=128) :: infilename
     character(len=4) :: stepname
+    !
+    if(present(mode)) then
+      modeio=mode
+    else
+      modeio=iomode
+    endif
     !
     call h5io_init(filename=folder//'/auxiliary.h5',mode='read')
     call h5read(varname='nstep',var=nstep)
@@ -1281,9 +1289,9 @@ module readwrite
     !
     if(lwsequ) then
       write(stepname,'(i4.4)')filenumb
-      infilename='outdat/flowfield'//stepname//'.h5'
+      infilename='outdat/flowfield'//stepname//'.'//modeio//'5'
     else
-      infilename=folder//'/flowfield.h5'
+      infilename=folder//'/flowfield.'//modeio//'5'
     endif
     !
     call h5io_init(filename=trim(infilename),mode='read')
@@ -1291,26 +1299,27 @@ module readwrite
     !
     if(nstep_1==nstep) then
       call h5read(varname='time',var=time)
-      call h5read(varname='ro',  var=rho(0:im,0:jm,0:km))
-      call h5read(varname='u1',  var=vel(0:im,0:jm,0:km,1))
-      call h5read(varname='u2',  var=vel(0:im,0:jm,0:km,2))
-      call h5read(varname='u3',  var=vel(0:im,0:jm,0:km,3))
-      call h5read(varname='p',   var=prs(0:im,0:jm,0:km))
-      call h5read(varname='t',   var=tmp(0:im,0:jm,0:km))
+      !
+      call h5read(varname='ro',  var=rho(0:im,0:jm,0:km)  ,mode=modeio)
+      call h5read(varname='u1',  var=vel(0:im,0:jm,0:km,1),mode=modeio)
+      call h5read(varname='u2',  var=vel(0:im,0:jm,0:km,2),mode=modeio)
+      call h5read(varname='u3',  var=vel(0:im,0:jm,0:km,3),mode=modeio)
+      call h5read(varname='p',   var=prs(0:im,0:jm,0:km)  ,mode=modeio)
+      call h5read(varname='t',   var=tmp(0:im,0:jm,0:km)  ,mode=modeio)
       do jsp=1,num_species
          write(spname,'(i2.2)')jsp
-        call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp))
+        call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode=modeio)
       enddo
       !
       if(trim(turbmode)=='k-omega') then
-        call h5read(varname='k',     var=tke(0:im,0:jm,0:km))
-        call h5read(varname='omega', var=omg(0:im,0:jm,0:km))
-        call h5read(varname='miut',  var=miut(0:im,0:jm,0:km))
+        call h5read(varname='k',     var=tke(0:im,0:jm,0:km),mode=modeio)
+        call h5read(varname='omega', var=omg(0:im,0:jm,0:km),mode=modeio)
+        call h5read(varname='miut',  var=miut(0:im,0:jm,0:km),mode=modeio)
       elseif(trim(turbmode)=='udf1') then
-        call h5read(varname='miut',  var=miut(0:im,0:jm,0:km))
+        call h5read(varname='miut',  var=miut(0:im,0:jm,0:km),mode=modeio)
       endif
       !
-      ! call h5io_init('checkpoint/qdata.h5',mode='read')
+      ! call h5io_init('checkpoint/qdata.'//modeio//'5',mode='read')
       ! do jsp=1,numq
       !   write(qname,'(i2.2)')jsp
       !   call h5read(varname='q'//qname,var=q(0:im,0:jm,0:km,jsp))
@@ -1319,9 +1328,9 @@ module readwrite
       call h5io_end
       !
     else
-      if(lio)  print*,' !! flowfield.h5 NOT consistent with auxiliary.h5'
+      if(lio)  print*,' !! flowfield.'//modeio//'5 NOT consistent with auxiliary.'//modeio//'5'
       if(lio)  print*,' nstep =',nstep,' in auxiliary.h5 '
-      if(lio)  print*,' nstep =',nstep_1,' in flowfield.h5 '
+      if(lio)  print*,' nstep =',nstep_1,' in flowfield.'//modeio//'5 '
       call mpistop
     endif
     !
@@ -1362,7 +1371,7 @@ module readwrite
   !| -------------                                                     |
   !| 30-06-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readmeanflow
+  subroutine readmeanflow(mode)
     !
     use commvar, only: nstep,im,jm,km
     use statistic,only : nsamples,liosta,nstep_sbeg,time_sbeg,         &
@@ -1377,96 +1386,107 @@ module readwrite
                          allomeanflow,lmeanallocated
     use hdf5io
     !
+    ! arguments
+    character(len=1),intent(in),optional :: mode
+    !
     ! local data
     integer :: nstep_1,nsamples_1
+    character(len=1) :: modeio
+    !
+    if(present(mode)) then
+      modeio=mode
+    else
+      modeio=iomode
+    endif
+    !
     !
     call allomeanflow
     lmeanallocated=.true.
     !
-    call h5io_init('outdat/meanflow.h5',mode='read')
+    call h5io_init('outdat/meanflow.'//modeio//'5',mode='read')
     call h5read(varname='nstep',     var=nstep_1)
     if(nstep_1 .ne. nstep) then
-      print*,' !! meanflow.h5 is NOT consistent with flowfield.h5'
+      print*,' !! meanflow.'//modeio//'5 is NOT consistent with flowfield.'//modeio//'5'
       print*,' !! nstep:',nstep,'nstep_1:',nstep_1
       stop 
     endif
     call h5read(varname='nsamples',  var=nsamples_1)
     if(nsamples_1 .ne. nsamples) then
-      print*,' !! meanflow.h5 is NOT consistent with auxiliary.h5'
+      print*,' !! meanflow.'//modeio//'5 is NOT consistent with auxiliary.'//modeio//'5'
       print*,' !! nsamples:',nsamples,'nsamples_1:',nsamples_1
       stop 
     endif
     call h5read(varname='nstep_sbeg',var=nstep_sbeg)
     call h5read(varname='time_sbeg', var=time_sbeg)
-    call h5read(varname='rom',var=rom(0:im,0:jm,0:km))
-    call h5read(varname='u1m',var=u1m(0:im,0:jm,0:km))
-    call h5read(varname='u2m',var=u2m(0:im,0:jm,0:km))
-    call h5read(varname='u3m',var=u3m(0:im,0:jm,0:km))
-    call h5read(varname='pm ',var=pm (0:im,0:jm,0:km))
-    call h5read(varname='tm ',var=tm (0:im,0:jm,0:km))
+    call h5read(varname='rom',var=rom(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u1m',var=u1m(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u2m',var=u2m(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u3m',var=u3m(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='pm ',var=pm (0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='tm ',var=tm (0:im,0:jm,0:km),mode=modeio)
     call h5io_end
     !
-    call h5io_init('outdat/2ndsta.h5',mode='read')
+    call h5io_init('outdat/2ndsta.'//modeio//'5',mode='read')
     call h5read(varname='nstep',var=nstep_1)
     if(nstep_1 .ne. nstep) then
-      print*,' !! 2ndsta.h5 is NOT consistent with flowfield.h5'
+      print*,' !! 2ndsta.'//modeio//'5 is NOT consistent with flowfield.'//modeio//'5'
       stop 
     endif
-    call h5read(varname='u11',var=u11(0:im,0:jm,0:km))
-    call h5read(varname='u22',var=u22(0:im,0:jm,0:km))
-    call h5read(varname='u33',var=u33(0:im,0:jm,0:km))
-    call h5read(varname='u12',var=u12(0:im,0:jm,0:km))
-    call h5read(varname='u13',var=u13(0:im,0:jm,0:km))
-    call h5read(varname='u23',var=u23(0:im,0:jm,0:km))
+    call h5read(varname='u11',var=u11(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u22',var=u22(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u33',var=u33(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u12',var=u12(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u13',var=u13(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u23',var=u23(0:im,0:jm,0:km),mode=modeio)
     !
-    call h5read(varname='pp', var=pp(0:im,0:jm,0:km))
-    call h5read(varname='tt', var=tt(0:im,0:jm,0:km))
-    call h5read(varname='tu1',var=tu1(0:im,0:jm,0:km))
-    call h5read(varname='tu2',var=tu2(0:im,0:jm,0:km))
-    call h5read(varname='tu3',var=tu2(0:im,0:jm,0:km))
+    call h5read(varname='pp', var=pp(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='tt', var=tt(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='tu1',var=tu1(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='tu2',var=tu2(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='tu3',var=tu2(0:im,0:jm,0:km),mode=modeio)
     call h5io_end
     !
-    call h5io_init('outdat/3rdsta.h5',mode='read')
+    call h5io_init('outdat/3rdsta.'//modeio//'5',mode='read')
     call h5read(varname='nstep',     var=nstep_1)
     if(nstep_1 .ne. nstep) then
-      print*,' !! 3rdsta.h5 is NOT consistent with flowfield.h5'
+      print*,' !! 3rdsta.'//modeio//'5 is NOT consistent with flowfield.'//modeio//'5'
       stop 
     endif
-    call h5read(varname='u111',var=u111(0:im,0:jm,0:km))
-    call h5read(varname='u222',var=u222(0:im,0:jm,0:km))
-    call h5read(varname='u333',var=u333(0:im,0:jm,0:km))
-    call h5read(varname='u112',var=u112(0:im,0:jm,0:km))
-    call h5read(varname='u113',var=u113(0:im,0:jm,0:km))
-    call h5read(varname='u122',var=u122(0:im,0:jm,0:km))
-    call h5read(varname='u133',var=u133(0:im,0:jm,0:km))
-    call h5read(varname='u223',var=u223(0:im,0:jm,0:km))
-    call h5read(varname='u233',var=u233(0:im,0:jm,0:km))
-    call h5read(varname='u123',var=u123(0:im,0:jm,0:km))
+    call h5read(varname='u111',var=u111(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u222',var=u222(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u333',var=u333(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u112',var=u112(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u113',var=u113(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u122',var=u122(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u133',var=u133(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u223',var=u223(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u233',var=u233(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u123',var=u123(0:im,0:jm,0:km),mode=modeio)
     call h5io_end
     !
-    call h5io_init('outdat/budget.h5',mode='read')
+    call h5io_init('outdat/budget.'//modeio//'5',mode='read')
     call h5read(varname='nstep',   var=nstep_1)
     if(nstep_1 .ne. nstep) then
-      print*,' !! budget.h5 is NOT consistent with flowfield.h5'
+      print*,' !! budget.'//modeio//'5 is NOT consistent with flowfield.'//modeio//'5'
       stop 
     endif
-    call h5read(varname='disspa', var=disspa(0:im,0:jm,0:km))
-    call h5read(varname='predil', var=predil(0:im,0:jm,0:km))
-    call h5read(varname='pu1',    var=pu1(0:im,0:jm,0:km))
-    call h5read(varname='pu2',    var=pu2(0:im,0:jm,0:km))
-    call h5read(varname='pu3',    var=pu3(0:im,0:jm,0:km))
-    call h5read(varname='u1rem',  var=u1rem(0:im,0:jm,0:km))
-    call h5read(varname='u2rem',  var=u2rem(0:im,0:jm,0:km))
-    call h5read(varname='u3rem',  var=u3rem(0:im,0:jm,0:km))
-    call h5read(varname='visdif1',var=visdif1(0:im,0:jm,0:km))
-    call h5read(varname='visdif2',var=visdif2(0:im,0:jm,0:km))
-    call h5read(varname='visdif3',var=visdif3(0:im,0:jm,0:km))
-    call h5read(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km))
-    call h5read(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km))
-    call h5read(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km))
-    call h5read(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km))
-    call h5read(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km))
-    call h5read(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km))
+    call h5read(varname='disspa', var=disspa(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='predil', var=predil(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='pu1',    var=pu1(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='pu2',    var=pu2(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='pu3',    var=pu3(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u1rem',  var=u1rem(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u2rem',  var=u2rem(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='u3rem',  var=u3rem(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='visdif1',var=visdif1(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='visdif2',var=visdif2(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='visdif3',var=visdif3(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='sgmam11',var=sgmam11(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='sgmam22',var=sgmam22(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='sgmam33',var=sgmam33(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='sgmam12',var=sgmam12(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='sgmam13',var=sgmam13(0:im,0:jm,0:km),mode=modeio)
+    call h5read(varname='sgmam23',var=sgmam23(0:im,0:jm,0:km),mode=modeio)
     call h5io_end
     !
   end subroutine readmeanflow
@@ -1488,9 +1508,9 @@ module readwrite
     use hdf5io
     !
     call h5io_init('./grid.h5',mode='write')
-    call h5write(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
-    call h5write(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
-    call h5write(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
+    call h5write(varname='x',var=x(0:im,0:jm,0:km,1),mode='h5')
+    call h5write(varname='y',var=x(0:im,0:jm,0:km,2),mode='h5')
+    call h5write(varname='z',var=x(0:im,0:jm,0:km,3),mode='h5')
     call h5io_end
     !
   end subroutine writegrid
