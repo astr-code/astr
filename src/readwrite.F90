@@ -494,9 +494,11 @@ module readwrite
       if(lkhomo) write(*,'(A)')' k'
       read(fh,'(/)')
 #ifdef COMB
-      backspace(fh)
       read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
+#else
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
 #endif
+
       read(fh,'(/)')
       read(fh,*)lrestart
       read(fh,'(/)')
@@ -1679,15 +1681,15 @@ module readwrite
       !
     elseif(ndims==2) then
       !
-      call tecbin('testout/tecfield'//mpirankname//'.plt',           &
-                                        x(0:im,0:jm,0,1),'x',        &
-                                        x(0:im,0:jm,0,2),'y',        &
-                                        rho(0:im,0:jm,0),'ro',       &
-                                      vel(0:im,0:jm,0,1),'u',        &
-                                      vel(0:im,0:jm,0,2),'v',        &
-                                        tmp(0:im,0:jm,0),'T',        &
-                                        prs(0:im,0:jm,0),'p',        &
-                                    rcrinod(0:im,0:jm,0),'c' )
+      ! call tecbin('testout/tecfield'//mpirankname//'.plt',           &
+      !                                   x(0:im,0:jm,0,1),'x',        &
+      !                                   x(0:im,0:jm,0,2),'y',        &
+      !                                   rho(0:im,0:jm,0),'ro',       &
+      !                                 vel(0:im,0:jm,0,1),'u',        &
+      !                                 vel(0:im,0:jm,0,2),'v',        &
+      !                                   tmp(0:im,0:jm,0),'T',        &
+      !                                   prs(0:im,0:jm,0),'p',        &
+      !                               rcrinod(0:im,0:jm,0),'c' )
       !
     endif
     !
@@ -1874,7 +1876,7 @@ module readwrite
     if(lio) call bakupfile('outdat/auxiliary.h5')
     if(lio) call bakupfile('outdat/flowfield.'//iomode//'5')
     !
-    call writeflfed()
+    ! call writeflfed()
     !
     ! call h5io_init('outdat/qdata.h5',mode='write')
     ! do jsp=1,numq

@@ -33,7 +33,7 @@ f
 0
 
 # turbmode,iomode                                       : turbulence model
-none,s
+none,h
 
 # bctype                                                : Boundary condition definition 
 1
