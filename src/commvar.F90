@@ -9,6 +9,10 @@ module commvar
   !
   use commtype
   !
+#ifdef COMB
+  use cantera
+#endif
+  !
   implicit none
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
@@ -88,6 +92,7 @@ module commvar
   real(8),allocatable :: schmidt(:)
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1
+  real(8),allocatable :: spcinf(:)
   !+---------------------+---------------------------------------------+
   !|               nstep | the total time step number.                 |
   !|             maxstep | the max step to run.                        |
@@ -112,7 +117,7 @@ module commvar
   !|                tinf | infinite temperature                        |      
   !|                pinf | infinite pressure                           |   
   !+---------------------+---------------------------------------------+
-  character(len=8) :: flowtype
+  character(len=16) :: flowtype
   !+---------------------+---------------------------------------------+
   !|            flowtype | to define the type of flow.                 |
   !+---------------------+---------------------------------------------+
@@ -158,7 +163,13 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|             lreport | to control report of subroutines            |
   !+---------------------+---------------------------------------------+
-
+  !
+#ifdef COMB
+  logical :: lcomb
+  character(len=255) :: chemfile
+  character(len=3) :: odetype
+  real(8),parameter:: dj_i=2.36d-3,dj_o=3.81d-3,dco_i=17.78d-3
+#endif 
   !
   parameter(hm=5)
   !

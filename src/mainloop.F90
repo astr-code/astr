@@ -20,6 +20,8 @@ module mainloop
   integer :: loop_counter=0
   integer :: nxtbakup,feqbakup=5
   integer :: fhand_err
+  integer :: nstep0
+  real(8) :: time_start
   !
   contains
   !
@@ -38,12 +40,13 @@ module mainloop
     use commcal,  only: cflcal
     !
     ! local data
-    real(8) :: time_start,time_beg,time_next_step
+    real(8) :: time_beg,time_next_step
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
     integer,dimension(8) :: value
     !
     time_start=ptime()
+    nstep0=nstep
     !
     if(firstcall) then
       !
@@ -248,11 +251,17 @@ module mainloop
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
                          lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
-                         feqwsequ,lwslic,lreport
+                         feqwsequ,lwslic,lreport,flowtype,     &
+                         ndims,num_species,maxstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use solver,   only : rhscal,filterq,spongefilter,filter2e
     use bc,       only : boucon,immbody
+#ifdef COMB
+    use thermchem,only : imp_euler_ode,heatrate
+    use fdnn
+    use commvar,  only : odetype
+#endif 
     !
     ! logical data
     logical,save :: firstcall = .true.
@@ -260,8 +269,22 @@ module mainloop
     integer :: nrk,i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:)
+    integer :: dt_ratio,jdnn,idnn
+    real(8) :: hrr,time_beg_2
     !
     time_beg=ptime()
+    !
+#ifdef COMB
+    if(odetype=='dnn') then 
+      if(nstep==nstep0) then
+        call initialization
+        call initialize_locell(im,jm,km)
+      endif 
+      dnnidx(:,:,:)=1
+      jdnn=0
+      dt_ratio=delta_t/deltat
+    endif 
+#endif
     !
     if(firstcall) then
       !
@@ -295,13 +318,17 @@ module mainloop
       !
       if(limmbou) call immbody(ctime(11))
       !
-      call qswap(ctime(7))
+      if(flowtype(1:2)/='0d') call qswap(ctime(7))
       !
-      call boucon
+      if(flowtype(1:2)/='0d') call boucon
       !
-      call qswap(ctime(7))
+      if(flowtype(1:2)/='0d') call qswap(ctime(7))
       !
       call rhscal(ctime(4))
+      !
+      if(flowtype(1:2)=='0d') jacob=1.d0
+      !
+      time_beg_2=ptime()
       !
       if(nrk==1) then
         !
@@ -322,19 +349,114 @@ module mainloop
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
       enddo
       !
+      ctime(14)=ctime(14)+ptime()-time_beg_2
+      !
       if(lfilter) call filterq(ctime(8))
       !
-      call spongefilter
+      if(flowtype(1:2)/='0d') call spongefilter
       !
-      call updatefvar
+      call updatefvar(ctime(15))
       !
-      call crashfix
+      call crashfix(ctime(16))
       !
-    enddo
+#ifdef COMB
+      if(nrk==3) then
+        !
+        time_beg_2=ptime()
+        !
+        do i=0,im 
+        do j=0,jm
+        do k=0,km
+              !
+          if(odetype=='ime' .or. odetype=='rk3') then
+            !
+            if(odetype=='ime') &
+              call imp_euler_ode(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:),deltat)
+            !
+            q(i,j,k,6:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
+            q(i,j,k,6:numq)=q(i,j,k,1)*q(i,j,k,6:numq)/sum(q(i,j,k,6:numq))
+            !
+          elseif(odetype=='dnn' .and. mod(nstep,dt_ratio)==0 .and. nstep>0) then
+            !
+            ! if(locell(jcell)%tmp<1000.d0 .or. locell(jcell)%tmp>2200.d0) then 
+            !
+            hrr=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
+            if(hrr<1.d8) then 
+              !
+              dnnidx(i,j,k)=0
+              !
+              do idnn=1,dt_ratio
+                !
+                call imp_euler_ode(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:),deltat)
+                !
+              enddo 
+              !
+            else 
+              !
+              jdnn=jdnn+1
+              inputholder(1,jdnn)=tmp(i,j,k)
+              inputholder(2,jdnn)=1.0
+              inputholder(3:num_species+1,jdnn)=spc(i,j,k,1:num_species-1)
+              !
+            endif
+            !
+          else
+            !
+            continue
+            !
+          endif !odetype
+          !
+        enddo !i
+        enddo !j
+        enddo !k
+        !
+        if(odetype=='dnn' .and. nstep>0 .and. mod(nstep,dt_ratio)==0) then
+          !
+          allocate(input(n_layer(1),jdnn),output(n_layer(1),jdnn))
+          !
+          input(:,:)=inputholder(:,1:jdnn)
+          if(jdnn/=0) output=netOneStep(input,epoch,n_layer,jdnn)
+          !
+          idnn=0
+          do i=0,im
+          do j=0,jm
+          do k=0,km
+            !
+            if(dnnidx(i,j,k)/=0) then 
+              idnn=idnn+1
+              spc(i,j,k,1:num_species-1)=output(3:num_species+1,idnn)
+              spc(i,j,k,num_species)=0.d0
+            endif 
+            !
+            q(i,j,k,6:numq)=max(0.d0,spc(i,j,k,:)*rho(i,j,k))
+            q(i,j,k,6:numq)=q(i,j,k,1)*q(i,j,k,6:numq)/sum(q(i,j,k,6:numq))
+            !
+          enddo 
+          enddo
+          enddo
+          !
+        endif 
+        !
+        ctime(13)=ctime(13)+ptime()-time_beg_2
+        !
+        call updatefvar(ctime(15))
+        !
+      endif !odetype
+#endif
+    !
+    enddo !rk
     !
     deallocate(qsave)
     !
     ctime(3)=ctime(3)+ptime()-time_beg
+    !
+#ifdef COMB
+    if(odetype=='dnn') then 
+      if(nstep==maxstep) call finalize()
+      if(allocated(input))deallocate(input,output)
+    endif
+    !
+#endif
     !
     return
     !
@@ -489,7 +611,7 @@ module mainloop
     !
     call statcal(ctime(5))
     !
-    call statout
+    call statout(time_start)
     !
     if(nstep==0 .or. loop_counter.ne.0) then
       ! the first step after reading ehecking out doesn't need to do this
@@ -565,7 +687,7 @@ module mainloop
       if(nodestat(i,j,k)<=0.d0) then
         !
         ! only check fluid points
-        if(q(i,j,k,1)>=0.d0 .and. q(i,j,k,5)>=0.d0) then
+        if(q(i,j,k,1)>=0.d0) then
           continue
         else
           !
@@ -790,12 +912,15 @@ module mainloop
   !| -------------                                                     |
   !| 04-10-2020: Created by J. Fang @ Warrington                       |
   !+-------------------------------------------------------------------+
-  subroutine crashfix
+  subroutine crashfix(subtime)
     !
-    use commvar,   only : numq,lreport
+    use commvar,   only : numq,lreport,nondimen,spcinf
     use commarray, only : q,rho,tmp,vel,prs,spc,x,nodestat
-    use parallel,  only : por,ig0,jg0,kg0,psum
+    use parallel,  only : por,ig0,jg0,kg0,psum,ptime
     use fludyna,   only : q2fvar,thermal
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
     !
     ! local data
     integer :: i,j,k,l,fh,ii,jj,kk
@@ -803,14 +928,20 @@ module mainloop
     integer :: norm,counter
     !
     logical,save :: firstcall = .true.
-    real(8),save :: eps_rho,eps_prs,eps_tmp
+    real(8),save :: eps_rho,eps_prs,eps_tmp,time_beg
     integer,save :: step_normal = 0
+    !
+    if(present(subtime)) time_beg=ptime()
     !
     if(firstcall) then
       eps_rho=1.d-5
       eps_tmp=1.d-5
       !
-      eps_prs=thermal(density=eps_rho,temperature=eps_tmp)
+      if(nondimen) then 
+        eps_prs=thermal(density=eps_rho,temperature=eps_tmp)
+      else 
+        eps_prs=thermal(density=eps_rho,temperature=eps_tmp,species=spcinf)
+      endif 
     endif
     !
     counter=0
@@ -847,7 +978,8 @@ module mainloop
                     jg0+j+jj<0 .or. jg0+j+jj>ja ) then
               continue
             else
-              if(rho(i+ii,j+jj,k+kk)>=0.d0 .and. prs(i+ii,j+jj,k+kk)>=0.d0 .and. tmp(i+ii,j+jj,k+kk)>=0.d0) then
+              if(rho(i+ii,j+jj,k+kk)>=0.d0 .and. prs(i+ii,j+jj,k+kk)>=0.d0 &
+                  .and. tmp(i+ii,j+jj,k+kk)>=0.d0) then
                 qavg(:)=qavg(:)+q(i+ii,j+jj,k+kk,:)
                 norm=norm+1
               endif
@@ -928,6 +1060,8 @@ module mainloop
       endif
       !
     endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
     !
     return
     !

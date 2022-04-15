@@ -10,7 +10,7 @@ module solver
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
                        datasync,ptime,irk,jrk,krk,irkm,jrkm,krkm
-  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime
+  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,nondimen
   !
   implicit none
   !
@@ -34,7 +34,9 @@ module solver
                         uinf,vinf,winf,roinf,pinf,tinf,const1,const2,  &
                         const3,const4,const5,const6,const7,tempconst,  &
                         tempconst1,reynolds,ref_t,mach,                &
-                        num_modequ,turbmode
+                        num_modequ,turbmode,spcinf,nondimen
+    use thermchem, only: spcindex
+    use fludyna, only: thermal
     !
     if(trim(turbmode)=='k-omega') then
       num_modequ=2
@@ -72,28 +74,49 @@ module solver
       stop ' !! ndims error @ refcal'
     endif
     !
-    prandtl=0.72d0
-    gamma=1.4d0
-    rgas=287.1d0
-    !
-    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
-    const2=gamma*mach**2
-    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
-    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
-    const5=(gamma-1.d0)*mach**2
-    const6=1.d0/(gamma-1.d0)
-    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
-    !
-    uinf=1.d0
-    vinf=0.d0
-    winf=0.d0
-    tinf=1.d0
-    roinf=1.d0
-    !
-    pinf=roinf*tinf/const2
-    !
-    tempconst=110.3d0/ref_t
-    tempconst1=1.d0+tempconst
+    if(nondimen) then 
+      prandtl=0.72d0
+      gamma=1.4d0
+      rgas=287.1d0
+      !
+      const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+      const2=gamma*mach**2
+      const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+      const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+      const5=(gamma-1.d0)*mach**2
+      const6=1.d0/(gamma-1.d0)
+      const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+      !
+      uinf=1.d0
+      vinf=0.d0
+      winf=0.d0
+      tinf=1.d0
+      roinf=1.d0
+      !
+      pinf=roinf*tinf/const2
+      !
+      tempconst=110.3d0/ref_t
+      tempconst1=1.d0+tempconst
+      !
+    else 
+      !
+      prandtl=0.72d0
+      uinf=1.d0
+      vinf=0.d0
+      winf=0.d0
+      pinf=1.01325d5
+      tinf=300.d0
+      allocate(spcinf(num_species))
+      if(num_species==1) then
+        spcinf(1)=1.d0
+      else
+        spcinf(:)=0.d0
+        spcinf(spcindex('O2'))=0.233d0
+        spcinf(spcindex('N2'))=1.d0-sum(spcinf(:))
+      endif
+      roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+      !
+    endif 
     !
   end subroutine refcal
   !+-------------------------------------------------------------------+
@@ -192,6 +215,7 @@ module solver
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
                           recon_schem,limmbou,lchardecomp
     use commcal,   only : ShockSolid,ducrossensor
+    use tecio
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -205,30 +229,34 @@ module solver
     !
     if(present(subtime)) time_beg=ptime() 
     !
-    read(conschm(1:1),*) nconv
-    !
-    if(firstcall) then
-      if(limmbou) call ShockSolid
-      firstcall=.false.
-    endif
-    !
-    call gradcal(subtime=ctime(10))
-    !
-    if(mod(nconv,2)==0) then
-      call convrsdcal6(subtime=ctime(9))
-    else
+    if(flowtype(1:2)/='0d') then
       !
-      if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
+      read(conschm(1:1),*) nconv
       !
-      if(conschm(4:4)=='e') then
-        call convrsduwd(subtime=ctime(9))
-      elseif(conschm(4:4)=='c') then
-        call convrsdcmp(subtime=ctime(9))
-      else
-        stop ' !! error @ conschm'
+      if(firstcall) then
+        if(limmbou) call ShockSolid
+        firstcall=.false.
       endif
       !
-    endif
+      call gradcal(subtime=ctime(10))
+      !
+      if(mod(nconv,2)==0) then
+        call convrsdcal6(subtime=ctime(9))
+      else
+        !
+        if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
+        !
+        if(conschm(4:4)=='e') then
+          call convrsduwd(subtime=ctime(9))
+        elseif(conschm(4:4)=='c') then
+          call convrsdcmp(subtime=ctime(9))
+        else
+          stop ' !! error @ conschm'
+        endif
+        !
+      endif
+      !
+    endif !flowtype
     !
     qrhs=-qrhs
     !
@@ -238,7 +266,22 @@ module solver
       call srcchan
     endif
     !
+#ifdef COMB
+    call srccomb(subtime=ctime(13))
+#endif
+    !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    ! call tecbin('testout/tecqrhs'//mpirankname//'.plt',            &
+    !                                   x(0:im,0:jm,0,1),'x',        &
+    !                                   x(0:im,0:jm,0,2),'y',        &
+    !                                qrhs(0:im,0:jm,0,1),'qrhs1',    &
+    !                                qrhs(0:im,0:jm,0,2),'qrhs2',    &
+    !                                qrhs(0:im,0:jm,0,3),'qrhs3',    &
+    !                                qrhs(0:im,0:jm,0,4),'qrhs4',    &
+    !                                qrhs(0:im,0:jm,0,5),'qrhs5',    &
+    !                                qrhs(0:im,0:jm,0,6),'qrhs6')
+    ! call mpistop
     !
     return
     !
@@ -319,6 +362,46 @@ module solver
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
+  !| This subroutine add a source term to the rsd of the equation to   |
+  !| drive channel flow.                                               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+#ifdef COMB
+  subroutine srccomb(subtime)
+    !
+    use commvar,  only : im,jm,km,numq,num_species,odetype,lcomb
+    use commarray,only : qrhs,rho,tmp,spc
+    use thermchem,only : chemrate,wirate
+    use parallel, only : ptime 
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: time_beg
+    !
+    if(present(subtime)) time_beg=ptime() 
+    !
+    if(odetype(1:2)=='rk' .and. lcomb) then
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        call chemrate(den=rho(i,j,k),tmp=tmp(i,j,k),spc=spc(i,j,k,:))
+        qrhs(i,j,k,6:numq)=qrhs(i,j,k,6:numq)+wirate(:)
+      enddo
+      enddo 
+      enddo
+    endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+  end subroutine srccomb
+#endif 
+  !+-------------------------------------------------------------------+
   !| this subroutine is to solve the convectional term with upwind     |
   !| biased schemes using Steger-Warming flux splitting scheme.        |
   !+-------------------------------------------------------------------+
@@ -336,6 +419,8 @@ module solver
                         lshock,crinod
     use commfunc, only: recons_exp
     use riemann,  only: flux_steger_warming
+    use fludyna,  only: sos
+    use thermchem,only: aceval,gammarmix
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -535,6 +620,7 @@ module solver
         do m=1,numq
           qrhs(i,j,k,m)=qrhs(i,j,k,m)+Fh(i,m)-Fh(i-1,m)
         enddo
+        !
       enddo
       !
     enddo
@@ -854,7 +940,6 @@ module solver
             var2=recons_exp(   f=Flcm(m,:), inode=k,       &
                              dim=km,        ntype=npdck,   &
                              reschem=recon_schem,shock=lsh,solid=lso)
-            !
           endif
           !
           Fhc(m)=var1+var2
@@ -915,8 +1000,14 @@ module solver
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
                         recon_schem,lchardecomp,conschm
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+<<<<<<< HEAD
     use commfunc, only: recons,mp5
     use riemann,  only: flux_steger_warming
+=======
+    use fludyna,  only: sos
+    use thermchem,only: aceval
+    use commfunc, only: recons,suw3,suw5,suw7,mp5,mp7,weno5,weno7,weno5z,weno7z
+>>>>>>> combustion
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -963,6 +1054,7 @@ module solver
     do j=js,je
       !
       ! flux split by using Steger-Warming method
+<<<<<<< HEAD
       call flux_steger_warming( fplus= fswp(iss:iee,:),         &
                                 fmius= fswm(iss:iee,:),         &
                                   rho=  rho(iss:iee,j,k),       &
@@ -972,6 +1064,97 @@ module solver
                                     q=    q(iss:iee,j,k,:),     &
                                   dxi=  dxi(iss:iee,j,k,1,:),   &
                                 jacob=jacob(iss:iee,j,k))
+=======
+      do i=iss,iee
+        !
+        uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2)+    &
+           dxi(i,j,k,1,3)*vel(i,j,k,3)
+        var0=1.d0/sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
+        !
+        gpd(1)=dxi(i,j,k,1,1)*var0
+        gpd(2)=dxi(i,j,k,1,2)*var0
+        gpd(3)=dxi(i,j,k,1,3)*var0
+        !
+        if(nondimen) then 
+          css=sos(tmp(i,j,k))
+        else
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+        endif
+        csa=css/var0
+        lmach=uu/csa
+        !
+        lmda(1)=uu
+        lmda(2)=uu
+        lmda(3)=uu
+        lmda(4)=uu+csa
+        lmda(5)=uu-csa
+        !
+        lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
+        lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
+        lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
+        lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
+        lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
+        !
+        lmdam(1)=lmda(1)-lmdap(1)
+        lmdam(2)=lmda(2)-lmdap(2)
+        lmdam(3)=lmda(3)-lmdap(3)
+        lmdam(4)=lmda(4)-lmdap(4)
+        lmdam(5)=lmda(5)-lmdap(5)
+        !
+        if(lmach>=1.d0) then
+          fswp(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fswp(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fswp(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fswp(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fswp(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+          !
+          fswm(i,1)=0.d0
+          fswm(i,2)=0.d0
+          fswm(i,3)=0.d0
+          fswm(i,4)=0.d0
+          fswm(i,5)=0.d0  
+        elseif(lmach<=-1.d0) then
+          fswp(i,1)=0.d0
+          fswp(i,2)=0.d0
+          fswp(i,3)=0.d0
+          fswp(i,4)=0.d0
+          fswp(i,5)=0.d0
+          !
+          fswm(i,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+          fswm(i,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,1,1)*prs(i,j,k) )
+          fswm(i,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,1,2)*prs(i,j,k) )
+          fswm(i,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,1,3)*prs(i,j,k) )
+          fswm(i,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+        else
+          !
+          fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
+          !
+          var1=lmdap(1)
+          var2=lmdap(4)-lmdap(5)
+          var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
+          !
+          jro=jacob(i,j,k)*rho(i,j,k)
+          !
+          fswp(i,1)=jro*(var1-var3*gm2)
+          fswp(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
+          fswp(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
+          fswp(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
+          fswp(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+          !
+          var1=lmdam(1)
+          var2=lmdam(4)-lmdam(5)
+          var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
+          !
+          fswm(i,1)=jro*(var1-var3*gm2)                                                         
+          fswm(i,2)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
+          fswm(i,3)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
+          fswm(i,4)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
+          fswm(i,5)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+          !                 
+        end if
+        !
+      enddo
+>>>>>>> combustion
       ! End of flux split by using Steger-Warming method
       !
       ! calculating interface flux using compact upwind scheme ay i+1/2
@@ -1121,6 +1304,7 @@ module solver
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! ! calculating along j direction
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+<<<<<<< HEAD
     allocate( fswp(-hm:jm+hm,1:numq),fswm(-hm:jm+hm,1:numq),           &
               fhcp(-1:jm,1:numq),    fhcm(-1:jm,1:numq) )
     allocate( Fh(-1:jm,1:numq) )
@@ -1267,6 +1451,106 @@ module solver
     enddo
     enddo
     deallocate( fswp,fswm,fhcp,fhcm,Fh )
+=======
+    ! allocate( Fswp(1:5,-hm:jm+hm),Fswm(1:5,-hm:jm+hm) )
+    ! allocate( Fh(1:5,-1:jm) )
+    ! !
+    ! do k=ks,ke
+    ! do i=is,ie
+    !   !
+    !   do j=-hm,jm+hm
+    !     !
+    !     uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2)+    &
+    !        dxi(i,j,k,2,3)*vel(i,j,k,3)
+    !     var0=1.d0/sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
+    !     !
+    !     gpd(1)=dxi(i,j,k,2,1)*var0
+    !     gpd(2)=dxi(i,j,k,2,2)*var0
+    !     gpd(3)=dxi(i,j,k,2,3)*var0
+    !     !
+          ! if(nondimen) then 
+          !   css=sos(tmp(i,j,k))
+          ! else
+          !   call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+          ! endif
+    !     csa=css/var0
+    !     lmach=uu/csa
+    !     !
+    !     lmda(1)=uu
+    !     lmda(2)=uu
+    !     lmda(3)=uu
+    !     lmda(4)=uu+csa
+    !     lmda(5)=uu-csa
+    !     !
+    !     lmdap(1)=0.5d0*(lmda(1)+sqrt(lmda(1)**2+eps**2))
+    !     lmdap(2)=0.5d0*(lmda(2)+sqrt(lmda(2)**2+eps**2))
+    !     lmdap(3)=0.5d0*(lmda(3)+sqrt(lmda(3)**2+eps**2))
+    !     lmdap(4)=0.5d0*(lmda(4)+sqrt(lmda(4)**2+eps**2))
+    !     lmdap(5)=0.5d0*(lmda(5)+sqrt(lmda(5)**2+eps**2))
+    !     !
+    !     lmdam(1)=lmda(1)-lmdap(1)
+    !     lmdam(2)=lmda(2)-lmdap(2)
+    !     lmdam(3)=lmda(3)-lmdap(3)
+    !     lmdam(4)=lmda(4)-lmdap(4)
+    !     lmdam(5)=lmda(5)-lmdap(5)
+    !     !
+    !     if(lmach>=1.d0) then
+    !       fswp(1,i)=jacob(i,j,k)*  q(i,j,k,1)*uu
+    !       fswp(2,i)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+    !       fswp(3,i)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+    !       fswp(4,i)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+    !       fswp(5,i)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+    !       !
+    !       fswm(1,i)=0.d0
+    !       fswm(2,i)=0.d0
+    !       fswm(3,i)=0.d0
+    !       fswm(4,i)=0.d0
+    !       fswm(5,i)=0.d0  
+    !     elseif(lmach<=-1.d0) then
+    !       fswp(1,i)=0.d0
+    !       fswp(2,i)=0.d0
+    !       fswp(3,i)=0.d0
+    !       fswp(4,i)=0.d0
+    !       fswp(5,i)=0.d0
+    !       !
+    !       fswm(1,i)=jacob(i,j,k)*  q(i,j,k,1)*uu
+    !       fswm(2,i)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+    !       fswm(3,i)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+    !       fswm(4,i)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+    !       fswm(5,i)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+    !     else
+    !       !
+    !       fhi=0.5d0*(gamma-1.d0)*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2)
+    !       !
+    !       var1=lmdap(1)
+    !       var2=lmdap(4)-lmdap(5)
+    !       var3=2.d0*lmdap(1)-lmdap(4)-lmdap(5)
+    !       !
+    !       jro=jacob(i,j,k)*rho(i,j,k)
+    !       !
+    !       fswp(1,i)=jro*(var1-var3*gm2)
+    !       fswp(2,i)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)
+    !       fswp(3,i)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)
+    !       fswp(4,i)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)
+    !       fswp(5,i)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+    !       !
+    !       var1=lmdam(1)
+    !       var2=lmdam(4)-lmdam(5)
+    !       var3=2.d0*lmdam(1)-lmdam(4)-lmdam(5)
+    !       !
+    !       fswm(1,i)=jro*(var1-var3*gm2)                                                         
+    !       fswm(2,i)=jro*((var1-var3*gm2)*vel(i,j,k,1)+var2*css*gpd(1)*gm2)                 
+    !       fswm(3,i)=jro*((var1-var3*gm2)*vel(i,j,k,2)+var2*css*gpd(2)*gm2)                 
+    !       fswm(4,i)=jro*((var1-var3*gm2)*vel(i,j,k,3)+var2*css*gpd(3)*gm2)                 
+    !       fswm(5,i)=jacob(i,j,k)*(var1*q(i,j,k,5)+rho(i,j,k)*(var2*uu*var0*css*gm2-var3*(fhi+css**2)*gm2/(gamma-1.d0)))
+    !       !                 
+    !     end if
+    !     !
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+>>>>>>> combustion
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! ! end of calculation at j direction
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1996,26 +2280,32 @@ module solver
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,num_modequ,        &
                           reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode,schmidt
+                          turbmode,nondimen,schmidt
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
     use commfunc,  only : ddfc
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
     use tecio
+#ifdef COMB
+    use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
+#endif
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    integer :: i,j,k,n,ncolm,jspc
+    integer :: i,j,k,n,ncolm,jspc,idir
     real(8),allocatable :: df(:,:),ff(:,:)
     real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
-    real(8),allocatable :: yflux(:,:,:,:,:)
+    real(8),allocatable,dimension(:,:,:,:,:) :: yflux
     real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
     real(8) :: detk
+    real(8),allocatable :: dispec(:,:)
+    real(8) :: corrdiff,hispec(num_species),xi(num_species),cpe,kama, &
+               gradyi(num_species),sum1,sum2,mw
     real(8),allocatable :: dfu(:)
     !
     real(8) :: time_beg
@@ -2030,7 +2320,7 @@ module solver
     !
     if(num_species>0) then
       allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
-      allocate(dfu(1:num_species))
+      if(nondimen) allocate(dfu(1:num_species))
       !
       yflux=0.d0
     endif
@@ -2049,7 +2339,28 @@ module solver
     do j=0,jm
     do i=0,im
       !
-      miu=miucal(tmp(i,j,k))/reynolds
+      if(nondimen) then 
+        miu=miucal(tmp(i,j,k))/reynolds
+      else
+        !
+#ifdef COMB
+        call enthpy(tmp(i,j,k),hispec(:))
+        call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
+        mw=sum(wmolar(:)*xi(:))
+        !
+        select case(tranmod)
+          case('multi')
+            if(.not.allocated(dispec))allocate(dispec(num_species,num_species))
+            call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                        spc=spc(i,j,k,:),rhodij=dispec(:,:))
+        case default
+          if(.not.allocated(dispec)) allocate(dispec(num_species,1))
+          call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                      spc=spc(i,j,k,:),rhodi=dispec(:,1))
+        end select
+#endif
+        !
+      endif 
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -2101,15 +2412,16 @@ module solver
         !
       elseif(trim(turbmode)=='none') then
         miu2=2.d0*miu
-        hcc=(miu/prandtl)/const5
+        !
+        if(nondimen) then 
+          hcc=(miu/prandtl)/const5
+        else
+          hcc=kama
+        endif 
+        !
         detk=0.d0
         !
-        if(num_species>0) then
-          dfu(1:num_species)=miu/schmidt(1:num_species)
-        endif
-        !
       endif
-      !
       !
       sigma(i,j,k,1)=miu2*(s11-skk)-detk + tau11 !s11   
       sigma(i,j,k,2)=miu2* s12           + tau12 !s12  
@@ -2127,20 +2439,65 @@ module solver
       qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
                                        sigma(i,j,k,5)*vel(i,j,k,2) +   &
                                        sigma(i,j,k,6)*vel(i,j,k,3)
-      !
+      !                                      
       if(num_species>0) then
         !
-        do jspc=1,num_species
-          yflux(i,j,k,jspc,1)=dfu(jspc)*dspc(i,j,k,jspc,1)
-          yflux(i,j,k,jspc,2)=dfu(jspc)*dspc(i,j,k,jspc,2)
-          yflux(i,j,k,jspc,3)=dfu(jspc)*dspc(i,j,k,jspc,3)
-        enddo
+        if(nondimen) then 
+          !
+          dfu(1:num_species)=miu/schmidt(1:num_species)
+          !
+          do idir=1,3
+            yflux(i,j,k,:,idir)=dfu(:)*dspc(i,j,k,:,idir)
+          enddo
+          !
+        else
+          !
+#ifdef COMB
+          !
+          do idir=1,3
+            !
+            gradyi(:)=dspc(i,j,k,:,idir)
+            !
+            sum1=mw*sum(gradyi(:)/wmolar(:))
+            !
+            select case(tranmod)
+              !
+              case('multi')
+                !
+                do jspc=1,num_species
+                  sum2=sum(dispec(jspc,:)*(gradyi(:)-spc(i,j,k,:)*sum1))
+                  !species diffusive flux
+                  yflux(i,j,k,jspc,idir)=-1.d0*wmolar(jspc)/mw*sum2
+                  !energy flux due to species diffusion
+                  qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+                enddo
+                !
+              case default
+                !
+                sum2=sum(dispec(:,1)*(gradyi(:)-spc(i,j,k,:)*sum1))
+                !
+                do jspc=1,num_species
+                  !Corretion diffusion velocity for continuity
+                  corrdiff=sum2*spc(i,j,k,jspc)
+                  !species diffusive flux
+                  yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
+                                          -corrdiff
+                  !energy flux due to species diffusion
+                  qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+                enddo
+                !
+            end select
+            !
+          enddo 
+#endif
+          !
+        endif !nondimen
         !
-      endif
+      endif !num_species>0 
       !
-    enddo
-    enddo
-    enddo
+    enddo !k
+    enddo !j
+    enddo !i
     !
     call dataswap(sigma,subtime=ctime(7))
     !
@@ -2202,20 +2559,21 @@ module solver
       do n=2,ncolm
         df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
       enddo
+      !
       !+------------------------------+
       !| end of calculate derivative  |
       !+------------------------------+
       !
       qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(is:ie,2)
-      qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,3)
-      qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
-      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
+      ! qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,3)
+      ! qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
+      ! qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
       !
-      if(num_species>0) then
-        do jspc=6,5+num_species
-          qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(is:ie,jspc)
-        enddo
-      endif
+      ! if(num_species>0) then
+      !   do jspc=6,5+num_species
+      !     qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(is:ie,jspc)
+      !   enddo
+      ! endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
@@ -2280,15 +2638,15 @@ module solver
       !+------------------------------+
       !
       qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(js:je,2)
-      qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,3)
-      qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,4)
-      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
+      ! qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,3)
+      ! qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,4)
+      ! qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
       !
-      if(num_species>0) then
-        do jspc=6,5+num_species
-          qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(js:je,jspc)
-        enddo
-      endif
+      ! if(num_species>0) then
+      !   do jspc=6,5+num_species
+      !     qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(js:je,jspc)
+      !   enddo
+      ! endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species

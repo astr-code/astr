@@ -23,14 +23,18 @@ module gridgeneration
   subroutine gridgen
     !
     use parallel, only : mpirank
-    use commvar,  only : flowtype,lreadgrid,limmbou,solidfile
+    use commvar,  only : flowtype,lreadgrid,limmbou,solidfile,nondimen
     use readwrite,only : readgrid,writegrid,readsolid
     !
     if(lreadgrid) then
       call readgrid
     else
       if(trim(flowtype)=='tgv') then
-        call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+        if(nondimen) then
+          call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+        else 
+          call gridcube(5.1530915662d-3,5.1530915662d-3,5.1530915662d-3)
+        endif 
       elseif(trim(flowtype)=='jet') then
         call gridjet
       elseif(trim(flowtype)=='2dvort') then
@@ -43,6 +47,12 @@ module gridgeneration
         call gridcube(20.d0,10.d0,10.d0)
       elseif(trim(flowtype)=='channel') then
         call grichan(2.d0*pi,pi)
+      elseif(trim(flowtype)=='0dreactor') then
+        call gridcube(1.d0,1.d0,1.d0)
+      elseif(trim(flowtype)=='1dflame') then
+        call gridcube(0.5d-2,0.05d-3,0.d0)
+      elseif(trim(flowtype)=='h2supersonic') then
+        call gridsupersonicjet
       else
         print*,trim(flowtype),' is not defined @ gridgen'
         stop ' !! error at gridgen' 
@@ -109,7 +119,7 @@ module gridgeneration
     enddo
     enddo
     !
-    if(lio) print*,' ** cubic grid generated'
+    if(lio) print*,' ** jet grid generated'
     !
   end subroutine gridjet
   !+-------------------------------------------------------------------+
@@ -312,6 +322,89 @@ module gridgeneration
   !| The end of the subroutine grichan.                                |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate grid for jet simulation.           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-Jan-2020: Created by J. Fang @ Warrington.                     |
+  !+-------------------------------------------------------------------+
+  subroutine gridsupersonicjet
+    !
+#ifdef COMB
+    use commvar, only: dj_i,dco_i,im,jm,km,ia,ja,ka
+    use parallel, only : ig0,jg0,kg0
+    use commarray,only : x
+    !
+    ! local data
+    real(8),allocatable :: yn(:),xn(:),rn(:)
+    real(8) :: varc,var1,var2,varmin,varmax,dy,xmax,ymax,zmax,scale
+    integer :: i,j,k,in,nd
+    !
+    !+--------+
+    !| begin  |
+    !+--------+
+    xmax=118.d-3
+    ymax=70.8d-3
+    zmax=70.8d-3
+    ! NOTE: im, jm ,zm must be even numbers
+    ! xmax=44.0d-3
+    ! ymax=40.0d-3
+    ! zmax=40.0d-3
+    !
+    allocate(yn(0:ja),xn(0:ia),rn(0:ja))
+    !
+    ! number of cells in a diameter
+    nd=8*24
+    ! dy=16.d-3/real(nd,8)
+    dy=8.d0*dj_i/real(nd,8)
+    in=nd/2
+    do j=1,in
+      rn(j)=dy*j
+    enddo
+    !
+    call spongstretch(ja/2-in,ymax/2,rn(in-2:ja/2))
+    !
+    yn(:)=0.d0
+    do j=1,ja/2
+      yn(j)=yn(j-1)+(rn(ja/2-j+1)-rn(ja/2-j))
+    enddo
+    !
+    do j=ja/2+1,ja
+      yn(j)=yn(j-1)+(rn(j-ja/2)-rn(j-ja/2-1))
+    enddo
+    !
+    ! in=nd+22*24
+    ! do i=0,in
+    !   xn(i)=dy*i
+    ! enddo
+    ! call spongstretch(ia-in,xmax,xn(in-2:ia))
+    do i=0,ia
+      xn(i)=xmax/ia*i
+    enddo
+    !
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1)=xn(i+ig0) 
+      x(i,j,k,2)=yn(j+jg0)
+      x(i,j,k,3)=yn(k+kg0)
+      ! z(i,j,k)=(zmax/km)*k
+    end do
+    end do
+    end do
+    !+--------+
+    !| end    |
+    !+--------+
+    !
+    return
+    !
+#endif
+  end subroutine gridsupersonicjet
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine gridjet.                                |
+  !+-------------------------------------------------------------------+
   !
 end module gridgeneration
 !+---------------------------------------------------------------------+

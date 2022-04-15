@@ -28,7 +28,9 @@ add_executable(astr
                     solver.F90
                     statistic.F90
                     stlaio.F90
-                    tecio.F90)
+                    tecio.F90
+                    thermchem.F90
+                    vtkio.F90)
 #add_executable(astr ${files_astr})
 target_link_libraries(astr)
 if (MPI_FOUND)

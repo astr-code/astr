@@ -9,7 +9,7 @@ module statistic
   !
   use constdef
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
-                       zmin,zmax,nstep,deltat,force,numq
+                       zmin,zmax,nstep,deltat,force,numq,num_species
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
                        irk,jrk,jrkm,ptime
   use stlaio,  only: get_unit
@@ -23,6 +23,7 @@ module statistic
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
              wallheatflux,dissipation
   real(8) :: vel_incom,prs_incom,rho_incom
+  real(8) :: umax,rhomax,tmpmax,qdotmax
   real(8),allocatable :: max_q(:),min_q(:)
   !
   real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,       &
@@ -323,13 +324,15 @@ module statistic
   subroutine statcal(subtime)
     !
     use commvar,  only : flowtype
-    use commarray,only : vel,prs,rho
+    use commarray,only : vel,prs,rho,tmp,spc
+    use thermchem,only : heatrate
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    real(8) :: time_beg
+    integer :: i,j,k
+    real(8) :: time_beg,qdot
     !
     if(present(subtime)) time_beg=ptime() 
     !
@@ -378,6 +381,26 @@ module statistic
       vel_incom=psum(vel_incom)
       prs_incom=psum(prs_incom)
       rho_incom=psum(rho_incom)
+      !
+    elseif(flowtype=='1dflame'.or.flowtype=='0dreactor' &
+        .or.flowtype=='h2supersonic') then
+      tmpmax=maxval(tmp(0:im,0:jm,0:km))
+      tmpmax=pmax(tmpmax)
+      rhomax=maxval(rho(0:im,0:jm,0:km))
+      rhomax=pmax(rhomax)
+      umax=maxval(vel(0:im,0:jm,0:km,1))
+      umax=pmax(umax)
+      !
+      qdotmax=-1.d30
+      do i=0,im
+        do j=0,jm
+          do k=0,km
+            qdot=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
+            if(qdot>qdotmax)qdotmax=qdot
+          enddo 
+        enddo 
+      enddo  
+      qdotmax=pmax(qdotmax)
       !
     endif
     !
@@ -436,16 +459,21 @@ module statistic
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine statout
+  subroutine statout(time_verybegin)
     !
-    use commvar, only : flowtype,nstep,time,maxstep,lrestart,feqlist
+    use commvar, only : flowtype,nstep,time,maxstep,lrestart,feqlist,uinf
+    use parallel,only : ptime
+    !
+    ! arguments
+    real(8),intent(in),optional :: time_verybegin
     !
     ! local data
     logical,save :: linit=.true.
     logical :: fex
     integer :: nprthead=200
-    integer :: i,ferr,ns
+    integer :: i,ferr,ns,walltime
     integer,save :: hand_fs
+    real(8) :: l_0
     ! 
     if(lio) then
       !
@@ -486,6 +514,10 @@ module statistic
           elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','wallheatflux','wrms'
+          elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
+                  .or.flowtype=='h2supersonic') then
+            write(hand_fs,"(2(A10,1X),5(A12,1X))") &
+              'nstep','clock','time','maxT','maxU','maxRho','maxHRR'
           else
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -505,6 +537,9 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
       elseif(trim(flowtype)=='cylinder') then
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
+      elseif(flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic') then
+        walltime=int(ptime()-time_verybegin)
+        write(hand_fs,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,rhomax,qdotmax
       else
         ! general flowstate
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
@@ -521,6 +556,10 @@ module statistic
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','wallheatflux','wrms'
           elseif(trim(flowtype)=='cylinder') then
             write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
+          elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
+                  .or.flowtype=='h2supersonic') then
+            write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
+              'maxU','maxRho','maxHRR'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
           endif
@@ -528,13 +567,17 @@ module statistic
         endif
         !
         if(trim(flowtype)=='tgv') then
-          write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time,enstophy,kenergy
+          l_0=xmax/(2.d0*pi)
+          write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time/(l_0/uinf),enstophy,kenergy
         elseif(trim(flowtype)=='channel') then
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
         elseif(trim(flowtype)=='cylinder') then
           write(*,"(2X,I7,1X,F13.7,3(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
+        elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
+                .or.flowtype=='h2supersonic') then
+          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,rhomax,qdotmax
         else
           write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
@@ -562,7 +605,7 @@ module statistic
   !+-------------------------------------------------------------------+
   function enstophycal() result(vout)
     !
-    use commvar,   only : im,jm,km,ia,ja,ka
+    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf
     use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
@@ -571,6 +614,7 @@ module statistic
     ! local data
     integer :: i,j,k
     real(8) :: omega(3),omegam
+    real(8) :: l_0,u_0
     !
     vout=0.d0
     do k=1,km
@@ -591,6 +635,10 @@ module statistic
     !
     vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
     !
+    l_0=xmax/(2.d0*pi)
+    !
+    vout=vout/(roinf*(uinf/l_0)**2)
+    !
     return
     !
   end function enstophycal
@@ -607,7 +655,7 @@ module statistic
   !+-------------------------------------------------------------------+
   function kenergycal() result(vout)
     !
-    use commvar,   only : im,jm,km,ia,ja,ka
+    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf
     use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
@@ -630,6 +678,7 @@ module statistic
     enddo
     !
     vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+    vout=vout/(roinf*uinf*uinf)
     !
     return
     !

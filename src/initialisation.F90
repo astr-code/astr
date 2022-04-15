@@ -11,7 +11,7 @@ module initialisation
   use constdef
   use parallel,only: lio,mpistop,mpirank,mpirankname,bcast
   use commvar, only: im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims,    &
-                     num_species,xmin,xmax,ymin,ymax,zmin,zmax
+                     num_species,xmin,xmax,ymin,ymax,zmin,zmax,spcinf
   use tecio
   !
   implicit none
@@ -33,7 +33,7 @@ module initialisation
                         lrestart,lavg,turbmode
     use commarray,only: vel,rho,prs,spc,q,tke,omg
     use readwrite,only: readcont,readflowini3d,readflowini2d,          &
-                        readcheckpoint,readmeanflow,readmonc
+                        readcheckpoint,readmeanflow,readmonc,writeflfed
     use fludyna,  only: updateq
     use statistic,only: nsamples
     use bc,       only: ninflowslice
@@ -41,6 +41,8 @@ module initialisation
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
       call blprofile
     endif
+    !
+    call readcont
     !
     if(lrestart) then
       !
@@ -91,6 +93,12 @@ module initialisation
           call blini
         case('windtunn')
           call wtini
+        case('0dreactor')
+          call reactorini
+        case('1dflame')
+          call onedflameini
+        case('h2supersonic')
+          call h2supersonic
         case default
           print*,trim(flowtype)
           stop ' !! flowtype not defined @ flowinit'
@@ -109,8 +117,6 @@ module initialisation
       !
     endif
     !
-    call readcont
-    !
     call readmonc
     !
     if(lavg) then
@@ -122,6 +128,9 @@ module initialisation
     endif
     !
     if(lio) print*,' ** flowfield initialised.'
+    !
+    ! call writeflfed
+    ! stop
     !
   end subroutine flowinit
   !+-------------------------------------------------------------------+
@@ -616,24 +625,57 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine tgvini
     !
+    use commvar,  only: nondimen
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal
+#ifdef COMB
+    use thermchem,only : tranmod,tranco,enthpy,convertxiyi,wmolar
+#endif
     !
     ! local data
     integer :: i,j,k,jspc
+    real(8) :: l_0
+    real(8) :: cpe,miu,kama
+    real(8),allocatable :: dispec(:,:)
+    !
+    if(nondimen) then
+      roinf=1.d0
+      tinf=1.d0
+      pinf=thermal(temperature=tinf,density=roinf)
+      l_0=1.d0
+      uinf=1.d0
+    else
+#ifdef COMB
+      tinf=347.d0
+      roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+      l_0=xmax/(2.d0*pi)
+      uinf=40.d0
+      !
+      if(.not.allocated(dispec)) allocate(dispec(num_species,1))
+      call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama, &
+                  spc=spcinf,rhodi=dispec(:,1))
+      if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+#endif
+    endif
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       rho(i,j,k)  =roinf
-      vel(i,j,k,1)= sin(x(i,j,k,1))*cos(x(i,j,k,2))*cos(x(i,j,k,3))
-      vel(i,j,k,2)=-cos(x(i,j,k,1))*sin(x(i,j,k,2))*cos(x(i,j,k,3))
+      vel(i,j,k,1)= uinf*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
+      vel(i,j,k,2)=-uinf*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
       vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf+roinf/16.d0*( cos(2.d0*x(i,j,k,1)) +           &
-                                      cos(2.d0*x(i,j,k,2)) )*          &
-                                             (cos(2.d0*x(i,j,k,3))+2.d0)
+      prs(i,j,k)  =pinf+roinf/16.d0*(uinf**2) &
+                        *(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
+                        *(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
       !
-      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+      if(nondimen) then
+        tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+        if(num_species>1) spc(i,j,k,1)=1.d0
+      else 
+        spc(i,j,k,:)=spcinf(:)
+        tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
+      endif 
       !
       if(num_species>=1) then
         !
@@ -1308,6 +1350,299 @@ module initialisation
   end subroutine cylinderini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine cylinderini.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of 0D reactor.                                                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 24-01-2022: Created by Created by Z.X. Chen @ Peking University   |
+  !+-------------------------------------------------------------------+
+  subroutine reactorini
+    !
+    use commvar,  only: pinf
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    use thermchem,only: convertxiyi,spcindex
+    !
+#ifdef COMB
+    ! local data
+    integer :: i,j,k
+    real(8) :: tmpr,specr(num_species),specx(num_species)
+    !
+    ! tmpr=1000.d0/0.8d0
+    tmpr=1000.d0
+    ! prin=13.5d5
+    !reactants
+    specx(:)=0.d0
+    specx(spcindex('H2'))=0.2d0
+    specx(spcindex('O2'))=0.1d0
+    !
+    ! specx(spcindex('H2'))=0.2867d0
+    ! specx(spcindex('O2'))=0.1434d0
+    ! specx(spcindex('H2O'))=0.1819d0
+    !
+    specx(spcindex('N2'))=1.d0-sum(specx)
+    call convertxiyi(specx(:),specr(:),'X2Y')
+    !
+    !!
+    ! specr(:)=0.d0
+    ! specr(spcindex('nc7h16'))=0.07247482382311918d0
+    ! specr(spcindex('o2'))=0.28285951066551174d0
+    ! specr(spcindex('he'))=0.08059381448746926d0
+    ! specr(spcindex('n2'))=1.d0-sum(specr)
+    !
+    ! specr(spcindex('CH4'))=0.055d0
+    ! specr(spcindex('O2'))=0.220185d0
+    ! specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    ! print*,specr
+    ! stop
+    ! specr(1)=0.055d0
+    ! specr(2)=0.220185d0
+    ! specr(num_species)=1.d0-sum(specr)
+    ! specr(1)=0.06218387d0
+    ! specr(2)=0.21843332
+    ! specr(num_species)=1.d0-sum(specr)
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      vel(i,j,k,:)= 0.d0
+      !
+      tmp(i,j,k)  = tmpr
+      !
+      prs(i,j,k)=pinf
+      !
+      spc(i,j,k,:)=specr(:)
+      !
+      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:))
+      !
+      ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** reactor initialised.'
+    !
+#endif
+  !
+  end subroutine reactorini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine reactorini.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of 1D flame.                                           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-Jan-2022: Created by Z.X. Chen @ Peking University             |
+  !+-------------------------------------------------------------------+
+  subroutine onedflameini
+    !
+    use commvar,  only: pinf,ia,num_species
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    !
+#ifdef COMB
+    use thermchem,only: convertxiyi,spcindex
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
+      specp(num_species),arg,prgvar,masflx,specx(num_species),yloc
+    !
+    tmpr=650.d0
+    xloc=0.25d-2
+    yloc=xloc
+    xwid=0.5d-3
+    !
+    !reactants
+    specr(:)=0.d0
+    specr(spcindex('H2'))=0.031274  
+    specr(spcindex('O2'))=0.22563  
+    specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    ! specx(:)=0.d0
+    ! specx(spcindex('H2'))=0.2957746478873239d0
+    ! specx(spcindex('O2'))=0.14788732394366194d0
+    ! specx(spcindex('N2'))=1.d0-sum(specx)
+    !
+    ! specr(spcindex('CH4'))=5.5045872d-2
+    ! specr(spcindex('O2'))=2.20183486d-1
+    ! call convertxiyi(specx(:),specr(:),'X2Y')
+    !
+    ! specr(spcindex('nc7h16'))=0.06218387d0
+    ! specr(spcindex('o2'))=0.21843332
+    ! specr(spcindex('n2'))=1.d0-sum(specr)
+    !
+    !products
+    tmpp=1700.d0
+    specp(:)=0.d0
+    ! specp(spcindex('CO2'))=1.51376d-1
+    ! specp(spcindex('H2O'))=1.23853d-1
+    ! specp(spcindex('N2'))=1.d0-sum(specp)
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      xc=x(i,j,k,1)
+      yc=x(i,j,k,2)
+      !
+      if(ndims==3) stop '!!Error - 3D case not configured!!'
+      if(abs(xc-xloc)<xwid*0.5d0*1.2d0) then 
+        prgvar=1.d0
+        if(abs(xc-xloc)>xwid*0.5d0) &
+        prgvar=1.d0-(abs(xc-xloc)-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
+      else
+        prgvar=0.d0
+      endif 
+      !
+      spc(i,j,k,:)=specr(:)!+prgvar*(specp(js)-specr(js))
+      !
+      vel(i,j,k,:)=0.d0
+      !
+      tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
+      !
+      prs(i,j,k)=pinf
+      !
+      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:))
+      !
+      ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** 1D flame initialised.'
+    !
+#endif
+    !
+  end subroutine onedflameini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine onedflameini.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of H2 supersonic jet flame                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-Feb-2022: Created by Z.X. Chen @ Peking University             |
+  !+-------------------------------------------------------------------+
+  subroutine h2supersonic
+#ifdef COMB
+    !
+    use commvar,  only: &
+      pinf,uinf,tinf,num_species,dj_i,dj_o,dco_i,flowtype,ymax
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal,multistream_inflow
+    !
+    use thermchem,only: convertxiyi,spcindex
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: rb,ctr,xc,yb,zb,arg,val,xloc,xwid
+    real(8) :: vel0(ndims),prs0,rho0,tmp0,spc0(num_species)
+    !
+    ctr=0.5d0*ymax
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      xc=x(i,j,k,1)
+      yb=x(i,j,k,2)
+      zb=x(i,j,k,3)
+      !
+      if(ndims<3) then
+        rb=abs(yb-ctr)
+      else
+        rb=sqrt((yb-ctr)**2+(zb-ctr)**2)
+      endif
+      !
+      if(.true. .and. rb<=0.5d0*dj_i) then
+        call multistream_inflow(stream='fuel',rho=rho0,vel=vel0, &
+          prs=prs0,tmp=tmp0,spc=spc0,rovd=rb/dj_i)
+          !
+      elseif(.true. .and. rb>0.5d0*dj_o .and. rb<=0.5d0*dco_i) then
+        call multistream_inflow(stream='hotcoflow',rho=rho0,vel=vel0, &
+          prs=prs0,tmp=tmp0,spc=spc0, &
+          rovd=abs(rb-0.25d0*(dco_i+dj_o))/(0.5d0*(dco_i-dj_o)))
+        !
+      elseif(.true. .and. rb>0.5d0*dco_i) then
+        call multistream_inflow(stream='air',rho=rho0,vel=vel0, &
+          prs=prs0,tmp=tmp0,spc=spc0)
+        !
+      else
+        !
+        prs0=pinf
+        tmp0=tinf
+        spc0(:)=spcinf(:)
+        rho0=roinf
+        vel0(1)=uinf*100.d0
+        vel0(2:ndims)=0.d0
+        !
+      endif 
+      !
+      ! erf profile in the axial diretion
+      xloc=2.d0*dj_i
+      xwid=2.d0*dj_i
+      arg=-1.d0*(xc-xloc)/xwid
+      val=0.5d0*(1.0d0+erf(arg))
+      !
+      !0.92135039647485750
+      ! vel(i,j,k,1)=uinf+val*(vel0(1)-uinf)
+      ! vel(i,j,k,2:ndims)=0.d0
+      ! prs(i,j,k)=pinf
+      ! tmp(i,j,k)=tinf+val*(tmp0-tinf)
+      ! spc(i,j,k,:)=spcinf(:)+val*(spc0(:)-spcinf(:))
+      vel(i,j,k,1)=uinf+0.92135039647485750*(vel0(1)-uinf)
+      vel(i,j,k,2:ndims)=0.d0
+      prs(i,j,k)=pinf
+      tmp(i,j,k)=tinf+0.92135039647485750*(tmp0-tinf)
+      spc(i,j,k,:)=spcinf(:)+0.92135039647485750*(spc0(:)-spcinf(:))
+      ! vel(i,j,k,1)=uinf
+      ! vel(i,j,k,2:ndims)=0.d0
+      ! prs(i,j,k)=pinf
+      ! tmp(i,j,k)=tinf
+      ! spc(i,j,k,:)=spcinf(:)
+      !
+      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:))
+      !
+      ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,3(A))')  &
+      '  ** ',ndims,'-D ',trim(flowtype),' initialised.'
+    !
+    call tecbin('testout/tecini'//mpirankname//'.plt',                &
+                                      x(0:im,0:jm,0:km,1),'x',        &
+                                      x(0:im,0:jm,0:km,2),'y',        &
+                                      x(0:im,0:jm,0:km,3),'z',        &
+                                      rho(0:im,0:jm,0:km),'ro',       &
+                                    vel(0:im,0:jm,0:km,1),'u',        &
+                                    vel(0:im,0:jm,0:km,2),'v',        &
+                                      tmp(0:im,0:jm,0:km),'T',        &
+                                    spc(0:im,0:jm,0:km,1),'Y1' )
+    !
+    !
+#endif
+    !
+  end subroutine h2supersonic
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine h2supersonic.                           |
   !+-------------------------------------------------------------------+
   !
   function return_30k(x) result(y)

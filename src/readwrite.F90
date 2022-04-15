@@ -20,7 +20,7 @@ module readwrite
   !+---------------------+---------------------------------------------+
   !|            nxtchkpt | the next nstep to checkpoint.               |
   !|            nxtwsequ | the next nstep to write flow field.         |
-  !+---------------------+---------------------------------------------+
+  !+---------------------+---------f------------------------------------+
   !
   contains
   !
@@ -129,6 +129,9 @@ module readwrite
                         lrestart,limmbou,solidfile,bfacmpld,           &
                         turbmode,schmidt
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
+#ifdef COMB
+    use commvar, only : odetype,lcomb
+#endif
     !
     ! local data
     character(len=42) :: typedefine
@@ -164,6 +167,12 @@ module readwrite
         typedefine='     shock-wave/boundary layer interaction'
       case('windtunn')
         typedefine='                   a numerical wind tunnel'
+      case('0dreactor')
+        typedefine='               a perfectly stirred reactor'
+      case('1dflame')
+        typedefine='               a 1D premixed laminar flame'
+      case('h2supersonic')
+        typedefine='                     a supersonic H2 flame'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -201,8 +210,8 @@ module readwrite
       write(*,'(2X,A59,I3)')' number of independent variables: ',numq
       write(*,'(2X,A59,I3)')' number of species: ',num_species
       !
-      if(num_species>0) then
-      write(*,'(1X,A,12(1X,F8.6))')' schmidt number: ',(schmidt(i),i=1,num_species)
+      if(num_species>0 .and. nondimen) then
+        write(*,'(1X,A,12(1X,F8.6))')' schmidt number: ',(schmidt(i),i=1,num_species)
       endif
       !
       write(*,'(2X,62A)')('-',i=1,62)
@@ -305,6 +314,21 @@ module readwrite
       else
         stop ' !! error: rk scheme not defined !!'
       endif
+      !
+#ifdef COMB
+      if(lcomb) then
+        write(*,'(9X,A)',advance='no')'  chemistry ODE solver: '
+        if(odetype=='rk3') then
+          write(*,'(A)')'  3rd-order explicit Runge–Kutta'
+        elseif(odetype=='ime') then
+          write(*,'(A)')'  1st-order implicit Euler'
+        elseif(odetype=='dnn') then
+          write(*,'(A)')'  deep neural network model'
+        else
+          stop ' !! error: chemistry ODE solver defined !!'
+        endif
+      endif 
+#endif
       !
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                    *** Boundary Conditions ***'
@@ -430,6 +454,8 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readinput
     !
+    use commvar
+    use parallel,only : bcast,mpibar
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_t,reynolds,mach,         &
                         num_species,flowtype,lfilter,alfa_filter,      &
@@ -467,7 +493,10 @@ module readwrite
       if(ljhomo) write(*,'(A)',advance='no')' j,'
       if(lkhomo) write(*,'(A)')' k'
       read(fh,'(/)')
-      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
+#ifdef COMB
+      backspace(fh)
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
+#endif
       read(fh,'(/)')
       read(fh,*)lrestart
       read(fh,'(/)')
@@ -486,8 +515,8 @@ module readwrite
       read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
       read(fh,*)num_species
-      if(num_species>0) then
-        allocate(schmidt(1:num_species))
+      if(num_species>0 .and. nondimen) then
+        allocate(schmidt(num_species))
         backspace(fh)
         read(fh,*)num_species,(schmidt(i),i=1,num_species)
       endif
@@ -573,7 +602,7 @@ module readwrite
     !
     call bcast(recon_schem)
     call bcast(num_species)
-    call bcast(schmidt,num_species)
+    if(nondimen)call bcast(schmidt,num_species)
     !
     call bcast(bctype)
     call bcast(twall)
@@ -1648,6 +1677,18 @@ module readwrite
       close(18)
       print*,' << outdat/profile',trim(stepname),mpirankname,'.dat'
       !
+    elseif(ndims==2) then
+      !
+      call tecbin('testout/tecfield'//mpirankname//'.plt',           &
+                                        x(0:im,0:jm,0,1),'x',        &
+                                        x(0:im,0:jm,0,2),'y',        &
+                                        rho(0:im,0:jm,0),'ro',       &
+                                      vel(0:im,0:jm,0,1),'u',        &
+                                      vel(0:im,0:jm,0,2),'v',        &
+                                        tmp(0:im,0:jm,0),'T',        &
+                                        prs(0:im,0:jm,0),'p',        &
+                                    rcrinod(0:im,0:jm,0),'c' )
+      !
     endif
     !
     nxtwsequ=nstep+feqwsequ
@@ -2252,6 +2293,8 @@ module readwrite
                           ctime(12),' - ',100.d0*ctime(12)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - Diffu   : ',    &
                           ctime(10),' - ',100.d0*ctime(10)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - React   : ',    &
+                          ctime(13),' - ',100.d0*ctime(13)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - filter    : ',    &
                             ctime(8),' - ',100.d0*ctime(8)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io        : ',    &
@@ -2262,8 +2305,14 @@ module readwrite
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
                           ctime(11),' - ',100.d0*ctime(11)/ctime(2),' %'
-      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'  - com         : ',    &
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - q_sum       : ',    &
+                         ctime(14), ' - ',100.d0*ctime(14)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - q2var       : ',    &
+                         ctime(15), ' - ',100.d0*ctime(15)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - crfix       : ',    &
+                         ctime(16), ' - ',100.d0*ctime(16)/ctime(2),' %'
       !
       flush(hand_rp)
       !
