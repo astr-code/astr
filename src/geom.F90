@@ -186,21 +186,23 @@ module geom
     !
     call nodestatecal
     !
-    call boundnodecal
-    !
-    call icellextent
-    !
-    call icellijkcal
-    !
-    call cellbilincoef
-    !
-    call immblocal
+    ! call boundnodecal
+    ! ! !
+    ! call icellextent
+    ! !
+    ! call icellijkcal
+    ! !
+    ! call cellbilincoef
+    ! !
+    ! call immblocal
     !
     subtime=ptime()-time_beg 
     !
     if(lio) print*,' ** grid in solid calculated'
     !
     if(lio) write(*,'(A,F12.8)')'  ** time cost in processing immersed grid :',subtime
+    !
+    ! call mpistop
     !
   end subroutine immsgrid
   !+-------------------------------------------------------------------+
@@ -795,7 +797,9 @@ module geom
     if(lio) print*,' ** identifying solid nodes ...'
     !
     nodestat=0
+    !
     ncou=0
+    !
     do jsd=1,nsolid
       !
       pso=>immbody(jsd)
@@ -816,20 +820,23 @@ module geom
            xp(2)<pso%xmin(2) .or.  xp(2)>pso%xmax(2) .or.    &
            xp(3)<pso%xmin(3) .or.  xp(3)>pso%xmax(3) ) then
           !
-          nodestat(i,j,k)=0
+          ! nodestat(i,j,k)=0
+          continue
           ! fluids 
           !
         else
           !
           ! to calculation the intersection between nodes and face
           ! !
-          if(ndims==2) then
-            linsold=polyhedron_contains_point_2d(pso,xp)
-          elseif(ndims==3) then
-            linsold=polyhedron_contains_point_3d(pso,xp)
-          else
-            stop ' !! ERROR1 @ nodestatecal' 
-          endif
+          ! if(ndims==2) then
+          !   linsold=polyhedron_contains_point_2d(pso,xp)
+          ! elseif(ndims==3) then
+          !   linsold=polyhedron_contains_point_3d(pso,xp)
+          ! else
+          !   stop ' !! ERROR1 @ nodestatecal' 
+          ! endif
+          !
+          linsold=nodes_in_mvg(xp(1),xp(2),xp(3))
           !
           if(linsold) then
             ! ths point is in the solid
@@ -1005,11 +1012,6 @@ module geom
     !
     if(lio) print*,' ** near-boundary ghost nodes identified'
     !
-    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
-    !                            x(0:im,0:jm,0:km,1),'x',           &
-    !                            x(0:im,0:jm,0:km,2),'y',           &
-    !                            x(0:im,0:jm,0:km,3),'z',           &
-    !                            nodestat(0:im,0:jm,0:km),'ns' )
     !
     ! set cell state.
     if(ndims==2) then
@@ -1090,6 +1092,14 @@ module geom
     endif
     !
     if(lio) print*,' ** cell state set'
+    !
+    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
+    !                            x(0:im,0:jm,0:km,1),'x',           &
+    !                            x(0:im,0:jm,0:km,2),'y',           &
+    !                            x(0:im,0:jm,0:km,3),'z',           &
+    !                            nodestat(0:im,0:jm,0:km),'ns' )
+    ! !
+    ! call mpistop
     !
   end subroutine nodestatecal
   !+-------------------------------------------------------------------+
@@ -1211,11 +1221,14 @@ module geom
     nc_f=psum(nc_f)
     nc_g=psum(nc_g)
     if(lio) then
-      write(*,'(A,I0)')'     ** number of boundary nodes: ',size(immbond)
+      write(*,'(A,I0)')'     ** number of immersed nodes: ',size(immbond)
       write(*,'(A,I0)')'        **    ghost nodes: ',nc_g
       write(*,'(A,I0)')'        **  forcing nodes: ',nc_f
       write(*,'(A,I0)')'        ** boundary nodes: ',nc_b
     endif
+    !
+    ! call write_sboun(immbond,'bound')
+    ! call write_sboun(immbond,'ghost')
     !
     return
     !
@@ -1294,6 +1307,8 @@ module geom
         endif
         !
       endif
+      !
+      write(*,'(1A1,A,I4,A,$)')char(13),'',100*jb/size(immbond),' %'
       !
     enddo
     !
@@ -4686,6 +4701,58 @@ module geom
   !+-------------------------------------------------------------------+
   !| The end of the function polyhedron_contains_point_2d.             |
   !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine function is to return if a node is in a mvg.      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 18-04-2022  | Added by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  function nodes_in_mvg(x,y,z) result (inside)
+    !
+    logical inside
+    real(8),intent(in) :: x,y,z
+    !
+    ! local data
+    real(8) :: xmin,xmax,ymin,ymax,zmin,zmax,zc,yh,gamma,beta
+    !
+    inside=.false.
+    !
+    xmin=10.d0
+    xmax=xmin+2.523597d0
+    zc=1.25d0
+    !
+    gamma=0.4193491958d0
+    beta=0.150927957d0
+    !
+    ymin=0.d0
+    ymax=(x-xmin)*tan(beta)+ymin
+    !
+    zmin=zc-(xmax-x)*tan(gamma)
+    zmax=zc+(xmax-x)*tan(gamma)
+    !
+    if(x>=xmin .and. x<=xmax .and. y>=ymin .and. y<=ymax .and.         &
+       z>=zmin .and. z<=zmax) then
+      inside=.true.
+    endif
+    !
+    zc=3.75d0
+    zmin=zc-(xmax-x)*tan(gamma)
+    zmax=zc+(xmax-x)*tan(gamma)
+    !
+    if(x>=xmin .and. x<=xmax .and. y>=ymin .and. y<=ymax .and.         &
+       z>=zmin .and. z<=zmax) then
+      inside=.true.
+    endif
+    !
+    return
+    !
+  end function nodes_in_mvg
+  !+-------------------------------------------------------------------+
+  !| The end of the function nodes_in_mvg.                             |
+  !+-------------------------------------------------------------------+
+
   !!
   !+-------------------------------------------------------------------+
   ! ref: https://searchcode.com/codesearch/view/13427361/

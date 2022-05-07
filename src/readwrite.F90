@@ -1876,7 +1876,7 @@ module readwrite
     if(lio) call bakupfile('outdat/auxiliary.h5')
     if(lio) call bakupfile('outdat/flowfield.'//iomode//'5')
     !
-    ! call writeflfed()
+    call writeflfed()
     !
     ! call h5io_init('outdat/qdata.h5',mode='write')
     ! do jsp=1,numq
@@ -2376,7 +2376,7 @@ module readwrite
           endif
         enddo
         close(fh)
-        print*,' << tecbound,',mpirankname,'.dat'
+        print*,' << tecbound',mpirankname,'.dat'
       endif
       !
     case('ghost')
