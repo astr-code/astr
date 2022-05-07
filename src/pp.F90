@@ -780,14 +780,17 @@ module pp
     integer :: i,j,k,jf,km,jm,im,nface
     real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
                x1(3),x2(3),x3(3),x4(3),norm1(3),var1,var2
-    real(8) :: epsilon,delta,x0,lx,h
+    real(8) :: epsilon,delta,x0,lx,lz,h,sz,chord
     type(triangle),allocatable :: tempface(:)
     !
     epsilon=1.d-12
-    delta=5.85d0/7.696215d0
-    x0=10.d0*7.696215d0
-    lx=15.25286858d0
-    h=2.31d0
+    delta=1.d0
+    x0=10.d0
+    lx=2.523597432d0
+    lz=2.25d0
+    chord=sqrt(lx**2+0.25d0*lz**2)
+    sz=0.25d0
+    h =0.3838d0
     nface=0
     !
     print*,' ** generating solid'
@@ -799,20 +802,20 @@ module pp
     allocate(tempface(12))
     !
     x1(1)=x0
-    x1(2)=10.d0
-    x1(3)=0.75d0/delta
+    x1(2)=0.d0
+    x1(3)=0.5d0*sz
     !
     x2(1)=x0
-    x2(2)=10.d0
-    x2(3)=0.75d0/delta+13.6d0/delta
+    x2(2)=0.d0
+    x2(3)=0.5d0*sz+lz
     !
-    x3(1)=x0+lx/delta
-    x3(2)=10.d0
-    x3(3)=0.75d0/delta+6.8d0/delta
+    x3(1)=x0+lx
+    x3(2)=0.d0
+    x3(3)=0.5d0*sz+0.5d0*lz
     !
-    x4(1)=x0+lx/delta
-    x4(2)=10.d0+h/delta
-    x4(3)=0.75d0/delta+6.8d0/delta
+    x4(1)=x0+lx
+    x4(2)=0.d0+h
+    x4(3)=0.5d0*sz+0.5d0*lz
     !
     nface=nface+1
     tempface(nface)%a=x1
@@ -820,16 +823,16 @@ module pp
     tempface(nface)%c=x3
     tempface(nface)%normdir=(/0.d0,-1.d0,0.d0/)
     !
-    var1=6.8d0/16.7d0
-    var2=   lx/16.7d0
+    var1=0.5d0*lz/chord
+    var2=      lx/chord
     nface=nface+1
     tempface(nface)%a=x1
     tempface(nface)%b=x3
     tempface(nface)%c=x4
     tempface(nface)%normdir=(/var1,0.d0,-var2/)
     !
-    var1=6.8d0/16.7d0
-    var2=   lx/16.7d0
+    var1=0.5d0*lz/chord
+    var2=      lx/chord
     nface=nface+1
     tempface(nface)%a=x2
     tempface(nface)%b=x3
@@ -850,10 +853,10 @@ module pp
     !
     nface=0
     !
-    x1(3)=x1(3)+1.5d0/delta+13.6d0/delta
-    x2(3)=x2(3)+1.5d0/delta+13.6d0/delta
-    x3(3)=x3(3)+1.5d0/delta+13.6d0/delta
-    x4(3)=x4(3)+1.5d0/delta+13.6d0/delta
+    x1(3)=x1(3)+sz+lz
+    x2(3)=x2(3)+sz+lz
+    x3(3)=x3(3)+sz+lz
+    x4(3)=x4(3)+sz+lz
     !
     nface=nface+1
     tempface(nface)%a=x1
@@ -861,16 +864,16 @@ module pp
     tempface(nface)%c=x3
     tempface(nface)%normdir=(/0.d0,-1.d0,0.d0/)
     !
-    var1=6.8d0/16.7d0
-    var2=   lx/16.7d0
+    var1=0.5d0*lz/chord
+    var2=      lx/chord
     nface=nface+1
     tempface(nface)%a=x1
     tempface(nface)%b=x3
     tempface(nface)%c=x4
     tempface(nface)%normdir=(/var1,0.d0,-var2/)
     !
-    var1=6.8d0/16.7d0
-    var2=   lx/16.7d0
+    var1=0.5d0*lz/chord
+    var2=      lx/chord
     nface=nface+1
     tempface(nface)%a=x2
     tempface(nface)%b=x3

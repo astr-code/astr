@@ -690,7 +690,7 @@ module readwrite
   subroutine readcont
     !
     use commvar, only: deltat,lwsequ,lwslic,lavg,maxstep,feqchkpt,     &
-                       feqwsequ,feqslice,feqlist,feqavg
+                       feqwsequ,feqslice,feqlist,feqavg,lcracon
     use parallel,only: bcast
     !
     ! local data
@@ -705,7 +705,7 @@ module readwrite
       !
       open(fh,file=trim(inputfile),action='read')
       read(fh,'(////)')
-      read(fh,*)lwsequ,lwslic,lavg
+      read(fh,*)lwsequ,lwslic,lavg,lcracon
       read(fh,'(/)')
       read(fh,*)maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
       read(fh,'(/)')
@@ -718,6 +718,7 @@ module readwrite
     call bcast(lwsequ)
     call bcast(lwslic)
     call bcast(lavg)
+    call bcast(lcracon)
     call bcast(maxstep)
     call bcast(feqchkpt)
     call bcast(feqwsequ)
@@ -1926,7 +1927,7 @@ module readwrite
     if(lio) call bakupfile('outdat/auxiliary.h5')
     if(lio) call bakupfile('outdat/flowfield.'//iomode//'5')
     !
-    ! call writeflfed()
+    call writeflfed()
     !
     ! call h5io_init('outdat/qdata.h5',mode='write')
     ! do jsp=1,numq
@@ -2426,7 +2427,7 @@ module readwrite
           endif
         enddo
         close(fh)
-        print*,' << tecbound,',mpirankname,'.dat'
+        print*,' << tecbound',mpirankname,'.dat'
       endif
       !
     case('ghost')

@@ -230,6 +230,91 @@ module bc
     endif
     !
   end subroutine xyzbc
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to apply bounday conditions to node state.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 21-04-2022: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine nodebc(nodestat)
+    !
+    integer,intent(inout) :: nodestat(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
+    !
+    ! local data
+    integer :: n
+    !
+    do n=1,6
+      !
+      if(bctype(n)==41 .or. bctype(n)==411 .or. bctype(n)==421) then
+        call solidnode(n,nodestat)
+      endif
+      !
+    enddo
+    !
+  end subroutine nodebc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine nodebc.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to apply solid bc to nodes.                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 21-04-2021: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine solidnode(ndir,nodestat)
+    !
+    ! arguments
+    integer,intent(in) :: ndir
+    integer,intent(inout) :: nodestat(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    if(ndir==3) then
+      !
+      if(jrk==0) then
+        !
+        j=0
+        !
+        do k=0,km
+        do i=0,im
+          !
+          nodestat(i,-hm:0,k)=5
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
+    elseif(ndir==4) then
+      !
+      if(jrk==jrkm) then
+        !
+        j=jm
+        !
+        do k=0,km
+        do i=0,im
+          !
+          nodestat(i,jm:jm+hm,k)=5
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
+    else
+      stop ' !! ndir not defined @ solidnode'
+    endif
+    !
+  end subroutine solidnode
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine solidnode.                              |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is to apply bounday conditions.                   |
   !+-------------------------------------------------------------------+
@@ -345,201 +430,201 @@ module bc
     !
     if(present(subtime)) time_beg=ptime()
     !
-    if(npdci==1) then
-      iss=0
-    else
-      iss=1
-    endif
-    if(npdcj==1) then
-      jss=0
-    else
-      jss=1
-    endif
-    if(ndims==2) then
-      kss=0
-    else
-      kss=1
-    endif
-    !
-    ncube=2**ndims
-    !
-    ! go over the boundary nodes
-    !
-    allocate( vel_icell(ncube,3),tmp_icell(ncube),prs_icell(ncube), &
-              c_dir(ncube),c_neu(ncube))
-    allocate(qimag(numq,1:size(immbond)))
-    !
-    counter=0
-    !
-    do jb=1,size(immbond)
-      !
-      pb=>immbond(jb)
-      !
-      ! if(.not. allocated(pb%qimag)) allocate(pb%qimag(numq))
-      ! pb%qimag=0.d0
-      !
-      i=pb%icell(1)-ig0
-      j=pb%icell(2)-jg0
-      k=pb%icell(3)-kg0
-      !
-      if( ijkcellin(i,j,k)) then
-        ! the icell is in local processor
-        !
-        prslmin= 1.d10
-        prslmax=-1.d10
-        do m=1,ncube
-          !
-          if(pb%icell_ijk(m,1)>=0) then
-            !
-            i=pb%icell_ijk(m,1)
-            j=pb%icell_ijk(m,2)
-            k=pb%icell_ijk(m,3)
-            !
-            vel_icell(m,:)=vel(i,j,k,:)
-            tmp_icell(m)  =tmp(i,j,k)
-            prs_icell(m)  =prs(i,j,k)
-            !
-            prslmin=min(prslmin,prs(i,j,k))
-            prslmax=max(prslmax,prs(i,j,k))
-          ! elseif(pb%icell_bnode(m)>0) then
-          !   kb=pb%icell_bnode(m)
-          !   !
-          !   vel_icell(m,:)=0.d0
-          !   tmp_icell(m)  =tinf
-          !   prs_icell(m)  =0.d0
-            !
-          else
-            stop ' !! ERROR in determining interpolation coefficient'
-          endif
-          !
-        enddo
-        !
-        c_dir=pb%coef_dirichlet
-        ! c_neu=pb%coef_neumann
-        !
-        vel_image(1)=dot_product(c_dir,vel_icell(:,1))
-        vel_image(2)=dot_product(c_dir,vel_icell(:,2))
-        vel_image(3)=dot_product(c_dir,vel_icell(:,3))
-        !
-        tmp_image   =dot_product(c_dir,tmp_icell)
-        !
-        ! prs_image   =dot_product(c_neu,prs_icell)
-        prs_image   =dot_product(c_dir,prs_icell)
-        prs_image   =median(prs_image,prslmin,prslmin)
-        !
-        rho_image=thermal(pressure=prs_image,temperature=tmp_image)
-        !
-        spc_image=1.d0
-        !
-        counter=counter+1
-        !
-        call fvar2q(      q=qimag(:,counter),                      &
-                    density=rho_image,  velocity=vel_image,        &
-                    pressure=prs_image,  species=spc_image         )
-        !
-        !
-      endif
-      !
-    enddo
+    ! if(npdci==1) then
+    !   iss=0
+    ! else
+    !   iss=1
+    ! endif
+    ! if(npdcj==1) then
+    !   jss=0
+    ! else
+    !   jss=1
+    ! endif
+    ! if(ndims==2) then
+    !   kss=0
+    ! else
+    !   kss=1
+    ! endif
     ! !
-    call syncqimag(qimag(:,1:counter))
+    ! ncube=2**ndims
     ! !
-    do jb=1,size(immbond)
-      !
-      pb=>immbond(jb)
-      !
-      ! if(.not. allocated(pb%q)) allocate(pb%q(numq))
-      !
-      ! now get the value for ghost nodes
-      !
-      ! call q2fvar(      q=  pb%qimag,                   &
-      !               density=var_ro,                     &
-      !              velocity=var_u(:),                   &
-      !              pressure=var_p,                      &
-      !           temperature=var_t,                      &
-      !               species=var_sp                      )
-      ! !
-      ! vel_bou=0.d0
-      ! prs_bou=var_p
-      ! tmp_bou=tinf
-      ! rho_bou=thermal(pressure=prs_bou,temperature=tmp_bou)
-      ! spc_bou=var_sp
-      ! !
-      ! call fvar2q(       q=  pb%q,   density=rho_bou,        &
-      !            velocity=vel_bou,  pressure=prs_bou,        &
-      !             species=spc_bou                            )
-      !
-      ! if(.not. pb%localin) cycle
-      !
-      i=pb%igh(1)-ig0
-      j=pb%igh(2)-jg0
-      k=pb%igh(3)-kg0
-      !
-      if(i>=0 .and. i<=im .and. &
-         j>=0 .and. j<=jm .and. &
-         k>=0 .and. k<=km ) then
-        !
-        call q2fvar(      q=  pb%qimag,                   &
-                      density=var_ro,                     &
-                     velocity=var_u(:),                   &
-                     pressure=var_p,                      &
-                  temperature=var_t                        )
-        !
-        if(pb%nodetype=='g') then
-          ! for ghost nodes
-          !
-          vel(i,j,k,:)=-1.d0*var_u(:)*pb%dis2ghost/pb%dis2image
-            tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
-            prs(i,j,k)=var_p
-            rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          spc(i,j,k,:)=1.d0
-          !
-        elseif(pb%nodetype=='b') then
-          ! for boundary nodes
-          !
-          vel(i,j,k,:)=0.d0
-            tmp(i,j,k)=tinf
-            prs(i,j,k)=var_p
-            rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          spc(i,j,k,:)=1.d0
-          !
-        ! elseif(pb%nodetype=='f') then
-        !   ! for force nodes
-        !   vel(i,j,k,:)=0.5d0*var_u(:)
-        !     tmp(i,j,k)=0.5d0*(tinf+var_t)
-        !     prs(i,j,k)=var_p
-        !   rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-        !   !
-        !   spc(i,j,k,:)=1.d0
-        !   !
-        ! else
-        !   stop ' ERROR @ immbody'
-        endif
-        !
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                    species=spc(i,j,k,:)                               )
-        !
-      endif
-      !
-    enddo
+    ! ! go over the boundary nodes
+    ! !
+    ! allocate( vel_icell(ncube,3),tmp_icell(ncube),prs_icell(ncube), &
+    !           c_dir(ncube),c_neu(ncube))
+    ! allocate(qimag(numq,1:size(immbond)))
+    ! !
+    ! counter=0
+    ! !
+    ! do jb=1,size(immbond)
+    !   !
+    !   pb=>immbond(jb)
+    !   !
+    !   ! if(.not. allocated(pb%qimag)) allocate(pb%qimag(numq))
+    !   ! pb%qimag=0.d0
+    !   !
+    !   i=pb%icell(1)-ig0
+    !   j=pb%icell(2)-jg0
+    !   k=pb%icell(3)-kg0
+    !   !
+    !   if( ijkcellin(i,j,k)) then
+    !     ! the icell is in local processor
+    !     !
+    !     prslmin= 1.d10
+    !     prslmax=-1.d10
+    !     do m=1,ncube
+    !       !
+    !       if(pb%icell_ijk(m,1)>=0) then
+    !         !
+    !         i=pb%icell_ijk(m,1)
+    !         j=pb%icell_ijk(m,2)
+    !         k=pb%icell_ijk(m,3)
+    !         !
+    !         vel_icell(m,:)=vel(i,j,k,:)
+    !         tmp_icell(m)  =tmp(i,j,k)
+    !         prs_icell(m)  =prs(i,j,k)
+    !         !
+    !         prslmin=min(prslmin,prs(i,j,k))
+    !         prslmax=max(prslmax,prs(i,j,k))
+    !       ! elseif(pb%icell_bnode(m)>0) then
+    !       !   kb=pb%icell_bnode(m)
+    !       !   !
+    !       !   vel_icell(m,:)=0.d0
+    !       !   tmp_icell(m)  =tinf
+    !       !   prs_icell(m)  =0.d0
+    !         !
+    !       else
+    !         stop ' !! ERROR in determining interpolation coefficient'
+    !       endif
+    !       !
+    !     enddo
+    !     !
+    !     c_dir=pb%coef_dirichlet
+    !     ! c_neu=pb%coef_neumann
+    !     !
+    !     vel_image(1)=dot_product(c_dir,vel_icell(:,1))
+    !     vel_image(2)=dot_product(c_dir,vel_icell(:,2))
+    !     vel_image(3)=dot_product(c_dir,vel_icell(:,3))
+    !     !
+    !     tmp_image   =dot_product(c_dir,tmp_icell)
+    !     !
+    !     ! prs_image   =dot_product(c_neu,prs_icell)
+    !     prs_image   =dot_product(c_dir,prs_icell)
+    !     prs_image   =median(prs_image,prslmin,prslmin)
+    !     !
+    !     rho_image=thermal(pressure=prs_image,temperature=tmp_image)
+    !     !
+    !     spc_image=1.d0
+    !     !
+    !     counter=counter+1
+    !     !
+    !     call fvar2q(      q=qimag(:,counter),                      &
+    !                 density=rho_image,  velocity=vel_image,        &
+    !                 pressure=prs_image,  species=spc_image         )
+    !     !
+    !     !
+    !   endif
+    !   !
+    ! enddo
+    ! ! !
+    ! call syncqimag(qimag(:,1:counter))
+    ! ! !
+    ! do jb=1,size(immbond)
+    !   !
+    !   pb=>immbond(jb)
+    !   !
+    !   ! if(.not. allocated(pb%q)) allocate(pb%q(numq))
+    !   !
+    !   ! now get the value for ghost nodes
+    !   !
+    !   ! call q2fvar(      q=  pb%qimag,                   &
+    !   !               density=var_ro,                     &
+    !   !              velocity=var_u(:),                   &
+    !   !              pressure=var_p,                      &
+    !   !           temperature=var_t,                      &
+    !   !               species=var_sp                      )
+    !   ! !
+    !   ! vel_bou=0.d0
+    !   ! prs_bou=var_p
+    !   ! tmp_bou=tinf
+    !   ! rho_bou=thermal(pressure=prs_bou,temperature=tmp_bou)
+    !   ! spc_bou=var_sp
+    !   ! !
+    !   ! call fvar2q(       q=  pb%q,   density=rho_bou,        &
+    !   !            velocity=vel_bou,  pressure=prs_bou,        &
+    !   !             species=spc_bou                            )
+    !   !
+    !   ! if(.not. pb%localin) cycle
+    !   !
+    !   i=pb%igh(1)-ig0
+    !   j=pb%igh(2)-jg0
+    !   k=pb%igh(3)-kg0
+    !   !
+    !   if(i>=0 .and. i<=im .and. &
+    !      j>=0 .and. j<=jm .and. &
+    !      k>=0 .and. k<=km ) then
+    !     !
+    !     call q2fvar(      q=  pb%qimag,                   &
+    !                   density=var_ro,                     &
+    !                  velocity=var_u(:),                   &
+    !                  pressure=var_p,                      &
+    !               temperature=var_t                        )
+    !     !
+    !     if(pb%nodetype=='g') then
+    !       ! for ghost nodes
+    !       !
+    !       vel(i,j,k,:)=-1.d0*var_u(:)*pb%dis2ghost/pb%dis2image
+    !         tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
+    !         prs(i,j,k)=var_p
+    !         rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+    !       !
+    !       spc(i,j,k,:)=1.d0
+    !       !
+    !     elseif(pb%nodetype=='b') then
+    !       ! for boundary nodes
+    !       !
+    !       vel(i,j,k,:)=0.d0
+    !         tmp(i,j,k)=tinf
+    !         prs(i,j,k)=var_p
+    !         rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+    !       !
+    !       spc(i,j,k,:)=1.d0
+    !       !
+    !     ! elseif(pb%nodetype=='f') then
+    !     !   ! for force nodes
+    !     !   vel(i,j,k,:)=0.5d0*var_u(:)
+    !     !     tmp(i,j,k)=0.5d0*(tinf+var_t)
+    !     !     prs(i,j,k)=var_p
+    !     !   rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+    !     !   !
+    !     !   spc(i,j,k,:)=1.d0
+    !     !   !
+    !     ! else
+    !     !   stop ' ERROR @ immbody'
+    !     endif
+    !     !
+    !     call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+    !                velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+    !                 species=spc(i,j,k,:)                               )
+    !     !
+    !   endif
+    !   !
+    ! enddo
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       !
-      if(nodestat(i,j,k)==5) then
+      ! if(nodestat(i,j,k)==5) then
         ! inner solid
-      ! if(nodestat(i,j,k)>0) then
+      if(nodestat(i,j,k)>0) then
         ! all solid nodes
         !
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-        ! tmp(i,j,k)  =twall(3)
-        tmp(i,j,k)  =tinf
+        tmp(i,j,k)  =twall(3)
+        ! tmp(i,j,k)  =tinf
         prs(i,j,k)  =pinf
         rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
         !

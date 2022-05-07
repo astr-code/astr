@@ -10,7 +10,7 @@ module mainloop
   use constdef
   use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
                       ptime,irk,jrk,irkm,jrkm
-  use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep
+  use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep,lcracon
   use commarray,only: crinod
   use tecio
   use stlaio,  only: get_unit
@@ -68,7 +68,7 @@ module mainloop
       !
       time_beg=ptime()
       !
-      if(flowtype(1:2)/='0d') call crashcheck
+      if(lcracon) call crashcheck
       !
       if(rkscheme=='rk3') then
         call rk3
@@ -361,7 +361,7 @@ module mainloop
       !
       ctime(15)=ctime(15)+ptime()-time_beg_2
       !
-      call crashfix(ctime(16))
+      if(lcracon) call crashfix(ctime(16))
       !
 #ifdef COMB
       if(nrk==3) then
@@ -577,7 +577,7 @@ module mainloop
       call updatefvar
       !
       ! call crashcheck
-      call crashfix
+      if(lcracon) call crashfix
       !
     enddo
     !

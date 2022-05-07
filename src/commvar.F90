@@ -37,7 +37,7 @@ module commvar
   !|       solidbodyfile | the file contains solid body geometry .     |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcracon
   character(len=3) :: rkscheme
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |
@@ -47,6 +47,7 @@ module commvar
   !|             lfilter | to activate filer flag                      |
   !|               lfftk | to use fft in the k direction.              |
   !|             limmbou | to use immersed boundary method             |
+  !|             lcracon | to activate crash control function.         |
   !|            rkscheme | which rk method to use.                     |
   !+---------------------+---------------------------------------------+
   !
