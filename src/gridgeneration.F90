@@ -29,11 +29,13 @@ module gridgeneration
     if(lreadgrid) then
       call readgrid
     else
-      if(trim(flowtype)=='tgv') then
+      if(flowtype(1:3)=='tgv') then
         if(nondimen) then
           call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
-        else 
+        elseif(trim(flowtype)=='tgv') then
           call gridcube(5.1530915662d-3,5.1530915662d-3,5.1530915662d-3)
+        else
+          call gridcube(6.283185307d-3,6.283185307d-3,6.283185307d-3)
         endif 
       elseif(trim(flowtype)=='jet') then
         call gridjet
@@ -58,7 +60,7 @@ module gridgeneration
         stop ' !! error at gridgen' 
       endif
       !
-      ! call writegrid
+      call writegrid
       !
     endif
     !

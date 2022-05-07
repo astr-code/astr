@@ -15,13 +15,13 @@ FCFLAGS= -O3 -fbounds-check
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
 OPTIONS3 = -DHDF5
-# OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
+OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
 # OMP = -fopenmp
 
 EXE=astr
 
-# LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread
-LIBS= -lz -lm 
+LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread
+# LIBS= -lz -lm 
 
 TARGET = $(BINDIR)/$(EXE)
 
@@ -43,4 +43,4 @@ default: $(OBJS)
 	$(FC) $(FCFLAGS) -o $(TARGET) $(OBJDIR)/*.o $(LIBS) $(INCL) $(OMP)
 
 clean:
-	rm -fv $(OBJDIR)/*.o $(OBJDIR)/*.mod $(TARGET)
+	rm -fv $(OBJDIR)/*.o $(OBJDIR)/*.mod $(TARGET) $(SRCDIR)/*.mod

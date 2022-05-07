@@ -444,9 +444,9 @@ module mainloop
         ctime(13)=ctime(13)+ptime()-time_beg_2
         !
         time_beg_2=ptime()
-        ！
+        !
         call updatefvar
-        ！
+        !
         ctime(15)=ctime(15)+ptime()-time_beg_2
         !
       endif !odetype

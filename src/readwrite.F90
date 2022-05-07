@@ -173,6 +173,8 @@ module readwrite
         typedefine='               a 1D premixed laminar flame'
       case('h2supersonic')
         typedefine='                     a supersonic H2 flame'
+      case('tgvflame')
+        typedefine='                 Taylor-Green Vortex flame'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -409,7 +411,7 @@ module readwrite
       !
       write(*,'(2X,62A)')('-',i=1,62)
       !
-      write(*,'(2X,A)')'                          *** i/o model ***'
+      write(*,'(2X,A)')'                          *** i/o mode ***'
       if(iomode=='s') then
         write(*,'(35X,A)')'                stream output'
       elseif(iomode=='h') then
@@ -660,11 +662,6 @@ module readwrite
     !
     ! every mpirank must read chem.dat
     if(.not.(nondimen)) then
-      !
-      inquire(file='thermchem.txt',exist=lfex)
-        ! call system('xsltproc $FACTDIR/run/chemMech/thermchem_gen.xsl '  &
-        !   //trim(chemfile)//' > thermchem.txt')
-      call mpibar
       !
       call chemread(trim(chemfile))
       !

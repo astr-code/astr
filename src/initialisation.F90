@@ -98,7 +98,9 @@ module initialisation
         case('1dflame')
           call onedflameini
         case('h2supersonic')
-          call h2supersonic
+          call h2supersonicini
+        case('tgvflame')
+          call tgvflameini
         case default
           print*,trim(flowtype)
           stop ' !! flowtype not defined @ flowinit'
@@ -129,7 +131,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
+    call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -629,14 +631,12 @@ module initialisation
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal
 #ifdef COMB
-    use thermchem,only : tranmod,tranco,enthpy,convertxiyi,wmolar
+    use thermchem,only: tranco,convertxiyi
 #endif
     !
     ! local data
     integer :: i,j,k,jspc
-    real(8) :: l_0
-    real(8) :: cpe,miu,kama
-    real(8),allocatable :: dispec(:,:)
+    real(8) :: l_0,miu
     !
     if(nondimen) then
       roinf=1.d0
@@ -651,10 +651,8 @@ module initialisation
       l_0=xmax/(2.d0*pi)
       uinf=40.d0
       !
-      if(.not.allocated(dispec)) allocate(dispec(num_species,1))
-      call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama, &
-                  spc=spcinf,rhodi=dispec(:,1))
-      if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+      ! call tranco(tmp=tinf,spc=spcinf,mu=miu,den=roinf)
+      ! if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
 #endif
     endif
     !
@@ -677,7 +675,7 @@ module initialisation
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
       endif 
       !
-      if(num_species>=1) then
+      if(num_species>=1 .and. nondimen) then
         !
         spc(i,j,k,1)=sin(x(i,j,k,1))**2
         do jspc=2,num_species
@@ -1538,7 +1536,7 @@ module initialisation
   !| -------------                                                     |
   !| 04-Feb-2022: Created by Z.X. Chen @ Peking University             |
   !+-------------------------------------------------------------------+
-  subroutine h2supersonic
+  subroutine h2supersonicini
 #ifdef COMB
     !
     use commvar,  only: &
@@ -1640,9 +1638,104 @@ module initialisation
     !
 #endif
     !
-  end subroutine h2supersonic
+  end subroutine h2supersonicini
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine h2supersonic.                           |
+  !| The end of the subroutine h2supersonicini.                        |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of TGV flame.                                          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-Mar-2022: Created by Yifan Xu @ Peking University              |
+  !+-------------------------------------------------------------------+
+  subroutine tgvflameini
+    !
+    use commvar,  only: nondimen,xmax
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    !
+#ifdef COMB
+    !
+    use thermchem,only : tranco,spcindex,mixture
+    use cantera 
+    !
+    ! local data
+    integer :: i,j,k,jspc
+    real(8) :: miu,xc,yc,zc,xloc,l_0,xwid,specr(num_species), &
+      specp(num_species),prgvar
+    !
+    tinf=300.d0
+    xloc=xmax/2.d0
+    xwid=xmax/8.d0
+    !
+    l_0=xmax/(2.d0*pi)
+    uinf=40.d0
+    roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+    !
+    ! call tranco(tmp=tinf,mu=miu,den=roinf,spc=specr)
+    ! if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+    !
+    ! nonpremixed reactants include fuel and oxidizer
+    specr(:)=0.d0
+    specr(spcindex('H2'))=0.0556 
+    specr(spcindex('O2'))=0.233  
+    specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      xc=x(i,j,k,1)
+      yc=x(i,j,k,2)
+      zc=x(i,j,k,3)
+      !
+      prgvar=0.5d0*(1.d0+tanh(3.d0*(abs(xc-xloc)-xwid)/xwid))
+      specp(:)=0.d0
+      specp(spcindex('H2'))=specr(spcindex('H2'))*(1.d0-prgvar)
+      specp(spcindex('O2'))=specr(spcindex('O2'))*prgvar
+      specp(spcindex('N2'))=1.d0-sum(specp)
+      !
+      spc(i,j,k,:)=specp(:)
+      !
+      spc(i,j,k,spcindex('N2'))=1.d0-(sum(spc(i,j,k,:))-spc(i,j,k,spcindex('N2')))
+      !
+      prs(i,j,k)=pinf
+      tmp(i,j,k)=tinf
+      ! get initial rho
+      roinf=thermal(temperature=tmp(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
+      !
+      ! |--CANTERA--|
+      call setState_TPY(mixture,tmp(i,j,k),prs(i,j,k),spc(i,j,k,:))
+      call equilibrate(mixture,'HP')
+      tmp(i,j,k)=temperature(mixture)
+      call getMassFractions(mixture,specp(:))
+      spc(i,j,k,:)=specp(:)
+      !
+      rho(i,j,k)=thermal(temperature=tmp(i,j,k),pressure=prs(i,j,k), &
+                          species=spc(i,j,k,:))
+      ! set velocity and scale vx 
+      vel(i,j,k,1)= uinf*sin(xc/l_0)*cos(yc/l_0)*cos(zc/l_0)*roinf/rho(i,j,k)
+      vel(i,j,k,2)=-uinf*cos(xc/l_0)*sin(yc/l_0)*cos(zc/l_0)
+      vel(i,j,k,3)= 0.d0
+      !
+      prs(i,j,k)  =pinf+roinf/16.d0*(uinf**2) &
+                        *(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
+                        *(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D tgv flame initialised.'
+    !
+#endif
+    !
+  end subroutine tgvflameini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine tgvflameini.                           |
   !+-------------------------------------------------------------------+
   !
   function return_30k(x) result(y)
