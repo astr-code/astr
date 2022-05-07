@@ -640,7 +640,7 @@ module readwrite
   subroutine readcont
     !
     use commvar, only: deltat,lwsequ,lwslic,lavg,maxstep,feqchkpt,     &
-                       feqwsequ,feqslice,feqlist,feqavg
+                       feqwsequ,feqslice,feqlist,feqavg,lcracon
     use parallel,only: bcast
     !
     ! local data
@@ -655,7 +655,7 @@ module readwrite
       !
       open(fh,file=trim(inputfile),action='read')
       read(fh,'(////)')
-      read(fh,*)lwsequ,lwslic,lavg
+      read(fh,*)lwsequ,lwslic,lavg,lcracon
       read(fh,'(/)')
       read(fh,*)maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
       read(fh,'(/)')
@@ -668,6 +668,7 @@ module readwrite
     call bcast(lwsequ)
     call bcast(lwslic)
     call bcast(lavg)
+    call bcast(lcracon)
     call bcast(maxstep)
     call bcast(feqchkpt)
     call bcast(feqwsequ)

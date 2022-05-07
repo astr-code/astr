@@ -2,8 +2,8 @@
 #               control file for ASTR  code                #
 ############################################################
 
-# lwsequ,lwslic,lavg
-       f,     f,   f
+# lwsequ,lwslic,lavg,lcracon
+       f,     f,   f,      f
 
 # maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
        10,     100,     100,      50,      1,    50
