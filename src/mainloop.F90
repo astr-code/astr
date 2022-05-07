@@ -35,7 +35,7 @@ module mainloop
   subroutine steploop
     !
     use commvar,  only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
-                        rkscheme,nsrpt
+                        rkscheme,nsrpt,flowtype
     use readwrite,only: readcont,timerept,nxtchkpt,nxtwsequ
     use commcal,  only: cflcal
     !
@@ -68,7 +68,7 @@ module mainloop
       !
       time_beg=ptime()
       !
-      call crashcheck
+      if(flowtype(1:2)/='0d') call crashcheck
       !
       if(rkscheme=='rk3') then
         call rk3
@@ -355,14 +355,18 @@ module mainloop
       !
       if(flowtype(1:2)/='0d') call spongefilter
       !
-      call updatefvar(ctime(15))
+      time_beg_2=ptime()
+      !
+      call updatefvar
+      !
+      ctime(15)=ctime(15)+ptime()-time_beg_2
       !
       call crashfix(ctime(16))
       !
 #ifdef COMB
       if(nrk==3) then
         !
-        time_beg_2=ptime()
+				time_beg_2=ptime()
         !
         do i=0,im 
         do j=0,jm
@@ -439,7 +443,11 @@ module mainloop
         !
         ctime(13)=ctime(13)+ptime()-time_beg_2
         !
-        call updatefvar(ctime(15))
+        time_beg_2=ptime()
+        ！
+        call updatefvar
+        ！
+        ctime(15)=ctime(15)+ptime()-time_beg_2
         !
       endif !odetype
 #endif
@@ -631,7 +639,7 @@ module mainloop
       endif
       !
       if(lwslic .and. mod(nstep,feqslice)==0) then
-        call writeslice(ctime(13))
+        call writeslice(ctime(23))
       endif
       !
     endif

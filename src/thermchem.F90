@@ -93,7 +93,7 @@ module thermchem
     !---CANTERA---
     call getMolecularWeights(mixture,wmolar)
     !
-    open(unit=11,file='thermchem.txt',status='old',form='formatted')
+    open(unit=11,file='datin/thermchem.txt',status='old',form='formatted')
     call skipline(11,3)
     do js=1,num_species
       read(11,*) spcsym(js),clewis(js)

@@ -468,6 +468,11 @@ module readwrite
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
+#ifdef COMB
+    use thermchem,only: chemrep,chemread,thermdyn
+    logical :: lfex
+#endif
+    !
     ! local data
     character(len=64) :: inputfile
     character(len=5) :: char
@@ -498,7 +503,6 @@ module readwrite
 #else
       read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
 #endif
-
       read(fh,'(/)')
       read(fh,*)lrestart
       read(fh,'(/)')
@@ -508,11 +512,15 @@ module readwrite
         read(fh,'(/)')
         read(fh,*)ref_t,reynolds,mach
       else
-        read(fh,'(///)')
+        read(fh,'(//)')
       endif
       !
       read(fh,'(/)')
+#ifdef COMB
+      read(fh,*)conschm,difschm,rkscheme,odetype
+#else 
       read(fh,*)conschm,difschm,rkscheme
+#endif
       read(fh,'(/)')
       read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
@@ -560,10 +568,29 @@ module readwrite
         read(fh,'(/)')
         read(fh,'(A)')solidfile
       endif
+#ifdef COMB
+      if(.not.nondimen) then
+        read(fh,'(/)')
+        read(fh,'(A)')chemfile  
+        if(len(trim(chemfile))>1) then
+          inquire(file=trim(chemfile),exist=lfex)
+          !
+          if(.not. lfex) then
+            print*,' !! Error ',trim(chemfile),' not exist !!'
+            stop
+          endif
+          !
+        else
+          print*,' !! Error chemfile not provided in input !!'
+            stop
+        endif
+      endif 
+      !
+#endif
       close(fh)
       print*,' >> ',trim(inputfile),' ... done'
       !
-    endif
+    endif !mpirank==0
     !
     call bcast(ia)
     call bcast(ja)
@@ -624,6 +651,32 @@ module readwrite
     !
     call readslic
     !
+#ifdef COMB
+    call bcast(lcomb)
+    call bcast(odetype)
+    call bcast(chemfile)
+    !
+    call mpibar
+    !
+    ! every mpirank must read chem.dat
+    if(.not.(nondimen)) then
+      !
+      inquire(file='thermchem.txt',exist=lfex)
+        ! call system('xsltproc $FACTDIR/run/chemMech/thermchem_gen.xsl '  &
+        !   //trim(chemfile)//' > thermchem.txt')
+      call mpibar
+      !
+      call chemread(trim(chemfile))
+      !
+      call thermdyn
+      !
+      if(mpirank==0) call chemrep('./chemrep.dat')
+      if(mpirank==0) print*,' >> ',trim(chemfile),' ... done.'
+      !
+    endif
+    !
+#endif
+  !
   end subroutine readinput
   !+-------------------------------------------------------------------+
   !| The end of the subroutine readinput.                              |
@@ -2301,8 +2354,8 @@ module readwrite
                             ctime(8),' - ',100.d0*ctime(8)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io        : ',    &
                             ctime(6),' - ',100.d0*ctime(6)/ctime(2),' %'
-      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io slices : ',    &
-                          ctime(13),' - ',100.d0*ctime(13)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - io_slices : ',    &
+                          ctime(23),' - ',100.d0*ctime(23)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - sta       : ',    &
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
