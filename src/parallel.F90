@@ -3489,6 +3489,231 @@ module parallel
   !| The end of the subroutine array5d_sendrecv.                       |
   !+-------------------------------------------------------------------+
   !
+  subroutine yflux_sendrecv(var,subtime)
+    !
+    ! arguments
+    real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:,1:)
+    real(8),intent(inout),optional :: subtime
+    !
+    ! logical data
+    integer,save :: nx,mx
+    integer :: ncou,ierr,j,k
+    real(8),allocatable,dimension(:,:,:,:,:),save :: sbufx1,sbufx2,rbufx1,rbufx2, &
+                                                     sbufy1,sbufy2,rbufy1,rbufy2, &
+                                                     sbufz1,sbufz2,rbufz1,rbufz2
+    real(8) :: time_beg
+    logical,save :: firstcall=.true.
+    !
+    if(present(subtime)) time_beg=ptime()
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! buf1: send buffer
+    ! buf2: send buffer
+    ! buf1: redevice buffer
+    ! buf2: redevice buffer
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(lio) print*,' ** 1'
+    if(firstcall) then
+      !
+      nx=size(var,4)
+      mx=size(var,5)
+      allocate( sbufx1(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
+                sbufx2(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
+                rbufx1(1:hm, 0:jm,0:km,1:nx,1:mx),                        &
+                rbufx2(-hm:-1,0:jm,0:km,1:nx,1:mx) )
+      allocate( sbufy1(0:im,1:hm, 0:km,1:nx,1:mx),                        &
+                sbufy2(0:im,1:hm, 0:km,1:nx,1:mx),                        &
+                rbufy1(0:im,1:hm, 0:km,1:nx,1:mx),                        &
+                rbufy2(0:im,-hm:-1,0:km,1:nx,1:mx) )
+      allocate( sbufz1(0:im,0:jm, 1:hm,1:nx,1:mx),                      &
+                sbufz2(0:im,0:jm, 1:hm,1:nx,1:mx),                      &
+                rbufz1(0:im,0:jm, 1:hm,1:nx,1:mx),                      &
+                rbufz2(0:im,0:jm,-hm:-1,1:nx,1:mx) )
+      firstcall=.false.
+      !
+    endif
+    if(lio) print*,' ** 2'
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    if(isize==1) then
+      !
+    else
+      !
+      ncou=(jm+1)*(km+1)*nx*mx*hm
+      !
+      !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        ! pack the left send buffer
+        sbufx1(1:hm,0:jm,0:km,:,:)=var(1:hm,0:jm,0:km,:,:)
+      endif
+      if(mpiright .ne. MPI_PROC_NULL) then
+        ! pack the right send bufxfer
+        sbufx2(1:hm,0:jm,0:km,:,:)=var(im-hm:im-1,0:jm,0:km,:,:)
+      endif
+      !
+      if(lio) print*,' ** 3'
+      ! Message passing
+      call mpi_sendrecv(sbufx1,ncou,mpi_real8,mpileft, mpitag,            &
+                        rbufx1,ncou,mpi_real8,mpiright,mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      if(lio) print*,' ** 4'
+      mpitag=mpitag+1
+      call mpi_sendrecv(sbufx2,ncou,mpi_real8,mpiright,mpitag,            &
+                        rbufx2,ncou,mpi_real8,mpileft, mpitag,            &
+                                               mpi_comm_world,status,ierr)
+      if(lio) print*,' ** 5'
+      mpitag=mpitag+1
+      !
+      if(mpiright .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from right
+        var(im+1:im+hm,0:jm,0:km,:,:)=rbufx1(1:hm,0:jm,0:km,:,:)
+        !
+      end if
+        !
+      if(mpileft .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from left
+        var(-hm:-1,0:jm,0:km,:,:)=rbufx2(-hm:-1,0:jm,0:km,:,:)
+        !
+      end if
+      !
+      if(lio) print*,' ** 6'
+    endif
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Finish message pass in i direction.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(jsize==1 .and. ljhomo) then
+      !
+      if(ja==0) then 
+        do j=-hm,hm
+          var(0:im,j,0:km,:,:)=var(0:im,0,0:km,:,:)
+        enddo
+      else
+        var(0:im, -hm:-1   ,0:km,:,:)=var(0:im,jm-hm:jm-1,0:km,:,:)
+        var(0:im,jm+1:jm+hm,0:km,:,:)=var(0:im,    1:hm,  0:km,:,:)
+      endif
+      !  
+    else
+      if(lio) print*,' ** 7'
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(km+1)*nx*mx*hm
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! pack the upper send bufyfer
+        sbufy1(0:im,1:hm,0:km,:,:)=var(0:im,1:hm,0:km,:,:)
+      endif
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! pack the down send bufyfer
+        sbufy2(0:im,1:hm,0:km,:,:)=var(0:im,jm-hm:jm-1,0:km,:,:)
+      end if
+      !
+      if(lio) print*,' ** 8'
+      ! Message passing
+      call mpi_sendrecv(sbufy1,ncou,mpi_real8,mpidown,mpitag,             &
+                        rbufy1,ncou,mpi_real8,mpiup,  mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      if(lio) print*,' ** 9'
+      call mpi_sendrecv(sbufy2,ncou,mpi_real8,mpiup,  mpitag,             &
+                        rbufy2,ncou,mpi_real8,mpidown,mpitag,             &
+                                               mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      if(lio) print*,' ** 10'
+      !
+      if(mpiup .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from up
+        var(0:im,jm+1:jm+hm,0:km,:,:)=rbufy1(0:im,1:hm,0:km,:,:)
+        !
+      endif
+      !
+      if(mpidown .ne. MPI_PROC_NULL) then
+        ! unpack the received the packet from down
+        var(0:im,-hm:-1,0:km,:,:)=rbufy2(0:im,-hm:-1,0:km,:,:) 
+        !
+      end if
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+      if(lio) print*,' ** 11'
+    if(ksize==1 .and. lkhomo) then
+      !
+      if(ka==0) then
+        do k=-hm,hm
+          var(0:im,0:jm,k,:,:)=var(0:im,0:jm,0,:,:)
+        enddo
+      else
+        var(0:im,0:jm, -hm:-1   ,:,:)=var(0:im,0:jm,km-hm:km-1,:,:)
+        var(0:im,0:jm,km+1:km+hm,:,:)=var(0:im,0:jm,    1:hm,  :,:)
+      endif
+      !             
+    else
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ncou=(im+1)*(jm+1)*nx*mx*hm
+      !
+      if(lio) print*,' ** 12'
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        ! pack the back send bufzfer
+        sbufz1(0:im,0:jm,1:hm,:,:)=var(0:im,0:jm,1:hm,:,:)
+      endif
+      if(mpifront .ne. MPI_PROC_NULL) then
+        ! pack the front send bufzfer
+        sbufz2(0:im,0:jm,1:hm,:,:)=var(0:im,0:jm,km-hm:km-1,:,:)
+      endif
+      !
+      if(lio) print*,' ** 13'
+      ! Message passing
+      call mpi_sendrecv(sbufz1,ncou,mpi_real8,mpiback, mpitag,          &
+                        rbufz1,ncou,mpi_real8,mpifront,mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      if(lio) print*,' ** 14'
+      call mpi_sendrecv(sbufz2,ncou,mpi_real8,mpifront,mpitag,          &
+                        rbufz2,ncou,mpi_real8,mpiback, mpitag,          &
+                                             mpi_comm_world,status,ierr)
+      mpitag=mpitag+1
+      if(lio) print*,' ** 15'
+      !
+      if(mpifront .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet from front
+        var(0:im,0:jm,km+1:km+hm,:,:)=rbufz1(0:im,0:jm,1:hm,:,:)
+        !
+      end if
+      !
+      if(mpiback .ne. MPI_PROC_NULL) then
+        !
+        ! unpack the received the packet back
+        var(0:im,0:jm,-hm:-1,:,:)=rbufz2(0:im,0:jm,-hm:-1,:,:)
+        !
+      end if
+      !
+      if(lio) print*,' ** 16'
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Finish message pass in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
+    return
+    !
+  end subroutine yflux_sendrecv
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is used to swap q and update the flow variables.  |
   !| The flow variables at interfaces are also synchronized.           |

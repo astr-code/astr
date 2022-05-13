@@ -68,7 +68,7 @@ module mainloop
       !
       time_beg=ptime()
       !
-      if(lcracon) call crashcheck
+      call crashcheck
       !
       if(rkscheme=='rk3') then
         call rk3
@@ -268,7 +268,7 @@ module mainloop
     real(8),save :: rkcoe(3,3)
     integer :: nrk,i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
-    real(8),allocatable :: qsave(:,:,:,:)
+    real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
     real(8) :: hrr,time_beg_2
     !
@@ -300,11 +300,11 @@ module mainloop
       rkcoe(2,3)=num2d3
       rkcoe(3,3)=num2d3
       !
+      allocate(qsave(0:im,0:jm,0:km,1:numq))
+      !
       firstcall=.false.
       !
     endif
-    !
-    allocate(qsave(0:im,0:jm,0:km,1:numq))
     !
     do nrk=1,3
       !
@@ -341,12 +341,14 @@ module mainloop
       endif
       !
       do m=1,numq
+        !
         q(0:im,0:jm,0:km,m)=rkcoe(1,nrk)*qsave(0:im,0:jm,0:km,m)+      &
                             rkcoe(2,nrk)*q(0:im,0:jm,0:km,m)*          &
                                      jacob(0:im,0:jm,0:km)+            &
                             rkcoe(3,nrk)*qrhs(0:im,0:jm,0:km,m)*deltat
         !
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+        !
       enddo
       !
       ctime(14)=ctime(14)+ptime()-time_beg_2
@@ -366,7 +368,7 @@ module mainloop
 #ifdef COMB
       if(nrk==3) then
         !
-				time_beg_2=ptime()
+        time_beg_2=ptime()
         !
         do i=0,im 
         do j=0,jm
@@ -454,8 +456,6 @@ module mainloop
     !
     enddo !rk
     !
-    deallocate(qsave)
-    !
     ctime(3)=ctime(3)+ptime()-time_beg
     !
 #ifdef COMB
@@ -465,6 +465,8 @@ module mainloop
     endif
     !
 #endif
+    !
+    ! call mpistop
     !
     return
     !
@@ -496,7 +498,7 @@ module mainloop
     use bc,       only : boucon,immbody
     !
     !
-    ! logical data
+    ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(2,4)
     integer :: nrk,i,j,k,m
@@ -603,7 +605,7 @@ module mainloop
   subroutine rkfirst
     !
     use commvar,  only : lavg,lwslic,lwsequ,feqavg,feqchkpt,feqwsequ,  &
-                         feqslice
+                         feqslice,iomode
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
     use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
                          nxtchkpt,nxtwsequ
@@ -645,18 +647,28 @@ module mainloop
     endif
     !
     ! time to write checkpoint
-    if(nstep==nxtchkpt) then
+    if(iomode == 'n') then
       !
-      ! the checkpoint and flowfield may be writen in the same time
-      call writechkpt(nxtwsequ,ctime(6))
+      continue
+      !
+    else
+      !
+      if(nstep==nxtchkpt) then
+        !
+        ! the checkpoint and flowfield may be writen in the same time
+        call writechkpt(nxtwsequ,ctime(6))
+        !
+      endif
+      !
+      if(lwsequ .and. nstep==nxtwsequ) then
+        !
+        call writeflfed(ctime(6))
+        !
+      endif
       !
     endif
     !
-    if(lwsequ .and. nstep==nxtwsequ) then
-      !
-      call writeflfed(ctime(6))
-      !
-    endif
+    return
     !
   end subroutine rkfirst
   !+-------------------------------------------------------------------+
@@ -737,16 +749,20 @@ module mainloop
     !
     if(ltocrash) then
       !
-      if(lio) print*,' !! COMPUTATION CRASHED !!'
-      if(lio) print*,' !! FETCH AN BAKUP FLOW FIELD !!'
+      if(lcracon) then
+        if(lio) print*,' !! COMPUTATION CRASHED !!'
+        if(lio) print*,' !! FETCH AN BAKUP FLOW FIELD !!'
+        !
+        call databakup('recovery')
+        ! call readcheckpoint(folder='bakup')
+        !
+        loop_counter=0
+      else
+        if(lio) print*,' !! COMPUTATION CRASHED, JOB STOPS !!'
+        call mpistop
+      endif
       !
-      call databakup('recovery')
-      ! call readcheckpoint(folder='bakup')
-      !
-      loop_counter=0
-      !
-      ! call mpistop
-    else
+    elseif(lcracon) then
       !
       ! if not crash, backup data
       !

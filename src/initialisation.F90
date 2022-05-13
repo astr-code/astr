@@ -101,6 +101,8 @@ module initialisation
           call h2supersonicini
         case('tgvflame')
           call tgvflameini
+        case('rti')
+          call rtini
         case default
           print*,trim(flowtype)
           stop ' !! flowtype not defined @ flowinit'
@@ -131,7 +133,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    call writeflfed
+    ! call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -704,6 +706,51 @@ module initialisation
   end subroutine tgvini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine tgvini.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of Rayleigh–Taylor instability.                        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 27-May-2020: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  subroutine rtini
+    !
+    use commarray,only: x,vel,rho,prs,tmp
+    use fludyna,  only: thermal,sos
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      if(x(i,j,k,2)<0.5d0) then
+        rho(i,j,k)=2.d0
+        prs(i,j,k)=2.d0*x(i,j,k,2)+1.d0
+      else
+        rho(i,j,k)=1.d0
+        prs(i,j,k)=x(i,j,k,2)+1.5d0
+      endif
+      !
+      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+      !
+      vel(i,j,k,1)=  0.d0
+      vel(i,j,k,2)= -0.025*sos(tmp(i,j,k))*cos(8.d0*pi*x(i,j,k,1))
+      vel(i,j,k,3)=  0.d0
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D R–T instability initialised.'
+    !
+  end subroutine rtini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine rtini.                                  |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -1665,7 +1712,7 @@ module initialisation
     ! local data
     integer :: i,j,k,jspc
     real(8) :: miu,xc,yc,zc,xloc,l_0,xwid,specr(num_species), &
-      specp(num_species),prgvar
+      specp(num_species),prgvar,cpe,kama
     !
     tinf=300.d0
     xloc=xmax/2.d0
@@ -1675,14 +1722,14 @@ module initialisation
     uinf=40.d0
     roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
     !
-    ! call tranco(tmp=tinf,mu=miu,den=roinf,spc=specr)
-    ! if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
-    !
     ! nonpremixed reactants include fuel and oxidizer
     specr(:)=0.d0
     specr(spcindex('H2'))=0.0556 
     specr(spcindex('O2'))=0.233  
     specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama,spc=specp)
+    if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
     !
     do k=0,km
     do j=0,jm

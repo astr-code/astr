@@ -263,7 +263,9 @@ module solver
     if(diffterm) call diffrsdcal6(subtime=ctime(10))
     !
     if(trim(flowtype)=='channel') then 
-      call srcchan
+      call src_chan
+    elseif(trim(flowtype)=='rti') then 
+      call src_rti
     endif
     !
 #ifdef COMB
@@ -298,7 +300,7 @@ module solver
   !| -------------                                                     |
   !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine srcchan
+  subroutine src_chan
     !
     use commvar,  only : force,im,jm,km
     use parallel, only : psum 
@@ -356,9 +358,41 @@ module solver
     end do
     end do
     !
-  end subroutine srcchan
+  end subroutine src_chan
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine source1.                                |
+  !| The end of the subroutine src_chan.                               |
+  !+-------------------------------------------------------------------+
+  !!
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine add gravity effect to the Rayleigh–Taylor         |
+  !| instability                                                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-05-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine src_rti
+    !
+    use commvar,  only : im,jm,km
+    use commarray,only : rho,vel,qrhs,jacob
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*jacob(i,j,k)
+      !
+      qrhs(i,j,k,5)=qrhs(i,j,k,5)+rho(i,j,k)*vel(i,j,k,2)*jacob(i,j,k)
+    end do
+    end do
+    end do
+    !
+  end subroutine src_rti
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine src_rti.                                |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -373,7 +407,7 @@ module solver
   subroutine srccomb(subtime)
     !
     use commvar,  only : im,jm,km,numq,num_species,odetype,lcomb
-    use commarray,only : qrhs,rho,tmp,spc
+    use commarray,only : qrhs,rho,tmp,spc,jacob
     use thermchem,only : chemrate,wirate
     use parallel, only : ptime 
     !
@@ -391,7 +425,7 @@ module solver
       do j=0,jm
       do i=0,im
         call chemrate(den=rho(i,j,k),tmp=tmp(i,j,k),spc=spc(i,j,k,:))
-        qrhs(i,j,k,6:numq)=qrhs(i,j,k,6:numq)+wirate(:)
+        qrhs(i,j,k,6:numq)=qrhs(i,j,k,6:numq)+wirate(:)*jacob(i,j,k)
       enddo
       enddo 
       enddo
@@ -519,6 +553,8 @@ module solver
         else
           hdiss=crinod(i,j,k) .or. crinod(i+1,j,k)
         endif
+        !
+        ! hdiss=.true.
         !
         if(lchardecomp) then
           !
@@ -700,6 +736,8 @@ module solver
           hdiss=crinod(i,j,k) .or. crinod(i,j+1,k)
         endif
         !
+        ! hdiss=.true.
+        !
         if(lchardecomp) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
@@ -872,6 +910,8 @@ module solver
           hdiss=crinod(i,j,k) .or. crinod(i,j,k+1)
         endif
         !
+        ! hdiss=.true.
+        !
         if(lchardecomp) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
@@ -1001,7 +1041,7 @@ module solver
                         recon_schem,lchardecomp,conschm
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
     use fludyna,  only: sos
-    use commfunc, only: recons
+    use commfunc, only: recons,mp5
     use thermchem,only: aceval
     use riemann,  only: flux_steger_warming
     !
@@ -1141,21 +1181,21 @@ module solver
         !
         do m=1,numq
           !
-          var1=fhcpc(m)
-          var2=fhcmc(m)
+          ! var1=fhcpc(m)
+          ! var2=fhcmc(m)
           !
-          ! if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
-          !   var1=fhcpc(m)
-          !   var2=fhcmc(m)
-          ! elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
-          !   var1=fhcpc(m)
-          !   var2=fhcmc(m)
-          ! else
-          !   !
-          !   var1=mp5(flcp(m,1:5),fhcpc(m))
-          !   var2=mp5(flcm(m,1:5),fhcmc(m))
-          !   !
-          ! endif
+          if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          else
+            !
+            var1=mp5(flcp(m,1:5),fhcpc(m),discont=.false.)
+            var2=mp5(flcm(m,1:5),fhcmc(m),discont=.false.)
+            !
+          endif
           !
           Fhc(m)=var1+var2
           !
@@ -1310,19 +1350,19 @@ module solver
         !
         do m=1,5
           !
-          var1=fhcpc(m)
-          var2=fhcmc(m)
+          ! var1=fhcpc(m)
+          ! var2=fhcmc(m)
           !
-          ! if((npdcj==1 .and. j==0)    .or.(npdcj==2 .and. j==jm-1)) then
-          !   var1=fhcpc(m)
-          !   var2=fhcmc(m)
-          ! elseif((npdcj==1 .and. j==1).or.(npdcj==2 .and. j==jm-2)) then
-          !   var1=fhcpc(m)
-          !   var2=fhcmc(m)
-          ! else
-          !   var1=mp5(flcp(m,1:5),fhcpc(m))
-          !   var2=mp5(flcm(m,1:5),fhcmc(m))
-          ! endif
+          if((npdcj==1 .and. j==0)    .or.(npdcj==2 .and. j==jm-1)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          elseif((npdcj==1 .and. j==1).or.(npdcj==2 .and. j==jm-2)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          else
+            var1=mp5(flcp(m,1:5),fhcpc(m),discont=.false.)
+            var2=mp5(flcm(m,1:5),fhcmc(m),discont=.false.)
+          endif
           !
           Fhc(m)=var1+var2
           !
@@ -1479,19 +1519,19 @@ module solver
         !
         do m=1,5
           !
-          var1=fhcpc(m)
-          var2=fhcmc(m)
+          ! var1=fhcpc(m)
+          ! var2=fhcmc(m)
           !
-          ! if((npdck==1 .and. k==0)    .or.(npdck==2 .and. k==km-1)) then
-          !   var1=fhcpc(m)
-          !   var2=fhcmc(m)
-          ! elseif((npdck==1 .and. k==1).or.(npdck==2 .and. k==km-2)) then
-          !   var1=fhcpc(m)
-          !   var2=fhcmc(m)
-          ! else
-          !   var1=mp5(flcp(m,1:5),fhcpc(m))
-          !   var2=mp5(flcm(m,1:5),fhcmc(m))
-          ! endif
+          if((npdck==1 .and. k==0)    .or.(npdck==2 .and. k==km-1)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          elseif((npdck==1 .and. k==1).or.(npdck==2 .and. k==km-2)) then
+            var1=fhcpc(m)
+            var2=fhcmc(m)
+          else
+            var1=mp5(flcp(m,1:5),fhcpc(m),discont=.false.)
+            var2=mp5(flcm(m,1:5),fhcmc(m),discont=.false.)
+          endif
           !
           Fhc(m)=var1+var2
           !
@@ -2090,6 +2130,7 @@ module solver
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
     use tecio
+    use parallel,  only : yflux_sendrecv
 #ifdef COMB
     use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
 #endif
@@ -2100,8 +2141,8 @@ module solver
     ! local data
     integer :: i,j,k,n,ncolm,jspc,idir
     real(8),allocatable :: df(:,:),ff(:,:)
-    real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux,dkflux,doflux
-    real(8),allocatable,dimension(:,:,:,:,:) :: yflux
+    real(8),allocatable,dimension(:,:,:,:),  save :: sigma,qflux,dkflux,doflux
+    real(8),allocatable,dimension(:,:,:,:,:),save :: yflux
     real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
@@ -2110,31 +2151,44 @@ module solver
     real(8) :: corrdiff,hispec(num_species),xi(num_species),cpe,kama, &
                gradyi(num_species),sum1,sum2,mw
     real(8),allocatable :: dfu(:)
+    logical,save :: firstcall=.true.
     !
     real(8) :: time_beg
     !
     if(present(subtime)) time_beg=ptime() 
     !
-    allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
-              qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    if(firstcall) then
+      allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
+                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    endif
     !
     sigma =0.d0
     qflux =0.d0
     !
     if(num_species>0) then
-      allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
-      if(nondimen) allocate(dfu(1:num_species))
       !
+      if(firstcall) then
+        allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
+      endif
+      !
+      if(nondimen) allocate(dfu(1:num_species))
       yflux=0.d0
+      !
     endif
     !
     if(trim(turbmode)=='k-omega') then
-      allocate( dkflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),             &
-                doflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+      !
+      if(firstcall) then
+        allocate( dkflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),             &
+                  doflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+      endif
+      !
       dkflux=0.d0
       doflux=0.d0
       !
     endif
+    !
+    if(firstcall) firstcall=.false.
     !
     if(trim(turbmode)=='k-omega') call src_komega
     !
@@ -2160,6 +2214,7 @@ module solver
           if(.not.allocated(dispec)) allocate(dispec(num_species,1))
           call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
                       spc=spc(i,j,k,:),rhodi=dispec(:,1))
+          ! print*,' ** miu=',miu,'cp=',cpe,'kamma=',kama,'rhodi=',dispec(:,1)
         end select
 #endif
         !
@@ -2308,6 +2363,7 @@ module solver
     !
     if(num_species>0) then
       call dataswap(yflux,subtime=ctime(7))
+      ! call yflux_sendrecv(yflux,subtime=ctime(7))
     endif
     !
     if(trim(turbmode)=='k-omega') then
@@ -2368,15 +2424,15 @@ module solver
       !+------------------------------+
       !
       qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(is:ie,2)
-      ! qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,3)
-      ! qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
-      ! qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
-      !
-      ! if(num_species>0) then
-      !   do jspc=6,5+num_species
-      !     qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(is:ie,jspc)
-      !   enddo
-      ! endif
+      qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,3)
+      qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
+      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
+      
+      if(num_species>0) then
+        do jspc=6,5+num_species
+          qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(is:ie,jspc)
+        enddo
+      endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
@@ -2441,15 +2497,15 @@ module solver
       !+------------------------------+
       !
       qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(js:je,2)
-      ! qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,3)
-      ! qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,4)
-      ! qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
-      !
-      ! if(num_species>0) then
-      !   do jspc=6,5+num_species
-      !     qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(js:je,jspc)
-      !   enddo
-      ! endif
+      qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,3)
+      qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,4)
+      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
+      
+      if(num_species>0) then
+        do jspc=6,5+num_species
+          qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(js:je,jspc)
+        enddo
+      endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
@@ -2542,11 +2598,13 @@ module solver
       !!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    deallocate(sigma,qflux)
-    !
-    if(num_species>0) deallocate(yflux)
-    if(trim(turbmode)=='k-omega') deallocate(dkflux,doflux)
-    
+    ! if(allocated(sigma))  deallocate(sigma)
+    ! if(allocated(qflux))  deallocate(qflux)
+    ! if(allocated(dkflux)) deallocate(dkflux)
+    ! if(allocated(doflux)) deallocate(doflux)
+    ! if(allocated(yflux))  deallocate(yflux)
+    if(allocated(dispec)) deallocate(dispec)
+    if(allocated(dfu))    deallocate(dfu)
     !
     if(present(subtime)) subtime=subtime+ptime()-time_beg
     !

@@ -379,6 +379,10 @@ module bc
         call outflow(n)
       endif
       !
+      if(bctype(n)==31) then
+        call fixbc(n)
+      endif
+      !
     enddo
     !
     ! if(present(subtime)) time_beg=ptime()
@@ -1038,72 +1042,72 @@ module bc
       !
     endif
     !
-    if(ndir==3 .and. jrk==0) then
-      !
-      if(lfirstcal) then
-        !
-        call alloinflow(ndir)
-        !
-        if(trim(flowtype)=='jet') then
-          call jetinflow
-        else
-          call freestreaminflow
-        endif
-        !
-        lfirstcal=.false.
-        !
-      endif
-      !
-      i=0
-      do k=0,km
-      do j=0,jm
-        !
-        css=sos(tmp(i,j,k))
-        ub =vel(i,j,k,1)
-        !
-        if(ub>=css) then
-          ! supersonic inlet
-          !
-          vel(i,j,k,:)=vel_in(j,k,:)
-          tmp(i,j,k)  =tmp_in(j,k)
-          prs(i,j,k)  =prs_in(j,k)
-          rho(i,j,k)  =rho_in(j,k)
-          !
-          spc(i,j,k,:)=spc_in(j,k,:)
-          !
-        elseif(ub<css .and. ub>=0.d0) then
-          ! subsonic inlet
-          ue  =extrapolate(vel(i+1,j,k,1),vel(i+2,j,k,1),dv=0.d0)
-          pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),  dv=0.d0)
-          roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),  dv=0.d0)
-          ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
-          !
-          vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
-          vel(i,j,k,2)=vel_in(j,k,2)
-          vel(i,j,k,3)=vel_in(j,k,3)
-          prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
-          rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
-          !
-          tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          !
-          spc(i,j,k,:)=spc_in(j,k,:)
-          !
-          ! print*,vel_in(j,k,1),rho(i,j,k)
-          !
-        else
-          stop ' !! velocity at inflow error 2 !! @ inflow'
-        endif
-        !
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                    species=spc(i,j,k,:)                               )
-        !
-        qrhs(i,j,k,:)=0.d0
-        !
-      enddo
-      enddo
-      !
-    endif
+    ! if(ndir==3 .and. jrk==0) then
+    !   !
+    !   if(lfirstcal) then
+    !     !
+    !     call alloinflow(ndir)
+    !     !
+    !     if(trim(flowtype)=='jet') then
+    !       call jetinflow
+    !     else
+    !       call freestreaminflow
+    !     endif
+    !     !
+    !     lfirstcal=.false.
+    !     !
+    !   endif
+    !   !
+    !   i=0
+    !   do k=0,km
+    !   do j=0,jm
+    !     !
+    !     css=sos(tmp(i,j,k))
+    !     ub =vel(i,j,k,1)
+    !     !
+    !     if(ub>=css) then
+    !       ! supersonic inlet
+    !       !
+    !       vel(i,j,k,:)=vel_in(j,k,:)
+    !       tmp(i,j,k)  =tmp_in(j,k)
+    !       prs(i,j,k)  =prs_in(j,k)
+    !       rho(i,j,k)  =rho_in(j,k)
+    !       !
+    !       spc(i,j,k,:)=spc_in(j,k,:)
+    !       !
+    !     elseif(ub<css .and. ub>=0.d0) then
+    !       ! subsonic inlet
+    !       ue  =extrapolate(vel(i+1,j,k,1),vel(i+2,j,k,1),dv=0.d0)
+    !       pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),  dv=0.d0)
+    !       roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),  dv=0.d0)
+    !       ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
+    !       !
+    !       vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
+    !       vel(i,j,k,2)=vel_in(j,k,2)
+    !       vel(i,j,k,3)=vel_in(j,k,3)
+    !       prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
+    !       rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
+    !       !
+    !       tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+    !       !
+    !       spc(i,j,k,:)=spc_in(j,k,:)
+    !       !
+    !       ! print*,vel_in(j,k,1),rho(i,j,k)
+    !       !
+    !     else
+    !       stop ' !! velocity at inflow error 2 !! @ inflow'
+    !     endif
+    !     !
+    !     call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+    !                velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+    !                 species=spc(i,j,k,:)                               )
+    !     !
+    !     qrhs(i,j,k,:)=0.d0
+    !     !
+    !   enddo
+    !   enddo
+    !   !
+    ! endif
     !
     ! call mpistop
     !
@@ -4536,7 +4540,7 @@ module bc
     endif
     !
   end subroutine slipisotwall
-
+  !
   subroutine slipadibwall(ndir)
     !
     use commvar,   only : Reynolds,turbmode,lreport
@@ -4970,6 +4974,104 @@ module bc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to apply a fixed b.c.                          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-05-2022: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine fixbc(ndir)
+    !
+    use fludyna, only : fvar2q,thermal
+    !
+    ! arguments
+    integer,intent(in) :: ndir
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    if(ndir==1 .and. irk==0) then
+      !
+      i=0
+      !
+      do k=0,km
+      do j=0,jm
+      enddo
+      enddo
+      !
+    elseif(ndir==2 .and. irk==irkm) then
+      !
+      i=im
+      !
+      do k=0,km
+      do j=0,jm
+      enddo
+      enddo
+      !
+    elseif(ndir==3 .and. jrk==0) then
+      !
+      j=0
+      !
+      do k=0,km
+      do i=0,im
+        !
+        rho(i,j,k)  =2.d0
+        vel(i,j,k,:)=0.d0
+        prs(i,j,k)  =1.d0
+        !
+        tmp(i,j,k)  =thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k)         )
+        !
+      enddo
+      enddo
+      !
+    elseif(ndir==4 .and. jrk==jrkm) then
+      !
+      j=jm
+      !
+      do k=0,km
+      do i=0,im
+        !
+        rho(i,j,k)  =1.d0
+        vel(i,j,k,:)=0.d0
+        prs(i,j,k)  =2.5d0
+        !
+        tmp(i,j,k)  =thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k)         )
+        !
+      enddo
+      enddo
+      !
+    elseif(ndir==5 .and. krk==0) then
+      !
+      k=0
+      !
+      do j=0,jm
+      do i=0,im
+      enddo
+      enddo
+      !
+    elseif(ndir==6 .and. krk==krkm) then
+      !
+      k=km
+      !
+      do j=0,jm
+      do i=0,im
+      enddo
+      enddo
+      !
+    endif
+    !
+  end subroutine fixbc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine fixbc.                                  |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to obtain the inlet flow for jet.              |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -5384,9 +5486,83 @@ module bc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gcnscbc.                                |
   !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is a templet of designing b.c.                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-05-2022: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine bc_template(ndir)
     !
-  !
-  !
+    ! arguments
+    integer,intent(in) :: ndir
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    if(ndir==1 .and. irk==0) then
+      !
+      i=0
+      !
+      do k=0,km
+      do j=0,jm
+      enddo
+      enddo
+      !
+    elseif(ndir==2 .and. irk==irkm) then
+      !
+      i=im
+      !
+      do k=0,km
+      do j=0,jm
+      enddo
+      enddo
+      !
+    elseif(ndir==3 .and. jrk==0) then
+      !
+      j=0
+      !
+      do k=0,km
+      do i=0,im
+      enddo
+      enddo
+      !
+    elseif(ndir==4 .and. jrk==jrkm) then
+      !
+      j=jm
+      !
+      do k=0,km
+      do i=0,im
+      enddo
+      enddo
+      !
+    elseif(ndir==5 .and. krk==0) then
+      !
+      k=0
+      !
+      do j=0,jm
+      do i=0,im
+      enddo
+      enddo
+      !
+    elseif(ndir==6 .and. krk==krkm) then
+      !
+      k=km
+      !
+      do j=0,jm
+      do i=0,im
+      enddo
+      enddo
+      !
+    endif
+    !
+  end subroutine bc_template
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine bc_template.                            |
+  !+-------------------------------------------------------------------+
+  !!
 end module bc
 !+---------------------------------------------------------------------+
 !| The end of the module bc.                                           |

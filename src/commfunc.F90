@@ -87,7 +87,8 @@ module commfunc
         fc=SUW3(f(3:5))
       end select
       !
-    elseif((ntype==1 .and. inode==2).or.(ntype==2 .and. inode==dim-3)) then
+    else
+    ! elseif((ntype==1 .and. inode==2).or.(ntype==2 .and. inode==dim-3)) then
       !
       select case(reschem)
       case(-1)
@@ -111,29 +112,29 @@ module commfunc
         stop
       end select
       !
-    else
-      !
-      select case(reschem)
-      case(-1)
-        fc=f(4)
-      case(0)
-        fc=suw7(f(1:7))
-      case(1)
-        fc=weno7(f(1:7))
-      case(2)
-        fc=weno7z(f(1:7))
-      case(3)
-        fc=mp7(f(1:7))
-      ! case(4)
-      !   call weno7sym(f(1:8),var1)
-      case(5)
-        fc=mp7ld(f(1:8),bfacmpld,shock,solid)
-      case(6) !xi
-        fc=round(f(3:5))
-      case default
-        print*,' !! 2 Reconstruction scheme not defined @ recons_exp !!'
-        stop
-      end select
+    ! else
+    !   !
+    !   select case(reschem)
+    !   case(-1)
+    !     fc=f(4)
+    !   case(0)
+    !     fc=suw7(f(1:7))
+    !   case(1)
+    !     fc=weno7(f(1:7))
+    !   case(2)
+    !     fc=weno7z(f(1:7))
+    !   case(3)
+    !     fc=mp7(f(1:7))
+    !   ! case(4)
+    !   !   call weno7sym(f(1:8),var1)
+    !   case(5)
+    !     fc=mp7ld(f(1:8),bfacmpld,shock,solid)
+    !   case(6) !xi
+    !     fc=round(f(3:5))
+    !   case default
+    !     print*,' !! 2 Reconstruction scheme not defined @ recons_exp !!'
+    !     stop
+    !   end select
       !
     endif
     !
@@ -3603,14 +3604,16 @@ module commfunc
   ! Schemes with Runge¨CKutta Time Stepping, J. C. P., 1997, 136: 83¨C99
   ! .
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  pure function MP5(u,ul)  result(uh)
+  pure function MP5(u,ul,discont)  result(uh)
     !
     real(8),intent(in) :: u(1:5)
     real(8),intent(in),optional :: ul
+    logical,intent(in),optional :: discont
     real(8) :: uh
     !
     real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
     real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+    logical :: lskt
     !
     if(present(ul)) then
       ulinear=ul
@@ -3618,13 +3621,19 @@ module commfunc
       ulinear=(2.d0*u(1)-13.d0*u(2)+47.d0*u(3)+27.d0*u(4)-3.d0*u(5))/60.d0
     endif
     !
+    if(present(discont)) then
+      lskt=discont
+    else
+      lskt=.true.
+    endif
+    !
     var1=u(4)-u(3)
     var2=4.d0*(u(3)-u(2))
     uMP=u(3)+minmod2(var1,var2)
     !
     var1=(ulinear-u(3))*(ulinear-uMP)
-    if(var1>=1.d-10) then
-    !if(switch(i)) then
+    if(lskt .and. var1>=1.d-10) then
+      !
       dm1=u(1)-2.d0*u(2)+u(3)
       d0= u(2)-2.d0*u(3)+u(4)
       d1= u(3)-2.d0*u(4)+u(5)
@@ -3757,7 +3766,8 @@ module commfunc
     uMP=u(3)+minmod2(var1,var2)
     !
     var1=(ulinear-u(3))*(ulinear-uMP)
-    if(lskt) then
+    ! if(lskt) then
+    if(var1>=1.d-10) then
       dm1=u(1)-2.d0*u(2)+u(3)
       d0= u(2)-2.d0*u(3)+u(4)
       d1= u(3)-2.d0*u(4)+u(5)

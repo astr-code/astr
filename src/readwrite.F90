@@ -175,6 +175,8 @@ module readwrite
         typedefine='                     a supersonic H2 flame'
       case('tgvflame')
         typedefine='                 Taylor-Green Vortex flame'
+      case('rti')
+        typedefine='               Rayleigh–Taylor instability'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'
@@ -381,6 +383,8 @@ module readwrite
           write(*,'(39X,I0,2(A))')bctype(n),' nscbc outflow at: ',bcdir(n)
         elseif(bctype(n)==23) then
           write(*,'(36X,I0,2(A))')bctype(n),' gc-nscbc outflow at: ',bcdir(n)
+        elseif(bctype(n)==31) then
+          write(*,'(36X,I0,2(A))')bctype(n),'       fixed b.c. at: ',bcdir(n)
         else
           print*,n,bctype(n)
           stop ' !! BC not defined !!'
@@ -416,6 +420,8 @@ module readwrite
         write(*,'(35X,A)')'                stream output'
       elseif(iomode=='h') then
         write(*,'(35X,A)')'            structured output'
+      elseif(iomode=='n') then
+        write(*,'(35X,A)')'                    no output'
       else
         print*,' !! ERROR in defining iomode: ',iomode
         stop

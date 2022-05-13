@@ -55,12 +55,14 @@ module gridgeneration
         call gridcube(0.5d-2,0.05d-3,0.d0)
       elseif(trim(flowtype)=='h2supersonic') then
         call gridsupersonicjet
+      elseif(trim(flowtype)=='rti') then
+        call gridcube(0.25d0,1.d0,0.d0)
       else
         print*,trim(flowtype),' is not defined @ gridgen'
         stop ' !! error at gridgen' 
       endif
       !
-      call writegrid
+      ! call writegrid
       !
     endif
     !
