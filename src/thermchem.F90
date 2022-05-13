@@ -1455,50 +1455,33 @@ module thermchem
     integer :: js
     real(8) :: lamocp
     !
-    if(.true. .and. ctrflag) then
+    call setState_TRY(mixture,tmp,den,spc(:))
+    !
+    if(present(lam)) lam=thermalConductivity(mixture)
+    !
+    if(present(mu)) mu=viscosity(mixture)
+    !
+    if(present(cp)) cp=cp_mass(mixture)
+    !
+    if(present(rhodi) .or. present(rhodij)) then
       !
-      call setState_TRY(mixture,tmp,den,spc(:))
-      !
-      lam=thermalConductivity(mixture)
-      !
-      if(present(rhodi) .or. present(rhodij)) then
+      select case(tranmod)
         !
-        select case(tranmod)
+        case('mixav')
+          call getMixDiffCoeffs(mixture,rhodi(:))
+          rhodi(:)=den*rhodi(:)
           !
-          case('mixav')
-            call getMixDiffCoeffs(mixture,rhodi(:))
-            rhodi(:)=den*rhodi(:)
-            !
-          case('multi')
-            do js=1,num_species
-              call getMultiDiffCoeffs(mixture,js,rhodij(js,:))
-              rhodij(js,:)=den*rhodij(js,:)
-            enddo
-            !
-          case default
-            ! call cpeval(tmp=tmp,spc=spc,cp=cp)
-            cp=cp_mass(mixture)
-            rhodi(:)=lam/cp*olewis(:)
-            !
-        end select
-        !
-      endif
-      !
-    else
-      !
-      lamocp=alamda*exp(rlamda*log(tmp))
-      !
-      call cpeval(tmp=tmp,spc=spc,cp=cp)
-      !
-      if(present(mu)) mu=lamocp*prandtl
-      !
-      if(present(lam)) lam=lamocp*cp
-      !
-      if(present(rhodi)) then
-        do js=1,num_species
-          rhodi(js)=lamocp*olewis(js)
-        enddo
-      endif
+        case('multi')
+          do js=1,num_species
+            call getMultiDiffCoeffs(mixture,js,rhodij(js,:))
+            rhodij(js,:)=den*rhodij(js,:)
+          enddo
+          !
+        case default
+          ! 
+          rhodi(:)=thermalConductivity(mixture) &
+                    /cp_mass(mixture)*olewis(:)
+      end select
       !
     endif
     !

@@ -1712,14 +1712,14 @@ module initialisation
     ! local data
     integer :: i,j,k,jspc
     real(8) :: miu,xc,yc,zc,xloc,l_0,xwid,specr(num_species), &
-      specp(num_species),prgvar,cpe,kama
+      specp(num_species),prgvar
     !
     tinf=300.d0
     xloc=xmax/2.d0
     xwid=xmax/8.d0
     !
     l_0=xmax/(2.d0*pi)
-    uinf=40.d0
+    uinf=4.d0
     roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
     !
     ! nonpremixed reactants include fuel and oxidizer
@@ -1728,8 +1728,9 @@ module initialisation
     specr(spcindex('O2'))=0.233  
     specr(spcindex('N2'))=1.d0-sum(specr)
     !
-    call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama,spc=specp)
-    if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+    call tranco(den=roinf,tmp=tinf,mu=miu,spc=spcinf)
+    if(lio) print*, &
+      ' ** nu=',miu/roinf,'Re=',roinf*uinf*xmax/miu,'pinf=',pinf
     !
     do k=0,km
     do j=0,jm
