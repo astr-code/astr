@@ -205,6 +205,21 @@ module parallel
         stop
       end if
       !
+      if(ndims==3 .and. mpisize<8) then
+        print*,' !! minimal 8 ranks required for 3-D simulations'
+        stop
+      endif
+      !
+      if(ndims==2 .and. mpisize<4) then
+        print*,' !! minimal 4 ranks required for 2-D simulations'
+        stop
+      endif
+      !
+      if(ndims==1 .and. mpisize<2) then
+        print*,' !! minimal 2 ranks required for 1-D simulations'
+        stop
+      endif
+      !
       n=0
       do i=1,mpisize
         !
