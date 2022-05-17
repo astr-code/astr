@@ -4235,6 +4235,7 @@ module bc
               nmod_t=0
               nmod_z=0
             endif
+            !
           endif
           !
           call bcast(wallamplit,comm=mpi_jmin)

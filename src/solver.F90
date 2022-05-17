@@ -244,12 +244,17 @@ module solver
         call convrsdcal6(subtime=ctime(9))
       else
         !
-        if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
-        !
         if(conschm(4:4)=='e') then
+          !
+          if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
+          !
           call convrsduwd(subtime=ctime(9))
         elseif(conschm(4:4)=='c') then
+          !
+          if(lchardecomp) call ducrossensor(ctime(12))
+          !
           call convrsdcmp(subtime=ctime(9))
+          !
         else
           stop ' !! error @ conschm'
         endif
@@ -1039,10 +1044,8 @@ module solver
     use commvar,  only: im,jm,km,hm,numq,                              &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
                         recon_schem,lchardecomp,conschm
-    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
-    use fludyna,  only: sos
-    use commfunc, only: recons,mp5
-    use thermchem,only: aceval
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lshock,crinod
+    use commfunc, only: recons,mplimiter
     use riemann,  only: flux_steger_warming
     !
     ! arguments
@@ -1061,7 +1064,11 @@ module solver
     !
     real(8) :: time_beg
     !
+    logical :: lsh,sson,hdiss
+    !
     if(present(subtime)) time_beg=ptime() 
+    !
+    sson=allocated(lshock)
     !
     eps=0.04d0
     gm2=0.5d0/gamma
@@ -1179,21 +1186,43 @@ module solver
         !
         ! Calculating values at i+1/2 using shock-capturing scheme.
         !
+        if(sson) then
+          !
+          if(i<0) then
+            lsh=lshock(i+1,j,k)
+          elseif(i+1>im) then
+            lsh=lshock(i,j,k)
+          else
+            lsh=lshock(i,j,k) .or. lshock(i+1,j,k)
+          endif
+          !
+        else
+          !
+          lsh=.true.
+          !
+        endif
+        !
+        if(i<0) then
+          hdiss=crinod(i+1,j,k)
+        elseif(i+1>im) then
+          hdiss=crinod(i,j,k)
+        else
+          hdiss=crinod(i,j,k) .or. crinod(i+1,j,k)
+        endif
+        !
         do m=1,numq
           !
-          ! var1=fhcpc(m)
-          ! var2=fhcmc(m)
-          !
-          if((npdci==1 .and. i==0)    .or.(npdci==2 .and. i==im-1)) then
-            var1=fhcpc(m)
-            var2=fhcmc(m)
-          elseif((npdci==1 .and. i==1).or.(npdci==2 .and. i==im-2)) then
-            var1=fhcpc(m)
-            var2=fhcmc(m)
+          if(hdiss) then
+            !
+            var1=flcp(m,4)
+            var2=flcm(m,4)
+            !
           else
             !
-            var1=mp5(flcp(m,1:5),fhcpc(m),discont=.false.)
-            var2=mp5(flcm(m,1:5),fhcmc(m),discont=.false.)
+            var1=mplimiter(flcp(m,1:5),fhcpc(m),shock=lsh,inode=i,   &
+                                                   dim=im,ntype=npdci)
+            var2=mplimiter(flcm(m,1:5),fhcmc(m),shock=lsh,inode=i,   &
+                                                   dim=im,ntype=npdci)
             !
           endif
           !
@@ -1326,7 +1355,7 @@ module solver
             !
             fhcpc(6:numq)=fhcp(j,6:numq)
             fhcmc(6:numq)=fhcm(j,6:numq)
-            !=
+            !
           endif
           ! End of characteristic decomposition.
           !
@@ -1348,20 +1377,42 @@ module solver
         !
         ! Calculating values at j+1/2 using shock-capturing scheme.
         !
+        if(sson) then
+          !
+          if(j<0) then
+            lsh=lshock(i,j+1,k)
+          elseif(j+1>jm) then
+            lsh=lshock(i,j,k)
+          else
+            lsh=lshock(i,j,k) .or. lshock(i,j+1,k)
+          endif
+          !
+        else
+          lsh=.true.
+        endif
+        !
+        if(j<0) then
+          hdiss=crinod(i,j+1,k)
+        elseif(j+1>jm) then
+          hdiss=crinod(i,j,k)
+        else
+          hdiss=crinod(i,j,k) .or. crinod(i,j+1,k)
+        endif
+        !
         do m=1,5
           !
-          ! var1=fhcpc(m)
-          ! var2=fhcmc(m)
-          !
-          if((npdcj==1 .and. j==0)    .or.(npdcj==2 .and. j==jm-1)) then
-            var1=fhcpc(m)
-            var2=fhcmc(m)
-          elseif((npdcj==1 .and. j==1).or.(npdcj==2 .and. j==jm-2)) then
-            var1=fhcpc(m)
-            var2=fhcmc(m)
+          if(hdiss) then
+            !
+            var1=flcp(m,4)
+            var2=flcm(m,4)
+            !
           else
-            var1=mp5(flcp(m,1:5),fhcpc(m),discont=.false.)
-            var2=mp5(flcm(m,1:5),fhcmc(m),discont=.false.)
+            !
+            var1=mplimiter(flcp(m,1:5),fhcpc(m),shock=lsh,inode=j,   &
+                                                   dim=jm,ntype=npdcj)
+            var2=mplimiter(flcm(m,1:5),fhcmc(m),shock=lsh,inode=j,   &
+                                                   dim=jm,ntype=npdcj)
+            !
           endif
           !
           Fhc(m)=var1+var2
@@ -1517,20 +1568,42 @@ module solver
         !
         ! Calculating values at k+1/2 using shock-capturing scheme.
         !
+        if(sson) then
+          !
+          if(k<0) then
+            lsh=lshock(i,j,k+1)
+          elseif(k+1>km) then
+            lsh=lshock(i,j,k)
+          else
+            lsh=lshock(i,j,k) .or. lshock(i,j,k+1)
+          endif
+          !
+        else
+          lsh=.true.
+        endif
+        !
+        if(k<0) then
+          hdiss=crinod(i,j,k+1)
+        elseif(k+1>km) then
+          hdiss=crinod(i,j,k)
+        else
+          hdiss=crinod(i,j,k) .or. crinod(i,j,k+1)
+        endif
+        !
         do m=1,5
           !
-          ! var1=fhcpc(m)
-          ! var2=fhcmc(m)
-          !
-          if((npdck==1 .and. k==0)    .or.(npdck==2 .and. k==km-1)) then
-            var1=fhcpc(m)
-            var2=fhcmc(m)
-          elseif((npdck==1 .and. k==1).or.(npdck==2 .and. k==km-2)) then
-            var1=fhcpc(m)
-            var2=fhcmc(m)
+          if(hdiss) then
+            !
+            var1=flcp(m,4)
+            var2=flcm(m,4)
+            !
           else
-            var1=mp5(flcp(m,1:5),fhcpc(m),discont=.false.)
-            var2=mp5(flcm(m,1:5),fhcmc(m),discont=.false.)
+            !
+            var1=mplimiter(flcp(m,1:5),fhcpc(m),shock=lsh,inode=k,   &
+                                                   dim=km,ntype=npdck)
+            var2=mplimiter(flcm(m,1:5),fhcmc(m),shock=lsh,inode=k,   &
+                                                   dim=km,ntype=npdck)
+            !
           endif
           !
           Fhc(m)=var1+var2

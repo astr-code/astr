@@ -190,6 +190,35 @@ module commfunc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This function is to apply the MP limiter to reconstructured       |
+  !| interface value                                                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-05-2022  | Created by J. Fang @ Warrington.                    |
+  !+-------------------------------------------------------------------+
+  pure function mplimiter(f,fl,shock,inode,dim,ntype)  result(fc)
+    !
+    real(8),intent(in) :: f(1:5),fl
+    integer,intent(in) :: inode,dim,ntype
+    logical,intent(in) :: shock
+    real(8) :: fc
+    !
+    if((ntype==1 .and. inode==0) .or. (ntype==2 .and. inode==dim-1) .or. &
+       (ntype==1 .and. inode==1) .or. (ntype==2 .and. inode==dim-2) ) then
+      fc=fl
+    else
+      fc=mp5(f,fl,discont=shock)
+    endif
+    !
+    return
+    !
+  end function mplimiter
+  !+-------------------------------------------------------------------+
+  !| The end of the function mplimiter.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This function is to return the finite-difference value of a input |
   !| function.                                                         |
   !+-------------------------------------------------------------------+
