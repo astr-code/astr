@@ -1194,7 +1194,8 @@ module thermchem
     ! local data
     real(8) :: cpcmix,gamrgc
     !
-    call cpeval(tmp=tmp,spc=spc,cp=cpcmix)
+    call setState_TPY(mixture,tmp,prefgb,spc(:))
+    cpcmix=cp_mass(mixture)
     !
     gamrgc=rgcmix(spc)*cpcmix/(cpcmix-rgcmix(spc))
     !
@@ -1350,15 +1351,6 @@ module thermchem
     it=1
     !
     species: do is=1,num_species
-      !
-      ! if(is==1 .and. .not.(lctr_cp)) then
-      !   do jt=1,ntint(is)
-      !     if(tmp>tinthi(ntint(is),is)) then
-      !       print*,' !! Error - CP Temperature out of bound!!, T =',tmp
-      !     endif
-      !     if(tmp>tinthi(jt,is)) it=it+1
-      !   enddo
-      ! endif
       !
       if(present(cp)) then
         !

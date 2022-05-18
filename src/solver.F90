@@ -2196,7 +2196,7 @@ module solver
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,num_modequ,        &
                           reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode,nondimen,schmidt
+                          turbmode,nondimen,schmidt,nstep,deltat,flowtype
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
     use commfunc,  only : ddfc
@@ -2430,6 +2430,8 @@ module solver
     enddo !j
     enddo !i
     !
+    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    !
     call dataswap(sigma,subtime=ctime(7))
     !
     call dataswap(qflux,subtime=ctime(7))
@@ -2444,6 +2446,8 @@ module solver
       !
       call dataswap(doflux,subtime=ctime(7))
     endif
+    !
+    if(present(subtime)) time_beg=ptime() 
     !
     ! Calculating along i direction.
     !
@@ -2499,7 +2503,7 @@ module solver
       qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(is:ie,2)
       qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,3)
       qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
-      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
+      if(flowtype=='tgvflame' .and. nstep*deltat>2.d-5)qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
       
       if(num_species>0) then
         do jspc=6,5+num_species
@@ -2572,7 +2576,7 @@ module solver
       qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(js:je,2)
       qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,3)
       qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,4)
-      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
+      if(flowtype=='tgvflame' .and. nstep*deltat>2.d-5)qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
       
       if(num_species>0) then
         do jspc=6,5+num_species
@@ -2647,7 +2651,7 @@ module solver
         qrhs(i,j,ks:ke,2)=qrhs(i,j,ks:ke,2)+df(ks:ke,2)
         qrhs(i,j,ks:ke,3)=qrhs(i,j,ks:ke,3)+df(ks:ke,3)
         qrhs(i,j,ks:ke,4)=qrhs(i,j,ks:ke,4)+df(ks:ke,4)
-        qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(ks:ke,5)
+        if(flowtype=='tgvflame' .and. nstep*deltat>2.d-5) qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(ks:ke,5)
         !
         if(num_species>0) then
           do jspc=6,5+num_species
