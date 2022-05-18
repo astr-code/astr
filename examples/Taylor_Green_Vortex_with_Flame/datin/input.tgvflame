@@ -6,7 +6,7 @@
 tgvflame
 
 # im,jm,km                                              : The size of grid.
-64,64,64
+128,128,128
 
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 t,t,t
@@ -24,7 +24,7 @@ f
 273.15d0, 1600.d0, 0.1d0
 
 # conschm,difschm,rkscheme,odetype                      : Numerical scheme
-742e, 642c, rk3, rk3  
+642c, 642c, rk3, rk3  
 
 # recon_schem, lchardecomp,bfacmpld,shkcrt              : Parameters for upwind-biased scheme
 5, f, 0.3d0, 0.05d0
