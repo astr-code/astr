@@ -2503,7 +2503,9 @@ module solver
       qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(is:ie,2)
       qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,3)
       qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
-      if(flowtype=='tgvflame' .and. nstep*deltat>2.d-5)qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
+      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
+      ! freeze energy flux for startup
+      if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(is:ie,j,k,5)=0.d0
       
       if(num_species>0) then
         do jspc=6,5+num_species
@@ -2576,7 +2578,9 @@ module solver
       qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(js:je,2)
       qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(js:je,3)
       qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(js:je,4)
-      if(flowtype=='tgvflame' .and. nstep*deltat>2.d-5)qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
+      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(js:je,5)
+      ! freeze energy flux for startup
+      if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(i,js:je,k,5)=0.d0
       
       if(num_species>0) then
         do jspc=6,5+num_species
@@ -2651,7 +2655,9 @@ module solver
         qrhs(i,j,ks:ke,2)=qrhs(i,j,ks:ke,2)+df(ks:ke,2)
         qrhs(i,j,ks:ke,3)=qrhs(i,j,ks:ke,3)+df(ks:ke,3)
         qrhs(i,j,ks:ke,4)=qrhs(i,j,ks:ke,4)+df(ks:ke,4)
-        if(flowtype=='tgvflame' .and. nstep*deltat>2.d-5) qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(ks:ke,5)
+        qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(ks:ke,5)
+        ! freeze energy flux for startup
+        if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(i,j,ks:ke,5)=0.d0
         !
         if(num_species>0) then
           do jspc=6,5+num_species

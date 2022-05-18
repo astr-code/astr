@@ -515,7 +515,7 @@ module statistic
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','wallheatflux','wrms'
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-                  .or.flowtype=='h2supersonic') then
+              .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame') then
             write(hand_fs,"(2(A10,1X),5(A12,1X))") &
               'nstep','clock','time','maxT','maxU','maxRho','maxHRR'
           else
