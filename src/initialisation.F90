@@ -133,7 +133,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
+    call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -1758,7 +1758,7 @@ module initialisation
       ! |--CANTERA--|
       call setState_TPY(mixture,tmp(i,j,k),prs(i,j,k),spc(i,j,k,:))
       call equilibrate(mixture,'HP')
-      tmp(i,j,k)=temperature(mixture)
+      tmp(i,j,k)=tinf+(temperature(mixture)-tinf)*1.35d0
       call getMassFractions(mixture,specp(:))
       spc(i,j,k,:)=specp(:)
       !
