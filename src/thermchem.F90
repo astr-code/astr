@@ -509,7 +509,7 @@ module thermchem
     !
 #ifdef COMB
     ! local data
-    ! integer :: js,icp,jcp,kcp,jr,istr1,istr2,ks
+    integer :: js,icp,jcp,kcp,jr,istr1,istr2,ks
     ! real(8) :: ttemp(5),fornow,ttold(5)
     ! character*132 char132
     ! character*10 char10
@@ -517,18 +517,18 @@ module thermchem
     ! character*4 char4
     ! character*1 char1
     ! !
-    ! open(16,file=filename)
-    ! !
-    ! ! SPECIES LIST, 43 char length per line
-    ! write(16,'(A)')' +------------ Chemical Data -------------+'
-    ! write(16,'(A,I5,A18)')' Number of species:',num_species,''
-    ! write(16,'(A7,3X,A7,3X,A8,4X,A9,A2)') &
-    ! ' Index','Species','Mol.Mass','Lewis No.',''
-    ! do js=1,num_species
-    !   write(16,'(A2,I5,3X,A7,3X,1PE9.3,3X,1PE9.3,A2)') &
-    !   ' ',js,spcsym(js),wmolar(js),clewis(js),''
-    ! enddo
-    ! !
+    open(16,file=filename)
+    !
+    ! SPECIES LIST, 43 char length per line
+    write(16,'(A)')' +------------ Chemical Data -------------+'
+    write(16,'(A,I5,A18)')' Number of species:',num_species,''
+    write(16,'(A7,3X,A7,3X,A8,4X,A9,A2)') &
+    ' Index','Species','Mol.Mass','Lewis No.',''
+    do js=1,num_species
+      write(16,'(A2,I5,3X,A7,3X,1PE9.3,3X,1PE9.3,A2)') &
+      ' ',js,spcsym(js),wmolar(js),clewis(js),''
+    enddo
+    !
     ! write(16,*)
     ! !THERMODYNAMIC DATA
     ! write(16,'(A,A14)')' Species thermodynamic data:',''
@@ -778,7 +778,9 @@ module thermchem
     ! write(16,'(A)')' End of chemical data'
     ! write(16,'(A)')' +----------------------------------------+'
     ! !
-    ! close(16)
+    close(16)
+    !
+    print*,' << ',filename
     !
 #endif
     !
