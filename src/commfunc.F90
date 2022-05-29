@@ -87,8 +87,8 @@ module commfunc
         fc=SUW3(f(3:5))
       end select
       !
-    else
-    ! elseif((ntype==1 .and. inode==2).or.(ntype==2 .and. inode==dim-3)) then
+    ! else
+    elseif((ntype==1 .and. inode==2).or.(ntype==2 .and. inode==dim-3)) then
       !
       select case(reschem)
       case(-1)
@@ -112,29 +112,29 @@ module commfunc
         stop
       end select
       !
-    ! else
-    !   !
-    !   select case(reschem)
-    !   case(-1)
-    !     fc=f(4)
-    !   case(0)
-    !     fc=suw7(f(1:7))
-    !   case(1)
-    !     fc=weno7(f(1:7))
-    !   case(2)
-    !     fc=weno7z(f(1:7))
-    !   case(3)
-    !     fc=mp7(f(1:7))
-    !   ! case(4)
-    !   !   call weno7sym(f(1:8),var1)
-    !   case(5)
-    !     fc=mp7ld(f(1:8),bfacmpld,shock,solid)
-    !   case(6) !xi
-    !     fc=round(f(3:5))
-    !   case default
-    !     print*,' !! 2 Reconstruction scheme not defined @ recons_exp !!'
-    !     stop
-    !   end select
+    else
+      !
+      select case(reschem)
+      case(-1)
+        fc=f(4)
+      case(0)
+        fc=suw7(f(1:7))
+      case(1)
+        fc=weno7(f(1:7))
+      case(2)
+        fc=weno7z(f(1:7))
+      case(3)
+        fc=mp7(f(1:7))
+      ! case(4)
+      !   call weno7sym(f(1:8),var1)
+      case(5)
+        fc=mp7ld(f(1:8),bfacmpld,shock,solid)
+      case(6) !xi
+        fc=round(f(3:5))
+      case default
+        print*,' !! 2 Reconstruction scheme not defined @ recons_exp !!'
+        stop
+      end select
       !
     endif
     !
