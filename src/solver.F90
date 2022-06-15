@@ -2414,7 +2414,7 @@ module solver
                   yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
                                           -corrdiff
                   !energy flux due to species diffusion
-                  qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+                  qflux(i,j,k,idir)=qflux(i,j,k,idir)+yflux(i,j,k,jspc,idir)*hispec(jspc)
                 enddo
                 !
             end select
