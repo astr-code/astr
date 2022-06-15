@@ -162,7 +162,7 @@ module parallel
   subroutine mpisizedis
     !
     logical :: lallo
-    integer :: nfactor(1:30)
+    integer :: nfactor(1:mpisize)
     integer :: i,j,k,n,n1,n2,n3,nsize,kaa
     integer(8) :: nvar1,nvar2,nvar3
     !
