@@ -46,7 +46,7 @@ module initialisation
     !
     if(lrestart) then
       !
-      call readcheckpoint(folder='checkpoint',mode='h')
+      call readcheckpoint(folder='outdat',mode='h')
       !
       call updateq
       !
@@ -1758,14 +1758,14 @@ module initialisation
       ! |--CANTERA--|
       call setState_TPY(mixture,tmp(i,j,k),prs(i,j,k),spc(i,j,k,:))
       call equilibrate(mixture,'HP')
-      tmp(i,j,k)=tinf+(temperature(mixture)-tinf)*1.35d0
+      tmp(i,j,k)=tinf+(temperature(mixture)-tinf)!*1.35d0
       call getMassFractions(mixture,specp(:))
       spc(i,j,k,:)=specp(:)
       !
       rho(i,j,k)=thermal(temperature=tmp(i,j,k),pressure=prs(i,j,k), &
                           species=spc(i,j,k,:))
       ! set velocity and scale vx 
-      vel(i,j,k,1)= uinf*sin(xc/l_0)*cos(yc/l_0)*cos(zc/l_0)*roinf/rho(i,j,k)
+      vel(i,j,k,1)= uinf*sin(xc/l_0)*cos(yc/l_0)*cos(zc/l_0)!*roinf/rho(i,j,k)
       vel(i,j,k,2)=-uinf*cos(xc/l_0)*sin(yc/l_0)*cos(zc/l_0)
       vel(i,j,k,3)= 0.d0
       !
