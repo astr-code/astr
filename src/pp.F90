@@ -27,7 +27,8 @@ module pp
     use cmdefne
     !
     ! local data
-    character(len=64) :: cmd,casefolder,inputfile,outputfile
+    character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
+                         flowfieldfile
     !
     call readkeyboad(cmd)
     print*,' ** pp command: ',cmd
@@ -57,6 +58,15 @@ module pp
     elseif(trim(cmd)=='parinfo') then
       !
       call parallelifogen
+      !
+    elseif(trim(cmd)=='view') then
+      !
+      call readkeyboad(flowfieldfile)
+      call readkeyboad(outputfile)
+      call readkeyboad(viewmode)
+      call readkeyboad(inputfile)
+      !
+      call fieldview(trim(flowfieldfile),trim(outputfile),trim(viewmode),trim(inputfile))
       !
     else
       stop ' !! pp command not defined. @ ppentrance'
@@ -1817,7 +1827,7 @@ module pp
   !+-------------------------------------------------------------------+
   !| This function is to generate a  4-digit NACA airfoil.             |
   !+-------------------------------------------------------------------+
-  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil                   |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -1889,6 +1899,81 @@ module pp
   end subroutine naca4digit
   !+-------------------------------------------------------------------+
   !| The end of the subroutine naca4digit.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to view flow by postprocess data.                |
+  !+-------------------------------------------------------------------+
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine fieldview(flowfile,outputfile,viewmode,inputfile)
+    !
+    use hdf5io
+    use tecio
+    use WriteVTK
+    !
+    ! arguments
+    character(len=*),intent(in) :: flowfile,outputfile,viewmode,inputfile
+    !
+    ! local data
+    integer :: im,jm,km
+    logical :: lihomo,ljhomo,lkhomo
+    real(8) :: ref_t,reynolds,mach
+    character(len=32) :: gridfile
+    !
+    real(8),allocatable,dimension(:,:) :: x_2d,y_2d,z_2d,ro_2d,u_2d,   &
+                                          v_2d,w_2d,p_2d,t_2d
+    real(8),allocatable,dimension(:,:,:) :: x,y,z,ro,u,v,w,p,t
+    !
+    print*,' ==========================readinput=========================='
+    !
+    open(11,file=inputfile,form='formatted',status='old')
+    read(11,'(///////)')
+    read(11,*)im,jm,km
+    read(11,"(/)")
+    read(11,*)lihomo,ljhomo,lkhomo
+    read(11,'(//////////)')
+    read(11,*)ref_t,reynolds,mach
+    read(11,'(///////////////////////////)')
+    read(11,'(A)')gridfile
+    close(11)
+    print*,' >> ',inputfile
+    !
+    print*,' ** grid file: ',trim(gridfile)
+    !
+    if(viewmode=='xy') then
+      allocate(x_2d(0:im,0:jm),y_2d(0:im,0:jm))
+      call H5ReadSubset(x_2d,im,jm,km,'x',gridfile,kslice=0)
+      call H5ReadSubset(y_2d,im,jm,km,'y',gridfile,kslice=0)
+      !
+      allocate(ro_2d(0:im,0:jm),u_2d(0:im,0:jm), v_2d(0:im,0:jm),      &
+                w_2d(0:im,0:jm),p_2d(0:im,0:jm), t_2d(0:im,0:jm)       )
+      !
+      call h5_read2dfrom3d(ro_2d,im,jm,km,'ro',flowfile,kslice=0)
+      call h5_read2dfrom3d( u_2d,im,jm,km,'u1',flowfile,kslice=0)
+      call h5_read2dfrom3d( v_2d,im,jm,km,'u2',flowfile,kslice=0)
+      call h5_read2dfrom3d( w_2d,im,jm,km,'u3',flowfile,kslice=0)
+      call h5_read2dfrom3d( p_2d,im,jm,km, 'p',flowfile,kslice=0)
+      call h5_read2dfrom3d( t_2d,im,jm,km, 't',flowfile,kslice=0)
+      !
+      call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+                                     v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
+       ! call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+       !                                   v_2d,'v',p_2d,'p',t_2d,'t')
+    elseif(viewmode=='3d') then
+      allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+    else
+      print*,viewmode
+      stop ' !! mode is not defined @ fieldview'
+    endif
+    !
+  end subroutine fieldview
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine flowfieldview.                          |
   !+-------------------------------------------------------------------+
   !
 end module pp

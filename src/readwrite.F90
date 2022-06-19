@@ -970,7 +970,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*17)
+          open(fh(n),file=trim(filename),access='direct',recl=8*4)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1026,8 +1026,9 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
-                               tmp(i,j,k),dvel(i,j,k,:,:)
+        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
+        !                        tmp(i,j,k),dvel(i,j,k,:,:)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
       enddo
@@ -1682,35 +1683,35 @@ module readwrite
       enddo
     endif
     !
-    ! if(allocated(ssf)) then
-    !   call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km))
-    ! endif
-    ! if(allocated(lshock)) then
-    !   allocate(rshock(0:im,0:jm,0:km))
-    !   allocate(rcrinod(0:im,0:jm,0:km))
-    !   do k=0,km
-    !   do j=0,jm
-    !   do i=0,im
-    !     !
-    !     if(lshock(i,j,k)) then
-    !       rshock(i,j,k)=1.d0
-    !     else
-    !       rshock(i,j,k)=0.d0
-    !     endif
-    !     !
-    !     if(crinod(i,j,k)) then
-    !       rcrinod(i,j,k)=1.d0
-    !     else
-    !       rcrinod(i,j,k)=0.d0
-    !     endif
-    !     !
-    !   enddo
-    !   enddo
-    !   enddo
-    !   !
-    !   call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
-    !   call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km))
-    ! endif
+    if(allocated(ssf)) then
+      call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km),mode=iomode)
+    endif
+    if(allocated(lshock)) then
+      allocate(rshock(0:im,0:jm,0:km))
+      allocate(rcrinod(0:im,0:jm,0:km))
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(lshock(i,j,k)) then
+          rshock(i,j,k)=1.d0
+        else
+          rshock(i,j,k)=0.d0
+        endif
+        !
+        if(crinod(i,j,k)) then
+          rcrinod(i,j,k)=1.d0
+        else
+          rcrinod(i,j,k)=0.d0
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+      call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km),mode=iomode)
+      call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km),mode=iomode)
+    endif
     !
     if(trim(turbmode)=='k-omega') then
       call h5write(varname='k',     var=tke(0:im,0:jm,0:km),mode=iomode)

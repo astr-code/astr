@@ -42,6 +42,7 @@ module hdf5io
     module procedure h5_readarray1d
     module procedure h5_read1rl8
     module procedure h5_read1int
+    module procedure h5_readarray3d
     !
   end Interface h5sread
   !
@@ -54,6 +55,14 @@ module hdf5io
     module procedure h5_writearray3d
     !
   end Interface h5srite
+  !
+  Interface H5ReadSubset
+    !
+    module procedure h5_read2dfrom3d
+    module procedure h5_read1dfrom3d
+    module procedure h5_read1dfrom2d
+    !
+  end Interface H5ReadSubset
   !
 #ifdef HDF5
   integer(hid_t) :: h5file_id
@@ -1326,4 +1335,282 @@ module hdf5io
   !| This end of the subroutine h5_readarray1d.                        |
   !+-------------------------------------------------------------------+
   !
+  subroutine h5_readarray3d(varin,vname,dim1,dim2,dim3,fname,explicit)
+    !
+    integer :: dim1,dim2,dim3
+    real(8) :: varin(0:dim1,0:dim2,0:dim3)
+    character(len=*),intent(in) :: vname,fname
+    logical,intent(in), optional:: explicit
+    logical :: lexplicit
+    !
+    !
+    integer(hid_t) :: file_id
+    ! file identifier
+    integer(hid_t) :: dset_id1
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(3)
+    !
+    if (present(explicit)) then
+       lexplicit = explicit
+    else
+       lexplicit = .true.
+    end if
+    !
+    call h5open_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 1'
+    !
+    call h5fopen_f(fname,h5f_acc_rdwr_f,file_id,h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 2'
+
+    ! open an existing dataset.
+    call h5dopen_f(file_id,vname,dset_id1,h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 3'
+    !
+    dimt=(/dim1+1,dim2+1,dim3+1/)
+    !
+    ! read the dataset.
+    call h5dread_f(dset_id1,h5t_native_double,varin,dimt,h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 4'
+    !
+    ! close the dataset
+    call h5dclose_f(dset_id1, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 5'
+    ! close the file.
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 6'
+    !
+    ! close fortran interface.
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_readarray3d 7'
+    !
+    if(lexplicit) print*,' >> ',vname,' from ',fname,' ... done'
+    !
+  end subroutine h5_readarray3d
+  !
+  !+-------------------------------------------------------------------+
+  !| this subroutine is to read a 2D slice from 3D array               |
+  !+-------------------------------------------------------------------+
+  subroutine h5_read2dfrom3d(vread,dim1,dim2,dim3,vname,fname,         &
+                                                   islice,jslice,kslice)
+    !
+    ! argument2
+    integer,intent(in) :: dim1,dim2,dim3
+    real(8),allocatable,intent(out) :: vread(:,:)
+    character(len=*),intent(in) :: vname,fname
+    integer,intent(in),optional :: islice,jslice,kslice
+    !
+    ! local data
+    integer :: error                          ! error flag
+    integer(hid_t) :: file_id                 ! file identifier 
+    integer(hid_t) :: dataspace               ! dataspace identifier 
+    integer(hid_t) :: memspace                ! memspace identifier 
+    integer(hid_t) :: dset_id                 ! dataset identifier 
+    integer :: rank                           ! dataset rank ( in file )
+    integer(hsize_t) :: offset(1:3)           ! hyperslab offset
+    integer(hsize_t) :: dimsm(1:3)            ! dataset dimensions
+    !
+    ! Initialize FORTRAN interface.
+    call h5open_f(error) 
+    !
+    ! Open the file.
+    call h5fopen_f(fname,h5f_acc_rdwr_f,file_id,error)
+    !
+    ! Open the dataset.
+    call h5dopen_f(file_id,vname,dset_id,error)
+    !
+    if(present(islice)) then
+      offset=(/islice,0,0/)
+      dimsm=(/1,dim2+1,dim3+1/)
+      !
+      allocate(vread(0:dim2,0:dim3))
+    elseif(present(jslice)) then
+      offset=(/0,jslice,0/)
+      dimsm=(/dim1+1,1,dim3+1/)
+      !
+      allocate(vread(0:dim1,0:dim3))
+    elseif(present(kslice)) then
+      offset=(/0,0,kslice/)
+      dimsm=(/dim1+1,dim2+1,1/)
+      !
+      allocate(vread(0:dim1,0:dim2))
+    else
+      stop ' !! slice set error !!'
+    endif
+    !
+    rank=3 
+    ! Create memory dataspace.
+    call h5screate_simple_f(rank,dimsm,memspace,error)
+    !
+    ! Get dataset's dataspace identifier and select subset.
+    call h5dget_space_f(dset_id,dataspace,error)
+    call h5sselect_hyperslab_f(dataspace,h5s_select_set_f,offset,dimsm,error) 
+    !
+    call h5dread_f(dset_id,h5t_native_double,vread,dimsm,error,        &
+                   mem_space_id=memspace,file_space_id=dataspace)
+    !
+    call h5sclose_f(dataspace, error)
+    call h5sclose_f(memspace, error)
+    call h5dclose_f(dset_id, error)
+    call h5fclose_f(file_id, error)
+    !
+    ! Close FORTRAN interface.
+    !
+    call h5close_f(error)
+    !
+    if(error==0) then
+      print*,' >> ',vname,' from ',fname,' ... done'
+    else
+      stop ' !! error in h5_read2dfrom3d'
+    endif
+    !
+  end subroutine h5_read2dfrom3d
+  !
+  subroutine h5_read1dfrom3d(vread,dim1,dim2,dim3,vname,fname,         &
+                                                   islice,jslice,kslice)
+    !
+    ! argument2
+    integer,intent(in) :: dim1,dim2,dim3
+    real(8),allocatable,intent(out) :: vread(:)
+    character(len=*),intent(in) :: vname,fname
+    integer,intent(in),optional :: islice,jslice,kslice
+    !
+    ! local data
+    integer :: error                          ! error flag
+    integer(hid_t) :: file_id                 ! file identifier 
+    integer(hid_t) :: dataspace               ! dataspace identifier 
+    integer(hid_t) :: memspace                ! memspace identifier 
+    integer(hid_t) :: dset_id                 ! dataset identifier 
+    integer :: rank                           ! dataset rank ( in file )
+    integer(hsize_t) :: offset(1:3)           ! hyperslab offset
+    integer(hsize_t) :: dimsm(1:3)            ! dataset dimensions
+    !
+    ! Initialize FORTRAN interface.
+    call h5open_f(error) 
+    !
+    ! Open the file.
+    call h5fopen_f(fname,h5f_acc_rdwr_f,file_id,error)
+    !
+    ! Open the dataset.
+    call h5dopen_f(file_id,vname,dset_id,error)
+    !
+    if(present(islice) .and. present(jslice)) then
+      offset=(/islice+1,jslice+1,0/)
+      dimsm=(/1,1,dim3+1/)
+      !
+      allocate(vread(0:dim3))
+    elseif(present(islice) .and. present(kslice)) then
+      offset=(/islice+1,0,kslice+1/)
+      dimsm=(/1,dim2+1,1/)
+      !
+      allocate(vread(0:dim2))
+    elseif(present(jslice) .and. present(kslice)) then
+      offset=(/0,jslice+1,kslice+1/)
+      dimsm=(/dim1+1,1,1/)
+      !
+      allocate(vread(0:dim1))
+    else
+      stop ' !! slice set error !!'
+    endif
+    !
+    rank=3 
+    ! Create memory dataspace.
+    call h5screate_simple_f(rank,dimsm,memspace,error)
+    !
+    ! Get dataset's dataspace identifier and select subset.
+    call h5dget_space_f(dset_id,dataspace,error)
+    call h5sselect_hyperslab_f(dataspace,h5s_select_set_f,offset,dimsm,error) 
+    !
+    call h5dread_f(dset_id,h5t_native_double,vread,dimsm,error,        &
+                   mem_space_id=memspace,file_space_id=dataspace)
+    !
+    call h5sclose_f(dataspace, error)
+    call h5sclose_f(memspace, error)
+    call h5dclose_f(dset_id, error)
+    call h5fclose_f(file_id, error)
+    !
+    ! Close FORTRAN interface.
+    !
+    call h5close_f(error)
+    !
+    if(error==0) then
+      print*,' >> ',vname,' from ',fname,' ... done'
+    else
+      stop ' !! error in h5_read1dfrom3d'
+    endif
+    !
+  end subroutine h5_read1dfrom3d
+
+  subroutine h5_read1dfrom2d(vread,dim1,dim2,vname,fname,islice,jslice)
+    !
+    ! argument2
+    integer,intent(in) :: dim1,dim2
+    real(8),allocatable,intent(out) :: vread(:)
+    character(len=*),intent(in) :: vname,fname
+    integer,intent(in),optional :: islice,jslice
+    !
+    ! local data
+    integer :: error                          ! error flag
+    integer(hid_t) :: file_id                 ! file identifier 
+    integer(hid_t) :: dataspace               ! dataspace identifier 
+    integer(hid_t) :: memspace                ! memspace identifier 
+    integer(hid_t) :: dset_id                 ! dataset identifier 
+    integer :: rank                           ! dataset rank ( in file )
+    integer(hsize_t) :: offset(1:2)           ! hyperslab offset
+    integer(hsize_t) :: dimsm(1:2)            ! dataset dimensions
+    !
+    ! Initialize FORTRAN interface.
+    call h5open_f(error) 
+    !
+    ! Open the file.
+    call h5fopen_f(fname,h5f_acc_rdwr_f,file_id,error)
+    !
+    ! Open the dataset.
+    call h5dopen_f(file_id,vname,dset_id,error)
+    !
+    if(present(islice)) then
+      offset=(/0,jslice+1/)
+      dimsm=(/1,dim2+1/)
+      !
+      allocate(vread(0:dim2))
+    elseif(present(jslice)) then
+      offset=(/islice+1,0/)
+      dimsm=(/dim1+1,1/)
+      !
+      allocate(vread(0:dim1))
+    else
+      stop ' !! slice set error !!'
+    endif
+    !
+    rank=2 
+    ! Create memory dataspace.
+    call h5screate_simple_f(rank,dimsm,memspace,error)
+    !
+    ! Get dataset's dataspace identifier and select subset.
+    call h5dget_space_f(dset_id,dataspace,error)
+    call h5sselect_hyperslab_f(dataspace,h5s_select_set_f,offset,dimsm,error) 
+    !
+    call h5dread_f(dset_id,h5t_native_double,vread,dimsm,error,        &
+                   mem_space_id=memspace,file_space_id=dataspace)
+    !
+    call h5sclose_f(dataspace, error)
+    call h5sclose_f(memspace, error)
+    call h5dclose_f(dset_id, error)
+    call h5fclose_f(file_id, error)
+    !
+    ! Close FORTRAN interface.
+    !
+    call h5close_f(error)
+    !
+    if(error==0) then
+      print*,' >> ',vname,' from ',fname,' ... done'
+    else
+      stop ' !! error in h5_read1dfrom2d'
+    endif
+    !
+  end subroutine h5_read1dfrom2d
+  !+-------------------------------------------------------------------+
+  !! the end of the subroutine h5_read2dfrom3d                         |
+  !+-------------------------------------------------------------------+
+  !!
 end module hdf5io
