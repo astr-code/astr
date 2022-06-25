@@ -394,7 +394,7 @@ module readwrite
       write(*,'(2X,62A)')('-',i=1,62)
       !
       if(limmbou) then
-        write(*,'(2X,A)')'                    *** Solid Body Immersed ***'
+        write(*,'(2X,A)')'                   *** Immersed Boundary ON ***'
         write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
         write(*,'(2X,62A)')('-',i=1,62)
       endif

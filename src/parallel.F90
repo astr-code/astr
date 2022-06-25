@@ -50,6 +50,7 @@ module parallel
   interface psum
     module procedure psum_int
     module procedure psum_int_ary
+    module procedure psum_int_ary2d
     module procedure psum_r8
     module procedure psum_r8_ary
     module procedure psum_r8_ary_2d
@@ -57,6 +58,8 @@ module parallel
   !
   interface pmax
     module procedure pmax_int
+    module procedure pmax_int8
+    module procedure pmax_int8_array1d
     module procedure pmax_r8
   end interface
   !
@@ -82,7 +85,12 @@ module parallel
     module procedure pgather_rel2d_array
     module procedure pgather_int2d_array
     module procedure pgather_int1d_array
+    module procedure pgather_int
     module procedure pgather_cha1_array
+  end interface
+  !
+  interface pswapall
+    module procedure pswapall_int1d_array
   end interface
   !
   interface pscatter
@@ -92,6 +100,10 @@ module parallel
   interface rmdup
      module procedure rmdup_i4
      module procedure rmdup_i4_2d
+  end interface
+  !
+  interface msize
+    module procedure size_integer
   end interface
   !
   integer :: mpirank,mpisize,mpirankmax
@@ -1394,41 +1406,74 @@ module parallel
     integer,intent(in) :: sendtabl(0:),recvtabl(0:)
     !
     ! local data
-    integer :: nvar,ierr,incode,jrank,recvsize,n2size
-    integer,allocatable :: senddispls(:),recvdispls(:),                &
-                           sendtabl2(:),recvtabl2(:)
+    integer :: nvar,ierr,incode,jrank,recvsize,n2size,j
+    integer :: newtype
+    integer,allocatable :: senddispls(:),recvdispls(:)
     !
     ! start
     !
     nvar=1
     !
-    n2size=size(datasend,2)
+    n2size=size(datasend,1)
     !
-    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax),        &
-             sendtabl2(0:mpirankmax),recvtabl2(0:mpirankmax))
+    call mpi_type_contiguous(n2size,mpi_real8,newtype,ierr)
+    call mpi_type_commit(newtype,ierr)
     !
-    sendtabl2=sendtabl*n2size
-    recvtabl2=recvtabl*n2size
+    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax))
+    !
     senddispls=0
     recvdispls=0
     do jrank=1,mpirankmax
-      senddispls(jrank)=senddispls(jrank-1)+sendtabl2(jrank-1)
-      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl2(jrank-1)
+      senddispls(jrank)=senddispls(jrank-1)+sendtabl(jrank-1)
+      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl(jrank-1)
     enddo
     recvsize=recvdispls(mpirankmax)+recvtabl(mpirankmax)
-    allocate(datarecv(recvsize/n2size,n2size))
+    allocate(datarecv(n2size,recvsize))
     !
-    call mpi_alltoallv(datasend, sendtabl2, senddispls, mpi_real8, &
-                       datarecv, recvtabl2, recvdispls, mpi_real8, &
+    call mpi_alltoallv(datasend, sendtabl, senddispls, newtype, &
+                       datarecv, recvtabl, recvdispls, newtype, &
                        mpi_comm_world, ierr)
     !
-    deallocate(senddispls,recvdispls,sendtabl2,recvtabl2)
+    ! do j=1,size(datarecv,1)
+    ! if(mpirank==11) print*,datasend
+    ! enddo
+    !
+    deallocate(senddispls,recvdispls)
     !
   end subroutine updatable_rel2d_a2a_v
   !+-------------------------------------------------------------------+
   !| The end of the subroutine updatable_int.                          |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| this function is to update table based on alltoall mpi            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-Jun-2022  | Created by J. Fang STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  function pswapall_int1d_array(vain) result(vout)
+    !
+    use mpi
+    !
+    integer,intent(in) :: vain(:)
+    integer :: vout(size(vain))
+    !
+    ! local variables
+    integer :: nvar,ierr
+    !
+    nvar=size(vain)
+    !
+    call mpi_alltoall(vain,1,mpi_integer,                   &
+                      vout,1,mpi_integer,mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function pswapall_int1d_array
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pswapall_int1d_array.                   |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is used to gather arraies.                        |
   !+-------------------------------------------------------------------+
@@ -1509,6 +1554,46 @@ module parallel
                         mpi_comm_world, ierr)
     !
   end subroutine pgather_int1d_array
+  !
+  subroutine pgather_int(var,data,mode)
+    !
+    ! arguments
+    integer,intent(in) :: var
+    integer,intent(out),allocatable :: data(:)
+    character(len=*),intent(in),optional :: mode
+    !
+    !
+    ! local data
+    integer :: counts(0:mpirankmax)
+    integer :: ierr,jrank,ncou
+    !
+    call mpi_allgather(var, 1, mpi_integer, counts, 1, mpi_integer,  &
+                       mpi_comm_world, ierr)
+    !
+    if(present(mode) .and. mode=='noneg') then
+      ! only pick >=0 values
+      ncou=0
+      do jrank=0,mpirankmax
+        if(counts(jrank)>=0) then
+          ncou=ncou+1
+        endif
+      enddo
+      !
+      allocate(data(ncou))
+      ncou=0
+      do jrank=0,mpirankmax
+        if(counts(jrank)>=0) then
+          ncou=ncou+1
+          data(ncou)=counts(jrank)
+        endif
+      enddo
+      !
+    else
+      allocate(data(0:mpirankmax))
+      data=counts
+    endif
+    !
+  end subroutine pgather_int
   !
   subroutine pgather_rel2d_array(array,data)
     !
@@ -1841,6 +1926,28 @@ module parallel
     !
   end function psum_int_ary
   !
+  function psum_int_ary2d(var) result(varsum)
+    !
+    ! arguments
+    integer,intent(in) :: var(:,:)
+    integer,allocatable :: varsum(:,:)
+    !
+    ! local data
+    integer :: ierr,nsize1,nsize2,nsize
+    !
+    nsize1=size(var,1)
+    nsize2=size(var,2)
+    nsize=nsize1*nsize2
+    !
+    allocate(varsum(nsize1,nsize2))
+    !
+    call mpi_allreduce(var,varsum,nsize,mpi_integer,mpi_sum,           &
+                                                    mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function psum_int_ary2d
+  !
   real(8) function  psum_r8(var)
     !
     ! arguments
@@ -1919,6 +2026,35 @@ module parallel
                                                     mpi_comm_world,ierr)
     !
   end function pmax_int
+  !
+  integer(8) function  pmax_int8(var)
+    !
+    ! arguments
+    integer(8),intent(in) :: var
+    !
+    ! local data
+    integer :: ierr
+    !
+    call mpi_allreduce(var,pmax_int8,1,mpi_integer8,mpi_max,          &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_int8
+  !
+  function  pmax_int8_array1d(var) result(vout)
+    !
+    ! arguments
+    integer(8),intent(in) :: var(:)
+    integer(8) :: vout(1:size(var))
+    !
+    ! local data
+    integer :: ierr,nsize
+    !
+    nsize=size(var)
+    !
+    call mpi_allreduce(var,vout,nsize,mpi_integer8,mpi_max,          &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_int8_array1d
   !
   real(8) function  pmax_r8(var)
     !
@@ -4535,49 +4671,56 @@ module parallel
     use commtype, only : sboun
     !
     ! arguments
-    integer,intent(in) :: icellin(:,:)
+    integer(8),intent(in) :: icellin(:)
     type(sboun),intent(inout) :: abound(:)
     !
     ! local data
     integer :: ierr,jrank,csize,jb
-    integer,allocatable :: recvbuf(:,:,:),icellout(:,:)
+    integer(8),allocatable :: icellout(:)
     !
-    csize=size(icellin,1)
-    allocate(recvbuf(1:csize,1:3,0:mpirankmax),icellout(1:csize,1:3))
+    csize=size(icellin)
     !
-    call mpi_gather(icellin,csize*3,mpi_integer,                       &
-                    recvbuf,csize*3,mpi_integer, 0 , mpi_comm_world,ierr)
+    allocate(icellout(1:csize))
     !
-    if(mpirank==0) then
-      !
-      do jb=1,csize
-        !
-        do jrank=0,mpirankmax
-          if(recvbuf(jb,1,jrank)>0) then
-            ! the first non-zero element
-            icellout(jb,:)=recvbuf(jb,:,jrank)
-            exit
-          endif
-        enddo
-        !
-        if(jrank==mpirankmax+1) then
-          print*,' ** jrank=',jrank
-          print*,' ** jb=',jb
-          print*,' ** recvbuf(jb,1,:)',recvbuf(jb,1,:)
-          stop ' ERROR 1 @ pcollecicell: all icell is 0'
-        endif
-        !
-      enddo
-      !
-    endif
+    icellout=pmax(icellin)
     !
-    call bcast(icellout)
+    ! allocate(recvbuf(1:csize,1:3,0:mpirankmax),icellout(1:csize,1:3))
+    ! !
+    ! call mpi_gather(icellin,csize*3,mpi_integer,                       &
+    !                 recvbuf,csize*3,mpi_integer, 0 , mpi_comm_world,ierr)
+    ! !
+    ! if(mpirank==0) then
+    !   !
+    !   do jb=1,csize
+    !     !
+    !     do jrank=0,mpirankmax
+    !       if(recvbuf(jb,1,jrank)>0) then
+    !         ! the first non-zero element
+    !         icellout(jb,:)=recvbuf(jb,:,jrank)
+    !         exit
+    !       endif
+    !     enddo
+    !     !
+    !     if(jrank==mpirankmax+1) then
+    !       print*,' ** jrank=',jrank
+    !       print*,' ** jb=',jb
+    !       print*,' ** recvbuf(jb,1,:)',recvbuf(jb,1,:)
+    !       stop ' ERROR 1 @ pcollecicell: all icell is 0'
+    !     endif
+    !     !
+    !   enddo
+    !   !
+    ! endif
+    ! !
+    ! call bcast(icellout)
     !
     do jb=1,csize
-      abound(jb)%icell=icellout(jb,:)
+      call ijk2int8(int8=icellout(jb),i3a=abound(jb)%icell,mode='1>>3')
+      ! abound(jb)%icell=icellout(jb,:)
     enddo
     !
-    deallocate(recvbuf,icellout)
+    ! deallocate(recvbuf,icellout)
+    deallocate(icellout)
     !
     return
     !
@@ -4586,6 +4729,61 @@ module parallel
   !| The end of the subroutine pcollecicell.                           |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to convert three integer4 number to one        |
+  !|  integer4 number                                                  | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 20-06-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine ijk2int8(i,j,k,int8,i3a,mode)
+    !
+    integer(8) :: int8
+    integer,optional :: i,j,k
+    integer,optional :: i3a(3)
+    character(len=*),intent(in) :: mode
+    integer, parameter :: i16 = selected_int_kind(16)
+    !
+    if(mode=='3>>1') then
+      if(present(i) .and. present(j) .and. present(k)) then
+        int8=i+j*1000000+k*1000000000000_i16
+      elseif(present(i3a)) then
+        int8=i3a(1)+i3a(2)*1000000+i3a(3)*1000000000000_i16
+      endif
+    elseif(mode=='1>>3') then
+      if(present(i) .and. present(j) .and. present(k)) then
+        k=int8/1000000000000_i16
+        j=int8/1000000-k*1000000
+        i=int8-k*1000000000000_i16-j*1000000
+      elseif(present(i3a)) then
+        i3a(3)=int8/1000000000000_i16
+        i3a(2)=int8/1000000-i3a(3)*1000000
+        i3a(1)=int8-i3a(3)*1000000000000_i16-i3a(2)*1000000
+      endif
+    else
+      stop ' mode not defined @ ijk2int8'
+    endif
+    !
+  end subroutine ijk2int8
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine ijk2int8.                              |
+  !+-------------------------------------------------------------------+
+  !
+  pure function size_integer(var) result(nsize)
+    !
+    integer,allocatable,intent(in) :: var(:)
+    integer :: nsize
+    !
+    if(allocated(var)) then
+      nsize=size(var)
+    else
+      nsize=0
+    endif
+    !
+    return
+    !
+  end function size_integer
   !
 end module parallel
 !+---------------------------------------------------------------------+

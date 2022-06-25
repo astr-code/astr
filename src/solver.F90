@@ -249,6 +249,7 @@ module solver
           if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
           !
           call convrsduwd(subtime=ctime(9))
+          !
         elseif(conschm(4:4)=='c') then
           !
           if(lchardecomp) call ducrossensor(ctime(12))
@@ -262,6 +263,7 @@ module solver
       endif
       !
     endif !flowtype
+    !
     !
     qrhs=-qrhs
     !
@@ -465,7 +467,7 @@ module solver
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    integer :: i,j,k,iss,iee,jss,jee,kss,kee
+    integer :: i,j,k,iss,iee,jss,jee,kss,kee,nwd
     integer :: m,n,jvar
     real(8) :: eps,gm2,var1,var2
     !
@@ -582,26 +584,39 @@ module solver
           do m=1,5
             !
             do n=1,8
+              !
               ! plus flux
-              Flcp(m,n)=LEV(m,1)*Fswp(i+n-4,1)+                        &
-                        LEV(m,2)*Fswp(i+n-4,2)+                        &
-                        LEV(m,3)*Fswp(i+n-4,3)+                        &
-                        LEV(m,4)*Fswp(i+n-4,4)+                        &
-                        LEV(m,5)*Fswp(i+n-4,5)
+              nwd=iwind8(i,n,iss,iee,'+')
+              !
+              Flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
+                        LEV(m,2)*Fswp(nwd,2)+                        &
+                        LEV(m,3)*Fswp(nwd,3)+                        &
+                        LEV(m,4)*Fswp(nwd,4)+                        &
+                        LEV(m,5)*Fswp(nwd,5)
               !
               ! minus flux
-              Flcm(m,n)=LEV(m,1)*Fswm(i+5-n,1)+                        &
-                        LEV(m,2)*Fswm(i+5-n,2)+                        &
-                        LEV(m,3)*Fswm(i+5-n,3)+                        &
-                        LEV(m,4)*Fswm(i+5-n,4)+                        &
-                        LEV(m,5)*Fswm(i+5-n,5)
+              nwd=iwind8(i,n,iss,iee,'-')
+              Flcm(m,n)=LEV(m,1)*Fswm(nwd,1)+                        &
+                        LEV(m,2)*Fswm(nwd,2)+                        &
+                        LEV(m,3)*Fswm(nwd,3)+                        &
+                        LEV(m,4)*Fswm(nwd,4)+                        &
+                        LEV(m,5)*Fswm(nwd,5)
             end do
             !
           end do
           !
           if(numq>5) then
-            Flcp(6:numq,n)=Fswp(i+n-4,6:numq)
-            Flcm(6:numq,n)=Fswm(i+5-n,6:numq)
+            !
+            do n=1,8
+              !
+              nwd=iwind8(i,n,iss,iee,'+')
+              Flcp(6:numq,n)=Fswp(nwd,6:numq)
+              !
+              nwd=iwind8(i,n,iss,iee,'-')
+              Flcm(6:numq,n)=Fswm(nwd,6:numq)
+              !
+            end do
+            !
           endif
           ! End of characteristic decomposition.
           !
@@ -610,10 +625,12 @@ module solver
           !
           do n=1,8
             ! plus flux
-            Flcp(1:numq,n)=Fswp(i+n-4,1:numq)
+            nwd=iwind8(i,n,iss,iee,'+')
+            Flcp(1:numq,n)=Fswp(nwd,1:numq)
             !
             ! minus flux
-            Flcm(1:numq,n)=Fswm(i+5-n,1:numq)
+            nwd=iwind8(i,n,iss,iee,'-')
+            Flcm(1:numq,n)=Fswm(nwd,1:numq)
           end do
           !
         endif
@@ -670,6 +687,7 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end of calculation at i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along j direction
@@ -754,26 +772,34 @@ module solver
           do m=1,5
             !
             do n=1,8
+              !
               ! plus flux
-              Flcp(m,n)=LEV(m,1)*Fswp(j+n-4,1)+                        &
-                        LEV(m,2)*Fswp(j+n-4,2)+                        &
-                        LEV(m,3)*Fswp(j+n-4,3)+                        &
-                        LEV(m,4)*Fswp(j+n-4,4)+                        &
-                        LEV(m,5)*Fswp(j+n-4,5)
+              nwd=iwind8(j,n,jss,jee,'+')
+              Flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
+                        LEV(m,2)*Fswp(nwd,2)+                        &
+                        LEV(m,3)*Fswp(nwd,3)+                        &
+                        LEV(m,4)*Fswp(nwd,4)+                        &
+                        LEV(m,5)*Fswp(nwd,5)
               !
               ! minus flux
-              Flcm(m,n)=LEV(m,1)*Fswm(j+5-n,1)+                        &
-                        LEV(m,2)*Fswm(j+5-n,2)+                        &
-                        LEV(m,3)*Fswm(j+5-n,3)+                        &
-                        LEV(m,4)*Fswm(j+5-n,4)+                        &
-                        LEV(m,5)*Fswm(j+5-n,5)
+              nwd=iwind8(j,n,jss,jee,'-')
+              Flcm(m,n)=LEV(m,1)*Fswm(nwd,1)+                        &
+                        LEV(m,2)*Fswm(nwd,2)+                        &
+                        LEV(m,3)*Fswm(nwd,3)+                        &
+                        LEV(m,4)*Fswm(nwd,4)+                        &
+                        LEV(m,5)*Fswm(nwd,5)
             end do
             !
           end do
           !
           if(numq>5) then
-            Flcp(6:numq,n)=Fswp(j+n-4,6:numq)
-            Flcm(6:numq,n)=Fswm(j+5-n,6:numq)
+            do n=1,8
+              nwd=iwind8(j,n,jss,jee,'+')
+              Flcp(6:numq,n)=Fswp(nwd,6:numq)
+              !
+              nwd=iwind8(j,n,jss,jee,'-')
+              Flcm(6:numq,n)=Fswm(nwd,6:numq)
+            end do
           endif
           !
           ! End of characteristic decomposition.
@@ -783,10 +809,12 @@ module solver
           !
           do n=1,8
             ! plus flux
-            Flcp(1:numq,n)=Fswp(j+n-4,1:numq)
+            nwd=iwind8(j,n,jss,jee,'+')
+            Flcp(1:numq,n)=Fswp(nwd,1:numq)
             !
             ! minus flux
-            Flcm(1:numq,n)=Fswm(j+5-n,1:numq)
+            nwd=iwind8(j,n,jss,jee,'-')
+            Flcm(1:numq,n)=Fswm(nwd,1:numq)
           end do
           !
         endif
@@ -929,28 +957,33 @@ module solver
             !
             do n=1,8
               ! plus flux
-              Flcp(m,n)=LEV(m,1)*Fswp(k+n-4,1)+                        &
-                        LEV(m,2)*Fswp(k+n-4,2)+                        &
-                        LEV(m,3)*Fswp(k+n-4,3)+                        &
-                        LEV(m,4)*Fswp(k+n-4,4)+                        &
-                        LEV(m,5)*Fswp(k+n-4,5)
+              nwd=iwind8(k,n,kss,kee,'+')
+              Flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
+                        LEV(m,2)*Fswp(nwd,2)+                        &
+                        LEV(m,3)*Fswp(nwd,3)+                        &
+                        LEV(m,4)*Fswp(nwd,4)+                        &
+                        LEV(m,5)*Fswp(nwd,5)
               !
               ! minus flux
-              Flcm(m,n)=LEV(m,1)*Fswm(k+5-n,1)+                        &
-                        LEV(m,2)*Fswm(k+5-n,2)+                        &
-                        LEV(m,3)*Fswm(k+5-n,3)+                        &
-                        LEV(m,4)*Fswm(k+5-n,4)+                        &
-                        LEV(m,5)*Fswm(k+5-n,5)
+              nwd=iwind8(k,n,kss,kee,'-')
+              Flcm(m,n)=LEV(m,1)*Fswm(nwd,1)+                        &
+                        LEV(m,2)*Fswm(nwd,2)+                        &
+                        LEV(m,3)*Fswm(nwd,3)+                        &
+                        LEV(m,4)*Fswm(nwd,4)+                        &
+                        LEV(m,5)*Fswm(nwd,5)
             end do
             !
           end do
           !
-          do n=1,8
-            if(numq>5) then
-              Flcp(6:numq,n)=Fswp(k+n-4,6:numq)
-              Flcm(6:numq,n)=Fswm(k+5-n,6:numq)
-            endif
-          end do
+          if(numq>5) then
+            do n=1,8
+              nwd=iwind8(k,n,kss,kee,'+')
+              Flcp(6:numq,n)=Fswp(nwd,6:numq)
+              !
+              nwd=iwind8(k,n,kss,kee,'-')
+              Flcm(6:numq,n)=Fswm(nwd,6:numq)
+            end do
+          endif
           !
           ! End of characteristic decomposition.
           !
@@ -959,10 +992,12 @@ module solver
           !
           do n=1,8
             ! plus flux
-            Flcp(1:numq,n)=Fswp(k+n-4,1:numq)
+            nwd=iwind8(k,n,kss,kee,'+')
+            Flcp(1:numq,n)=Fswp(nwd,1:numq)
             !
             ! minus flux
-            Flcm(1:numq,n)=Fswm(k+5-n,1:numq)
+            nwd=iwind8(k,n,kss,kee,'-')
+            Flcm(1:numq,n)=Fswm(nwd,1:numq)
           end do
           !
         endif
@@ -1028,6 +1063,42 @@ module solver
   end subroutine convrsduwd
   !+-------------------------------------------------------------------+
   !| The end of the subroutine convrsduwd.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| this function is to retune the i in a scheme's stencile.          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-06-2022: Finished by J. Fang @ Warrington.                     |
+  !+-------------------------------------------------------------------+
+  integer function iwind8(i,n,imin,imax,dir)
+    !
+    integer,intent(in) :: i,n,imin,imax
+    character(len=*),intent(in) :: dir
+    !
+    if(dir=='+') then
+      !
+      iwind8=i+n-4
+      !
+      if(iwind8<imin) iwind8=imin
+      if(iwind8>imax) iwind8=imax
+      !
+    elseif(dir=='-') then
+      !
+      iwind8=i+5-n
+      !
+      if(iwind8<imin) iwind8=imin
+      if(iwind8>imax) iwind8=imax
+      !
+    else
+      print*,dir
+      stop ' !! ERROR dir@ function iwind8'
+    endif
+    !
+  end function iwind8
+  !+-------------------------------------------------------------------+
+  !| The end of the function iwind8.                                   |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+

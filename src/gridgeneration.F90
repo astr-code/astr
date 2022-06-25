@@ -23,8 +23,8 @@ module gridgeneration
   subroutine gridgen
     !
     use parallel, only : mpirank
-    use commvar,  only : flowtype,lreadgrid,limmbou,solidfile,nondimen
-    use readwrite,only : readgrid,writegrid,readsolid
+    use commvar,  only : flowtype,lreadgrid,nondimen
+    use readwrite,only : readgrid,writegrid
     !
     if(lreadgrid) then
       call readgrid
@@ -46,7 +46,7 @@ module gridgeneration
       elseif(trim(flowtype)=='shuosher') then
         call grid1d(-5.d0,5.d0)
       elseif(trim(flowtype)=='windtunn') then
-        call gridcube(20.d0,10.d0,10.d0)
+        call gridsandbox
       elseif(trim(flowtype)=='channel') then
         call grichan(2.d0*pi,pi)
       elseif(trim(flowtype)=='0dreactor') then
@@ -63,12 +63,7 @@ module gridgeneration
       endif
       !
       call writegrid
-      ! stop
       !
-    endif
-    !
-    if(limmbou) then
-      if(mpirank==0) call readsolid(solidfile)
     endif
     !
   end subroutine gridgen
@@ -130,51 +125,6 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gridjet.                                |
   !+-------------------------------------------------------------------+
-  !
-  subroutine spongstretch(dim,varmax,var)
-    !
-    integer :: dim,hh
-    real(8) :: var(-2:dim)
-    real(8) :: varmax
-    real(8) :: err,err2,dra,ddra,var1,var2,dde,ratio
-    !
-    dra=1.d0
-    !
-    ddra=0.001d0*dra
-    err=1.d10
-    err2=0.d0
-    !
-    do while( dabs(err)>1.d-9 )
-      !
-      ratio=1.d0
-      do hh=1,dim
-        !
-        dde=var(hh-1)-var(hh-2)
-        var(hh)=var(hh-1)+dde*ratio
-        ratio=ratio*dra
-        !
-      end do
-      !
-      err=varmax-var(dim)
-      !
-      if(err>0) then
-        dra=dra+ddra
-      else
-        dra=dra-ddra
-      end if
-      !
-      if(err*err2<0.d0) ddra=0.5d0*ddra
-      !
-      err2=err
-      !
-      !print*,err,ddra,dra,ratio
-      !
-    end do
-    !
-  end subroutine spongstretch
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! End of the subroutine spongstretch
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to generate a cubic mesh.                      |
@@ -410,6 +360,249 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gridjet.                                |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a sandbox grid for wind tunnel.    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-Jun-2022: Created by J. Fang @ Warrington.                     |
+  !+-------------------------------------------------------------------+
+  subroutine gridsandbox
+    !
+    use parallel,  only : mpistop,ig0,jg0,kg0,lio,mpirank
+    use commvar,   only : immbody,nsolid,ia,ja,ka,im,jm,km,ndims
+    use commarray, only : x
+    use stlaio
+    use tecio
+    !
+    integer :: imm,jmm,kmm,im4,jm4,km4,isp
+    integer :: i,j,k,jbody
+    real(8) :: lx_solid,ly_solid,lz_solid,x0,y0,z0
+    real(8) :: xmin,ymin,zmin,xmax,ymax,zmax
+    real(8),allocatable,dimension(:) :: xx,yy,zz
+    real(8),allocatable,dimension(:,:,:) :: xa,ya,za
+    !
+    xmin=1.d10; xmax=-1.d10
+    ymin=1.d10; ymax=-1.d10
+    zmin=1.d10; zmax=-1.d10
+    do jbody=1,size(immbody)
+      xmin=min(xmin,immbody(jbody)%xmin(1))
+      ymin=min(ymin,immbody(jbody)%xmin(2))
+      zmin=min(zmin,immbody(jbody)%xmin(3))
+      !
+      xmax=max(xmax,immbody(jbody)%xmax(1))
+      ymax=max(ymax,immbody(jbody)%xmax(2))
+      zmax=max(zmax,immbody(jbody)%xmax(3))
+    enddo
+    !
+    lx_solid=xmax-xmin
+    ly_solid=ymax-ymin
+    lz_solid=zmax-zmin
+    ! lx_solid=2.091906d0
+    ! ly_solid=2.d0
+    ! lz_solid=8.291200d-2
+    !
+    if(mpirank==0) print*,' ** domain size:',lx_solid,ly_solid,lz_solid
+    if(mpirank==0) print*,' **   mesh size:',ia,ja,ka
+    !
+    allocate(xx(0:ia),yy(0:ja),zz(0:ka))
+    !
+    isp=28
+    !
+    imm=(ia-isp)/2
+    jmm=ja/2
+    kmm=ka/2
+    !
+    im4=imm/2
+    jm4=jmm/2
+    km4=kmm/2
+    !
+    ! core region 
+    do i=imm,imm+im4
+      xx(i)=lx_solid/dble(im4)*dble(i-imm)
+    enddo
+    !
+    ! effecive region
+    call spongstretch(imm-im4,5.d0*lx_solid,xx(imm+im4-2:imm+imm))
+    !
+    do i=0,imm-1
+      xx(i)=-xx(imm+imm-i)
+    enddo
+    !
+    ! sponge region
+    call spongstretch(ia-2*imm,10.d0*lx_solid,xx(imm+imm-2:ia))
+    if(mpirank==0) then
+      print*,' ** -------------------- mesh report --------------------'
+      print*,'    x direction'
+      print*,'       core zone '
+      write(*,'(2(A,1X,F12.8))')'          x:',xx(imm-im4),' ~ ',xx(imm+im4)
+      write(*,'(2(A,1X,I0))')   '          i:',imm-im4,' ~ ', imm+im4
+      write(*,'(1(A,1X,F12.8))')'         dx:',xx(imm+im4)-xx(imm+im4-1)
+      print*,'       effecive zone '
+      write(*,'(2(A,1X,F12.8))')'          x:',xx(0),' ~ ',xx(imm+imm)
+      write(*,'(2(A,1X,I0))')   '          i:',0,' ~ ', imm+imm
+      write(*,'(1(A,1X,F12.8))')'         dx:',xx(imm+imm)-xx(imm+imm-1)
+      print*,'       sponge zone '
+      write(*,'(2(A,1X,F12.8))')'          x:',xx(imm+imm),' ~ ',xx(ia)
+      write(*,'(2(A,1X,I0))')   '          i:',imm+imm,' ~ ', ia
+      write(*,'(1(A,1X,F12.8))')'         dx:',xx(ia)-xx(ia-1)
+      print*,' ** -----------------------------------------------------'
+    endif
+    !
+    x0=xx(0)
+    xx=xx-x0
+    !
+    ! core regjon 
+    do j=jmm,jmm+jm4
+      yy(j)=ly_solid/dble(jm4)*dble(j-jmm)
+    enddo
+    !
+    ! effecive regjon
+    call spongstretch(jmm-jm4,5.d0*ly_solid,yy(jmm+jm4-2:jmm+jmm))
+    !
+    do j=0,jmm-1
+      yy(j)=-yy(jmm+jmm-j)
+    enddo
+    if(mpirank==0) then
+      print*,'    y djrectjon'
+      print*,'       core zone '
+      write(*,'(2(A,1x,F12.8))')'          y:',yy(jmm-jm4),' ~ ',yy(jmm+jm4)
+      write(*,'(2(A,1x,i0))')   '          j:',jmm-jm4,' ~ ', jmm+jm4
+      write(*,'(1(A,1x,F12.8))')'         dy:',yy(jmm+jm4)-yy(jmm+jm4-1)
+      print*,'       effecive zone '
+      write(*,'(2(A,1x,F12.8))')'          y:',yy(0),' ~ ',yy(jmm+jmm)
+      write(*,'(2(A,1x,i0))')   '          j:',0,' ~ ', jmm+jmm
+      write(*,'(1(A,1x,F12.8))')'         dy:',yy(jmm+jmm)-yy(jmm+jmm-1)
+      print*,' ** -----------------------------------------------------'
+    endif
+    !
+    y0=yy(0)
+    yy=yy-y0
+    !
+    if(ndims==3) then
+      !
+      ! core regkon 
+      do k=kmm,kmm+km4
+        zz(k)=lz_solid/dble(km4)*dble(k-kmm)
+      enddo
+      !
+      ! effeckve regkon
+      call spongstretch(kmm-km4,5.d0*lz_solid,zz(kmm+km4-2:kmm+kmm))
+      !
+      do k=0,kmm-1
+        zz(k)=-zz(kmm+kmm-k)
+      enddo
+      if(mpirank==0) then
+        print*,'    z dkrectkon'
+        print*,'       core zone '
+        write(*,'(2(A,1x,F12.8))')'          z:',zz(kmm-km4),' ~ ',zz(kmm+km4)
+        write(*,'(2(A,1x,i0))')   '          k:',kmm-km4,' ~ ', kmm+km4
+        write(*,'(1(A,1x,F12.8))')'         dz:',zz(kmm+km4)-zz(kmm+km4-1)
+        print*,'       effecive zone '
+        write(*,'(2(A,1x,F12.8))')'          z:',zz(0),' ~ ',zz(kmm+kmm)
+        write(*,'(2(A,1x,i0))')   '          k:',0,' ~ ', kmm+kmm
+        write(*,'(1(A,1x,F12.8))')'         dz:',zz(kmm+kmm)-zz(kmm+kmm-1)
+        print*,' ** -----------------------------------------------------'
+      endif
+      !
+      z0=zz(0)
+      zz=zz-z0
+      !
+    else
+      zz=0.d0
+    endif
+    !
+    if(mpirank==0) print*,' ** center of the domain:',xx(imm),yy(jmm),zz(kmm)
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1)=xx(i+ig0)
+      x(i,j,k,2)=yy(j+jg0)
+      if(ndims==3) then
+        x(i,j,k,3)=zz(k+kg0)
+      else
+        x(i,j,k,3)=0.d0
+      endif
+    enddo
+    enddo
+    enddo
+    !
+    if(mpirank==0) then
+      print*,' ** sandbox mesh generated, ranging:'
+      write(*,'(2(A,1x,F12.8))')'          x:',xx(0),' ~ ',xx(ia)
+      write(*,'(2(A,1x,F12.8))')'          y:',yy(0),' ~ ',yy(ja)
+      write(*,'(2(A,1x,F12.8))')'          z:',zz(0),' ~ ',zz(ka)
+    endif
+    ! allocate(xa(0:ia,0:ja,0:ka),ya(0:ia,0:ja,0:ka),za(0:ia,0:ja,0:ka))
+    ! do k=0,ka
+    ! do j=0,ja
+    ! do i=0,ia
+    !   xa(i,j,k)=xx(i)
+    !   ya(i,j,k)=yy(j)
+    !   za(i,j,k)=zz(k)
+    ! enddo
+    ! enddo
+    ! enddo
+    ! !
+    ! call tecbin('tecgrid.plt',xa,'x',ya,'y',za,'z')
+    !
+  end subroutine gridsandbox
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine gridjet.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to stretch grid for spong layers
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine spongstretch(dim,varmax,var)
+    !
+    integer :: dim,hh
+    real(8) :: var(-2:dim)
+    real(8) :: varmax
+    real(8) :: err,err2,dra,ddra,var1,var2,dde,ratio
+    !
+    dra=1.d0
+    !
+    ddra=0.001d0*dra
+    err=1.d10
+    err2=0.d0
+    !
+    do while( dabs(err)>1.d-9 )
+      !
+      ! ratio=1.d0
+      ratio=(var(0)-var(-1))/(var(-1)-var(-2))
+      do hh=1,dim
+        !
+        dde=var(hh-1)-var(hh-2)
+        var(hh)=var(hh-1)+dde*ratio
+        ratio=ratio*dra
+        !
+      end do
+      !
+      err=varmax-var(dim)
+      !
+      if(err>0) then
+        dra=dra+ddra
+      else
+        dra=dra-ddra
+      end if
+      !
+      if(err*err2<0.d0) ddra=0.5d0*ddra
+      !
+      err2=err
+      !
+      !print*,err,ddra,dra,ratio
+      !
+    end do
+    !
+    ! print*,' the mesh is strenched to x=',varmax,' from x=',var(0),' the max ratio is:',ratio,' using ',dim,' nodes'
+    !
+  end subroutine spongstretch
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine spongstretch
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
 end module gridgeneration
 !+---------------------------------------------------------------------+

@@ -25,6 +25,8 @@ module pp
   subroutine ppentrance
     !
     use cmdefne
+    use readwrite,       only : readinput
+    use gridgeneration,  only : gridgen
     !
     ! local data
     character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
@@ -39,6 +41,10 @@ module pp
       call examplegen(trim(casefolder))
       ! generate an example channel flow case
       !
+    elseif(trim(cmd)=='gridgen') then
+      call readinput
+      !
+      call gridgen
     elseif(trim(cmd)=='solid') then
       call solidpp
     elseif(trim(cmd)=='datacon') then
@@ -563,10 +569,10 @@ module pp
       call readsolid(trim(inputfile))
       !
       ! resc_fact=0.015d0
-      resc_fact=0.06667d0
-      rot_vec=(/0.d0,1.d0,0.d0/)
+      resc_fact=0.005d0
+      rot_vec=(/1.d0,0.d0,0.d0/)
       rot_theta=-90.d0
-      shift_cor=(/5.d0,5.d0,0.d0/)
+      shift_cor=(/5.d0,5.d0,5.d0/)
     else
       !
       print*,' !! ERROR 1, cmd not defined !!'
@@ -583,16 +589,16 @@ module pp
     ! call solidgen_triagnle
     ! call solidgen_airfoil
     !
-    ! do js=1,nsolid
-    !   call solidrange(immbody(js))
-    !   !
-    !   call solidresc(immbody(js),resc_fact)
-    !   call solidrota(immbody(js),rot_theta,rot_vec)
-    !   call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
-    !                              y=shift_cor(2)-immbody(js)%xcen(2),  &
-    !                              z=shift_cor(3)-immbody(js)%xcen(3))
-    !   !
-    ! enddo
+    do js=1,nsolid
+      call solidrange(immbody(js))
+      !
+      ! call solidresc(immbody(js),resc_fact)
+      call solidrota(immbody(js),rot_theta,rot_vec)
+      ! call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
+      !                            y=shift_cor(2)-immbody(js)%xcen(2),  &
+      !                            z=shift_cor(3)-immbody(js)%xcen(3))
+      !
+    enddo
     !
     !
     !

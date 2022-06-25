@@ -57,6 +57,10 @@ module commtype
     real(8),allocatable :: coef_dirichlet(:),coef_neumann(:),invmatrx(:,:)
     !
     logical :: localin,cellin
+    integer :: icell_rank,ighst_rank
+    integer,allocatable :: ighst_rank_all(:)
+    !
+    character(len=1) :: locality
     !
     !+-------------------+---------------------------------------------+
     !|               igh | i,j,k of the ghost point                    |
