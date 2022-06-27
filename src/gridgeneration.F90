@@ -431,7 +431,7 @@ module gridgeneration
     enddo
     !
     ! sponge region
-    call spongstretch(ia-2*imm,10.d0*lx_solid,xx(imm+imm-2:ia))
+    call spongstretch(ia-2*imm,20.d0*lx_solid,xx(imm+imm-2:ia))
     if(mpirank==0) then
       print*,' ** -------------------- mesh report --------------------'
       print*,'    x direction'
