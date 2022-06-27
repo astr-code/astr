@@ -2330,11 +2330,18 @@ module readwrite
         write(hand_rp,'(1(A,I0))')'     mpi size: ',mpirankmax+1
         write(hand_rp,'(2X,A,E13.6E2)')'time cost for preparation : ',preptime
         !
+        close(hand_rp)
+        !
         repsp=0
         !
         linit=.false.
         !
       endif
+      !
+      if(nstep<=repsp+1) return 
+      ! just reported
+      !
+      open(hand_rp,file='report.txt',position="append")
       !
       write(hand_rp,'(2X,62A)')('-',i=1,62)
       write(hand_rp,'(2X,2(A,I7))')'time report from nstep : ',repsp,  &
@@ -2376,10 +2383,9 @@ module readwrite
       !
       flush(hand_rp)
       !
-      if(nstep>=maxstep) then
-        close(hand_rp)
-        print*,' << report.txt'
-      endif
+      close(hand_rp)
+      !
+      print*,' << report.txt'
       !
     endif
     !
