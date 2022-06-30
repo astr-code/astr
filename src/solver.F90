@@ -1072,7 +1072,7 @@ module solver
   !| -------------                                                     |
   !| 25-06-2022: Finished by J. Fang @ Warrington.                     |
   !+-------------------------------------------------------------------+
-  integer function iwind8(i,n,imin,imax,dir)
+  pure integer function iwind8(i,n,imin,imax,dir)
     !
     integer,intent(in) :: i,n,imin,imax
     character(len=*),intent(in) :: dir
@@ -1091,14 +1091,34 @@ module solver
       if(iwind8<imin) iwind8=imin
       if(iwind8>imax) iwind8=imax
       !
-    else
-      print*,dir
-      stop ' !! ERROR dir@ function iwind8'
     endif
     !
   end function iwind8
+  !
+  pure integer function iwind6(i,n,imin,imax,dir)
+    !
+    integer,intent(in) :: i,n,imin,imax
+    character(len=*),intent(in) :: dir
+    !
+    if(dir=='+') then
+      !
+      iwind6=i+n-3
+      !
+      if(iwind6<imin) iwind6=imin
+      if(iwind6>imax) iwind6=imax
+      !
+    elseif(dir=='-') then
+      !
+      iwind6=i+4-n
+      !
+      if(iwind6<imin) iwind6=imin
+      if(iwind6>imax) iwind6=imax
+      !
+    endif
+    !
+  end function iwind6
   !+-------------------------------------------------------------------+
-  !| The end of the function iwind8.                                   |
+  !| The end of the function iwind.                                    |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -1123,7 +1143,7 @@ module solver
     real(8),intent(inout),optional :: subtime
     !
     ! local data
-    integer :: i,j,k,iss,iee,jss,jee,kss,kee
+    integer :: i,j,k,iss,iee,jss,jee,kss,kee,nwd
     integer :: m,n,jvar
     real(8) :: eps,gm2,var1,var2
     !
@@ -1200,18 +1220,21 @@ module solver
             !
             do n=1,5
               ! plus flux
-              flcp(m,n)=LEV(m,1)*Fswp(i+n-3,1)+                        &
-                        LEV(m,2)*Fswp(i+n-3,2)+                        &
-                        LEV(m,3)*Fswp(i+n-3,3)+                        &
-                        LEV(m,4)*Fswp(i+n-3,4)+                        &
-                        LEV(m,5)*Fswp(i+n-3,5)
+              nwd=iwind6(i,n,iss,iee,'+')
+              !
+              flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
+                        LEV(m,2)*Fswp(nwd,2)+                        &
+                        LEV(m,3)*Fswp(nwd,3)+                        &
+                        LEV(m,4)*Fswp(nwd,4)+                        &
+                        LEV(m,5)*Fswp(nwd,5)
               !
               ! minus flux
-              flcm(m,n)=LEV(m,1)*Fswm(i+4-n,1)+                        &
-                        LEV(m,2)*Fswm(i+4-n,2)+                        &
-                        LEV(m,3)*Fswm(i+4-n,3)+                        &
-                        LEV(m,4)*Fswm(i+4-n,4)+                        &
-                        LEV(m,5)*Fswm(i+4-n,5)
+              nwd=iwind6(i,n,iss,iee,'-')
+              flcm(m,n)=LEV(m,1)*Fswm(nwd,1)+                        &
+                        LEV(m,2)*Fswm(nwd,2)+                        &
+                        LEV(m,3)*Fswm(nwd,3)+                        &
+                        LEV(m,4)*Fswm(nwd,4)+                        &
+                        LEV(m,5)*Fswm(nwd,5)
             end do
             !
             fhcpc(m)=LEV(m,1)*fhcp(i,1)+                        &
@@ -1229,13 +1252,20 @@ module solver
           end do
           !
           if(numq>5) then
+            !
             do n=1,5
-              flcp(6:numq,n)=Fswp(i+n-3,6:numq)
-              flcm(6:numq,n)=Fswm(i+5-n,6:numq)
+              ! plus flux
+              nwd=iwind6(i,n,iss,iee,'+')
+              flcp(6:numq,n)=Fswp(nwd,6:numq)
+              !
+              ! minus flux
+              nwd=iwind6(i,n,iss,iee,'-')
+              flcm(6:numq,n)=Fswm(nwd,6:numq)
             end do
             !
             fhcpc(6:numq)=fhcp(i,6:numq)
             fhcmc(6:numq)=fhcm(i,6:numq)
+            !
           endif
           ! End of characteristic decomposition.
           !
@@ -1244,10 +1274,12 @@ module solver
           !
           do n=1,5
             ! plus flux
-            flcp(1:numq,n)=Fswp(i+n-3,1:numq)
+            nwd=iwind6(i,n,iss,iee,'+')
+            flcp(1:numq,n)=Fswp(nwd,1:numq)
             !
             ! minus flux
-            flcm(1:numq,n)=Fswm(i+4-n,1:numq)
+            nwd=iwind6(i,n,iss,iee,'-')
+            flcm(1:numq,n)=Fswm(nwd,1:numq)
           end do
           !
           fhcpc(1:numq)=fhcp(i,1:numq)
@@ -1388,19 +1420,21 @@ module solver
           do m=1,5
             !
             do n=1,5
-              ! plus flux
-              flcp(m,n)=LEV(m,1)*Fswp(j+n-3,1)+                        &
-                        LEV(m,2)*Fswp(j+n-3,2)+                        &
-                        LEV(m,3)*Fswp(j+n-3,3)+                        &
-                        LEV(m,4)*Fswp(j+n-3,4)+                        &
-                        LEV(m,5)*Fswp(j+n-3,5)
+              ! plus flux 
+              nwd=iwind6(j,n,jss,jee,'+')
+              flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
+                        LEV(m,2)*Fswp(nwd,2)+                        &
+                        LEV(m,3)*Fswp(nwd,3)+                        &
+                        LEV(m,4)*Fswp(nwd,4)+                        &
+                        LEV(m,5)*Fswp(nwd,5)
               !
               ! minus flux
-              flcm(m,n)=LEV(m,1)*Fswm(j+4-n,1)+                        &
-                        LEV(m,2)*Fswm(j+4-n,2)+                        &
-                        LEV(m,3)*Fswm(j+4-n,3)+                        &
-                        LEV(m,4)*Fswm(j+4-n,4)+                        &
-                        LEV(m,5)*Fswm(j+4-n,5)
+              nwd=iwind6(j,n,jss,jee,'-')
+              flcm(m,n)=LEV(m,1)*Fswm(nwd,1)+                        &
+                        LEV(m,2)*Fswm(nwd,2)+                        &
+                        LEV(m,3)*Fswm(nwd,3)+                        &
+                        LEV(m,4)*Fswm(nwd,4)+                        &
+                        LEV(m,5)*Fswm(nwd,5)
             end do
             !
             fhcpc(m)=LEV(m,1)*fhcp(j,1)+                        &
@@ -1420,8 +1454,13 @@ module solver
           if(numq>5) then
             !
             do n=1,5
-              flcp(6:numq,n)=Fswp(j+n-3,6:numq)
-              flcm(6:numq,n)=Fswm(j+4-n,6:numq)
+              ! plus flux 
+              nwd=iwind6(j,n,jss,jee,'+')
+              flcp(6:numq,n)=Fswp(nwd,6:numq)
+              !
+              ! minus flux
+              nwd=iwind6(j,n,jss,jee,'-')
+              flcm(6:numq,n)=Fswm(nwd,6:numq)
             enddo
             !
             fhcpc(6:numq)=fhcp(j,6:numq)
@@ -1435,10 +1474,12 @@ module solver
           !
           do n=1,5
             ! plus flux
-            flcp(1:numq,n)=Fswp(j+n-3,1:numq)
+            nwd=iwind6(j,n,jss,jee,'+')
+            flcp(1:numq,n)=Fswp(nwd,1:numq)
             !
             ! minus flux
-            flcm(1:numq,n)=Fswm(j+4-n,1:numq)
+            nwd=iwind6(j,n,jss,jee,'-')
+            flcm(1:numq,n)=Fswm(nwd,1:numq)
           end do
           !
           fhcpc(1:numq)=fhcp(j,1:numq)
@@ -1580,18 +1621,20 @@ module solver
             !
             do n=1,5
               ! plus flux
-              flcp(m,n)=LEV(m,1)*Fswp(k+n-3,1)+                        &
-                        LEV(m,2)*Fswp(k+n-3,2)+                        &
-                        LEV(m,3)*Fswp(k+n-3,3)+                        &
-                        LEV(m,4)*Fswp(k+n-3,4)+                        &
-                        LEV(m,5)*Fswp(k+n-3,5)
+              nwd=iwind6(k,n,kss,kee,'+')
+              flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
+                        LEV(m,2)*Fswp(nwd,2)+                        &
+                        LEV(m,3)*Fswp(nwd,3)+                        &
+                        LEV(m,4)*Fswp(nwd,4)+                        &
+                        LEV(m,5)*Fswp(nwd,5)
               !
               ! minus flux
-              flcm(m,n)=LEV(m,1)*Fswm(k+4-n,1)+                        &
-                        LEV(m,2)*Fswm(k+4-n,2)+                        &
-                        LEV(m,3)*Fswm(k+4-n,3)+                        &
-                        LEV(m,4)*Fswm(k+4-n,4)+                        &
-                        LEV(m,5)*Fswm(k+4-n,5)
+              nwd=iwind6(k,n,kss,kee,'-')
+              flcm(m,n)=LEV(m,1)*Fswm(nwd,1)+                        &
+                        LEV(m,2)*Fswm(nwd,2)+                        &
+                        LEV(m,3)*Fswm(nwd,3)+                        &
+                        LEV(m,4)*Fswm(nwd,4)+                        &
+                        LEV(m,5)*Fswm(nwd,5)
             end do
             !
             fhcpc(m)=LEV(m,1)*fhcp(k,1)+                        &
@@ -1611,8 +1654,13 @@ module solver
           if(numq>5) then
             !
             do n=1,5
-              flcp(6:numq,n)=Fswp(k+n-3,6:numq)
-              flcm(6:numq,n)=Fswm(k+4-n,6:numq)
+              ! plus flux
+              nwd=iwind6(k,n,kss,kee,'+')
+              flcp(6:numq,n)=Fswp(nwd,6:numq)
+              !
+              ! minus flux
+              nwd=iwind6(k,n,kss,kee,'-')
+              flcm(6:numq,n)=Fswm(nwd,6:numq)
             enddo
             !
             fhcpc(6:numq)=fhcp(k,6:numq)
@@ -1626,10 +1674,12 @@ module solver
           !
           do n=1,5
             ! plus flux
-            flcp(1:numq,n)=Fswp(k+n-3,1:numq)
+            nwd=iwind6(k,n,kss,kee,'+')
+            flcp(1:numq,n)=Fswp(nwd,1:numq)
             !
             ! minus flux
-            flcm(1:numq,n)=Fswm(k+4-n,1:numq)
+            nwd=iwind6(k,n,kss,kee,'-')
+            flcm(1:numq,n)=Fswm(nwd,1:numq)
           end do
           !
           fhcpc(1:numq)=fhcp(k,1:numq)
