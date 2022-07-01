@@ -1051,13 +1051,15 @@ module readwrite
   !| -------------                                                     |
   !| 07-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readgrid
+  subroutine readgrid(gridh5file)
     !
-    use commvar,   only : im,jm,km,gridfile
+    use commvar,   only : im,jm,km
     use commarray, only : x
     use hdf5io
     !
-    call h5io_init(filename=trim(gridfile),mode='read')
+    character(len=*),intent(in) :: gridh5file
+    !
+    call h5io_init(filename=gridh5file,mode='read')
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
@@ -1590,13 +1592,15 @@ module readwrite
   !| -------------                                                     |
   !| 07-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writegrid
+  subroutine writegrid(gridh5file)
     !
     use commvar,   only : im,jm,km
     use commarray, only : x
     use hdf5io
     !
-    call h5io_init('./grid.h5',mode='write')
+    character(len=*),intent(in) :: gridh5file
+    !
+    call h5io_init(gridh5file,mode='write')
     call h5write(varname='x',var=x(0:im,0:jm,0:km,1),mode='h5')
     call h5write(varname='y',var=x(0:im,0:jm,0:km,2),mode='h5')
     call h5write(varname='z',var=x(0:im,0:jm,0:km,3),mode='h5')
@@ -1670,7 +1674,9 @@ module readwrite
     !
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
+    !
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km),  mode=iomode)
+    !
     call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),mode=iomode)
     call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),mode=iomode)
     call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),mode=iomode)
@@ -1728,6 +1734,13 @@ module readwrite
       call h5srite(varname='time',var=time,filename=trim(outfilename))
     endif
     !
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,init=.true.)
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='u1')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='u2')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='u3')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='p')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='t')
+    !
     if(ndims==1) then
       !
       open(18,file='outdat/profile'//trim(stepname)//mpirankname//'.dat')
@@ -1756,6 +1769,103 @@ module readwrite
   end subroutine writeflfed
   !+-------------------------------------------------------------------+
   !| The end of the subroutine writeflfed.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write a xdmf head file for             |
+  !| visulisation of flow field.                                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-07-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine xdmfwriter(gridh5file,flowh5file,dataname,timesec,init)
+    !
+    use parallel,only : ia,ja,ka
+    !
+    ! arguments
+    character(len=*),intent(in),optional :: gridh5file,flowh5file,dataname
+    real(8),intent(in),optional :: timesec
+    logical,intent(in),optional :: init
+    !
+    ! local data
+    integer :: fh,i
+    logical :: inithead
+    !
+    if(lio) then
+      !
+      fh=get_unit()
+      !
+      if(present(gridh5file)) then
+        ! write the head of xdmf and grid
+        open(fh,file='visu.xdmf',form='formatted')
+        write(fh,'(A)')'<?xml version="1.0" ?>'
+        write(fh,'(A)')'<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>'
+        write(fh,'(A)')'<Xdmf xmlns:xi="http://www.w3.org/2001/XInclude" Version="2.0">'
+        write(fh,'(A)')'  <Domain>'
+        !
+        write(fh,'(A,3(1X,I0),A)')'    <Topology name="topo" TopologyType="3DSMESH" Dimensions="',  &
+                                  ka+1,ja+1,ia+1,'"> </Topology>'
+        write(fh,'(A)')'    <Geometry name="geo" Type="X_Y_Z">'
+        write(fh,'(A)')'      <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),3(A))')'                Dimensions="',ka+1,ja+1,ia+1,'"> ',gridh5file,':x </DataItem>'
+        write(fh,'(A)')'      <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),3(A))')'                Dimensions="',ka+1,ja+1,ia+1,'"> ',gridh5file,':y </DataItem>'
+        write(fh,'(A)')'      <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),3(A))')'                Dimensions="',ka+1,ja+1,ia+1,'"> ',gridh5file,':z </DataItem>'
+        write(fh,'(A)')'    </Geometry>'
+        !
+        write(fh,'(A)')'  </Domain>'
+        write(fh,'(A)')'</Xdmf>'
+        close(fh)
+        print*,' ** grid: ',gridh5file,' >> visu.xdmf'
+      endif
+      !
+      if(present(flowh5file)) then
+        !
+        if(present(init)) then
+          inithead=init
+        else
+          inithead=.false.
+        endif
+        !
+        if(inithead) then
+          ! connect to a new flowfield data file
+          open(fh,file='visu.xdmf',form='formatted')
+          read(fh,'(////////////)')
+          write(fh,*)
+          write(fh,'(A)')'    <Grid Name="001" GridType="Uniform">'
+          write(fh,'(A,F12.6,A)')'      <Time Value="',timesec,'" />'
+          write(fh,'(A)')'      <Topology Reference="/Xdmf/Domain/Topology[1]"/>'
+          write(fh,'(A)')'      <Geometry Reference="/Xdmf/Domain/Geometry[1]"/>'
+        else
+          open(fh,file='visu.xdmf',form='formatted',access='append')
+          backspace(fh)
+          backspace(fh)
+          backspace(fh)
+        endif
+        !
+        if(present(dataname)) then
+          write(fh,'(3(A))')'      <Attribute Name="',dataname,'" Center="Node">'
+          write(fh,'(A)')'        <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+          write(fh,'(A,3(1X,I0),5(A))')'                   Dimensions="',ka+1,ja+1,ia+1,'"> ',flowh5file,':',dataname,'</DataItem>'
+          write(fh,'(A)')'      </Attribute>'
+        endif
+        !
+        write(fh,'(A)')'    </Grid>'
+        write(fh,'(A)')'  </Domain>'
+        write(fh,'(A)')'</Xdmf>'
+        close(fh)
+        print*,' ** ',flowh5file,':',dataname,' >> visu.xdmf'
+        !
+      endif
+      !
+      !
+    endif
+    !
+  end subroutine xdmfwriter
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine xdmfwriter.                             |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

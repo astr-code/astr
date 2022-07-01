@@ -23,11 +23,11 @@ module gridgeneration
   subroutine gridgen
     !
     use parallel, only : mpirank
-    use commvar,  only : flowtype,lreadgrid,nondimen
-    use readwrite,only : readgrid,writegrid
+    use commvar,  only : flowtype,lreadgrid,nondimen,gridfile
+    use readwrite,only : readgrid,writegrid,xdmfwriter
     !
     if(lreadgrid) then
-      call readgrid
+      call readgrid(trim(gridfile))
     else
       if(flowtype(1:3)=='tgv') then
         if(nondimen) then
@@ -62,9 +62,11 @@ module gridgeneration
         stop ' !! error at gridgen' 
       endif
       !
-      call writegrid
+      call writegrid(trim(gridfile))
       !
     endif
+    !
+    call xdmfwriter(gridh5file=trim(gridfile))
     !
   end subroutine gridgen
   !+-------------------------------------------------------------------+
