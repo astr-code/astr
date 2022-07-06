@@ -1160,9 +1160,7 @@ module bc
           call mixlayerinflow
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
           !
-          if(turbinf=='none') then
-            call profileinflow
-          endif
+          call profileinflow
           !
         else
           call freestreaminflow

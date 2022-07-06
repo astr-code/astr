@@ -127,7 +127,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,schmidt
+                        turbmode,schmidt,ibmode,gridfile
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
 #ifdef COMB
     use commvar, only : odetype,lcomb
@@ -364,10 +364,12 @@ module readwrite
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
           write(*,'(18X,(A))',advance='no')'inflow turbulence : '
           !
-          if(turbinf=='none') then
-            write(*,'(A)')'      no inflow turbulence'
+          if(turbinf=='prof') then
+            write(*,'(A)')'            read a profile'
           elseif(turbinf=='intp') then
             write(*,'(A)')' interpolation of database'
+          elseif(turbinf=='free') then
+            write(*,'(A)')' free stream incoming flow'
           else
             print*,' !! turbinf: ',turbinf
             stop ' !! ERROR in defining turbinf @ bc 11 !!'
@@ -395,8 +397,20 @@ module readwrite
       !
       if(limmbou) then
         write(*,'(2X,A)')'                   *** Immersed Boundary ON ***'
-        write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
-        write(*,'(2X,62A)')('-',i=1,62)
+        if(trim(ibmode)=='stl') then
+          write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
+          write(*,'(2X,62A)')('-',i=1,62)
+        elseif(trim(ibmode)=='grid') then
+          write(*,'(2X,A,A)')' solid nodes are defined in grid: ',trim(gridfile)
+          write(*,'(2X,62A)')('-',i=1,62)
+          stop ' !! NOT READY YET !!'  
+        elseif(trim(ibmode)=='udf') then
+          write(*,'(2X,A,A)')' solid nodes are user defined'
+          write(*,'(2X,62A)')('-',i=1,62)
+        else
+          print*,ibmode
+          stop ' !! ibmode not defined !!'
+        endif
       endif
       !
 
@@ -471,7 +485,7 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,schmidt
+                        bfacmpld,shkcrt,turbmode,schmidt,ibmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -574,7 +588,13 @@ module readwrite
       read(fh,'(A)')gridfile
       if(limmbou) then
         read(fh,'(/)')
-        read(fh,'(A)')solidfile
+        read(fh,*)ibmode
+        !
+        if(trim(ibmode)=='stl') then
+          backspace(fh)
+          read(fh,*)ibmode,solidfile
+        endif
+        !
       endif
 #ifdef COMB
       if(.not.nondimen) then
@@ -617,6 +637,7 @@ module readwrite
     call bcast(flowtype)
     call bcast(turbmode)
     call bcast(iomode)
+    call bcast(ibmode)
     !
     call bcast(conschm)
     call bcast(difschm)
@@ -1053,8 +1074,8 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readgrid(gridh5file)
     !
-    use commvar,   only : im,jm,km
-    use commarray, only : x
+    use commvar,   only : im,jm,km,limmbou,ibmode
+    use commarray, only : x,nodestat
     use hdf5io
     !
     character(len=*),intent(in) :: gridh5file
@@ -1063,6 +1084,11 @@ module readwrite
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
+    !
+    if(limmbou .and. trim(ibmode)=='grid') then
+      call h5read(varname='nodestat',var=nodestat(0:im,0:jm,0:km))
+    endif
+    !
     call h5io_end
     !
     return

@@ -25,10 +25,10 @@ module ibmethod
   !+-------------------------------------------------------------------+
   subroutine ibprocess
     !
-    use commvar,   only : limmbou,solidfile
+    use commvar,   only : limmbou,solidfile,ibmode
     use readwrite, only : readsolid
     !
-    if(limmbou) then
+    if(limmbou .and. ibmode=='stl') then
       !
       if(mpirank==0) call readsolid(solidfile)
       !

@@ -774,7 +774,7 @@ module geom
   subroutine nodestatecal
     !
     use commtype,  only : solid
-    use commvar,   only : immbody,npdci,npdcj,npdck,nsolid,dxyzmin
+    use commvar,   only : immbody,npdci,npdcj,npdck,nsolid,dxyzmin,ibmode
     use commarray, only : x,nodestat,cell
     use commfunc,  only : dis2point
     !
@@ -787,61 +787,92 @@ module geom
     !
     if(lio) print*,' ** identifying solid nodes ...'
     !
-    ! check if the solid is out of the domain 
-    if(mpirank==0) then
-      do jsd=1,nsolid
-        call solidrange(immbody(jsd),inputcmd='checkdomain') 
-      enddo
-    endif
-    !
-    nodestat=0
-    ncou=0
-    do jsd=1,nsolid
+    if(trim(ibmode)=='stl') then
       !
-      pso=>immbody(jsd)
+      ! check if the solid is out of the domain 
+      if(mpirank==0) then
+        do jsd=1,nsolid
+          call solidrange(immbody(jsd),inputcmd='checkdomain') 
+        enddo
+      endif
+      !
+      nodestat=0
+      ncou=0
+      do jsd=1,nsolid
+        !
+        pso=>immbody(jsd)
+        !
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+          !
+          xp=x(i,j,k,:)
+          !
+          pcdir=pso%xcen(:)-xp
+          dist=pcdir(1)**2+pcdir(2)**2+pcdir(3)**2
+          if(dist>1.d-10) then
+            xp=xp+1.d-4*dxyzmin*pcdir/sqrt(dist)
+          endif
+          !
+          if(xp(1)<pso%xmin(1) .or.  xp(1)>pso%xmax(1) .or.    &
+             xp(2)<pso%xmin(2) .or.  xp(2)>pso%xmax(2) .or.    &
+             xp(3)<pso%xmin(3) .or.  xp(3)>pso%xmax(3) ) then
+            !
+            nodestat(i,j,k)=0
+            ! fluids 
+            !
+          else
+            !
+            ! to calculation the intersection between nodes and face
+            ! !
+            if(ndims==2) then
+              linsold=polyhedron_contains_point_2d(pso,xp)
+            elseif(ndims==3) then
+              linsold=polyhedron_contains_point_3d(pso,xp)
+            else
+              stop ' !! ERROR1 @ nodestatecal' 
+            endif
+            !
+            if(linsold) then
+              ! ths point is in the solid
+              nodestat(i,j,k)=5
+              !
+              ncou=ncou+1
+              !
+            else
+              ! fluids
+              nodestat(i,j,k)=0
+              !
+            endif
+            !
+          endif
+          !
+        enddo
+        enddo
+        enddo
+        !
+      enddo
+      !
+    elseif(trim(ibmode)=='udf') then
+      !
+      nodestat=0
+      ncou=0
       !
       do k=0,km
       do j=0,jm
       do i=0,im
         !
-        xp=x(i,j,k,:)
+        call solid_udf_backfacestep(xp=x(i,j,k,:),inside=linsold)
         !
-        pcdir=pso%xcen(:)-xp
-        dist=pcdir(1)**2+pcdir(2)**2+pcdir(3)**2
-        if(dist>1.d-10) then
-          xp=xp+1.d-4*dxyzmin*pcdir/sqrt(dist)
-        endif
-        !
-        if(xp(1)<pso%xmin(1) .or.  xp(1)>pso%xmax(1) .or.    &
-           xp(2)<pso%xmin(2) .or.  xp(2)>pso%xmax(2) .or.    &
-           xp(3)<pso%xmin(3) .or.  xp(3)>pso%xmax(3) ) then
+        if(linsold) then
+          ! ths point is in the solid
+          nodestat(i,j,k)=5
           !
-          nodestat(i,j,k)=0
-          ! fluids 
+          ncou=ncou+1
           !
         else
-          !
-          ! to calculation the intersection between nodes and face
-          ! !
-          if(ndims==2) then
-            linsold=polyhedron_contains_point_2d(pso,xp)
-          elseif(ndims==3) then
-            linsold=polyhedron_contains_point_3d(pso,xp)
-          else
-            stop ' !! ERROR1 @ nodestatecal' 
-          endif
-          !
-          if(linsold) then
-            ! ths point is in the solid
-            nodestat(i,j,k)=5
-            !
-            ncou=ncou+1
-            !
-          else
-            ! fluids
-            nodestat(i,j,k)=0
-            !
-          endif
+          ! fluids
+          nodestat(i,j,k)=0
           !
         endif
         !
@@ -849,7 +880,21 @@ module geom
       enddo
       enddo
       !
-    enddo
+    elseif(trim(ibmode)=='grid') then
+      !
+      ncou=0
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        if(nodestat(i,j,k)==5) then
+          ncou=ncou+1
+        endif
+      enddo
+      enddo
+      enddo
+      !
+    endif
     !
     ncou=psum(ncou)
     if(lio) write(*,'(A,I0)')'  ** total number of solide nodes: ',ncou
@@ -868,6 +913,14 @@ module geom
       do k=0,km
       do j=0,jm
       do i=0,im
+        !
+        ! skip boundary nodes
+        if(npdci==1 .and. i==0)  cycle
+        if(npdci==2 .and. i==im) cycle
+        if(npdcj==1 .and. j==0)  cycle
+        if(npdcj==2 .and. j==jm) cycle
+        if(npdck==1 .and. k==0)  cycle
+        if(npdck==2 .and. k==km) cycle
         !
         if(nodestat(i,j,k)==5) then
           ! solid nodes
@@ -917,8 +970,8 @@ module geom
       !
     enddo
     !
-    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
-    !                              nodestat(0:im,0:jm,0:km),'ns' )
+    ! !
+    ! call mpistop
     !
     ! search for near-boundary force nodes (1-5)
     !
@@ -1086,7 +1139,12 @@ module geom
     else 
       stop ' !! ERROR in ndims @ nodestatecal'
     endif
-    !
+    
+    ! call tecbin('testout/tecgrid'//mpirankname//'.plt',           &
+    !                            x(0:im,0:jm,0:km,1),'x',           &
+    !                            x(0:im,0:jm,0:km,2),'y',           &
+    !                            x(0:im,0:jm,0:km,3),'z',           &
+    !                            nodestat(0:im,0:jm,0:km),'ns' )
     !
     if(lio) print*,' ** cell state set'
     !
@@ -1103,7 +1161,7 @@ module geom
   !| -------------                                                     |
   !| 05-Jul-2021: Created by J. Fang @ Appleton                        |
   !+-------------------------------------------------------------------+
-  function nodeincell(acell,p) result(lin)
+  subroutine nodeincell(acell,p,lin,debug)
     !
     use commtype, only : nodcel,solid
     use commvar,  only : ndims
@@ -1111,12 +1169,20 @@ module geom
     !
     ! arguments
     type(nodcel),intent(in) :: acell
-    type(solid) :: scell
     real(8),intent(in) :: p(3)
-    logical :: lin
+    logical,intent(out) :: lin
+    logical,intent(in),optional :: debug
     !
+    type(solid) :: scell
     real(8) :: norm1(3),norm2(3),var1(3)
     integer :: n
+    logical :: ldebg
+    !
+    if(present(debug)) then
+      ldebg=debug
+    else
+      ldebg=.false.
+    endif
     !
     if(p(1)<acell%xmin(1) .or. p(1)>acell%xmax(1) .or. &
        p(2)<acell%xmin(2) .or. p(2)>acell%xmax(2) .or. &
@@ -1134,9 +1200,25 @@ module geom
         if(lin) then
           return
         else
-          lin=pointintriangle(acell%x(1,:),acell%x(4,:),acell%x(3,:),p)
-          return
+          lin=pointintriangle(acell%x(3,:),acell%x(4,:),acell%x(1,:),p)
+          !
+          if(lin) then
+            return
+          else
+            lin=pointintriangle(acell%x(4,:),acell%x(1,:),acell%x(2,:),p)
+            !
+            if(lin) then
+              return
+            else
+              lin=pointintriangle(acell%x(2,:),acell%x(3,:),acell%x(4,:),p)
+              if(lin) return
+            endif
+            !
+          endif
+          !
         endif
+        !
+        ! if(ldebg) print*,p,lin
         !
       elseif(ndims==3) then
         !
@@ -1236,9 +1318,9 @@ module geom
     !
     return
     !
-  end function nodeincell
+  end subroutine nodeincell
   !+-------------------------------------------------------------------+
-  !| The end of the function nodeincell.                               |
+  !| The end of the subroutine nodeincell.                             |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -1250,7 +1332,7 @@ module geom
   !+-------------------------------------------------------------------+
   subroutine boundnodecal
     !
-    use commvar,   only : nsolid,immbody,immbond,dxyzmin
+    use commvar,   only : nsolid,immbody,immbond,dxyzmin,ibmode
     use commtype,  only : solid,sboun
     use commarray, only : nodestat,x
     use parallel,  only : ig0,jg0,kg0,pmerg
@@ -1281,15 +1363,80 @@ module geom
       kss=1
     endif
     !
-    ! to get the nodes and distance of inner solid nodes to boundary 
-    counter=0
-    nc_f=0
-    nc_b=0
-    nc_g=0
-    !
-    do jsd=1,nsolid
+    if(trim(ibmode)=='stl') then
+      ! to get the nodes and distance of inner solid nodes to boundary 
+      counter=0
+      nc_f=0
+      nc_b=0
+      nc_g=0
       !
-      pso=>immbody(jsd)
+      do jsd=1,nsolid
+        !
+        pso=>immbody(jsd)
+        !
+        do k=kss,km
+        do j=jss,jm
+        do i=iss,im
+          !
+          if(nodestat(i,j,k)>0 .and. nodestat(i,j,k)<5) then
+            ! ghost point
+            !
+            counter=counter+1
+            !
+            call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='+')
+            !
+            bnodes(counter)%igh(1)=i+ig0
+            bnodes(counter)%igh(2)=j+jg0
+            bnodes(counter)%igh(3)=k+kg0
+            !
+            bnodes(counter)%ximag(:)=2.d0*bnodes(counter)%x(:)-x(i,j,k,:)
+            !
+            bnodes(counter)%dis2image=dis2point(bnodes(counter)%x,bnodes(counter)%ximag)
+            bnodes(counter)%dis2ghost=dis2point(bnodes(counter)%x,x(i,j,k,:))
+            !
+            if(dis2point(bnodes(counter)%x,x(i,j,k,:))<dxyzmin*0.01d0) then
+              ! the distance of node to wall is less thant 1/100 of 
+              ! the min grid spacing
+              bnodes(counter)%nodetype='b'
+              nc_b=nc_b+1
+              !
+              ! boundary marker
+            else
+              bnodes(counter)%nodetype='g'
+              nc_g=nc_g+1
+            endif
+            !
+            !
+          ! elseif(nodestat(i,j,k)==-1) then
+          !   ! force point
+          !   !
+          !   counter=counter+1
+          !   !
+          !   call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='-')
+          !   !
+          !   bnodes(counter)%igh(1)=i+ig0
+          !   bnodes(counter)%igh(2)=j+jg0
+          !   bnodes(counter)%igh(3)=k+kg0
+          !   !
+          !   bnodes(counter)%ximag(:)=2.d0*x(i,j,k,:)-bnodes(counter)%x(:)
+          !   !
+          !   bnodes(counter)%nodetype='f'
+          !   !
+          !   nc_f=nc_f+1
+          endif
+          !
+        enddo
+        enddo
+        enddo
+        !
+      enddo
+      !
+    elseif(trim(ibmode)=='udf') then
+      !
+      counter=0
+      nc_f=0
+      nc_b=0
+      nc_g=0
       !
       do k=kss,km
       do j=jss,jm
@@ -1300,7 +1447,7 @@ module geom
           !
           counter=counter+1
           !
-          call polyhedron_bound_search(pso,x(i,j,k,:),bnodes(counter),dir='+')
+          call solid_udf_backfacestep(xp=x(i,j,k,:),bnode=bnodes(counter))
           !
           bnodes(counter)%igh(1)=i+ig0
           bnodes(counter)%igh(2)=j+jg0
@@ -1322,7 +1469,6 @@ module geom
             bnodes(counter)%nodetype='g'
             nc_g=nc_g+1
           endif
-          !
           !
         ! elseif(nodestat(i,j,k)==-1) then
         !   ! force point
@@ -1346,7 +1492,8 @@ module geom
       enddo
       enddo
       !
-    enddo
+      !
+    endif
     !
     call pmerg(var=bnodes,nvar=counter,vmerg=immbond)
     !
@@ -1387,7 +1534,7 @@ module geom
     !
     ! local data
     integer(8),allocatable :: i_cell(:)
-    integer :: jb,i,j,k,ncou
+    integer :: jb,i,j,k,ncou,ijk(3)
     real(8) :: time_beg,subtime
     real(8) :: deltamv,xintcell(3)
     logical,allocatable :: icell_marker(:)
@@ -1413,8 +1560,13 @@ module geom
       !
       if(ndims==2) then
         !
-        call ijk2int8(int8=i_cell(jb),i3a=pngrid2d(pbon%ximag),mode='3>>1')
+        call pngrid2d(pbon%ximag,ijk)
+        call ijk2int8(int8=i_cell(jb),i3a=ijk,mode='3>>1')
         ! i_cell(jb,:)=pngrid2d(pbon%ximag)
+        !
+        ! if(mpirank==0 .and. jb==209) then
+        !   call pngrid2d(pbon%ximag,ijk,debug=.true.)
+        ! endif
         !
       elseif(ndims==3) then
         !
@@ -1506,7 +1658,9 @@ module geom
           !
           if(ndims==2) then
             !
-           call ijk2int8(int8=i_cell(jb),i3a=pngrid2d(pbon%ximag),mode='3>>1')
+            call pngrid2d(pbon%ximag,ijk)
+            !
+            call ijk2int8(int8=i_cell(jb),i3a=ijk,mode='3>>1')
             ! i_cell(jb,:)=pngrid2d(pbon%ximag)
             !
           elseif(ndims==3) then
@@ -1579,6 +1733,8 @@ module geom
     subtime=ptime()-time_beg 
     !
     if(lio) write(*,'(A,F12.8)')'  ** time cost in searching icell :',subtime
+    !
+    ! call mpistop
     !
   end subroutine icellsearch
   !+-------------------------------------------------------------------+
@@ -1827,6 +1983,7 @@ module geom
     nlocal=0
     nonlocal=0
     !
+    !
     do jb=1,size(immbond)
       !
       pbon=>immbond(jb)
@@ -1873,6 +2030,8 @@ module geom
         !
         num_icell_rank(mpirank)=num_icell_rank(mpirank)+1
         !
+      else
+        ! if(mpirank==0) print*,mpirank,'|',jb,pbon%x,pbon%ximag
       endif
       !
       ! if(jb==1) then
@@ -1926,6 +2085,8 @@ module geom
       ! endif
       !
     enddo
+    !
+    ! print*,mpirank,'|',icell_counter
     !
     call pgather(icell_order(1:icell_counter),imb_node_have)
     !
@@ -2116,25 +2277,35 @@ module geom
   !| -------------                                                     |
   !| 19-08-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  function pngrid2d(p) result(ijk)
+  subroutine pngrid2d(p,ijk,debug)
     !
     use commvar,   only : im,jm,km
     use commarray, only : x,cell
     !
     ! arguments
     real(8),intent(in) :: p(3)
-    integer :: ijk(3)
+    integer,intent(out) :: ijk(3)
+    logical,intent(in),optional :: debug
     !
     integer :: i,j,k
-    logical :: lin
+    logical :: lin,ldebg
     !
     ijk=0
     !
     k=0
+    !
+    if(present(debug)) then
+      ldebg=debug
+    else
+      ldebg=.false.
+    endif
+    !
     loopj: do j=1,jm
     loopi: do i=1,im
       !
-      if(nodeincell(cell(i,j,k),p)) then
+      call nodeincell(cell(i,j,k),p,lin,debug=ldebg)
+      !
+      if(lin) then
         !
         ijk(1)=i+ig0
         ijk(2)=j+jg0
@@ -2147,7 +2318,7 @@ module geom
     enddo loopi
     enddo loopj
     !
-  end function pngrid2d
+  end subroutine pngrid2d
   !+-------------------------------------------------------------------+
   !| The end of the function pngrid2d.                                 |
   !+-------------------------------------------------------------------+
@@ -2185,7 +2356,7 @@ module geom
     integer :: ilevel,ic,id,i,j,k,in,jn,kn,                            &
                ncou,nco2,imm,jmm,kmm,is,js,ks,ie,je,ke,isub,n
     integer,allocatable :: idsaver(:),idstemp(:)
-    logical :: lfound
+    logical :: lfound,lin
     !
     if(initial) then
       ! divide the domain into many subdomains using a tree structure
@@ -2430,7 +2601,8 @@ module geom
       do j=domain(id)%j0+1,domain(id)%jm
       do i=domain(id)%i0+1,domain(id)%im
         !
-        if(nodeincell(cell(i,j,k),p)) then
+        call nodeincell(cell(i,j,k),p,lin)
+        if(lin) then
           !
           ijk(1)=i+ig0
           ijk(2)=j+jg0
@@ -3739,6 +3911,17 @@ module geom
     real(8) :: a1,a2,a3,error,var1,var2,dot00,dot01,dot02,dot11,dot12, &
                inverDeno,u,v
     real(8) :: epsilon
+    logical :: lab,lac,lbc
+    !
+    ! add a discrimination if the point is on the line segment
+    lab=pnsegment(a,b,p)
+    lac=pnsegment(a,c,p)
+    lbc=pnsegment(b,c,p)
+    !
+    if(lab .or. lac .or. lbc) then
+      lin=.true.
+      return
+    endif
     !
     v0 = c - a 
     v1 = b - a 
@@ -3787,6 +3970,65 @@ module geom
   end function pointintriangle_nodes
   !+-------------------------------------------------------------------+
   !| The end of the subroutine pointintriangle.                        |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to check if a point in on a segment.           |
+  !+-------------------------------------------------------------------+
+  function pnsegment(a,b,p) result(lint)
+    !
+    real(8),intent(in)  :: a(3),b(3),p(3)
+    logical :: lint
+    !
+    real(8) :: vec1(3),vec2(3),vec3(3),norm,kab,kap
+    !
+    vec1=b-a
+    vec2=p-a
+    !
+    call geo_dvec_cross_3d(vec1,vec2,vec3)
+    !
+    if(abs(vec3(1))<1.d-16 .and. abs(vec3(2))<1.d-16 .and. abs(vec3(3))<1.d-16) then
+      kap=dot_product(vec1,vec2)
+      kab=dot_product(vec1,vec1)
+      !
+      if(kap<=kab .and. kap>=0) then
+        ! The point is  between a & b
+        lint=.true.
+      else
+        lint=.false.
+      endif
+      ! if(kap<0) then
+      !   ! The point is not between a & b
+      !   lint=.false.
+      !   return
+      ! elseif(kap>kab)
+      !   ! The point is not between a & b
+      !   lint=.false.
+      !   return
+      ! else
+      !   lint=.true.
+      !   return
+      ! endif
+      !
+    else
+      lint=.false.
+      return
+    endif
+    !
+    ! if( p(1)<min(a(1),b(1)) .or.  p(1)>max(a(1),b(1)) .or. &
+    !     p(2)<min(a(2),b(2)) .or.  p(1)>max(a(2),b(2)) .or. &
+    !     p(3)<min(a(3),b(3)) .or.  p(1)>max(a(3),b(3)) ) then
+    !   lint=.false.
+    !   return
+    ! else
+    !   !
+    !   dot_product(vec1,vec2)
+    !   !
+    ! endif
+    !
+  end function pnsegment
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pnsegment.                              |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
@@ -4043,15 +4285,77 @@ module geom
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+
-  !| This subroutine function is to return if a node is in a mvg.      |
+  !| This subroutine function is to return if a node is in a backward  |
+  !| facing step                                                       |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 18-04-2022  | Added by J. Fang @ Warrington                       |
   !+-------------------------------------------------------------------+
-  function nodes_in_mvg(x,y,z) result (inside)
+  subroutine solid_udf_backfacestep(xp,inside,bnode)
     !
-    logical inside
+    use commtype,  only : sboun
+    !
+    real(8),intent(in) :: xp(3)
+    logical,intent(out),optional :: inside
+    type(sboun),intent(out),optional :: bnode
+    !
+    real(8) :: dis1,dis2
+    real(8) :: step_upper_y,step_right_x
+    !
+    step_right_x=7.32d0
+    step_upper_y=3.05d0
+    !
+    if(xp(2)<step_upper_y .and. xp(1)<=step_right_x) then
+      !
+      if(present(inside)) inside=.true.
+      !
+      if(present(bnode)) then
+        !
+        dis1=abs(step_upper_y-xp(2))
+        dis2=abs(step_right_x-xp(1))
+        !
+        if(dis2<dis1) then
+          bnode%x(1)=step_right_x
+          bnode%x(2)=xp(2)
+          bnode%x(3)=xp(3)
+          !
+          bnode%normdir(1)=1.d0
+          bnode%normdir(2)=0.d0
+          bnode%normdir(3)=0.d0
+        else
+          bnode%x(1)=xp(1)
+          bnode%x(2)=step_upper_y
+          bnode%x(3)=xp(3)
+          !
+          bnode%normdir(1)=0.d0
+          bnode%normdir(2)=1.d0
+          bnode%normdir(3)=0.d0
+        endif
+        !
+      endif
+      !
+    else
+      if(present(inside)) inside=.false.
+    endif
+    !
+    return
+    !
+  end subroutine solid_udf_backfacestep
+  !+-------------------------------------------------------------------+
+  !| The end of subroutine solid_udf_backfacestep                      |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine function is to return if a node is in a mvg.      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-07-2022  | Added by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  pure function nodes_in_mvg(x,y,z) result (inside)
+    !
+    logical :: inside
     real(8),intent(in) :: x,y,z
     !
     ! local data

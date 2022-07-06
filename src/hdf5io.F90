@@ -183,7 +183,7 @@ module hdf5io
     elseif(mode=='s') then
       call h5ra3d_r8_stream(varname,var)
     else
-      stop ' !! error @  h5wa3d_r8'
+      stop ' !! error @  h5ra3d_r8'
     endif
     !
   end subroutine h5ra3d_r8

@@ -36,7 +36,7 @@ f
 none,h
 
 # bctype                                                : Boundary condition definition 
-11, none
+11, free 
 22
 52
 52
@@ -53,7 +53,7 @@ none,h
 datin/grid.h5
 
 # solidfile
-datin/circle.stl
+stl,'datin/circle.stl'
 
 
 

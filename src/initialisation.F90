@@ -36,10 +36,12 @@ module initialisation
                         readcheckpoint,readmeanflow,readmonc,writeflfed
     use fludyna,  only: updateq
     use statistic,only: nsamples
-    use bc,       only: ninflowslice
+    use bc,       only: ninflowslice,turbinf
     !
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
+      !
       call blprofile
+      !
     endif
     !
     call readcont
@@ -1241,7 +1243,7 @@ module initialisation
   subroutine blprofile
     !
     use readwrite,only: readprofile
-    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
     use stlaio,  only: get_unit
     !
@@ -1251,31 +1253,48 @@ module initialisation
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
-    if(lio) then
-      fh=get_unit()
+    if(turbinf=='prof' .or. turbinf=='intp') then
+      if(lio) then
+        fh=get_unit()
+        !
+        open(fh,file='datin/inlet.prof',action='read',form='formatted')
+        read(fh,*)
+        read(fh,*)
+        read(fh,*)nomi_thick,disp_thick,mome_thick,fric_velocity
+        close(fh)
+        write(*,"(A)")'  -----------------------------------------------'
+        write(*,"(A)")'            δ          δ*           θ        utau'
+        write(*,"(1X,4(F12.7))")nomi_thick,disp_thick,mome_thick,fric_velocity
+        write(*,"(A)")'  -----------------------------------------------'
+        !
+      endif
       !
-      open(fh,file='datin/inlet.prof',action='read',form='formatted')
-      read(fh,*)
-      read(fh,*)
-      read(fh,*)nomi_thick,disp_thick,mome_thick,fric_velocity
-      close(fh)
-      write(*,"(A)")'  -----------------------------------------------'
-      write(*,"(A)")'            δ          δ*           θ        utau'
-      write(*,"(1X,4(F12.7))")nomi_thick,disp_thick,mome_thick,fric_velocity
-      write(*,"(A)")'  -----------------------------------------------'
+      call bcast(nomi_thick)
+      call bcast(disp_thick)
+      call bcast(mome_thick)
+      call bcast(fric_velocity)
+      !
+      call readprofile('datin/inlet.prof',dir='j',                     &
+                                var1=rho_prof,     var2=vel_prof(:,1), &
+                                var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
+      !
+      prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
+      !
+    elseif(turbinf=='free') then
+      !
+      nomi_thick=0.d0
+      disp_thick=0.d0
+      mome_thick=0.d0
+      fric_velocity=1.d5
+      !
+      rho_prof(:)  =roinf
+      vel_prof(:,1)=uinf
+      vel_prof(:,2)=vinf
+      vel_prof(:,3)=winf
+      tmp_prof(:)  =tinf
+      prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
       !
     endif
-    !
-    call bcast(nomi_thick)
-    call bcast(disp_thick)
-    call bcast(mome_thick)
-    call bcast(fric_velocity)
-    !
-    call readprofile('datin/inlet.prof',dir='j',                     &
-                              var1=rho_prof,     var2=vel_prof(:,1), &
-                              var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
-    !
-    prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
     !
   end subroutine blprofile
   !+-------------------------------------------------------------------+
