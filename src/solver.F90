@@ -10,7 +10,7 @@ module solver
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
                        datasync,ptime,irk,jrk,krk,irkm,jrkm,krkm
-  use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,nondimen
+  use commvar,  only : ndims,ks,ke,hm,lfftk,ctime,nondimen
   !
   implicit none
   !
@@ -273,6 +273,8 @@ module solver
       call src_chan
     elseif(trim(flowtype)=='rti') then 
       call src_rti
+    elseif(trim(flowtype)=='tbl') then 
+      call src_tbl
     endif
     !
 #ifdef COMB
@@ -370,7 +372,6 @@ module solver
   !| The end of the subroutine src_chan.                               |
   !+-------------------------------------------------------------------+
   !!
-
   !+-------------------------------------------------------------------+
   !| This subroutine add gravity effect to the Rayleigh–Taylor         |
   !| instability                                                       |
@@ -402,6 +403,107 @@ module solver
   !| The end of the subroutine src_rti.                                |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine add the slow growth terms to the temporal BL flow |
+  !+-------------------------------------------------------------------+
+  !| ref: V. Topalian, T. A. Oliver, R. Ulerich, and R. D. Moser,      |
+  !|      Temporal slow-growth formulation for direct numerical        |
+  !|      simulation of compressible wall-bounded flows,               |
+  !|      Physical Review Fluids 2,(2017).                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-07-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine src_tbl
+    !
+    use commvar,  only : im,jm,km
+    use commarray,only : rho,vel,qrhs,jacob,x,q
+    use statistic,only : ro_xzm,u1_xzm,u2_xzm,eng_xzm,tke_xzm,ee_xzm,  &
+                         nominal_thickness
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: arytmp(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6)
+    real(8) :: drho(0:im,0:jm,0:km,1:3),du1(0:im,0:jm,0:km,1:3),       &
+               du2(0:im,0:jm,0:km,1:3),deng(0:im,0:jm,0:km,1:3),       &
+               dtke(0:im,0:jm,0:km,1:3),dee(0:im,0:jm,0:km,1:3)
+    real(8) :: bl_growth_rate,s_rho,s_u1,s_u2,s_u3,s_eng,uf,vf,wf,ef
+    !
+    bl_growth_rate=0.001d0
+    ! bl_growth_rate=0.044672d0
+    !
+    return
+    !
+    ! if(nominal_thickness<0.9d0) return
+    !
+    if(.not. allocated(ro_xzm)) return
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      arytmp(i,j,k,1)=ro_xzm(j)
+      arytmp(i,j,k,2)=u1_xzm(j)
+      arytmp(i,j,k,3)=u2_xzm(j)
+      arytmp(i,j,k,4)=eng_xzm(j)
+      !
+      arytmp(i,j,k,5)=tke_xzm(j)
+      arytmp(i,j,k,6)=ee_xzm(j)
+    end do
+    end do
+    end do
+    !
+    call dataswap(arytmp)
+    !
+    drho=grad(arytmp(:,:,:,1))
+    du1 =grad(arytmp(:,:,:,2))
+    du2 =grad(arytmp(:,:,:,3))
+    deng=grad(arytmp(:,:,:,4))
+    !
+    dtke=grad(arytmp(:,:,:,5))
+    dee =grad(arytmp(:,:,:,6))
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      uf=vel(i,j,k,1)-u1_xzm(j)
+      vf=vel(i,j,k,2)-u2_xzm(j)
+      wf=vel(i,j,k,3)
+      ef=q(i,j,k,5)/rho(i,j,k)-eng_xzm(j)
+      !
+      s_rho= x(i,j,k,2)*bl_growth_rate*drho(i,j,k,2)/ro_xzm(j)
+      s_u1 = x(i,j,k,2)*bl_growth_rate* (du1(i,j,k,2) + uf/tke_xzm(j)*dtke(i,j,k,2))
+      s_u2 = x(i,j,k,2)*bl_growth_rate* (du2(i,j,k,2) + vf/tke_xzm(j)*dtke(i,j,k,2))
+      s_u3 = x(i,j,k,2)*bl_growth_rate* (               wf/tke_xzm(j)*dtke(i,j,k,2))
+      s_eng= x(i,j,k,2)*bl_growth_rate* (deng(i,j,k,2)+ ef/ee_xzm(j) *dee(i,j,k,2))
+      !
+      ! s_rho= x(i,j,k,2)*bl_growth_rate*drho(i,j,k,2)/ro_xzm(j)
+      ! s_u1 = x(i,j,k,2)*bl_growth_rate* du1(i,j,k,2)
+      ! s_u2 = x(i,j,k,2)*bl_growth_rate* du2(i,j,k,2)
+      ! s_u3 = 0.d0
+      ! s_eng= x(i,j,k,2)*bl_growth_rate* deng(i,j,k,2)
+      !
+      if(isnan(s_rho)) s_rho=0.d0
+      if(isnan(s_u1 )) s_u1 =0.d0
+      if(isnan(s_u2 )) s_u2 =0.d0
+      if(isnan(s_u3 )) s_u3 =0.d0
+      if(isnan(s_eng)) s_eng=0.d0
+      !
+      qrhs(i,j,k,1)=qrhs(i,j,k,1)+s_rho*jacob(i,j,k)
+      qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*jacob(i,j,k)*(s_u1+vel(i,j,k,1)*s_rho)
+      qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*jacob(i,j,k)*(s_u2+vel(i,j,k,2)*s_rho)
+      qrhs(i,j,k,4)=qrhs(i,j,k,4)+rho(i,j,k)*jacob(i,j,k)*(s_u3+vel(i,j,k,3)*s_rho)
+      qrhs(i,j,k,5)=qrhs(i,j,k,5)+(rho(i,j,k)*s_eng+q(i,j,k,5)*s_rho)*jacob(i,j,k)
+      !
+    end do
+    end do
+    end do
+    !
+  end subroutine src_tbl
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine src_tbl.                                |
+  !+-------------------------------------------------------------------+
   !+-------------------------------------------------------------------+
   !| This subroutine add a source term to the rsd of the equation to   |
   !| drive channel flow.                                               |
@@ -2052,6 +2154,90 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
+  !| This subroutine is a general gradient calculater                  |
+  !|   input: scalar                                                   |
+  !|   output: the gradient of the input scalar                        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 22-07-2022  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
+  !+-------------------------------------------------------------------+
+  function grad(var) result(dvar)
+    !
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims
+    use commarray, only : dxi
+    use commfunc,  only : ddfc
+    !
+    ! arguments
+    real(8),intent(in) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
+    real(8) :: dvar(0:im,0:jm,0:km,1:3)
+    !
+    ! local data
+    integer :: i,j,k
+    real(8),allocatable :: df(:),ff(:)
+    !
+    allocate(ff(-hm:im+hm),df(0:im))
+    !
+    do k=0,km
+    do j=0,jm
+      !
+      ff(:)=var(:,j,k)
+      !
+      df(:)=ddfc(ff(:),difschm,npdci,im,alfa_dif,dci)
+      !
+      dvar(:,j,k,1)=dvar(:,j,k,1)+df(:)*dxi(0:im,j,k,1,1)
+      dvar(:,j,k,2)=dvar(:,j,k,2)+df(:)*dxi(0:im,j,k,1,2)
+      dvar(:,j,k,3)=dvar(:,j,k,3)+df(:)*dxi(0:im,j,k,1,3)
+      !
+    enddo
+    enddo
+    !
+    deallocate(ff,df)
+    !
+    allocate(ff(-hm:jm+hm),df(0:jm))
+    do k=0,km
+    do i=0,im
+      !
+      ff(:)=var(i,:,k)
+      !
+      df(:)=ddfc(ff(:),difschm,npdcj,jm,alfa_dif,dcj)
+      !
+      dvar(i,:,k,1)=dvar(i,:,k,1)+df(:)*dxi(i,0:jm,k,2,1)
+      dvar(i,:,k,2)=dvar(i,:,k,2)+df(:)*dxi(i,0:jm,k,2,2)
+      dvar(i,:,k,3)=dvar(i,:,k,3)+df(:)*dxi(i,0:jm,k,2,3)
+      !
+    enddo
+    enddo
+    deallocate(ff,df)
+    !
+    if(ndims==3) then
+      !
+      allocate(ff(-hm:km+hm),df(0:km))
+      do j=0,jm
+      do i=0,im
+        !
+        ff(:)=var(i,j,:)
+        !
+        df(:)=ddfc(ff(:),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+        !
+        dvar(i,j,:,1)=dvar(i,j,:,1)+df(:)*dxi(i,j,0:km,3,1)
+        dvar(i,j,:,2)=dvar(i,j,:,2)+df(:)*dxi(i,j,0:km,3,2)
+        dvar(i,j,:,3)=dvar(i,j,:,3)+df(:)*dxi(i,j,0:km,3,3)
+        !
+      enddo
+      enddo
+      deallocate(ff,df)
+      !
+    endif
+    !
+    return
+    !
+  end function grad
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine grad.                                   |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to calculate gradients of flow variables.      |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -2435,7 +2621,9 @@ module solver
       tau33=0.d0
       !
       if(trim(turbmode)=='k-omega') then
+        !
         miu2=2.d0*(miu+miut(i,j,k))
+        !
         hcc=(miu/prandtl+miut(i,j,k)/komega%prt)/const5
         !
         detk=num2d3*rho(i,j,k)*tke(i,j,k)

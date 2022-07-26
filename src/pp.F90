@@ -562,7 +562,10 @@ module pp
     print*,cmd
     !
     if(cmd=='sgen') then
-      call solidgen_mvg
+      call solidgen_circle
+      !
+      shift_cor=(/5.d0,2.5d0,0.d0/)
+      !
     elseif(cmd=='proc') then
       call readkeyboad(inputfile)
       !
@@ -593,10 +596,10 @@ module pp
       call solidrange(immbody(js))
       !
       ! call solidresc(immbody(js),resc_fact)
-      call solidrota(immbody(js),rot_theta,rot_vec)
-      ! call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
-      !                            y=shift_cor(2)-immbody(js)%xcen(2),  &
-      !                            z=shift_cor(3)-immbody(js)%xcen(3))
+      ! call solidrota(immbody(js),rot_theta,rot_vec)
+      call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
+                                 y=shift_cor(2)-immbody(js)%xcen(2),  &
+                                 z=shift_cor(3)-immbody(js)%xcen(3))
       !
     enddo
     !
@@ -668,7 +671,11 @@ module pp
       call naca4digit(xin(i),xap(i),yap(i),nacaname,'lower')
     enddo
     !
-    theter=-10.d0/180.d0*pi
+    print*,' ** input angle of attack in degree'
+    read(*,*)theter
+    !
+    theter=-theter/180.d0*pi
+    !
     do i=0,map
       var1=xap(i)*cos(theter)-yap(i)*sin(theter)
       var2=xap(i)*sin(theter)+yap(i)*cos(theter)
@@ -1707,7 +1714,7 @@ module pp
     ! local data
     integer :: i,j,k,jf,km,jm,im,nface
     real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
-               x1(3),x2(3),x3(3),x4(3),x5(3),x6(3),norm1(3),var1
+               x1(3),x2(3),x3(3),x4(3),x5(3),x6(3),norm1(3),var1,xcent(3)
     real(8) :: epsilon
     type(triangle),allocatable :: tempface(:)
     !
@@ -1767,15 +1774,17 @@ module pp
       tempface(nface)%b=x4
       tempface(nface)%c=x1
       !
-      ! nface=nface+1
-      ! tempface(nface)%a=x1
-      ! tempface(nface)%b=x2
-      ! tempface(nface)%c=x5
+      nface=nface+1
+      xcent=(/0.d0,0.d0,-0.01d0/)
+      tempface(nface)%a=x1
+      tempface(nface)%b=x2
+      tempface(nface)%c=xcent
       ! !
-      ! nface=nface+1
-      ! tempface(nface)%a=x3
-      ! tempface(nface)%b=x4
-      ! tempface(nface)%c=x6
+      nface=nface+1
+      xcent=(/0.d0,0.d0,0.01d0/)
+      tempface(nface)%a=x3
+      tempface(nface)%b=x4
+      tempface(nface)%c=xcent
       !
     enddo
     !
@@ -1981,6 +1990,7 @@ module pp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowfieldview.                          |
   !+-------------------------------------------------------------------+
+  !
   !
 end module pp
 !+---------------------------------------------------------------------+

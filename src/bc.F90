@@ -406,7 +406,7 @@ module bc
   !| -------------                                                     |
   !| 30-06-2021: Created by J. Fang @ Warrington                       |
   !+-------------------------------------------------------------------+
-  subroutine immbody(subtime)
+  subroutine immbody(subtime1,subtime2,subtime3,subtime4)
     !
     use commtype,  only : sboun
     !
@@ -419,7 +419,7 @@ module bc
     use commfunc,  only : median
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    real(8),intent(inout),optional :: subtime1,subtime2,subtime3,subtime4
     !
     ! local data
     integer :: i,j,k,m,kb,iss,jss,kss,n,jspec,jq,jb,jsup,counter,ncube
@@ -431,9 +431,11 @@ module bc
     real(8) :: prslmin,prslmax
     type(sboun),pointer :: pb
     !
-    real(8) :: time_beg
+    real(8) :: time_beg,time_tmp
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(subtime1) .or. present(subtime2) ) then
+      time_beg=ptime()
+    endif
     !
     if(npdci==1) then
       iss=0
@@ -533,7 +535,15 @@ module bc
       !
     enddo
     !
+    subtime2=subtime2+ptime()-time_beg
+    time_tmp=ptime()
+    !
     call syncqimag_nonlocal
+    ! call syncqimag_nonlocal(subtime1=subtime2,subtime2=subtime3, &
+    !                         subtime3=subtime4)
+    !
+    subtime3=subtime3+ptime()-time_tmp
+    time_tmp=ptime()
     !
     ! call syncqimag(qimag(:,1:counter))
     !
@@ -649,7 +659,8 @@ module bc
     enddo
     enddo
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    subtime4=subtime4+ptime()-time_tmp
+    if(present(subtime1)) subtime1=subtime1+ptime()-time_beg
     !
     ! call mpistop
     !
@@ -668,11 +679,14 @@ module bc
   !| -------------                                                     |
   !| 21-Jun-2022: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  subroutine syncqimag_nonlocal
+  subroutine syncqimag_nonlocal(subtime1,subtime2,subtime3)
     !
     use commtype, only : sboun
     use parallel, only : mpirankmax,pswapall,ptabupd,msize
     use commvar,  only : immbond
+    !
+    ! arguments
+    real(8),intent(inout),optional :: subtime1,subtime2,subtime3
     !
     ! local data
     integer :: nsize,jb,js,kb,qsize,jrank,qzmax,offset,bignumber,jsend,n,nnl
@@ -681,9 +695,16 @@ module bc
                                 num_bound_elemt_send(:),num_bound_elemt_recv(:)
     real(8),allocatable :: q2send(:,:),q2recv(:,:)
     type(sboun),pointer :: pbon
+    !
+    real(8) :: time_beg,time_tmp
+    !
     integer,save :: nsend,nrecv
     !
     logical,save :: lfirstcal=.true.
+    !
+    if(present(subtime1) .or. present(subtime2) .or. present(subtime3) ) then
+      time_beg=ptime()
+    endif
     !
     if(lfirstcal) then
       !
@@ -833,8 +854,18 @@ module bc
       !
     enddo
     !
+    if(present(subtime1)) then
+      subtime1=subtime1+ptime()-time_beg
+      time_tmp=ptime()
+    endif
+    !
     ! data passing via alltoall
     call ptabupd(q2send,q2recv,isendtable,irecvtable)
+    !
+    if(present(subtime2)) then
+      subtime2=subtime2+ptime()-time_tmp
+      time_tmp=ptime()
+    endif
     !
     ! unpack received data
     do n=1,nrecv
@@ -846,6 +877,9 @@ module bc
     !
     deallocate(q2send,q2recv)
     !
+    if(present(subtime3)) then
+      subtime3=subtime3+ptime()-time_tmp
+    endif
     ! print*,mpirank,'|',isendtable
     ! print*,mpirank,'-',sum(irecvtable),size(num_bound_elemt_recv)
     !
@@ -2250,26 +2284,26 @@ module bc
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
         if(ub>=css) then
-          ! supersonic inlet
+          ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
           vel(i,j,k,2)=ve 
-          vel(i,j,k,3)=0.d0 
+          vel(i,j,k,3)=we
           prs(i,j,k)  =pe
           rho(i,j,k)  =roe
           !
         else !if(ub<css .and. ub>=0.d0) then
           ! subsonic outlet
-          ! prs(i,j,k)= pinf
-          ! rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
-          ! vel(i,j,k,1)= ue + (pe-prs(i,j,k))/roe/csse
-          ! vel(i,j,k,2)= ve
-          ! vel(i,j,k,3)= 0.d0
-          vel(i,j,k,1)=ue 
-          vel(i,j,k,2)=ve 
-          vel(i,j,k,3)=0.d0 
-          prs(i,j,k)  =pe
-          rho(i,j,k)  =roe
+          prs(i,j,k)= pinf
+          rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
+          vel(i,j,k,1)= ue + (pe-prs(i,j,k))/roe/csse
+          vel(i,j,k,2)= ve
+          vel(i,j,k,3)= we
+          ! vel(i,j,k,1)=ue 
+          ! vel(i,j,k,2)=ve 
+          ! vel(i,j,k,3)=0.d0 
+          ! prs(i,j,k)  =pe
+          ! rho(i,j,k)  =roe
         ! else
         !   stop ' !! velocity at outflow error !! @ outflow'
         endif
@@ -2688,6 +2722,7 @@ module bc
         ! end if
         !
         do ii=0,2
+          !
           uu=dxi(i,j-ii,k,2,1)*vel(i,j-ii,k,1) +                       &
              dxi(i,j-ii,k,2,2)*vel(i,j-ii,k,2) +                       &
              dxi(i,j-ii,k,2,3)*vel(i,j-ii,k,3)
@@ -2700,6 +2735,14 @@ module bc
           do jspc=1,num_species
             Ecs(ii,5+jspc)=jacob(i,j-ii,k)*q(i,j-ii,k,5+jspc)*uu
           enddo
+          !
+          if(num_modequ>0) then
+            n=5+num_species
+            do jmod=1,num_modequ
+              Ecs(ii,n+jmod)=jacob(i,j-ii,k)*q(i,j-ii,k,n+jmod)*uu
+            enddo
+          endif
+          !
         enddo
         !
         do n=1,numq
@@ -3325,6 +3368,7 @@ module bc
     use commvar,   only : xmin,xmax,mach
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : deriv,ddfc,spafilter6exp
+    use parallel,  only : psum,mpi_imax
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -3334,7 +3378,7 @@ module bc
     real(8) :: pinv(5,5),pnor(5,5),Pmult(5,5),E(5),F(5),G(5),Rest(5),  &
                jcbi(3),LODi1(5),LODi(5)
     real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:),qfilt(:,:)
-    real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2
+    real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2,psonic,rncout
     !
     gmachmax2=0.d0
     if(ndir==2 .and. irk==irkm) then
@@ -3382,6 +3426,21 @@ module bc
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
       ! do j=js,je
+      !
+      ! psonic=0.d0
+      ! rncout=0.d0
+      ! do j=1,jm
+      !   do k=0,0
+      !     css=sos(tmp(i,j,k))
+      !     if(vel(i,j,k,1)>css .and. vel(i,j-1,k,1)<=css) then
+      !       psonic=psonic+prs(i,j,k)
+      !       rncout=rncout+1.d0
+      !     endif
+      !   enddo
+      ! enddo
+      ! psonic=psum(psonic,comm=mpi_imax)/psum(rncout,comm=mpi_imax)
+      ! print*,' ** psonic',psonic
+      !
       do k=0,km
       do j=0,jm
         !
@@ -3479,10 +3538,13 @@ module bc
             kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
             LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
           endif
+          ! else
+          !   LODi(5)=0.d0
+          ! endif
           !
-          kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+          ! kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
-          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         else
           ! back flow
           var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &
@@ -4846,7 +4908,7 @@ module bc
           else
             !
             vel(i,j,k,1)=0.d0
-            vel(i,j,k,2)=vwall(i,k)
+            vel(i,j,k,2)=0.d0
             !
           endif
           !
@@ -4889,6 +4951,7 @@ module bc
       if(jrk==jrkm) then
         !
         j=jm
+        !
         do k=0,km
         do i=0,im
           pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
@@ -4896,6 +4959,7 @@ module bc
           !
           vel(i,j,k,1)=0.d0
           vel(i,j,k,2)=0.d0
+          !
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe
           tmp(i,j,k)  =te

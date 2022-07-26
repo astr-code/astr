@@ -698,9 +698,9 @@ module geom
     do j=0,jm
     do i=0,im
       ! ! only for channel flow.
-      dis2wall(i,j,k)=min(x(i,j,k,2),2.d0-x(i,j,k,2))
+      ! dis2wall(i,j,k)=min(x(i,j,k,2),2.d0-x(i,j,k,2))
       ! only for flat plate boundary layer flow.
-      ! dis2wall(i,j,k)=x(i,j,k,2)
+      dis2wall(i,j,k)=x(i,j,k,2)
     enddo
     enddo
     enddo
@@ -862,7 +862,8 @@ module geom
       do j=0,jm
       do i=0,im
         !
-        call solid_udf_backfacestep(xp=x(i,j,k,:),inside=linsold)
+        ! call solid_udf_backfacestep(xp=x(i,j,k,:),inside=linsold)
+        call solid_udf_cavity(xp=x(i,j,k,:),inside=linsold)
         !
         if(linsold) then
           ! ths point is in the solid
@@ -1447,7 +1448,8 @@ module geom
           !
           counter=counter+1
           !
-          call solid_udf_backfacestep(xp=x(i,j,k,:),bnode=bnodes(counter))
+          ! call solid_udf_backfacestep(xp=x(i,j,k,:),bnode=bnodes(counter))
+          call solid_udf_cavity(xp=x(i,j,k,:),bnode=bnodes(counter))
           !
           bnodes(counter)%igh(1)=i+ig0
           bnodes(counter)%igh(2)=j+jg0
@@ -1795,6 +1797,11 @@ module geom
           if(nodestat(i,j,k)>0) then
             ! icell contain a solid node or a boundary node
             ! should not happen now
+            print*,'   jb=',jb
+            print*,'    x=',pbon%x
+            print*,' ximag=',pbon%ximag
+            print*,' i,j,k=',i,j,k
+            print*,'ic,jc,kc=',ic,jc,kc
             print*,mpirank,'| cell:',ic,jc,kc,cell(ic,jc,kc)%celltype
             print*,mpirank,'| node:',i,j,k
             print*,' !! ERROR: icell contain a solid node or a boundary node'
@@ -3054,14 +3061,14 @@ module geom
     !
     use commtype,  only : solid,triangle
     use commvar,   only : xmax,xmin,ymax,ymin,zmax,zmin
-    use commfunc,  only : areatriangle,cross_product
+    use commfunc,  only : areatriangle,cross_product,dis2point
     !
     ! arguments
     type(solid),intent(inout) :: asolid
     character(len=*),intent(in),optional :: inputcmd
     !
     ! local data
-    integer :: i,jf
+    integer :: i,jf,jedge
     real(8) :: var1
     !
     asolid%xmin=1.d10
@@ -3148,6 +3155,13 @@ module geom
                                       ' domain zmax: ',zmax
         endif
       endif
+      !
+    elseif(trim(inputcmd)=='edge') then
+      !
+      do jedge=1,size(asolid%edge)
+        asolid%edge(jedge)%cen=0.5d0*(asolid%edge(jedge)%a+asolid%edge(jedge)%b)
+        asolid%edge(jedge)%length=dis2point(asolid%edge(jedge)%a,asolid%edge(jedge)%b)
+      enddo
       !
     endif
     !
@@ -4344,6 +4358,98 @@ module geom
   end subroutine solid_udf_backfacestep
   !+-------------------------------------------------------------------+
   !| The end of subroutine solid_udf_backfacestep                      |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine function is to return if a node is in a open      |
+  !| cavity flow                                                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 26-07-2022  | Added by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine solid_udf_cavity(xp,inside,bnode)
+    !
+    use commtype,  only : sboun
+    !
+    real(8),intent(in) :: xp(3)
+    logical,intent(out),optional :: inside
+    type(sboun),intent(out),optional :: bnode
+    !
+    real(8) :: dis1,dis2
+    real(8) :: step_upper_y,step_right_x,step_left_x
+    !
+    step_left_x=5.d0
+    step_right_x=25.d0
+    step_upper_y=0.d0
+    !
+    if(xp(2)<step_upper_y .and. xp(1)<=step_left_x) then
+      !
+      if(present(inside)) inside=.true.
+      !
+      if(present(bnode)) then
+        !
+        dis1=abs(step_upper_y-xp(2))
+        dis2=abs(step_left_x-xp(1))
+        !
+        if(dis2<dis1) then
+          bnode%x(1)=step_left_x
+          bnode%x(2)=xp(2)
+          bnode%x(3)=xp(3)
+          !
+          bnode%normdir(1)=1.d0
+          bnode%normdir(2)=0.d0
+          bnode%normdir(3)=0.d0
+        else
+          bnode%x(1)=xp(1)
+          bnode%x(2)=step_upper_y
+          bnode%x(3)=xp(3)
+          !
+          bnode%normdir(1)=0.d0
+          bnode%normdir(2)=1.d0
+          bnode%normdir(3)=0.d0
+        endif
+        !
+      endif
+      !
+    elseif(xp(2)<step_upper_y .and. xp(1)>=step_right_x) then
+      !
+      if(present(inside)) inside=.true.
+      !
+      if(present(bnode)) then
+        !
+        dis1=abs(step_upper_y-xp(2))
+        dis2=abs(step_right_x-xp(1))
+        !
+        if(dis2<dis1) then
+          bnode%x(1)=step_right_x
+          bnode%x(2)=xp(2)
+          bnode%x(3)=xp(3)
+          !
+          bnode%normdir(1)=-1.d0
+          bnode%normdir(2)=0.d0
+          bnode%normdir(3)=0.d0
+        else
+          bnode%x(1)=xp(1)
+          bnode%x(2)=step_upper_y
+          bnode%x(3)=xp(3)
+          !
+          bnode%normdir(1)=0.d0
+          bnode%normdir(2)=1.d0
+          bnode%normdir(3)=0.d0
+        endif
+        !
+      endif
+      !
+    else
+      if(present(inside)) inside=.false.
+    endif
+    !
+    return
+    !
+  end subroutine solid_udf_cavity
+  !+-------------------------------------------------------------------+
+  !| The end of subroutine solid_udf_cavity                            |
   !+-------------------------------------------------------------------+
   !!
   !+-------------------------------------------------------------------+

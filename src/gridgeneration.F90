@@ -66,7 +66,7 @@ module gridgeneration
       !
     endif
     !
-    call xdmfwriter(gridh5file=trim(gridfile))
+    call xdmfwriter(gridh5file=trim(gridfile),mode='grid')
     !
   end subroutine gridgen
   !+-------------------------------------------------------------------+
@@ -380,7 +380,7 @@ module gridgeneration
     !
     integer :: imm,jmm,kmm,im4,jm4,km4,isp
     integer :: i,j,k,jbody
-    real(8) :: lx_solid,ly_solid,lz_solid,x0,y0,z0
+    real(8) :: lx_solid,ly_solid,lz_solid,len_chara,x0,y0,z0
     real(8) :: xmin,ymin,zmin,xmax,ymax,zmax
     real(8),allocatable,dimension(:) :: xx,yy,zz
     real(8),allocatable,dimension(:,:,:) :: xa,ya,za
@@ -401,12 +401,19 @@ module gridgeneration
     lx_solid=xmax-xmin
     ly_solid=ymax-ymin
     lz_solid=zmax-zmin
+    !
+    len_chara=1.d0 !sqrt(lx_solid**2+ly_solid**2)
     ! lx_solid=2.091906d0
     ! ly_solid=2.d0
     ! lz_solid=8.291200d-2
     !
-    if(mpirank==0) print*,' ** domain size:',lx_solid,ly_solid,lz_solid
-    if(mpirank==0) print*,' **   mesh size:',ia,ja,ka
+    if(mpirank==0) print*,' **           solid size:',lx_solid,ly_solid,lz_solid
+    if(mpirank==0) print*,' **  characteristic size:',len_chara
+    if(mpirank==0) print*,' **            mesh size:',ia,ja,ka
+    !
+    lx_solid=len_chara
+    ly_solid=0.5d0*len_chara
+    lz_solid=len_chara
     !
     allocate(xx(0:ia),yy(0:ja),zz(0:ka))
     !
