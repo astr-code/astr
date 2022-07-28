@@ -19,6 +19,7 @@ add_executable(astr
                     hdf5io.F90
 		    ibmethod.F90
 		    initialisation.F90
+                    interp.F90
                     mainloop.F90
                     models.F90
                     parallel.F90

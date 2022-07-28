@@ -90,6 +90,12 @@ module commtype
   !|                cell | a cell formed with nodes.                   |
   !+---------------------+---------------------------------------------+
   !
+  type :: varray
+    !
+    integer,allocatable :: vint(:)
+    !
+  end type varray
+  !
   contains 
   !
   !+-------------------------------------------------------------------+

@@ -774,7 +774,8 @@ module geom
   subroutine nodestatecal
     !
     use commtype,  only : solid
-    use commvar,   only : immbody,npdci,npdcj,npdck,nsolid,dxyzmin,ibmode
+    use commvar,   only : immbody,npdci,npdcj,npdck,nsolid,dxyzmin,    &
+                          ibmode,solidfile
     use commarray, only : x,nodestat,cell
     use commfunc,  only : dis2point
     !
@@ -862,8 +863,15 @@ module geom
       do j=0,jm
       do i=0,im
         !
-        ! call solid_udf_backfacestep(xp=x(i,j,k,:),inside=linsold)
-        call solid_udf_cavity(xp=x(i,j,k,:),inside=linsold)
+        if(trim(solidfile)=='backfacestep') then
+          call solid_udf_backfacestep(xp=x(i,j,k,:),inside=linsold)
+        elseif(trim(solidfile)=='cavity') then
+          call solid_udf_cavity(xp=x(i,j,k,:),inside=linsold)
+        else
+          print*,trim(solidfile)
+          stop ' !! ib geometry not defined !!'
+        endif
+        ! call solid_udf_cavity(xp=x(i,j,k,:),inside=linsold)
         !
         if(linsold) then
           ! ths point is in the solid
@@ -1333,7 +1341,7 @@ module geom
   !+-------------------------------------------------------------------+
   subroutine boundnodecal
     !
-    use commvar,   only : nsolid,immbody,immbond,dxyzmin,ibmode
+    use commvar,   only : nsolid,immbody,immbond,dxyzmin,ibmode,solidfile
     use commtype,  only : solid,sboun
     use commarray, only : nodestat,x
     use parallel,  only : ig0,jg0,kg0,pmerg
@@ -1448,8 +1456,14 @@ module geom
           !
           counter=counter+1
           !
-          ! call solid_udf_backfacestep(xp=x(i,j,k,:),bnode=bnodes(counter))
-          call solid_udf_cavity(xp=x(i,j,k,:),bnode=bnodes(counter))
+          if(trim(solidfile)=='backfacestep') then
+            call solid_udf_backfacestep(xp=x(i,j,k,:),bnode=bnodes(counter))
+          elseif(trim(solidfile)=='cavity') then
+            call solid_udf_cavity(xp=x(i,j,k,:),bnode=bnodes(counter))
+          else
+            print*,trim(solidfile)
+            stop ' !! ib geometry not defined !!'
+          endif
           !
           bnodes(counter)%igh(1)=i+ig0
           bnodes(counter)%igh(2)=j+jg0
@@ -1965,20 +1979,32 @@ module geom
   !+-------------------------------------------------------------------+
   subroutine immblocal
     !!
-    use commtype,  only : sboun
+    use commtype,  only : sboun,varray
     use commvar,   only : immbond,ndims,imb_node_have,imb_node_need,   &
                           num_icell_rank,num_ighost_rank
-    use parallel,  only : pgather,por,pmax,mpirankmax,psum
+    use parallel,  only : pgather,por,pmax,mpirankmax,psum,psuperpose,msize
     !
     integer :: jb,i,j,k,icell_counter,ighost_counter,icell_all,nlocal,nonlocal
-    integer,allocatable :: ighost_order(:),icell_order(:)
+    integer,allocatable :: ighost_order(:),icell_order(:),icell_max(:), &
+                           ighst_store(:)
     type(sboun),pointer :: pbon
-    logical :: anytrue
+    type(varray),allocatable :: ighst_store_all(:)
+    logical :: anytrue,lfex,lnewfile
+    integer :: fhand,frecd,total_mpiranks,ncout
+    !
+    real(8) :: time_beg,time_cos,time_sav
+    !
+    time_beg=ptime() 
+    !
+    allocate( num_icell_rank(0:mpirankmax),                            &
+              num_ighost_rank(0:mpirankmax) )
     !
     allocate( icell_order(1:size(immbond)),                            &
-              ighost_order(1:size(immbond)*8),                         &
-              num_icell_rank(0:mpirankmax),                            &
-              num_ighost_rank(0:mpirankmax) )
+              ighost_order(1:size(immbond)*8) )
+    !
+    allocate(icell_max(1:size(immbond)))
+    allocate(ighst_store(1:size(immbond)),ighst_store_all(1:size(immbond)))
+    !
     icell_counter=0
     ighost_counter=0
     !
@@ -1989,7 +2015,6 @@ module geom
     !
     nlocal=0
     nonlocal=0
-    !
     !
     do jb=1,size(immbond)
       !
@@ -2041,23 +2066,72 @@ module geom
         ! if(mpirank==0) print*,mpirank,'|',jb,pbon%x,pbon%ximag
       endif
       !
-      ! if(jb==1) then
-      !   print*,mpirank,'|',pbon%ighst_rank
-      ! endif
+      icell_max(jb)  =pbon%icell_rank
+      ighst_store(jb)=pbon%ighst_rank
       !
-      ! pbon%ighst_rank=pmax(pbon%ighst_rank)
-      pbon%icell_rank=pmax(pbon%icell_rank)
-      call pgather(pbon%ighst_rank,pbon%ighst_rank_all,mode='noneg')
+    enddo
+    !
+    inquire(file='ib_ghost_rank.dat',exist=lfex)
+    !
+    if(lfex) then
       !
-      ! if(jb==1) then
-      !   print*,mpirank,'|',pbon%ighst_rank_all
-      ! endif
+      fhand=get_unit()
+      open(fhand,file='ib_ghost_rank.dat',form='unformatted',access='direct',recl=4*11)
+      frecd=1
+      read(fhand,rec=frecd)total_mpiranks
       !
-      if(size(pbon%ighst_rank_all)==1 .and. pbon%ighst_rank_all(1)==pbon%icell_rank) then
-        ! this boundary element is local, no further comm should be needed
-        nlocal=nlocal+1
+      if(total_mpiranks==mpirankmax) then
         !
-        pbon%locality='l'
+        do jb=1,size(immbond)
+          frecd=frecd+1
+          read(fhand,rec=frecd)j,ncout,immbond(jb)%icell_rank
+          !
+          if(ncout>0) then
+            allocate(immbond(jb)%ighst_rank_all(ncout))
+            read(fhand,rec=frecd)j,ncout,immbond(jb)%icell_rank,immbond(jb)%ighst_rank_all
+          endif
+          !
+        enddo
+        !
+      endif
+      close(fhand)
+      if(lio) print*, ' >> ib_ghost_rank.dat with ',frecd,'records'
+      !
+    else
+      !
+      icell_max  =pmax(icell_max)
+      !
+      ! call psuperpose(ighst_store,ighst_store_all)
+      !
+      do jb=1,size(immbond)
+        !
+        pbon=>immbond(jb)
+        !
+        pbon%icell_rank=icell_max(jb)
+        !
+        call pgather(pbon%ighst_rank,pbon%ighst_rank_all,mode='noneg')
+        !
+      enddo
+      !
+    endif
+    !
+    do jb=1,size(immbond)
+      !
+      pbon=>immbond(jb)
+      !
+      if(msize(pbon%ighst_rank_all)==1) then
+        !
+        if(pbon%ighst_rank_all(1)==pbon%icell_rank) then
+          ! this boundary element is local, no further comm should be needed
+          nlocal=nlocal+1
+          !
+          pbon%locality='l'
+          !
+        else
+          nonlocal=nonlocal+1
+          !
+          pbon%locality='n'
+        endif
         !
       else
         nonlocal=nonlocal+1
@@ -2093,7 +2167,45 @@ module geom
       !
     enddo
     !
-    ! print*,mpirank,'|',icell_counter
+    if(lio) then
+      !
+      inquire(file='ib_ghost_rank.dat',exist=lfex)
+      if(lfex) then
+        fhand=get_unit()
+        open(fhand,file='ib_ghost_rank.dat',form='unformatted',access='direct',recl=4*11)
+        frecd=1
+        read(fhand,rec=frecd)total_mpiranks
+        close(fhand)
+        !
+        if(total_mpiranks==mpirankmax) then
+          lnewfile=.false.
+        else
+          lnewfile=.true.
+        endif
+        !
+      else
+        lnewfile=.true.
+      endif
+      !
+      if(lnewfile) then
+        fhand=get_unit()
+        open(fhand,file='ib_ghost_rank.dat',form='unformatted',access='direct',recl=4*11)
+        frecd=1
+        write(fhand,rec=frecd)mpirankmax
+        do jb=1,size(immbond)
+          frecd=frecd+1
+          write(fhand,rec=frecd)jb,msize(immbond(jb)%ighst_rank_all),immbond(jb)%icell_rank,immbond(jb)%ighst_rank_all
+        enddo
+        close(fhand)
+        print*, ' << ib_ghost_rank.dat with ',frecd,'records'
+        !
+      endif
+      !
+    endif
+    !
+    time_cos=ptime()
+    if(lio) print*,' ** time cost part 1: ',time_cos-time_beg
+    time_sav=time_cos
     !
     call pgather(icell_order(1:icell_counter),imb_node_have)
     !
@@ -2112,6 +2224,8 @@ module geom
       endif
     endif
     !
+    time_cos=ptime()-time_beg
+    !
     if(lio) then
       write(*,'(2(A,I0))')'  ** number of re-ordered elements:',  &
                                      icell_all,' totall ',size(immbond)
@@ -2119,6 +2233,7 @@ module geom
       write(*,'(A,I0,A)')'  ** ',size(immbond),' total boundary elements'
       write(*,'(A,I0,A)')'      ** ',nlocal,' local boundary elements'
       write(*,'(A,I0,A)')'      ** ',nonlocal,' non-local boundary elements'
+      write(*,'(A,E13.6E2)')'  ** time cost in immblocal:',time_cos
       !
       print*,' ** boundary nodes re-ordered' 
     endif

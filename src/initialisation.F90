@@ -1192,6 +1192,7 @@ module initialisation
       !
       vel(i,j,k,1)= vel_prof(j,1)
       vel(i,j,k,2)= vel_prof(j,2)
+      vel(i,j,k,3)= 0.d0
       !
       tmp(i,j,k)  = tmp_prof(j)
       !

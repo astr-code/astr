@@ -408,6 +408,7 @@ module readwrite
           stop ' !! NOT READY YET !!'  
         elseif(trim(ibmode)=='udf') then
           write(*,'(2X,A,A)')' solid nodes are user defined'
+          write(*,'(2X,A,A)')' solid geom: ',trim(solidfile)
           write(*,'(2X,62A)')('-',i=1,62)
         else
           print*,ibmode
@@ -590,13 +591,7 @@ module readwrite
       read(fh,'(A)')gridfile
       if(limmbou) then
         read(fh,'(/)')
-        read(fh,*)ibmode
-        !
-        if(trim(ibmode)=='stl') then
-          backspace(fh)
-          read(fh,*)ibmode,solidfile
-        endif
-        !
+        read(fh,*)ibmode,solidfile
       endif
 #ifdef COMB
       if(.not.nondimen) then

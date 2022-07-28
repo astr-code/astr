@@ -415,14 +415,14 @@ module bc
     use commarray, only : nodestat,vel,x
     use commcal,   only : ijkin,ijkcellin
     use fludyna,   only : fvar2q,q2fvar,thermal
-    use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck,qswap
+    use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck,qswap,msize
     use commfunc,  only : median
     !
     ! arguments
     real(8),intent(inout),optional :: subtime1,subtime2,subtime3,subtime4
     !
     ! local data
-    integer :: i,j,k,m,kb,iss,jss,kss,n,jspec,jq,jb,jsup,counter,ncube
+    integer :: i,j,k,m,kb,iss,jss,kss,n,jspec,jq,jb,jc,jsup,ncube,counter
     real(8) :: var_ro,var_u(3),var_t,var_p,var_sp(num_species)
     real(8) :: vel_bou(3),prs_bou,rho_bou,tmp_bou,spc_bou(num_species)
     real(8),allocatable :: vel_icell(:,:),tmp_icell(:),prs_icell(:),c_dir(:),c_neu(:)
@@ -430,6 +430,9 @@ module bc
     real(8),allocatable :: qimag(:,:)
     real(8) :: prslmin,prslmax
     type(sboun),pointer :: pb
+    !
+    logical,save :: lfirstcal=.true.
+    integer,allocatable,save :: nbnode(:),ngnode(:),ijkcub(:,:,:),ijkgho(:,:)
     !
     real(8) :: time_beg,time_tmp
     !
@@ -457,81 +460,158 @@ module bc
     !
     ! go over the boundary nodes
     !
+    if(lfirstcal) then
+      !
+      counter=0
+      do jb=1,size(immbond)
+        !
+        pb=>immbond(jb)
+        !
+        if(.not. allocated(pb%qimag)) allocate(pb%qimag(numq))
+        !
+        pb%qimag=0.d0
+        !
+        i=pb%icell(1)-ig0
+        j=pb%icell(2)-jg0
+        k=pb%icell(3)-kg0
+        !
+        if( ijkcellin(i,j,k)) then
+          !
+          counter=counter+1
+          !
+        endif
+        !
+      enddo
+      !
+      allocate(ijkcub(3,ncube,counter))
+      allocate(nbnode(counter))
+      !
+      counter=0
+      !
+      do jb=1,size(immbond)
+        !
+        pb=>immbond(jb)
+        !
+        i=pb%icell(1)-ig0
+        j=pb%icell(2)-jg0
+        k=pb%icell(3)-kg0
+        !
+        if( ijkcellin(i,j,k)) then
+          !
+          counter=counter+1
+          !
+          nbnode(counter)=jb
+          !
+          do m=1,ncube
+            if(pb%icell_ijk(m,1)>=0) then
+              ijkcub(1,m,counter)=pb%icell_ijk(m,1)
+              ijkcub(2,m,counter)=pb%icell_ijk(m,2)
+              ijkcub(3,m,counter)=pb%icell_ijk(m,3)
+            else
+              stop ' !! ERROR in determining pb%icell_ijk @ immbody'
+            endif
+          enddo
+        endif
+        !
+      enddo
+      !
+      counter=0
+      do jb=1,size(immbond)
+        !
+        pb=>immbond(jb)
+        !
+        i=pb%igh(1)-ig0
+        j=pb%igh(2)-jg0
+        k=pb%igh(3)-kg0
+        !
+        if(i>=0 .and. i<=im .and. &
+           j>=0 .and. j<=jm .and. &
+           k>=0 .and. k<=km ) then
+          !
+          counter=counter+1
+          !
+        endif
+        !
+      enddo
+      !
+      allocate(ngnode(counter),ijkgho(3,counter))
+      !
+      counter=0
+      do jb=1,size(immbond)
+        !
+        pb=>immbond(jb)
+        !
+        i=pb%igh(1)-ig0
+        j=pb%igh(2)-jg0
+        k=pb%igh(3)-kg0
+        !
+        if(i>=0 .and. i<=im .and. &
+           j>=0 .and. j<=jm .and. &
+           k>=0 .and. k<=km ) then
+          !
+          counter=counter+1
+          !
+          ngnode(counter)=jb
+          !
+          ijkgho(1,counter)=i
+          ijkgho(2,counter)=j
+          ijkgho(3,counter)=k
+          !
+        endif
+        !
+      enddo
+      !
+      lfirstcal=.false.
+      !
+    endif
+    !
     allocate( vel_icell(ncube,3),tmp_icell(ncube),prs_icell(ncube), &
               c_dir(ncube),c_neu(ncube))
     allocate(qimag(numq,1:size(immbond)))
     !
-    counter=0
-    !
-    do jb=1,size(immbond)
+    do jc=1,msize(nbnode)
+      !
+      jb=nbnode(jc)
       !
       pb=>immbond(jb)
       !
-      if(.not. allocated(pb%qimag)) allocate(pb%qimag(numq))
+      prslmin= 1.d10
+      prslmax=-1.d10
+      do m=1,ncube
+        !
+        i=ijkcub(1,m,jc)
+        j=ijkcub(2,m,jc)
+        k=ijkcub(3,m,jc)
+        !
+        vel_icell(m,:)=vel(i,j,k,:)
+        tmp_icell(m)  =tmp(i,j,k)
+        prs_icell(m)  =prs(i,j,k)
+        !
+        prslmin=min(prslmin,prs(i,j,k))
+        prslmax=max(prslmax,prs(i,j,k))
+        !
+      enddo
       !
-      pb%qimag=0.d0
+      c_dir=pb%coef_dirichlet
+      ! c_neu=pb%coef_neumann
       !
-      i=pb%icell(1)-ig0
-      j=pb%icell(2)-jg0
-      k=pb%icell(3)-kg0
+      vel_image(1)=dot_product(c_dir,vel_icell(:,1))
+      vel_image(2)=dot_product(c_dir,vel_icell(:,2))
+      vel_image(3)=dot_product(c_dir,vel_icell(:,3))
       !
-      if( ijkcellin(i,j,k)) then
-        ! the icell is in local processor
-        !
-        prslmin= 1.d10
-        prslmax=-1.d10
-        do m=1,ncube
-          !
-          if(pb%icell_ijk(m,1)>=0) then
-            !
-            i=pb%icell_ijk(m,1)
-            j=pb%icell_ijk(m,2)
-            k=pb%icell_ijk(m,3)
-            !
-            vel_icell(m,:)=vel(i,j,k,:)
-            tmp_icell(m)  =tmp(i,j,k)
-            prs_icell(m)  =prs(i,j,k)
-            !
-            prslmin=min(prslmin,prs(i,j,k))
-            prslmax=max(prslmax,prs(i,j,k))
-          ! elseif(pb%icell_bnode(m)>0) then
-          !   kb=pb%icell_bnode(m)
-          !   !
-          !   vel_icell(m,:)=0.d0
-          !   tmp_icell(m)  =tinf
-          !   prs_icell(m)  =0.d0
-            !
-          else
-            stop ' !! ERROR in determining interpolation coefficient'
-          endif
-          !
-        enddo
-        !
-        c_dir=pb%coef_dirichlet
-        ! c_neu=pb%coef_neumann
-        !
-        vel_image(1)=dot_product(c_dir,vel_icell(:,1))
-        vel_image(2)=dot_product(c_dir,vel_icell(:,2))
-        vel_image(3)=dot_product(c_dir,vel_icell(:,3))
-        !
-        tmp_image   =dot_product(c_dir,tmp_icell)
-        !
-        ! prs_image   =dot_product(c_neu,prs_icell)
-        prs_image   =dot_product(c_dir,prs_icell)
-        prs_image   =median(prs_image,prslmin,prslmin)
-        !
-        rho_image=thermal(pressure=prs_image,temperature=tmp_image)
-        !
-        spc_image=1.d0
-        !
-        counter=counter+1
-        !
-        call fvar2q(       q=pb%qimag(:),                         &
-                     density=rho_image,  velocity=vel_image,      &
-                    pressure=prs_image,  species=spc_image         )
-        !
-        !
-      endif
+      tmp_image   =dot_product(c_dir,tmp_icell)
+      !
+      ! prs_image   =dot_product(c_neu,prs_icell)
+      prs_image   =dot_product(c_dir,prs_icell)
+      prs_image   =median(prs_image,prslmin,prslmin)
+      !
+      rho_image=thermal(pressure=prs_image,temperature=tmp_image)
+      !
+      spc_image=1.d0
+      !
+      call fvar2q(       q=pb%qimag(:),                         &
+                   density=rho_image,  velocity=vel_image,      &
+                  pressure=prs_image,  species=spc_image         )
       !
     enddo
     !
@@ -547,89 +627,64 @@ module bc
     !
     ! call syncqimag(qimag(:,1:counter))
     !
-    do jb=1,size(immbond)
+    do jc=1,msize(ngnode)
+      !
+      jb=ngnode(jc)
       !
       pb=>immbond(jb)
       !
-      ! if(.not. allocated(pb%q)) allocate(pb%q(numq))
+      i=ijkgho(1,jc)
+      j=ijkgho(2,jc)
+      k=ijkgho(3,jc)
       !
-      ! now get the value for ghost nodes
+      call q2fvar(        q=pb%qimag,                   &
+                    density=var_ro,                     &
+                   velocity=var_u(:),                   &
+                   pressure=var_p,                      &
+                temperature=var_t                        )
       !
-      ! call q2fvar(      q=  pb%qimag,                   &
-      !               density=var_ro,                     &
-      !              velocity=var_u(:),                   &
-      !              pressure=var_p,                      &
-      !           temperature=var_t,                      &
-      !               species=var_sp                      )
-      ! !
-      ! vel_bou=0.d0
-      ! prs_bou=var_p
-      ! tmp_bou=tinf
-      ! rho_bou=thermal(pressure=prs_bou,temperature=tmp_bou)
-      ! spc_bou=var_sp
-      ! !
-      ! call fvar2q(       q=  pb%q,   density=rho_bou,        &
-      !            velocity=vel_bou,  pressure=prs_bou,        &
-      !             species=spc_bou                            )
-      !
-      ! if(.not. pb%localin) cycle
-      !
-      i=pb%igh(1)-ig0
-      j=pb%igh(2)-jg0
-      k=pb%igh(3)-kg0
-      !
-      if(i>=0 .and. i<=im .and. &
-         j>=0 .and. j<=jm .and. &
-         k>=0 .and. k<=km ) then
+      if(pb%nodetype=='g') then
+        ! for ghost nodes
         !
-        call q2fvar(        q=pb%qimag,                   &
-                      density=var_ro,                     &
-                     velocity=var_u(:),                   &
-                     pressure=var_p,                      &
-                  temperature=var_t                        )
+        vel(i,j,k,:)=-1.d0*var_u(:)*pb%dis2ghost/pb%dis2image
+          ! tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
+          tmp(i,j,k)=var_t
+          prs(i,j,k)=var_p
+          rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
         !
-        if(pb%nodetype=='g') then
-          ! for ghost nodes
-          !
-          vel(i,j,k,:)=-1.d0*var_u(:)*pb%dis2ghost/pb%dis2image
-            tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
-            prs(i,j,k)=var_p
-            rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          spc(i,j,k,:)=1.d0
-          !
-        elseif(pb%nodetype=='b') then
-          ! for boundary nodes
-          !
-          vel(i,j,k,:)=0.d0
-            tmp(i,j,k)=tinf
-            prs(i,j,k)=var_p
-            rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          spc(i,j,k,:)=1.d0
-          !
-        ! elseif(pb%nodetype=='f') then
-        !   ! for force nodes
-        !   vel(i,j,k,:)=0.5d0*var_u(:)
-        !     tmp(i,j,k)=0.5d0*(tinf+var_t)
-        !     prs(i,j,k)=var_p
-        !   rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-        !   !
-        !   spc(i,j,k,:)=1.d0
-        !   !
-        ! else
-        !   stop ' ERROR @ immbody'
-        endif
-        
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                    species=spc(i,j,k,:)                               )
+        spc(i,j,k,:)=1.d0
         !
-        ! if(jb==1)  then
-        !   print*,mpirank,'|',jb,'-',pb%icell_rank,pb%ighst_rank
-        ! endif
+      elseif(pb%nodetype=='b') then
+        ! for boundary nodes
         !
+        vel(i,j,k,:)=0.d0
+          tmp(i,j,k)=var_t
+          ! tmp(i,j,k)=tinf
+          prs(i,j,k)=var_p
+          rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        !
+        spc(i,j,k,:)=1.d0
+        !
+      ! elseif(pb%nodetype=='f') then
+      !   ! for force nodes
+      !   vel(i,j,k,:)=0.5d0*var_u(:)
+      !     tmp(i,j,k)=0.5d0*(tinf+var_t)
+      !     prs(i,j,k)=var_p
+      !   rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+      !   !
+      !   spc(i,j,k,:)=1.d0
+      !   !
+      ! else
+      !   stop ' ERROR @ immbody'
       endif
+      
+      call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                 velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                  species=spc(i,j,k,:)                               )
+      !
+      ! if(jb==1)  then
+      !   print*,mpirank,'|',jb,'-',pb%icell_rank,pb%ighst_rank
+      ! endif
       !
     enddo
     !
@@ -2000,44 +2055,52 @@ module bc
                                   spc(i,j-2,k,jspec),dv=0.d0)
         enddo
         !
-        if(vel(i,j,k,2)<=0.d0) then
-          ! subsonic inflow
-          ! vel(i,j,k,1)=uinf
-          ! vel(i,j,k,2)=-0.5d0*(pinf-pe)/(rho(i,j,k)*css)+0.5d0*(vinf+ve)
-          ! vel(i,j,k,3)=winf
-          ! prs(i,j,k)  =0.5d0*(pinf+pe)-0.5d0*rho(i,j,k)*css*(vinf-ve)
-          ! rho(i,j,k)  =roinf*(prs(i,j,k)/pinf)**(1.d0/gamma)
-          ! !
-          ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          ! !
-          ! spc(i,j,k,:)=0.d0
-          !
-          vel(i,j,k,1)=vel_far(i,1)
-          vel(i,j,k,2)=-0.5d0*(prs_far(i)-pe)/(rho(i,j,k)*css) +       &
-                                                 0.5d0*(vel_far(i,2)+ve)
-          vel(i,j,k,3)=0.d0
-          prs(i,j,k)  =0.5d0*(prs_far(i)+pe) -                         &
-                                  0.5d0*rho(i,j,k)*css*(vel_far(i,2)-ve)
-          rho(i,j,k)  =rho_far(i)*(prs(i,j,k)/prs_far(i))**(1.d0/gamma)
-          !
-          tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          !
-          spc(i,j,k,:)=0.d0
-          !
-        else
-          ! subsonic outflow
-          !
-          ! prs(i,j,k)=pinf
-          prs(i,j,k)=prs_far(i)
-          rho(i,j,k)=roe+(prs(i,j,k)-pe)/csse/csse
+        ! if(vel(i,j,k,2)<=0.d0) then
+        !   ! subsonic inflow
+        !   ! vel(i,j,k,1)=uinf
+        !   ! vel(i,j,k,2)=-0.5d0*(pinf-pe)/(rho(i,j,k)*css)+0.5d0*(vinf+ve)
+        !   ! vel(i,j,k,3)=winf
+        !   ! prs(i,j,k)  =0.5d0*(pinf+pe)-0.5d0*rho(i,j,k)*css*(vinf-ve)
+        !   ! rho(i,j,k)  =roinf*(prs(i,j,k)/pinf)**(1.d0/gamma)
+        !   ! !
+        !   ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        !   ! !
+        !   ! spc(i,j,k,:)=0.d0
+        !   !
+        !   vel(i,j,k,1)=vel_far(i,1)
+        !   vel(i,j,k,2)=-0.5d0*(prs_far(i)-pe)/(rho(i,j,k)*css) +       &
+        !                                          0.5d0*(vel_far(i,2)+ve)
+        !   vel(i,j,k,3)=0.d0
+        !   prs(i,j,k)  =0.5d0*(prs_far(i)+pe) -                         &
+        !                           0.5d0*rho(i,j,k)*css*(vel_far(i,2)-ve)
+        !   rho(i,j,k)  =rho_far(i)*(prs(i,j,k)/prs_far(i))**(1.d0/gamma)
+        !   !
+        !   tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        !   !
+        !   spc(i,j,k,:)=0.d0
+        !   !
+        ! else
+        !   ! subsonic outflow
+        !   !
+        !   ! prs(i,j,k)=pinf
+        !   prs(i,j,k)=prs_far(i)
+        !   rho(i,j,k)=roe+(prs(i,j,k)-pe)/csse/csse
+        !   !
+        !   vel(i,j,k,1)=ue
+        !   vel(i,j,k,2)=ve+(pe-prs(i,j,k))/roe/Csse
+        !   vel(i,j,k,3)=we
+        !   tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        !   spc(i,j,k,:)=spce(:)
+        !   !
+        ! endif
+          prs(i,j,k)=pe
+          rho(i,j,k)=roe
           !
           vel(i,j,k,1)=ue
-          vel(i,j,k,2)=ve+(pe-prs(i,j,k))/roe/Csse
+          vel(i,j,k,2)=ve
           vel(i,j,k,3)=we
           tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           spc(i,j,k,:)=spce(:)
-          !
-        endif
         !
         call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
                    velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
@@ -2801,8 +2864,8 @@ module bc
         !    dxi(i,j,k,2,2)*vel(i,j,k,2) +                       &
         !    dxi(i,j,k,2,3)*vel(i,j,k,3)
         ! if(uu>=0.d0) then
-          kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
-          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          ! kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+          ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
           ! LODi(5)=kinout*(prs(i,j,k)-prs_prof(jm))/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &

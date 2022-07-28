@@ -47,6 +47,10 @@ module parallel
     module procedure pmerg_sbou
   end interface
   !
+  interface psuperpose
+    module procedure psuperpose_int_ary1d
+  end interface psuperpose
+  !
   interface psum
     module procedure psum_int
     module procedure psum_int_ary
@@ -58,6 +62,7 @@ module parallel
   !
   interface pmax
     module procedure pmax_int
+    module procedure pmax_int4_array1d
     module procedure pmax_int8
     module procedure pmax_int8_array1d
     module procedure pmax_r8
@@ -1997,6 +2002,80 @@ module parallel
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This function is superpose variables from different ranks.        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-07-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine psuperpose_int_ary1d(var,vout)
+    !
+    use commtype, only : varray
+    !
+    integer,intent(in) :: var(:)
+    type(varray),intent(out) :: vout(1:size(var))
+    !
+    ! local data
+    integer :: nsize,i,j,jrank,ierr,ncout
+    integer,allocatable :: buf(:)
+    !
+    nsize=size(var)
+    !
+    allocate(buf(nsize*mpisize))
+    !
+    call mpi_gather(var,nsize,mpi_integer,buf,nsize,mpi_integer,  &
+                                             0,mpi_comm_world,ierr)
+    ! !
+    if(mpirank==0) then
+      !
+      do i=1,nsize
+        !
+        ncout=0
+        do jrank=0,mpirankmax
+          !
+          j=i+jrank*nsize
+          !
+          if(buf(j)>=0) then
+            !
+            ncout=ncout+1
+            !
+          endif
+          !
+        enddo
+        !
+        if(ncout>0) allocate(vout(i)%vint(ncout))
+        !
+        ncout=0
+        do jrank=0,mpirankmax
+          !
+          j=i+jrank*nsize
+          !
+          if(buf(j)>=0) then
+            !
+            ncout=ncout+1
+            !
+            vout(i)%vint(ncout)=buf(j)
+            !
+          endif
+          !
+        enddo
+        !
+      enddo
+      !
+    endif
+    ! !
+    ! call bcast(vout)
+    ! call bcast(nout)
+    ! !
+    return
+    !
+  end subroutine psuperpose_int_ary1d
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine psuperpose.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !
+  !+-------------------------------------------------------------------+
   !| This function is used to sum a number across ranks                |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -2167,6 +2246,22 @@ module parallel
                                                     mpi_comm_world,ierr)
     !
   end function pmax_int8
+  !
+  function  pmax_int4_array1d(var) result(vout)
+    !
+    ! arguments
+    integer(4),intent(in) :: var(:)
+    integer(4) :: vout(1:size(var))
+    !
+    ! local data
+    integer :: ierr,nsize
+    !
+    nsize=size(var)
+    !
+    call mpi_allreduce(var,vout,nsize,mpi_integer4,mpi_max,          &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_int4_array1d
   !
   function  pmax_int8_array1d(var) result(vout)
     !
