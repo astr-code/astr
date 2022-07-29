@@ -613,6 +613,7 @@ module hdf5io
     real(8),intent(in) :: var(:,:,:)
     character(len=1),intent(in) :: mode
     !
+#ifdef HDF5
     if(mode=='h') then
       call h5wa3d_r8_struct(varname,var)
     elseif(mode=='s') then
@@ -620,6 +621,8 @@ module hdf5io
     else
       stop ' !! error @  h5wa3d_r8'
     endif
+    !
+#endif
     !
   end subroutine h5wa3d_r8
   !
@@ -890,6 +893,7 @@ module hdf5io
     !
     integer :: v(1)
     !
+#ifdef HDF5
     integer(hid_t) :: file_id
     ! file identifier
     integer(hid_t) :: dset_id1
@@ -934,6 +938,8 @@ module hdf5io
     call h5close_f(h5error)
     if(h5error.ne.0)  stop ' !! error in h5_write1int 3'
     !
+#endif
+    !
   end subroutine h5_write1int
   !
   subroutine h5_writearray1dint(var,varname,filename,explicit,newfile)
@@ -945,8 +951,8 @@ module hdf5io
     logical :: lfilalive
     integer :: dim1
     !
-    !
-    integer(hid_t) :: file_id
+#ifdef HDF5
+    !    integer(hid_t) :: file_id
     ! file identifier
     integer(hid_t) :: dset_id1
     ! dataset identifier
@@ -990,6 +996,8 @@ module hdf5io
     !
     if(h5error.ne.0)  stop ' !! error in h5_writearray1dint 3'
     !
+#endif 
+    !
   end subroutine h5_writearray1dint
   !
   subroutine h5_write1rl8(var,varname,filename,explicit,newfile)
@@ -1001,6 +1009,8 @@ module hdf5io
     logical :: lfilalive
     !
     real(8) :: v(1)
+    !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1046,6 +1056,8 @@ module hdf5io
     call h5close_f(h5error)
     if(h5error.ne.0)  stop ' !! error in h5_write1rl8 3'
     !
+#endif 
+    !
   end subroutine h5_write1rl8
   !
   subroutine h5_writearray1d(var,varname,filename,explicit,newfile)
@@ -1056,6 +1068,8 @@ module hdf5io
     logical :: lexplicit,lnew
     logical :: lfilalive
     integer :: dim1
+    !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1100,6 +1114,8 @@ module hdf5io
     call h5close_f(h5error)
     if(h5error.ne.0)  stop ' !! error in h5_writearray1d 3'
     !
+#endif 
+    !
   end subroutine h5_writearray1d
   !
   subroutine h5_writearray3d(var,varname,filename,explicit,newfile)
@@ -1111,6 +1127,8 @@ module hdf5io
     integer :: dim1,dim2,dim3
     logical :: lexplicit,lnew
     logical :: lfilalive
+    !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1159,6 +1177,8 @@ module hdf5io
     call h5close_f(h5error)
     if(h5error.ne.0)  stop ' !! error in h5_writearray3d 4'
     !
+#endif 
+    !
   end subroutine h5_writearray3d
   !+-------------------------------------------------------------------+
   !| This end of the subroutine h5_writearray3d.                       |
@@ -1178,9 +1198,12 @@ module hdf5io
     ! local data
     integer :: h5error
     !
+#ifdef HDF5
     call h5ldelete_f(h5file_id,varname,h5error)
     !
     print*,' ** dataset: ',varname,'removed'
+    !
+#endif 
     !
   end subroutine h5delete
   !+-------------------------------------------------------------------+
@@ -1201,6 +1224,8 @@ module hdf5io
     character(len=*),intent(in) :: varname,filename
     logical,intent(in), optional:: explicit
     logical :: lexplicit
+    !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1242,6 +1267,8 @@ module hdf5io
     !
     if(lexplicit)  print*,' >> ',varname,' from ',filename,' ... done'
     !
+#endif 
+    !
   end subroutine h5_readarray1d
   !
   subroutine h5_read1int(var,varname,filename,explicit)
@@ -1250,6 +1277,8 @@ module hdf5io
     character(len=*),intent(in) :: varname,filename
     logical,intent(in), optional:: explicit
     logical :: lexplicit
+    !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1286,6 +1315,8 @@ module hdf5io
     !
     if(lexplicit)  print*,' >> ',varname,' from ',filename,' ... done'
     !
+#endif 
+    !
   end subroutine h5_read1int
   !
   subroutine h5_read1rl8(var,varname,filename,explicit)
@@ -1294,6 +1325,8 @@ module hdf5io
     character(len=*),intent(in) :: varname,filename
     logical,intent(in), optional:: explicit
     logical :: lexplicit
+    !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1330,6 +1363,8 @@ module hdf5io
     !
     if(lexplicit)  print*,' >> ',varname,' from ',filename,' ... done'
     !
+#endif 
+    !
   end subroutine h5_read1rl8
   !+-------------------------------------------------------------------+
   !| This end of the subroutine h5_readarray1d.                        |
@@ -1343,6 +1378,7 @@ module hdf5io
     logical,intent(in), optional:: explicit
     logical :: lexplicit
     !
+#ifdef HDF5
     !
     integer(hid_t) :: file_id
     ! file identifier
@@ -1386,6 +1422,8 @@ module hdf5io
     !
     if(lexplicit) print*,' >> ',vname,' from ',fname,' ... done'
     !
+#endif 
+    !
   end subroutine h5_readarray3d
   !
   !+-------------------------------------------------------------------+
@@ -1399,6 +1437,8 @@ module hdf5io
     real(8),allocatable,intent(out) :: vread(:,:)
     character(len=*),intent(in) :: vname,fname
     integer,intent(in),optional :: islice,jslice,kslice
+    !
+#ifdef HDF5
     !
     ! local data
     integer :: error                          ! error flag
@@ -1464,6 +1504,8 @@ module hdf5io
       stop ' !! error in h5_read2dfrom3d'
     endif
     !
+#endif 
+    !
   end subroutine h5_read2dfrom3d
   !
   subroutine h5_read1dfrom3d(vread,dim1,dim2,dim3,vname,fname,         &
@@ -1475,6 +1517,7 @@ module hdf5io
     character(len=*),intent(in) :: vname,fname
     integer,intent(in),optional :: islice,jslice,kslice
     !
+#ifdef HDF5
     ! local data
     integer :: error                          ! error flag
     integer(hid_t) :: file_id                 ! file identifier 
@@ -1539,6 +1582,8 @@ module hdf5io
       stop ' !! error in h5_read1dfrom3d'
     endif
     !
+#endif 
+    !
   end subroutine h5_read1dfrom3d
 
   subroutine h5_read1dfrom2d(vread,dim1,dim2,vname,fname,islice,jslice)
@@ -1549,6 +1594,7 @@ module hdf5io
     character(len=*),intent(in) :: vname,fname
     integer,intent(in),optional :: islice,jslice
     !
+#ifdef HDF5
     ! local data
     integer :: error                          ! error flag
     integer(hid_t) :: file_id                 ! file identifier 
@@ -1607,6 +1653,8 @@ module hdf5io
     else
       stop ' !! error in h5_read1dfrom2d'
     endif
+    !
+#endif 
     !
   end subroutine h5_read1dfrom2d
   !+-------------------------------------------------------------------+
