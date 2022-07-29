@@ -952,7 +952,7 @@ module hdf5io
     integer :: dim1
     !
 #ifdef HDF5
-    !    integer(hid_t) :: file_id
+    integer(hid_t) :: file_id
     ! file identifier
     integer(hid_t) :: dset_id1
     ! dataset identifier
