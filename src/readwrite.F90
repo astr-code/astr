@@ -1671,9 +1671,11 @@ module readwrite
   subroutine writeflfed(subtime)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ
+                       km,lwsequ,turbmode,feqwsequ,force
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
+    use statistic,only : nsamples,liosta,massflux,massflux_target
+    use bc,       only : ninflowslice
     use hdf5io
     !
     ! arguments
@@ -1682,21 +1684,24 @@ module readwrite
     ! local data
     integer :: i,j,k,jsp
     character(len=4) :: stepname
-    character(len=64) :: outfilename
+    character(len=64) :: outfilename,outauxiname
     character(len=64),save :: savfilenmae='first'
     character(len=2) :: spname
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       !
-      filenumb=filenumb+1
+      if(nstep/=0) filenumb=filenumb+1
       !
       write(stepname,'(i4.4)')filenumb
       !
       outfilename='outdat/flowfield'//stepname//'.'//iomode//'5'
+      outauxiname='outdat/auxiliary'//stepname//'.'//iomode//'5'
+      !
     else
       stepname=''
       outfilename='outdat/flowfield.'//iomode//'5'
+      outauxiname='outdat/auxiliary.'//iomode//'5'
     endif
     !
     ! outfilename='outdat/flowfield.h5'
@@ -1757,8 +1762,27 @@ module readwrite
     call h5io_end
     !
     if(lio) then
+      !
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
       call h5srite(varname='time',var=time,filename=trim(outfilename))
+      !
+
+      call h5srite(varname='nstep',var=nstep,                          &
+                          filename=trim(outauxiname),newfile=.true.)
+      call h5srite(varname='filenumb',var=filenumb,                    &
+                      filename=trim(outauxiname))
+      call h5srite(varname='fnumslic',var=fnumslic,                    &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='ninflowslice',var=ninflowslice,            &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='massflux',var=massflux,                    &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='massflux_target',var=massflux_target,      &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='force',var=force,                          &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='nsamples',var=nsamples,                    &
+                                         filename=trim(outauxiname))
     endif
     !
     if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
@@ -2017,8 +2041,8 @@ module readwrite
                        turbmode,feqchkpt,iomode
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
-    use statistic,only : nsamples,liosta,massflux,massflux_target
-    use bc,       only : ninflowslice
+    use statistic,only : liosta!,nsamples,massflux,massflux_target
+    ! use bc,       only : ninflowslice
     !
     use hdf5io
     !
@@ -2069,8 +2093,8 @@ module readwrite
     ! close(21)
     ! if(lio) print*,' << ',trim(outfilename)
     !
-    if(lio) call bakupfile('outdat/auxiliary.h5')
-    if(lio) call bakupfile('outdat/flowfield.'//iomode//'5')
+    if(lio.and.(.not.lwsequ)) call bakupfile('outdat/auxiliary.h5')
+    if(lio.and.(.not.lwsequ)) call bakupfile('outdat/flowfield.'//iomode//'5')
     !
     call writeflfed()
     !
@@ -2081,25 +2105,25 @@ module readwrite
     ! enddo
     ! call h5io_end
     !
-    if(lio) then
-      !
-      call h5srite(varname='nstep',var=nstep,                          &
-                          filename='outdat/auxiliary.h5',newfile=.true.)
-      call h5srite(varname='filenumb',var=filenumb,                    &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='fnumslic',var=fnumslic,                    &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='ninflowslice',var=ninflowslice,            &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='massflux',var=massflux,                    &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='massflux_target',var=massflux_target,      &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='force',var=force,                          &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='nsamples',var=nsamples,                    &
-                                         filename='outdat/auxiliary.h5')
-    endif
+    ! if(lio) then
+    !   !
+    !   call h5srite(varname='nstep',var=nstep,                          &
+    !                       filename='outdat/auxiliary.h5',newfile=.true.)
+    !   call h5srite(varname='filenumb',var=filenumb,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='fnumslic',var=fnumslic,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='ninflowslice',var=ninflowslice,            &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='massflux',var=massflux,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='massflux_target',var=massflux_target,      &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='force',var=force,                          &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='nsamples',var=nsamples,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    ! endif
     !
     if(limmbou .and. mpirank==imbroot) then
       ! call imboundarydata 
