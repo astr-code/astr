@@ -36,7 +36,7 @@ f
 none,h
 
 # bctype                                                : Boundary condition definition 
-11, none
+11, free
 21
 421, 0.8d0 
 51, 1.d5, 32.6d0

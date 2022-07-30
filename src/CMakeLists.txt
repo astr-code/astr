@@ -17,7 +17,9 @@ add_executable(astr
                     geom.F90
                     gridgeneration.F90
                     hdf5io.F90
-                    initialisation.F90
+		    ibmethod.F90
+		    initialisation.F90
+                    interp.F90
                     mainloop.F90
                     models.F90
                     parallel.F90

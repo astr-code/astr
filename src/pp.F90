@@ -25,9 +25,12 @@ module pp
   subroutine ppentrance
     !
     use cmdefne
+    use readwrite,       only : readinput
+    use gridgeneration,  only : gridgen
     !
     ! local data
-    character(len=64) :: cmd,casefolder,inputfile,outputfile
+    character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
+                         flowfieldfile
     !
     call readkeyboad(cmd)
     print*,' ** pp command: ',cmd
@@ -38,6 +41,10 @@ module pp
       call examplegen(trim(casefolder))
       ! generate an example channel flow case
       !
+    elseif(trim(cmd)=='gridgen') then
+      call readinput
+      !
+      call gridgen
     elseif(trim(cmd)=='solid') then
       call solidpp
     elseif(trim(cmd)=='datacon') then
@@ -57,6 +64,15 @@ module pp
     elseif(trim(cmd)=='parinfo') then
       !
       call parallelifogen
+      !
+    elseif(trim(cmd)=='view') then
+      !
+      call readkeyboad(flowfieldfile)
+      call readkeyboad(outputfile)
+      call readkeyboad(viewmode)
+      call readkeyboad(inputfile)
+      !
+      call fieldview(trim(flowfieldfile),trim(outputfile),trim(viewmode),trim(inputfile))
       !
     else
       stop ' !! pp command not defined. @ ppentrance'
@@ -546,17 +562,20 @@ module pp
     print*,cmd
     !
     if(cmd=='sgen') then
-      call solidgen_mvg
+      call solidgen_circle
+      !
+      shift_cor=(/5.d0,2.5d0,0.d0/)
+      !
     elseif(cmd=='proc') then
       call readkeyboad(inputfile)
       !
       call readsolid(trim(inputfile))
       !
       ! resc_fact=0.015d0
-      resc_fact=0.06667d0
-      rot_vec=(/0.d0,1.d0,0.d0/)
+      resc_fact=0.005d0
+      rot_vec=(/1.d0,0.d0,0.d0/)
       rot_theta=-90.d0
-      shift_cor=(/5.d0,5.d0,0.d0/)
+      shift_cor=(/5.d0,5.d0,5.d0/)
     else
       !
       print*,' !! ERROR 1, cmd not defined !!'
@@ -573,16 +592,16 @@ module pp
     ! call solidgen_triagnle
     ! call solidgen_airfoil
     !
-    ! do js=1,nsolid
-    !   call solidrange(immbody(js))
-    !   !
-    !   call solidresc(immbody(js),resc_fact)
-    !   call solidrota(immbody(js),rot_theta,rot_vec)
-    !   call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
-    !                              y=shift_cor(2)-immbody(js)%xcen(2),  &
-    !                              z=shift_cor(3)-immbody(js)%xcen(3))
-    !   !
-    ! enddo
+    do js=1,nsolid
+      call solidrange(immbody(js))
+      !
+      ! call solidresc(immbody(js),resc_fact)
+      ! call solidrota(immbody(js),rot_theta,rot_vec)
+      call solidshif(immbody(js),x=shift_cor(1)-immbody(js)%xcen(1),  &
+                                 y=shift_cor(2)-immbody(js)%xcen(2),  &
+                                 z=shift_cor(3)-immbody(js)%xcen(3))
+      !
+    enddo
     !
     !
     !
@@ -652,7 +671,11 @@ module pp
       call naca4digit(xin(i),xap(i),yap(i),nacaname,'lower')
     enddo
     !
-    theter=-10.d0/180.d0*pi
+    print*,' ** input angle of attack in degree'
+    read(*,*)theter
+    !
+    theter=-theter/180.d0*pi
+    !
     do i=0,map
       var1=xap(i)*cos(theter)-yap(i)*sin(theter)
       var2=xap(i)*sin(theter)+yap(i)*cos(theter)
@@ -1691,7 +1714,7 @@ module pp
     ! local data
     integer :: i,j,k,jf,km,jm,im,nface
     real(8) :: dthe,dphi,theter1,theter2,phi1,phi2,radi, &
-               x1(3),x2(3),x3(3),x4(3),x5(3),x6(3),norm1(3),var1
+               x1(3),x2(3),x3(3),x4(3),x5(3),x6(3),norm1(3),var1,xcent(3)
     real(8) :: epsilon
     type(triangle),allocatable :: tempface(:)
     !
@@ -1751,15 +1774,17 @@ module pp
       tempface(nface)%b=x4
       tempface(nface)%c=x1
       !
-      ! nface=nface+1
-      ! tempface(nface)%a=x1
-      ! tempface(nface)%b=x2
-      ! tempface(nface)%c=x5
+      nface=nface+1
+      xcent=(/0.d0,0.d0,-0.01d0/)
+      tempface(nface)%a=x1
+      tempface(nface)%b=x2
+      tempface(nface)%c=xcent
       ! !
-      ! nface=nface+1
-      ! tempface(nface)%a=x3
-      ! tempface(nface)%b=x4
-      ! tempface(nface)%c=x6
+      nface=nface+1
+      xcent=(/0.d0,0.d0,0.01d0/)
+      tempface(nface)%a=x3
+      tempface(nface)%b=x4
+      tempface(nface)%c=xcent
       !
     enddo
     !
@@ -1817,7 +1842,7 @@ module pp
   !+-------------------------------------------------------------------+
   !| This function is to generate a  4-digit NACA airfoil.             |
   !+-------------------------------------------------------------------+
-  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil                   |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -1890,6 +1915,82 @@ module pp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine naca4digit.                             |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to view flow by postprocess data.                |
+  !+-------------------------------------------------------------------+
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-Jul-2021: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine fieldview(flowfile,outputfile,viewmode,inputfile)
+    !
+    use hdf5io
+    use tecio
+    use WriteVTK
+    !
+    ! arguments
+    character(len=*),intent(in) :: flowfile,outputfile,viewmode,inputfile
+    !
+    ! local data
+    integer :: im,jm,km
+    logical :: lihomo,ljhomo,lkhomo
+    real(8) :: ref_t,reynolds,mach
+    character(len=32) :: gridfile
+    !
+    real(8),allocatable,dimension(:,:) :: x_2d,y_2d,z_2d,ro_2d,u_2d,   &
+                                          v_2d,w_2d,p_2d,t_2d
+    real(8),allocatable,dimension(:,:,:) :: x,y,z,ro,u,v,w,p,t
+    !
+    print*,' ==========================readinput=========================='
+    !
+    open(11,file=inputfile,form='formatted',status='old')
+    read(11,'(///////)')
+    read(11,*)im,jm,km
+    read(11,"(/)")
+    read(11,*)lihomo,ljhomo,lkhomo
+    read(11,'(//////////)')
+    read(11,*)ref_t,reynolds,mach
+    read(11,'(///////////////////////////)')
+    read(11,'(A)')gridfile
+    close(11)
+    print*,' >> ',inputfile
+    !
+    print*,' ** grid file: ',trim(gridfile)
+    !
+    if(viewmode=='xy') then
+      allocate(x_2d(0:im,0:jm),y_2d(0:im,0:jm))
+      call H5ReadSubset(x_2d,im,jm,km,'x',gridfile,kslice=0)
+      call H5ReadSubset(y_2d,im,jm,km,'y',gridfile,kslice=0)
+      !
+      allocate(ro_2d(0:im,0:jm),u_2d(0:im,0:jm), v_2d(0:im,0:jm),      &
+                w_2d(0:im,0:jm),p_2d(0:im,0:jm), t_2d(0:im,0:jm)       )
+      !
+      call h5_read2dfrom3d(ro_2d,im,jm,km,'ro',flowfile,kslice=0)
+      call h5_read2dfrom3d( u_2d,im,jm,km,'u1',flowfile,kslice=0)
+      call h5_read2dfrom3d( v_2d,im,jm,km,'u2',flowfile,kslice=0)
+      call h5_read2dfrom3d( w_2d,im,jm,km,'u3',flowfile,kslice=0)
+      call h5_read2dfrom3d( p_2d,im,jm,km, 'p',flowfile,kslice=0)
+      call h5_read2dfrom3d( t_2d,im,jm,km, 't',flowfile,kslice=0)
+      !
+      call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+                                     v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
+       ! call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+       !                                   v_2d,'v',p_2d,'p',t_2d,'t')
+    elseif(viewmode=='3d') then
+      allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+    else
+      print*,viewmode
+      stop ' !! mode is not defined @ fieldview'
+    endif
+    !
+  end subroutine fieldview
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine flowfieldview.                          |
+  !+-------------------------------------------------------------------+
+  !
   !
 end module pp
 !+---------------------------------------------------------------------+

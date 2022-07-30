@@ -35,9 +35,10 @@ module mainloop
   subroutine steploop
     !
     use commvar,  only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
-                        rkscheme,nsrpt,flowtype
+                        rkscheme,nsrpt,flowtype,limmbou
     use readwrite,only: readcont,timerept,nxtchkpt,nxtwsequ
     use commcal,  only: cflcal
+    use ibmethod, only: ibforce
     !
     ! local data
     real(8) :: time_beg,time_next_step
@@ -154,6 +155,8 @@ module mainloop
         !
         call timerept
         !
+        if(limmbou) call ibforce
+        !
         loop_counter=0
         !
       endif
@@ -164,7 +167,9 @@ module mainloop
       !
     enddo
     !
-    call timerept
+    if(limmbou) call timerept
+    !
+    call ibforce
     !
     ctime(1)=ptime()-time_start
     !
@@ -316,7 +321,10 @@ module mainloop
       !
       qrhs=0.d0
       !
-      if(limmbou) call immbody(ctime(11))
+      if(limmbou) call immbody(subtime1=ctime(11), &
+                               subtime2=ctime(24), &
+                               subtime3=ctime(25), &
+                               subtime4=ctime(26))
       !
       if(flowtype(1:2)/='0d') call qswap(ctime(7))
       !

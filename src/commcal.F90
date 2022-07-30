@@ -205,7 +205,7 @@ module commcal
     logical,save :: firstcall=.true.
     real(8) :: div2,vort,vortx,vorty,vortz,dpdi,dpdj,dpdk
     real(8) :: ssfmin,ssfmax,ssfavg,norm,ssfmax_local
-    integer :: i,j,k,i1,j1,k1,ii,jj,kk,ip1,jp1,kp1,im1,jm1,km1,nshknod
+    integer :: i,j,k,i1,j1,k1,ii,jj,kk,ip1,jp1,kp1,im1,jm1,km1,nshknod,nijka
     !
     real(8) :: time_beg
     !
@@ -325,11 +325,13 @@ module commcal
       ssfavg=psum(ssfavg)/psum(norm)
       !
       if(lio) then
+        nijka=(ia+1)*(ja+1)*(ka+1)
         print*,' ------------- shock sensor -------------'
-        write(*,"(18x,A,1X,F12.5)")'      max ssf: ',ssfmax
-        write(*,"(18x,A,1X,F12.5)")'      min ssf: ',ssfmin
-        write(*,"(18x,A,1X,F12.5)")'      avg ssf: ',ssfavg
-        write(*,"(18x,2(A,I0))")'  shock nodes:  ',nshknod,'/',ia*ja*ka
+        write(*,"(4x,A,11X,F12.5)")'      max ssf: ',ssfmax
+        write(*,"(4x,A,11X,F12.5)")'      min ssf: ',ssfmin
+        write(*,"(4x,A,11X,F12.5)")'      avg ssf: ',ssfavg
+        write(*,"(4x,2(A,I0),(A,F5.2,A))")'  shock nodes:  ',       &
+                 nshknod,'/',nijka,' = ',dble(100*nshknod)/dble(nijka),' %'
         print*,' ----------------------------------------'
       endif
       !

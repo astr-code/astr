@@ -36,10 +36,13 @@ module initialisation
                         readcheckpoint,readmeanflow,readmonc,writeflfed
     use fludyna,  only: updateq
     use statistic,only: nsamples
-    use bc,       only: ninflowslice
+    use bc,       only: ninflowslice,turbinf
     !
-    if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
+    if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
+       trim(flowtype)=='tbl') then
+      !
       call blprofile
+      !
     endif
     !
     call readcont
@@ -89,6 +92,8 @@ module initialisation
           call shuosherini
         case('bl')
           call blini
+        case('tbl')
+          call tblini
         case('swbli')
           call blini
         case('windtunn')
@@ -1187,6 +1192,7 @@ module initialisation
       !
       vel(i,j,k,1)= vel_prof(j,1)
       vel(i,j,k,2)= vel_prof(j,2)
+      vel(i,j,k,3)= 0.d0
       !
       tmp(i,j,k)  = tmp_prof(j)
       !
@@ -1200,12 +1206,21 @@ module initialisation
       endif
       !
       if(trim(turbmode)=='k-omega') then
-        tke(i,j,k)=1.5d0*0.0001d0
+        ! tke(i,j,k)=1.5d0*0.0001d0
+        !
+        tke(i,j,k)=1.5d0
         !
         ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
         delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
         miu=miucal(tmp(i,j,k))/Reynolds
         omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
+        !
+        if(x(i,j,k,2)>nomi_thick) then
+          ! add a damper for outer part of bl
+          radi=(x(i,j,k,2)-nomi_thick)**2
+          tke(i,j,k)=tke(i,j,k)*exp(-5.d0*radi)
+          omg(i,j,k)=omg(i,j,k)*exp(-5.d0*radi)
+        endif
         !
       endif
       !
@@ -1213,7 +1228,9 @@ module initialisation
     enddo
     enddo
     !
-    !
+    if(ndims==3) then
+    endif
+    ! 
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
     !                                   x(0:im,0:jm,0:km,2),'y',         &
@@ -1231,6 +1248,179 @@ module initialisation
   !| The end of the subroutine blini.                                  |
   !+-------------------------------------------------------------------+
   !
+  subroutine tblini
+    !
+    use commvar,  only: prandtl,mach,gamma,turbmode,                   &
+                        xmin,xmax,ymin,ymax,zmin,zmax,Reynolds
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
+    use fludyna,  only: thermal,miucal
+    use commfunc, only: dis2point2
+    use readwrite,only: readprofile
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    !
+    ! local data
+    integer :: i,j,k,l,ii,jj
+    real(8) :: theta,theter,fx,gz,zl,randomv(15),ran,radi
+    real(8) :: delta,beta1,miu
+    real(8) :: yh(0:jm),nth(0:jm),r12(0:jm)
+    integer :: seed1,seed2,seed3,seed11,seed22,seed33
+    integer, parameter :: nsemini = 1000
+    real(8), dimension(3,nsemini) :: eddy, posvor
+    real(8), dimension(3) :: dim_min, dim_max
+    real(8) :: volsemini,rrand,ddx,ddy,ddz,lsem,upr,vpr,wpr,rrand1,   &
+               init_noise,um,ftent
+    !
+    theta=0.1d0
+    !
+    beta1=0.075d0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  = rho_prof(j)
+      !
+      vel(i,j,k,1)= vel_prof(j,1)
+      vel(i,j,k,2)= vel_prof(j,2)
+      !
+      tmp(i,j,k)  = tmp_prof(j)
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>1) then
+        spc(i,j,k,1)=0.d0
+        !
+        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        !
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        ! tke(i,j,k)=1.5d0*0.0001d0
+        !
+        tke(i,j,k)=1.5d0
+        !
+        ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
+        delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+        miu=miucal(tmp(i,j,k))/Reynolds
+        omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
+        !
+        if(x(i,j,k,2)>nomi_thick) then
+          ! add a damper for outer part of bl
+          radi=(x(i,j,k,2)-nomi_thick)**2
+          tke(i,j,k)=tke(i,j,k)*exp(-5.d0*radi)
+          omg(i,j,k)=omg(i,j,k)*exp(-5.d0*radi)
+        endif
+        !
+      endif
+    !
+    enddo
+    enddo
+    enddo
+    !
+    if(ndims==3) then
+      !
+      ! copied from xcompact 
+      !! Simplified version of SEM 
+      init_noise=0.03d0
+      !
+      dim_min(1) = 0.d0
+      dim_min(2) = 0.d0
+      dim_min(3) = 0.d0
+      dim_max(1) = xmax
+      dim_max(2) = 0.25d0
+      dim_max(3) = zmax
+      volsemini = xmax * ymax * zmax
+      !
+      ! 3 int to get different random numbers
+      seed1 =  2345
+      seed2 = 13456
+      seed3 = 24567
+      do jj=1,nsemini
+        !
+        ! Vortex Position
+        do ii=1,3
+          seed11 = return_30k(seed1+jj*2+ii*379)
+          seed22 = return_30k(seed2+jj*5+ii*5250)
+          seed33 = return_30k(seed3+jj*3+ii*8170)
+          rrand1  = real(r8_random(seed11, seed22, seed33),8)
+          call random_number(rrand)
+          !write(*,*) ' rr r1 ', rrand, rrand1
+          posvor(ii,jj) = dim_min(ii)+(dim_max(ii)-dim_min(ii))*rrand
+        enddo
+        !
+        ! Eddy intensity
+        do ii=1,3
+           seed11 = return_30k(seed1+jj*7+ii*7924)
+           seed22 = return_30k(seed2+jj*11+ii*999)
+           seed33 = return_30k(seed3+jj*5+ii*5054)
+           rrand1  = real(r8_random(seed11, seed22, seed33),8)
+           call random_number(rrand)
+           !write(*,*) ' rr r1 ', rrand, rrand1
+           if (rrand <= 0.5d0) then
+              eddy(ii,jj) = -1.d0
+           else
+              eddy(ii,jj) =  1.d0
+           endif 
+        enddo
+        !
+      enddo
+      !
+      ! Loops to apply the fluctuations 
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        lsem = 0.15d0 ! For the moment we keep it constant
+        upr = 0.d0
+        vpr = 0.d0
+        wpr = 0.d0
+        do jj=1,nsemini
+          !
+          ddx = abs(x(i,j,k,1)-posvor(1,jj))
+          ddy = abs(x(i,j,k,2)-posvor(2,jj))
+          ddz = abs(x(i,j,k,3)-posvor(3,jj))
+          if (ddx < lsem .and. ddy < lsem .and. ddz < lsem) then
+            ! coefficients for the intensity of the fluctuation
+            ftent = (1.d0-ddx/lsem)*(1.d0-ddy/lsem)*(1.d0-ddz/lsem)
+            ftent = ftent / (sqrt(num2d3*lsem))**3
+            upr = upr + eddy(1,jj) * ftent
+            vpr = vpr + eddy(2,jj) * ftent
+            wpr = wpr + eddy(3,jj) * ftent
+          endif
+          !
+        enddo
+        !
+        upr = upr * sqrt(volsemini/nsemini)
+        vpr = vpr * sqrt(volsemini/nsemini)
+        wpr = wpr * sqrt(volsemini/nsemini)
+        !
+        um=vel(i,j,k,1) 
+        !
+        vel(i,j,k,1)=0.1d0*upr*sqrt(num2d3*init_noise*um) + vel(i,j,k,1)
+        vel(i,j,k,2)=0.1d0*vpr*sqrt(num2d3*init_noise*um) + vel(i,j,k,2)
+        vel(i,j,k,3)=0.1d0*wpr*sqrt(num2d3*init_noise*um)
+        !
+      enddo
+      enddo
+      enddo
+      !
+    endif
+    !
+    !
+    ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
+    !                                   x(0:im,0:jm,0:km,1),'x',         &
+    !                                   x(0:im,0:jm,0:km,2),'y',         &
+    !                                   x(0:im,0:jm,0:km,3),'z',         &
+    !                                rho(0:im,0:jm,0:km)  ,'ro',         &
+    !                                vel(0:im,0:jm,0:km,1),'u',          &
+    !                                vel(0:im,0:jm,0:km,2),'v',          &
+    !                                vel(0:im,0:jm,0:km,3),'w',          &
+    !                                prs(0:im,0:jm,0:km)  ,'p' )
+    
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D TBL initialised.'
+    !
+  end subroutine tblini
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is read the boundary layer profile.               |
   !+-------------------------------------------------------------------+
@@ -1240,10 +1430,11 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blprofile
     !
+    use commvar,  only: flowtype
     use readwrite,only: readprofile
-    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
-    use stlaio,  only: get_unit
+    use stlaio,   only: get_unit
     !
     ! local data
     integer :: fh
@@ -1251,31 +1442,50 @@ module initialisation
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
-    if(lio) then
-      fh=get_unit()
+    if(turbinf=='prof' .or. turbinf=='intp' .or. trim(flowtype)=='tbl') then
       !
-      open(fh,file='datin/inlet.prof',action='read',form='formatted')
-      read(fh,*)
-      read(fh,*)
-      read(fh,*)nomi_thick,disp_thick,mome_thick,fric_velocity
-      close(fh)
-      write(*,"(A)")'  -----------------------------------------------'
-      write(*,"(A)")'            δ          δ*           θ        utau'
-      write(*,"(1X,4(F12.7))")nomi_thick,disp_thick,mome_thick,fric_velocity
-      write(*,"(A)")'  -----------------------------------------------'
+      if(lio) then
+        !
+        fh=get_unit()
+        !
+        open(fh,file='datin/inlet.prof',action='read',form='formatted')
+        read(fh,*)
+        read(fh,*)
+        read(fh,*)nomi_thick,disp_thick,mome_thick,fric_velocity
+        close(fh)
+        write(*,"(A)")'  -----------------------------------------------'
+        write(*,"(A)")'            δ          δ*           θ        utau'
+        write(*,"(1X,4(F12.7))")nomi_thick,disp_thick,mome_thick,fric_velocity
+        write(*,"(A)")'  -----------------------------------------------'
+        !
+      endif
+      !
+      call bcast(nomi_thick)
+      call bcast(disp_thick)
+      call bcast(mome_thick)
+      call bcast(fric_velocity)
+      !
+      call readprofile('datin/inlet.prof',dir='j',                     &
+                                var1=rho_prof,     var2=vel_prof(:,1), &
+                                var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
+      !
+      prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
+      !
+    else
+      !
+      nomi_thick=0.d0
+      disp_thick=0.d0
+      mome_thick=0.d0
+      fric_velocity=1.d5
+      !
+      rho_prof(:)  =roinf
+      vel_prof(:,1)=uinf
+      vel_prof(:,2)=vinf
+      vel_prof(:,3)=winf
+      tmp_prof(:)  =tinf
+      prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
       !
     endif
-    !
-    call bcast(nomi_thick)
-    call bcast(disp_thick)
-    call bcast(mome_thick)
-    call bcast(fric_velocity)
-    !
-    call readprofile('datin/inlet.prof',dir='j',                     &
-                              var1=rho_prof,     var2=vel_prof(:,1), &
-                              var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
-    !
-    prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
     !
   end subroutine blprofile
   !+-------------------------------------------------------------------+

@@ -1,6 +1,9 @@
 .vscode/
 *.plt
 *.dat
+*.h5
+*.log
+*.xdmf
 bin/
 obj/
 solid_in.stl
@@ -11,3 +14,5 @@ report.bak
 report.txt
 benchmark/
 workspace*
+fort*
+

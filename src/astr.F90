@@ -16,6 +16,7 @@ program astr
   use cmdefne
   use pp
   use geom
+  use ibmethod
   !
   implicit none
   !
@@ -54,6 +55,8 @@ program astr
     call infodisp
     !
     call allocommarray
+    !
+    call ibprocess
     !
     call gridgen
     !

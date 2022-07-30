@@ -47,9 +47,14 @@ module parallel
     module procedure pmerg_sbou
   end interface
   !
+  interface psuperpose
+    module procedure psuperpose_int_ary1d
+  end interface psuperpose
+  !
   interface psum
     module procedure psum_int
     module procedure psum_int_ary
+    module procedure psum_int_ary2d
     module procedure psum_r8
     module procedure psum_r8_ary
     module procedure psum_r8_ary_2d
@@ -57,7 +62,12 @@ module parallel
   !
   interface pmax
     module procedure pmax_int
+    module procedure pmax_int4_array1d
+    module procedure pmax_int8
+    module procedure pmax_int8_array1d
     module procedure pmax_r8
+    module procedure pmax_r8_array2d
+    module procedure pmax_r8_array3d
   end interface
   !
   interface pmin
@@ -82,7 +92,12 @@ module parallel
     module procedure pgather_rel2d_array
     module procedure pgather_int2d_array
     module procedure pgather_int1d_array
+    module procedure pgather_int
     module procedure pgather_cha1_array
+  end interface
+  !
+  interface pswapall
+    module procedure pswapall_int1d_array
   end interface
   !
   interface pscatter
@@ -94,16 +109,21 @@ module parallel
      module procedure rmdup_i4_2d
   end interface
   !
+  interface msize
+    module procedure size_integer
+  end interface
+  !
   integer :: mpirank,mpisize,mpirankmax
-  integer :: isize,jsize,ksize,irkm,jrkm,krkm,irk,jrk,krk,ig0,jg0,kg0, &
-             irk_islice,jrk_jslice,krk_kslice
+  integer :: isize,jsize,ksize,irkm,jrkm,krkm,irk,jrk,krk,ig0,jg0,kg0
   integer :: mpileft,mpiright,mpidown,mpiup,mpifront,mpiback,mpitag
   character(len=8) :: mpirankname
   logical :: lio
-  integer :: status(mpi_status_size)
-  integer :: mpi_imin,mpi_jmin,mpi_jmax,group_imin,group_jmin,         &
-             group_jmax,mpi_group_world,mpi_islice,group_islice,       &
-             mpi_jslice,group_jslice,mpi_kslice,group_kslice
+  integer :: status(mpi_status_size) 
+  integer :: mpi_imin,mpi_imax,mpi_jmin,mpi_jmax
+  integer :: irk_islice,jrk_jslice,krk_kslice
+  integer :: mpi_islice,mpi_jslice,mpi_kslice
+  integer,allocatable :: mpi_ikgroup(:)
+  integer,allocatable :: mpi_kgroup(:,:)
   character(mpi_max_processor_name) :: processor_name
   !
   contains
@@ -449,6 +469,291 @@ module parallel
   ! the end of the subroutine parapp.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to assign sub-communicator.                    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-07-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine subcomm(nrank,irkg,jrkg,krkg,img,jmg,kmg,i0g,j0g,k0g)
+    !
+    use commvar,   only : islice,jslice,kslice
+    !
+    ! arguments
+    integer,intent(in) :: nrank(0:irkm,0:jrkm,0:krkm),                 &
+                          irkg(0:mpirankmax),jrkg(0:mpirankmax),       &
+                          krkg(0:mpirankmax),img(0:mpirankmax),        &
+                          jmg(0:mpirankmax),kmg(0:mpirankmax),         &
+                          i0g(0:mpirankmax),j0g(0:mpirankmax),         &
+                          k0g(0:mpirankmax)
+    !
+    ! local data
+    integer :: group_mpi,mpi_group_world
+    integer :: ni,nj,nk,n,nrk
+    integer :: newsize,ierr
+    integer,allocatable :: rank_use(:)
+    !
+    allocate(rank_use(jsize*ksize))
+    rank_use=-1
+    n=0
+    do nk=0,ksize-1
+    do nj=0,jsize-1
+      n=n+1
+      rank_use(n)=nrank(0,nj,nk)
+    end do
+    end do
+    !
+    call mpi_comm_group(mpi_comm_world,mpi_group_world,ierr)
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+    call mpi_comm_create(mpi_comm_world,group_mpi,mpi_imin,ierr)
+    !
+    if(irk==0) call mpi_comm_size(mpi_imin,newsize,ierr)
+    ! if(mpirank==0) write(*,'(A,I0)') &
+    !   '  ** new communicator: mpi_imin  ... created, size: ',newsize
+    !
+    rank_use=-1
+    n=0
+    do nk=0,ksize-1
+    do nj=0,jsize-1
+      n=n+1
+      rank_use(n)=nrank(isize-1,nj,nk)
+    end do
+    end do
+    !
+    call mpi_comm_group(mpi_comm_world,mpi_group_world,ierr)
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+    call mpi_comm_create(mpi_comm_world,group_mpi,mpi_imax,ierr)
+    !
+    if(irk==isize-1) call mpi_comm_size(mpi_imax,newsize,ierr)
+    ! if(mpirank==0) write(*,'(A,I0)') &
+    !   '  ** new communicator: mpi_imax  ... created, size: ',newsize
+    !
+    ! set sub communicator for islice
+    irk_islice=-1
+     !
+     do nrk=0,mpirankmax
+       !
+       if(islice>=i0g(nrk) .and. islice<i0g(nrk)+img(nrk)) then
+         irk_islice=irkg(nrk)
+         ! print*,' ** islice is at irk=',irk_islice
+         exit
+       endif
+       !
+     enddo
+     !
+    if(irk_islice>=0) then
+      !
+      rank_use=-1
+      n=0
+      do nk=0,ksize-1
+      do nj=0,jsize-1
+        n=n+1
+        rank_use(n)=nrank(irk_islice,nj,nk)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,mpi_islice,ierr)
+      if(irk==irk_islice) then
+        call mpi_comm_size(mpi_islice,newsize,ierr)
+        ! if(jrk==0 .and. krk==0) then
+        !   print*,' ** new communicator: mpi_islice  ... created, size: ',newsize
+        ! endif
+      endif
+      !
+    endif
+    !
+    deallocate(rank_use)
+    ! end of set sub communicator for islice
+    !
+    ! set sub communicator for jslice
+    allocate(rank_use(isize*ksize))
+    !
+    jrk_jslice=-1
+    !
+    do nrk=0,mpirankmax
+      !
+      if(jslice>=j0g(nrk) .and. jslice<j0g(nrk)+jmg(nrk)) then
+        jrk_jslice=jrkg(nrk)
+        ! print*,' ** jslice is at jrk=',jrk_jslice
+        exit
+      endif
+      !
+    enddo
+    !
+    if(jrk_jslice>=0) then
+      !
+      rank_use=-1
+      n=0
+      do nk=0,ksize-1
+      do ni=0,isize-1
+        n=n+1
+        rank_use(n)=nrank(ni,jrk_jslice,nk)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,mpi_jslice,ierr)
+      if(jrk==jrk_jslice) then
+        call mpi_comm_size(mpi_jslice,newsize,ierr)
+        ! if(irk==0 .and. krk==0) then
+        !   print*,' ** new communicator: mpi_jslice  ... created, size: ',newsize
+        ! endif
+      endif
+      !
+    endif
+    !
+    deallocate(rank_use)
+    ! end of set sub communicator for jslice
+    !
+    ! set sub communicator for kslice
+    allocate(rank_use(isize*jsize))
+    !
+    krk_kslice=-1
+    !
+    do nrk=0,mpirankmax
+      !
+      if(kslice>=k0g(nrk) .and. kslice<k0g(nrk)+kmg(nrk)) then
+        krk_kslice=krkg(nrk)
+        ! print*,' ** kslice is at krk=',krk_kslice
+        exit
+      endif
+      !
+    enddo
+    !
+    if(krk_kslice>=0) then
+      !
+      rank_use=-1
+      n=0
+      do nj=0,jsize-1
+      do ni=0,isize-1
+        n=n+1
+        rank_use(n)=nrank(ni,nj,krk_kslice)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,mpi_kslice,ierr)
+      if(krk==krk_kslice) then
+        call mpi_comm_size(mpi_kslice,newsize,ierr)
+        ! if(irk==0 .and. jrk==0) then
+        !   print*,' ** new communicator: mpi_kslice  ... created, size: ',newsize
+        ! endif
+      endif
+      !
+    endif
+    !
+    deallocate(rank_use)
+    ! end of set sub communicator for kslice
+    !
+    ! set sub communicator for j=0
+    allocate(rank_use(isize*ksize))
+    !
+    rank_use=-1
+    n=0
+    do nk=0,ksize-1
+    do ni=0,isize-1
+      n=n+1
+      rank_use(n)=nrank(ni,0,nk)
+    end do
+    end do
+    !
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+    call mpi_comm_create(mpi_comm_world,group_mpi,mpi_jmin,ierr)
+    !
+    if(jrk==0) call mpi_comm_size(mpi_jmin,newsize,ierr)
+    ! if(mpirank==0) write(*,'(A,I0)') &
+    !   '  ** new communicator: mpi_jmin  ... created, size: ',newsize
+    ! end of set sub communicator for j=0
+    !
+    ! set sub communicator for j=jmax
+    rank_use=-1
+    n=0
+    do nk=0,ksize-1
+    do ni=0,isize-1
+      n=n+1
+      rank_use(n)=nrank(ni,jsize-1,nk)
+    end do
+    end do
+    !
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+    call mpi_comm_create(mpi_comm_world,group_mpi,mpi_jmax,ierr)
+    !
+    if(jrk==jrkm) then
+      call mpi_comm_size(mpi_jmax,newsize,ierr)
+      ! if(irk==0 .and. krk==0) write(*,'(A,I0)') &
+      ! '  ** new communicator: mpi_jmax  ... created, size: ',newsize
+    endif
+    !
+    deallocate(rank_use)
+    ! end of set sub communicator for j=max
+    !
+    ! create i-k group from comm in i and k directions
+    allocate(rank_use(isize*ksize),mpi_ikgroup(0:jsize-1))
+    !
+    do nj=0,jsize-1
+      !
+      rank_use=-1
+      n=0
+      do nk=0,ksize-1
+      do ni=0,isize-1
+        n=n+1
+        rank_use(n)=nrank(ni,nj,nk)
+      end do
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,mpi_ikgroup(nj),ierr)
+      if(jrk==nj) then
+        call mpi_comm_size(mpi_ikgroup(nj),newsize,ierr)
+        ! if(irk==0 .and. krk==0) then
+        !   print*,' ** new communicator: mpi_ikgroup  ... created, size: ',newsize
+        ! endif
+      endif
+      !
+    enddo
+    !
+    deallocate(rank_use)
+    ! end of set i-k group
+    !
+    ! create k group from comm in i and k directions
+    allocate(rank_use(ksize),mpi_kgroup(0:isize-1,0:jsize-1))
+    !
+    do nj=0,jsize-1
+    do ni=0,isize-1
+      !
+      rank_use=-1
+      n=0
+      do nk=0,ksize-1
+        n=n+1
+        rank_use(n)=nrank(ni,nj,nk)
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,mpi_kgroup(ni,nj),ierr)
+      if(jrk==nj .and. irk==ni) then
+        call mpi_comm_size(mpi_kgroup(ni,nj),newsize,ierr)
+        ! if(irk==0 .and. krk==0) then
+        !   print*,' ** new communicator: mpi_kgroup  ... created, size: ',newsize
+        ! endif
+      endif
+      !
+    enddo
+    enddo
+    !
+    deallocate(rank_use)
+    ! end of set k group
+    !
+    if(lio) print*,' ** sub-communicators created'
+    !
+    call mpi_barrier(mpi_comm_world,ierr)
+    !
+  end subroutine subcomm
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine subcomm.                                |
+  !+-------------------------------------------------------------------+
+  !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to initilize parallel parameters
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -459,9 +764,8 @@ module parallel
     use commvar,   only : is,ie,js,je,ks,ke,islice,jslice,kslice
     !
     ! local data
-    integer :: n,nn,nsize1,nsize,ierr,fh,ni,nj,nk,newsize,nrk
+    integer :: n,nn,nsize1,nsize,ierr,fh,ni,nj,nk,nrk
     integer,allocatable:: ntemp(:,:),nrank(:,:,:)
-    integer,allocatable :: rank_use(:)
     integer,allocatable,dimension(:) :: nrect,irkg,jrkg,krkg,          &
                                         img,jmg,kmg,i0g,j0g,k0g
     !
@@ -488,15 +792,15 @@ module parallel
     lio=.false.
     !
     allocate( nrank(0:irkm,0:jrkm,0:krkm) )
+    allocate( irkg(0:mpirankmax),jrkg(0:mpirankmax),                 &
+              krkg(0:mpirankmax),img(0:mpirankmax),                  &
+              jmg(0:mpirankmax),kmg(0:mpirankmax),                   &
+              i0g(0:mpirankmax),j0g(0:mpirankmax),                   &
+              k0g(0:mpirankmax)                                     )
     !
     if(mpirank==0) then
       !
       allocate( ntemp(1:11,0:mpirankmax)                               )
-      allocate( irkg(0:mpirankmax),jrkg(0:mpirankmax),                 &
-                krkg(0:mpirankmax),img(0:mpirankmax),                  &
-                jmg(0:mpirankmax),kmg(0:mpirankmax),                   &
-                i0g(0:mpirankmax),j0g(0:mpirankmax),                   &
-                k0g(0:mpirankmax)                                     )
       !
       fh=get_unit()
       open(fh,file='datin/parallel.info',form='formatted')
@@ -766,198 +1070,19 @@ module parallel
     !
     call bcast(nrank)
     !
-    allocate(rank_use(jsize*ksize))
-    rank_use=-1
-    n=0
-    do nk=0,ksize-1
-    do nj=0,jsize-1
-      n=n+1
-      rank_use(n)=nrank(0,nj,nk)
-    end do
-    end do
+    call bcast(irkg)
+    call bcast(jrkg)
+    call bcast(krkg)
+    call bcast(img)
+    call bcast(jmg)
+    call bcast(kmg)
+    call bcast(i0g)
+    call bcast(j0g)
+    call bcast(k0g)
     !
-    call mpi_comm_group(mpi_comm_world,mpi_group_world,ierr)
-    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_imin,ierr)
-    call mpi_comm_create(mpi_comm_world,group_imin,mpi_imin,ierr)
+    call subcomm(nrank,irkg,jrkg,krkg,img,jmg,kmg,i0g,j0g,k0g)
     !
-    if(irk==0) call mpi_comm_size(mpi_imin,newsize,ierr)
-    if(mpirank==0) write(*,'(A,I0)') &
-      '  ** new communicator: mpi_imin  ... created, size: ',newsize
-    !
-    ! set sub communicator for islice
-    irk_islice=-1
-    if(mpirank==0) then
-      !
-      do nrk=0,mpirankmax
-        !
-        if(islice>=i0g(nrk) .and. islice<i0g(nrk)+img(nrk)) then
-          irk_islice=irkg(nrk)
-          print*,' ** islice is at irk=',irk_islice
-          exit
-        endif
-        !
-      enddo
-      !
-    endif
-    !
-    call bcast(irk_islice)
-    !
-    if(irk_islice>=0) then
-      !
-      rank_use=-1
-      n=0
-      do nk=0,ksize-1
-      do nj=0,jsize-1
-        n=n+1
-        rank_use(n)=nrank(irk_islice,nj,nk)
-      end do
-      end do
-      !
-      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_islice,ierr)
-      call mpi_comm_create(mpi_comm_world,group_islice,mpi_islice,ierr)
-      if(irk==irk_islice) then
-        call mpi_comm_size(mpi_islice,newsize,ierr)
-        if(jrk==0 .and. krk==0) then
-          print*,' ** new communicator: mpi_islice  ... created, size: ',newsize
-        endif
-      endif
-      !
-    endif
-    !
-    deallocate(rank_use)
-    ! end of set sub communicator for islice
-    !
-    ! set sub communicator for jslice
-    allocate(rank_use(isize*ksize))
-    !
-    jrk_jslice=-1
-    if(mpirank==0) then
-      !
-      do nrk=0,mpirankmax
-        !
-        if(jslice>=j0g(nrk) .and. jslice<j0g(nrk)+jmg(nrk)) then
-          jrk_jslice=jrkg(nrk)
-          print*,' ** jslice is at jrk=',jrk_jslice
-          exit
-        endif
-        !
-      enddo
-      !
-    endif
-    !
-    call bcast(jrk_jslice)
-    !
-    if(jrk_jslice>=0) then
-      !
-      rank_use=-1
-      n=0
-      do nk=0,ksize-1
-      do ni=0,isize-1
-        n=n+1
-        rank_use(n)=nrank(ni,jrk_jslice,nk)
-      end do
-      end do
-      !
-      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jslice,ierr)
-      call mpi_comm_create(mpi_comm_world,group_jslice,mpi_jslice,ierr)
-      if(jrk==jrk_jslice) then
-        call mpi_comm_size(mpi_jslice,newsize,ierr)
-        if(irk==0 .and. krk==0) then
-          print*,' ** new communicator: mpi_jslice  ... created, size: ',newsize
-        endif
-      endif
-      !
-    endif
-    !
-    deallocate(rank_use)
-    ! end of set sub communicator for jslice
-    !
-    ! set sub communicator for kslice
-    allocate(rank_use(isize*jsize))
-    !
-    krk_kslice=-1
-    if(mpirank==0) then
-      !
-      do nrk=0,mpirankmax
-        !
-        if(kslice>=k0g(nrk) .and. kslice<k0g(nrk)+kmg(nrk)) then
-          krk_kslice=krkg(nrk)
-          print*,' ** kslice is at krk=',krk_kslice
-          exit
-        endif
-        !
-      enddo
-      !
-    endif
-    !
-    call bcast(krk_kslice)
-    !
-    if(krk_kslice>=0) then
-      !
-      rank_use=-1
-      n=0
-      do nj=0,jsize-1
-      do ni=0,isize-1
-        n=n+1
-        rank_use(n)=nrank(ni,nj,krk_kslice)
-      end do
-      end do
-      !
-      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_kslice,ierr)
-      call mpi_comm_create(mpi_comm_world,group_kslice,mpi_kslice,ierr)
-      if(krk==krk_kslice) then
-        call mpi_comm_size(mpi_kslice,newsize,ierr)
-        if(irk==0 .and. jrk==0) then
-          print*,' ** new communicator: mpi_kslice  ... created, size: ',newsize
-        endif
-      endif
-      !
-    endif
-    !
-    deallocate(rank_use)
-    ! end of set sub communicator for kslice
-    !
-    allocate(rank_use(isize*ksize))
-    !
-    rank_use=-1
-    n=0
-    do nk=0,ksize-1
-    do ni=0,isize-1
-      n=n+1
-      rank_use(n)=nrank(ni,0,nk)
-    end do
-    end do
-    !
-    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jmin,ierr)
-    call mpi_comm_create(mpi_comm_world,group_jmin,mpi_jmin,ierr)
-    !
-    if(jrk==0) call mpi_comm_size(mpi_jmin,newsize,ierr)
-    if(mpirank==0) write(*,'(A,I0)') &
-      '  ** new communicator: mpi_jmin  ... created, size: ',newsize
-    !
-    rank_use=-1
-    n=0
-    do nk=0,ksize-1
-    do ni=0,isize-1
-      n=n+1
-      rank_use(n)=nrank(ni,jsize-1,nk)
-    end do
-    end do
-    !
-    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_jmax,ierr)
-    call mpi_comm_create(mpi_comm_world,group_jmax,mpi_jmax,ierr)
-    !
-    if(jrk==jrkm) then
-      call mpi_comm_size(mpi_jmax,newsize,ierr)
-      if(irk==0 .and. krk==0) write(*,'(A,I0)') &
-      '  ** new communicator: mpi_jmax  ... created, size: ',newsize
-    endif
-    !
-    deallocate(rank_use)
-    !
-    deallocate(nrank)
-    !
-    call mpi_barrier(mpi_comm_world,ierr)
+    deallocate(nrank,irkg,jrkg,krkg,img,jmg,kmg,i0g,j0g,k0g)
     !
   end subroutine parallelini
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1255,6 +1380,8 @@ module parallel
         call bcast_r8_ary(vario(js)%edge(jf)%a)
         call bcast_r8_ary(vario(js)%edge(jf)%b)
         call bcast_r8_ary(vario(js)%edge(jf)%normdir)
+        call bcast_r8_ary(vario(js)%edge(jf)%cen)
+        call bcast_r8(vario(js)%edge(jf)%length)
       enddo
       !
     enddo
@@ -1394,41 +1521,74 @@ module parallel
     integer,intent(in) :: sendtabl(0:),recvtabl(0:)
     !
     ! local data
-    integer :: nvar,ierr,incode,jrank,recvsize,n2size
-    integer,allocatable :: senddispls(:),recvdispls(:),                &
-                           sendtabl2(:),recvtabl2(:)
+    integer :: nvar,ierr,incode,jrank,recvsize,n2size,j
+    integer :: newtype
+    integer,allocatable :: senddispls(:),recvdispls(:)
     !
     ! start
     !
     nvar=1
     !
-    n2size=size(datasend,2)
+    n2size=size(datasend,1)
     !
-    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax),        &
-             sendtabl2(0:mpirankmax),recvtabl2(0:mpirankmax))
+    call mpi_type_contiguous(n2size,mpi_real8,newtype,ierr)
+    call mpi_type_commit(newtype,ierr)
     !
-    sendtabl2=sendtabl*n2size
-    recvtabl2=recvtabl*n2size
+    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax))
+    !
     senddispls=0
     recvdispls=0
     do jrank=1,mpirankmax
-      senddispls(jrank)=senddispls(jrank-1)+sendtabl2(jrank-1)
-      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl2(jrank-1)
+      senddispls(jrank)=senddispls(jrank-1)+sendtabl(jrank-1)
+      recvdispls(jrank)=recvdispls(jrank-1)+recvtabl(jrank-1)
     enddo
     recvsize=recvdispls(mpirankmax)+recvtabl(mpirankmax)
-    allocate(datarecv(recvsize/n2size,n2size))
+    allocate(datarecv(n2size,recvsize))
     !
-    call mpi_alltoallv(datasend, sendtabl2, senddispls, mpi_real8, &
-                       datarecv, recvtabl2, recvdispls, mpi_real8, &
+    call mpi_alltoallv(datasend, sendtabl, senddispls, newtype, &
+                       datarecv, recvtabl, recvdispls, newtype, &
                        mpi_comm_world, ierr)
     !
-    deallocate(senddispls,recvdispls,sendtabl2,recvtabl2)
+    ! do j=1,size(datarecv,1)
+    ! if(mpirank==11) print*,datasend
+    ! enddo
+    !
+    deallocate(senddispls,recvdispls)
     !
   end subroutine updatable_rel2d_a2a_v
   !+-------------------------------------------------------------------+
   !| The end of the subroutine updatable_int.                          |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| this function is to update table based on alltoall mpi            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-Jun-2022  | Created by J. Fang STFC Daresbury Laboratory       |
+  !+-------------------------------------------------------------------+
+  function pswapall_int1d_array(vain) result(vout)
+    !
+    use mpi
+    !
+    integer,intent(in) :: vain(:)
+    integer :: vout(size(vain))
+    !
+    ! local variables
+    integer :: nvar,ierr
+    !
+    nvar=size(vain)
+    !
+    call mpi_alltoall(vain,1,mpi_integer,                   &
+                      vout,1,mpi_integer,mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function pswapall_int1d_array
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine pswapall_int1d_array.                   |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is used to gather arraies.                        |
   !+-------------------------------------------------------------------+
@@ -1509,6 +1669,46 @@ module parallel
                         mpi_comm_world, ierr)
     !
   end subroutine pgather_int1d_array
+  !
+  subroutine pgather_int(var,data,mode)
+    !
+    ! arguments
+    integer,intent(in) :: var
+    integer,intent(out),allocatable :: data(:)
+    character(len=*),intent(in),optional :: mode
+    !
+    !
+    ! local data
+    integer :: counts(0:mpirankmax)
+    integer :: ierr,jrank,ncou
+    !
+    call mpi_allgather(var, 1, mpi_integer, counts, 1, mpi_integer,  &
+                       mpi_comm_world, ierr)
+    !
+    if(present(mode) .and. mode=='noneg') then
+      ! only pick >=0 values
+      ncou=0
+      do jrank=0,mpirankmax
+        if(counts(jrank)>=0) then
+          ncou=ncou+1
+        endif
+      enddo
+      !
+      allocate(data(ncou))
+      ncou=0
+      do jrank=0,mpirankmax
+        if(counts(jrank)>=0) then
+          ncou=ncou+1
+          data(ncou)=counts(jrank)
+        endif
+      enddo
+      !
+    else
+      allocate(data(0:mpirankmax))
+      data=counts
+    endif
+    !
+  end subroutine pgather_int
   !
   subroutine pgather_rel2d_array(array,data)
     !
@@ -1802,22 +2002,102 @@ module parallel
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This function is superpose variables from different ranks.        |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-07-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine psuperpose_int_ary1d(var,vout)
+    !
+    use commtype, only : varray
+    !
+    integer,intent(in) :: var(:)
+    type(varray),intent(out) :: vout(1:size(var))
+    !
+    ! local data
+    integer :: nsize,i,j,jrank,ierr,ncout
+    integer,allocatable :: buf(:)
+    !
+    nsize=size(var)
+    !
+    allocate(buf(nsize*mpisize))
+    !
+    call mpi_gather(var,nsize,mpi_integer,buf,nsize,mpi_integer,  &
+                                             0,mpi_comm_world,ierr)
+    ! !
+    if(mpirank==0) then
+      !
+      do i=1,nsize
+        !
+        ncout=0
+        do jrank=0,mpirankmax
+          !
+          j=i+jrank*nsize
+          !
+          if(buf(j)>=0) then
+            !
+            ncout=ncout+1
+            !
+          endif
+          !
+        enddo
+        !
+        if(ncout>0) allocate(vout(i)%vint(ncout))
+        !
+        ncout=0
+        do jrank=0,mpirankmax
+          !
+          j=i+jrank*nsize
+          !
+          if(buf(j)>=0) then
+            !
+            ncout=ncout+1
+            !
+            vout(i)%vint(ncout)=buf(j)
+            !
+          endif
+          !
+        enddo
+        !
+      enddo
+      !
+    endif
+    ! !
+    ! call bcast(vout)
+    ! call bcast(nout)
+    ! !
+    return
+    !
+  end subroutine psuperpose_int_ary1d
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine psuperpose.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !
+  !+-------------------------------------------------------------------+
   !| This function is used to sum a number across ranks                |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 01-October-2019: Created by J. Fang @ STFC Daresbury Laboratory   |
   !+-------------------------------------------------------------------+
-  integer function  psum_int(var)
+  integer function  psum_int(var,comm)
     !
     ! arguments
     integer,intent(in) :: var
+    integer,intent(in),optional :: comm
     !
     ! local data
-    integer :: ierr
+    integer :: ierr,comms
     !
-    call mpi_allreduce(var,psum_int,1,mpi_integer,mpi_sum,             &
-                                                    mpi_comm_world,ierr)
+    if(present(comm)) then
+      comms=comm
+    else
+      comms=mpi_comm_world
+    endif
+    !
+    call mpi_allreduce(var,psum_int,1,mpi_integer,mpi_sum,comms,ierr)
     !
   end function psum_int
   !
@@ -1841,34 +2121,68 @@ module parallel
     !
   end function psum_int_ary
   !
-  real(8) function  psum_r8(var)
+  function psum_int_ary2d(var) result(varsum)
+    !
+    ! arguments
+    integer,intent(in) :: var(:,:)
+    integer,allocatable :: varsum(:,:)
+    !
+    ! local data
+    integer :: ierr,nsize1,nsize2,nsize
+    !
+    nsize1=size(var,1)
+    nsize2=size(var,2)
+    nsize=nsize1*nsize2
+    !
+    allocate(varsum(nsize1,nsize2))
+    !
+    call mpi_allreduce(var,varsum,nsize,mpi_integer,mpi_sum,           &
+                                                    mpi_comm_world,ierr)
+    !
+    return
+    !
+  end function psum_int_ary2d
+  !
+  real(8) function  psum_r8(var,comm)
     !
     ! arguments
     real(8),intent(in) :: var
+    integer,intent(in),optional :: comm
     !
     ! local data
-    integer :: ierr
+    integer :: ierr,comms
     !
-    call mpi_allreduce(var,psum_r8,1,mpi_real8,mpi_sum,               &
-                                                    mpi_comm_world,ierr)
+    if(present(comm)) then
+      comms=comm
+    else
+      comms=mpi_comm_world
+    endif
+    !
+    call mpi_allreduce(var,psum_r8,1,mpi_real8,mpi_sum,comms,ierr)
     !
   end function psum_r8
   !
-  function psum_r8_ary(var) result(varsum)
+  function psum_r8_ary(var,comm) result(varsum)
     !
     ! arguments
     real(8),intent(in) :: var(:)
+    integer,intent(in),optional :: comm
     real(8),allocatable :: varsum(:)
     !
     ! local data
-    integer :: ierr,nsize
+    integer :: ierr,nsize,comms
     !
     nsize=size(var)
     !
+    if(present(comm)) then
+      comms=comm
+    else
+      comms=mpi_comm_world
+    endif
+    !
     allocate(varsum(nsize))
     !
-    call mpi_allreduce(var,varsum,nsize,mpi_real8,mpi_sum,             &
-                                                    mpi_comm_world,ierr)
+    call mpi_allreduce(var,varsum,nsize,mpi_real8,mpi_sum,comms,ierr)
     !
     return
     !
@@ -1919,6 +2233,90 @@ module parallel
                                                     mpi_comm_world,ierr)
     !
   end function pmax_int
+  !
+  integer(8) function  pmax_int8(var)
+    !
+    ! arguments
+    integer(8),intent(in) :: var
+    !
+    ! local data
+    integer :: ierr
+    !
+    call mpi_allreduce(var,pmax_int8,1,mpi_integer8,mpi_max,          &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_int8
+  !
+  function  pmax_int4_array1d(var) result(vout)
+    !
+    ! arguments
+    integer(4),intent(in) :: var(:)
+    integer(4) :: vout(1:size(var))
+    !
+    ! local data
+    integer :: ierr,nsize
+    !
+    nsize=size(var)
+    !
+    call mpi_allreduce(var,vout,nsize,mpi_integer4,mpi_max,          &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_int4_array1d
+  !
+  function  pmax_int8_array1d(var) result(vout)
+    !
+    ! arguments
+    integer(8),intent(in) :: var(:)
+    integer(8) :: vout(1:size(var))
+    !
+    ! local data
+    integer :: ierr,nsize
+    !
+    nsize=size(var)
+    !
+    call mpi_allreduce(var,vout,nsize,mpi_integer8,mpi_max,          &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_int8_array1d
+  !
+  function  pmax_r8_array2d(var) result(vout)
+    !
+    ! arguments
+    real(8),intent(in) :: var(:,:)
+    real(8),allocatable :: vout(:,:)
+    !
+    ! local data
+    integer :: ierr,nsize1,nsize2
+    !
+    nsize1=size(var,1)
+    nsize2=size(var,2)
+    !
+    allocate(vout(nsize1,nsize2))
+    !
+    call mpi_allreduce(var,vout,nsize1*nsize2,mpi_real8,mpi_max,      &
+                                                    mpi_comm_world,ierr)
+    !
+  end function pmax_r8_array2d
+  !
+  function  pmax_r8_array3d(var) result(vout)
+    !
+    ! arguments
+    real(8),intent(in) :: var(:,:,:)
+    real(8),allocatable :: vout(:,:,:)
+    !
+    ! local data
+    integer :: ierr,nsize1,nsize2,nsize3
+    !
+    nsize1=size(var,1)
+    nsize2=size(var,2)
+    nsize3=size(var,3)
+    !
+    allocate(vout(nsize1,nsize2,nsize3))
+    !
+    call mpi_allreduce(var,vout,nsize1*nsize2*nsize3,mpi_real8,mpi_max,  &
+                                                      mpi_comm_world,ierr)
+    !
+  end function pmax_r8_array3d
   !
   real(8) function  pmax_r8(var)
     !
@@ -3066,7 +3464,7 @@ module parallel
     logical,intent(in),optional :: debug
     real(8),intent(inout),optional :: subtime
     !
-    ! logical data
+    ! local data
     integer :: ncou,nx,dir
     integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
@@ -4535,49 +4933,56 @@ module parallel
     use commtype, only : sboun
     !
     ! arguments
-    integer,intent(in) :: icellin(:,:)
+    integer(8),intent(in) :: icellin(:)
     type(sboun),intent(inout) :: abound(:)
     !
     ! local data
     integer :: ierr,jrank,csize,jb
-    integer,allocatable :: recvbuf(:,:,:),icellout(:,:)
+    integer(8),allocatable :: icellout(:)
     !
-    csize=size(icellin,1)
-    allocate(recvbuf(1:csize,1:3,0:mpirankmax),icellout(1:csize,1:3))
+    csize=size(icellin)
     !
-    call mpi_gather(icellin,csize*3,mpi_integer,                       &
-                    recvbuf,csize*3,mpi_integer, 0 , mpi_comm_world,ierr)
+    allocate(icellout(1:csize))
     !
-    if(mpirank==0) then
-      !
-      do jb=1,csize
-        !
-        do jrank=0,mpirankmax
-          if(recvbuf(jb,1,jrank)>0) then
-            ! the first non-zero element
-            icellout(jb,:)=recvbuf(jb,:,jrank)
-            exit
-          endif
-        enddo
-        !
-        if(jrank==mpirankmax+1) then
-          print*,' ** jrank=',jrank
-          print*,' ** jb=',jb
-          print*,' ** recvbuf(jb,1,:)',recvbuf(jb,1,:)
-          stop ' ERROR 1 @ pcollecicell: all icell is 0'
-        endif
-        !
-      enddo
-      !
-    endif
+    icellout=pmax(icellin)
     !
-    call bcast(icellout)
+    ! allocate(recvbuf(1:csize,1:3,0:mpirankmax),icellout(1:csize,1:3))
+    ! !
+    ! call mpi_gather(icellin,csize*3,mpi_integer,                       &
+    !                 recvbuf,csize*3,mpi_integer, 0 , mpi_comm_world,ierr)
+    ! !
+    ! if(mpirank==0) then
+    !   !
+    !   do jb=1,csize
+    !     !
+    !     do jrank=0,mpirankmax
+    !       if(recvbuf(jb,1,jrank)>0) then
+    !         ! the first non-zero element
+    !         icellout(jb,:)=recvbuf(jb,:,jrank)
+    !         exit
+    !       endif
+    !     enddo
+    !     !
+    !     if(jrank==mpirankmax+1) then
+    !       print*,' ** jrank=',jrank
+    !       print*,' ** jb=',jb
+    !       print*,' ** recvbuf(jb,1,:)',recvbuf(jb,1,:)
+    !       stop ' ERROR 1 @ pcollecicell: all icell is 0'
+    !     endif
+    !     !
+    !   enddo
+    !   !
+    ! endif
+    ! !
+    ! call bcast(icellout)
     !
     do jb=1,csize
-      abound(jb)%icell=icellout(jb,:)
+      call ijk2int8(int8=icellout(jb),i3a=abound(jb)%icell,mode='1>>3')
+      ! abound(jb)%icell=icellout(jb,:)
     enddo
     !
-    deallocate(recvbuf,icellout)
+    ! deallocate(recvbuf,icellout)
+    deallocate(icellout)
     !
     return
     !
@@ -4586,6 +4991,61 @@ module parallel
   !| The end of the subroutine pcollecicell.                           |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to convert three integer4 number to one        |
+  !|  integer4 number                                                  | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 20-06-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine ijk2int8(i,j,k,int8,i3a,mode)
+    !
+    integer(8) :: int8
+    integer,optional :: i,j,k
+    integer,optional :: i3a(3)
+    character(len=*),intent(in) :: mode
+    integer, parameter :: i16 = selected_int_kind(16)
+    !
+    if(mode=='3>>1') then
+      if(present(i) .and. present(j) .and. present(k)) then
+        int8=i+j*1000000+k*1000000000000_i16
+      elseif(present(i3a)) then
+        int8=i3a(1)+i3a(2)*1000000+i3a(3)*1000000000000_i16
+      endif
+    elseif(mode=='1>>3') then
+      if(present(i) .and. present(j) .and. present(k)) then
+        k=int8/1000000000000_i16
+        j=int8/1000000-k*1000000
+        i=int8-k*1000000000000_i16-j*1000000
+      elseif(present(i3a)) then
+        i3a(3)=int8/1000000000000_i16
+        i3a(2)=int8/1000000-i3a(3)*1000000
+        i3a(1)=int8-i3a(3)*1000000000000_i16-i3a(2)*1000000
+      endif
+    else
+      stop ' mode not defined @ ijk2int8'
+    endif
+    !
+  end subroutine ijk2int8
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine ijk2int8.                              |
+  !+-------------------------------------------------------------------+
+  !
+  pure function size_integer(var) result(nsize)
+    !
+    integer,allocatable,intent(in) :: var(:)
+    integer :: nsize
+    !
+    if(allocated(var)) then
+      nsize=size(var)
+    else
+      nsize=0
+    endif
+    !
+    return
+    !
+  end function size_integer
   !
 end module parallel
 !+---------------------------------------------------------------------+

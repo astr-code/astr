@@ -285,12 +285,13 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine fvar2q_sca(q,density,velocity,pressure,temperature,species)
+  subroutine fvar2q_sca(q,density,velocity,pressure,temperature,       &
+                       species,tke,omega)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: density,velocity(:)
-    real(8),intent(in),optional :: pressure,temperature,species(:)
+    real(8),intent(in),optional :: pressure,temperature,species(:),tke,omega
     real(8),intent(out) :: q(:)
     !
     ! local data
@@ -338,6 +339,13 @@ module fludyna
       do jspec=1,num_species
         q(5+jspec)=density*species(jspec)
       enddo
+      !
+    endif
+    !
+    if(present(tke) .and. present(omega)) then
+      !
+      q(5+num_species+1)=density*tke
+      q(5+num_species+2)=density*omega
       !
     endif
     !

@@ -21,11 +21,14 @@ module statistic
   logical :: liosta=.false.
   real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
-             wallheatflux,dissipation
+             wallheatflux,dissipation,nominal_thickness
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8) :: umax,rhomax,tmpmax,qdotmax
   real(8),allocatable :: max_q(:),min_q(:)
   !
+  real(8),allocatable,dimension(:) :: ro_xzm,u1_xzm,u2_xzm,t_xzm,p_xzm,&
+                                      eng_xzm,tke_xzm,ee_xzm
+  real(8),allocatable,dimension(:,:) :: ro_zm,u1_zm,u2_zm,t_zm,p_zm
   real(8),allocatable,dimension(:,:,:) :: rom,u1m,u2m,u3m,pm,tm,       &
                                           u11,u22,u33,u12,u13,u23,pp,  &
                                           tt,tu1,tu2,tu3,              &
@@ -315,6 +318,108 @@ module statistic
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to calculate spatical averaged variables. |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 15-05-2022  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine meanflowxzm
+    !
+    use commvar,  only : ndims
+    use commarray,only : vel,prs,rho,tmp,x,q
+    use parallel, only : mpi_ikgroup
+    !
+    ! local data
+    integer :: i,j,k
+    integer,save :: ks,ke
+    logical,save :: linit=.true.
+    real(8),save :: varsamp
+    real(8) :: eng,ro,u1,u2,u3
+    !
+    if(linit) then
+      allocate(ro_xzm(0:jm),u1_xzm(0:jm),u2_xzm(0:jm),t_xzm(0:jm),     &
+               p_xzm(0:jm),eng_xzm(0:jm),tke_xzm(0:jm),ee_xzm(0:jm))
+      !
+      if(ndims==2) then
+        ks=0
+        ke=0
+        varsamp=dble(ia)
+      elseif(ndims==3) then
+        ks=1
+        ke=km
+        varsamp=dble(ia*ka)
+      endif
+      !
+      linit=.false.
+      !
+    endif
+    !
+    ro_xzm=0.d0
+    u1_xzm=0.d0
+    u2_xzm=0.d0
+     t_xzm=0.d0
+     p_xzm=0.d0
+   eng_xzm=0.d0
+    !
+    tke_xzm=0.d0
+    ee_xzm=0.d0
+    !
+    do k=ks,ke
+    do i=1,im
+      !
+      do j=0,jm
+        !
+        ro=rho(i,j,k)
+        eng=q(i,j,k,5)/ro
+        !
+        ro_xzm(j)=ro_xzm(j)+ro
+         p_xzm(j)= p_xzm(j)+prs(i,j,k)
+        !
+        u1_xzm(j)=u1_xzm(j)+ro*vel(i,j,k,1)
+        u2_xzm(j)=u2_xzm(j)+ro*vel(i,j,k,2)
+         t_xzm(j)= t_xzm(j)+ro*tmp(i,j,k)
+       eng_xzm(j)=eng_xzm(j)+q(i,j,k,5)
+        !
+        tke_xzm(j)=tke_xzm(j)+ro*(vel(i,j,k,1)**2+vel(i,j,k,2)**2+     &
+                                  vel(i,j,k,3)**2)
+        ee_xzm(j)=ee_xzm(j)+ro*eng**2
+        !
+      enddo
+      !
+    enddo
+    enddo
+    !
+    p_xzm =psum( p_xzm,comm=mpi_ikgroup(jrk))
+    ro_xzm=psum(ro_xzm,comm=mpi_ikgroup(jrk))
+    u1_xzm=psum(u1_xzm,comm=mpi_ikgroup(jrk))
+    u2_xzm=psum(u2_xzm,comm=mpi_ikgroup(jrk))
+     t_xzm=psum( t_xzm,comm=mpi_ikgroup(jrk))
+    eng_xzm=psum(eng_xzm,comm=mpi_ikgroup(jrk))
+    !
+    tke_xzm=psum(tke_xzm,comm=mpi_ikgroup(jrk))
+    ee_xzm=psum(ee_xzm,comm=mpi_ikgroup(jrk))
+    !
+    u1_xzm=u1_xzm/ro_xzm
+    u2_xzm=u2_xzm/ro_xzm
+    t_xzm = t_xzm/ro_xzm
+    eng_xzm=eng_xzm/ro_xzm
+    !
+    tke_xzm=tke_xzm/ro_xzm
+    ee_xzm=ee_xzm/ro_xzm
+    !
+    ro_xzm=ro_xzm/varsamp
+     p_xzm= p_xzm/varsamp
+    !
+    tke_xzm=sqrt(tke_xzm-(u1_xzm**2+u2_xzm**2))
+    ee_xzm=sqrt(ee_xzm-eng_xzm**2)
+    !
+  end subroutine meanflowxzm
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine meanflowxzm.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to calculate and output instantous status.|
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -345,6 +450,16 @@ module statistic
       massflux=massfluxcal()
       wrms=wrmscal()
       wallheatflux=whfbl()
+    elseif(trim(flowtype)=='tbl') then
+      !
+      call meanflowxzm
+      !
+      fbcx=fbcxbl()
+      massflux=massfluxcal()
+      wrms=wrmscal()
+      wallheatflux=whfbl()
+      nominal_thickness=blthickness('nominal')
+      !
     elseif(trim(flowtype)=='channel') then
       !
       fbcx=fbcxchan()
@@ -516,6 +631,9 @@ module statistic
           elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','wallheatflux','wrms'
+          elseif(trim(flowtype)=='tbl') then
+            write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
+                                 'massflux','fbcx','blthickness','wrms'
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
               .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame') then
             write(hand_fs,"(2(A10,1X),5(A12,1X))") &
@@ -537,6 +655,8 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
       elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
+      elseif(trim(flowtype)=='tbl') then
+        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
       elseif(trim(flowtype)=='cylinder') then
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
       elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic') then
@@ -556,6 +676,8 @@ module statistic
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','forcex','wrms'
           elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','wallheatflux','wrms'
+          elseif(trim(flowtype)=='tbl') then
+            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','δ','wrms'
           elseif(trim(flowtype)=='cylinder') then
             write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
           elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
@@ -575,6 +697,8 @@ module statistic
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
           write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
+        elseif(trim(flowtype)=='tbl') then
+          write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
         elseif(trim(flowtype)=='cylinder') then
           write(*,"(2X,I7,1X,F13.7,3(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
@@ -862,6 +986,59 @@ module statistic
   !| The end of the subroutine fbcxbl.                                 |
   !+-------------------------------------------------------------------+
   !!
+  !+-------------------------------------------------------------------+
+  !| This function is to return wall skin-friction of bl flow.         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 29-09-2021  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  real(8) function blthickness(which_thickness) result(thickness)
+    !
+    use commvar,  only : reynolds
+    use commarray,only : tmp,dvel,x
+    use parallel, only : jrk,jrkm
+    use fludyna,  only : miucal
+    use commfunc, only : arquad
+    use interp,   only : interlinear
+    !
+    character(len=*),intent(in) :: which_thickness
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: miu,norm,area
+    real(8) :: tau(0:im,0:km)
+    !
+    if(which_thickness=='nominal') then
+      !
+      thickness=0.d0
+      do j=1,jm
+        !
+        if(u1_xzm(j-1)<0.99d0 .and. u1_xzm(j)>=0.99d0) then
+          thickness=interlinear(u1_xzm(j-1),u1_xzm(j),                 &
+                                x(0,j-1,0,2),x(0,j,0,2),0.99d0)
+        endif
+        !
+      enddo
+      !
+    else
+      stop ' !! which_thickness not defined @ blthickness'
+    endif
+    !
+    thickness=pmax(thickness)
+    !
+    ! if(thickness>1.05d0) then
+    !   if(lio) print*,' ** target BL thickness achieved:',thickness
+    !   call mpistop
+    ! endif
+    !
+    return
+    !
+  end function blthickness
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine blthickness.                            |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This function is to return wall wallheatflux of bl flow.          |
   !+-------------------------------------------------------------------+

@@ -127,7 +127,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,schmidt
+                        turbmode,schmidt,ibmode,gridfile
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
 #ifdef COMB
     use commvar, only : odetype,lcomb
@@ -163,6 +163,8 @@ module readwrite
         typedefine='                         shu-osher problem'
       case('bl')
         typedefine='                       boundary layer flow'
+      case('tbl')
+        typedefine='                   temporal boundary layer'
       case('swbli')
         typedefine='     shock-wave/boundary layer interaction'
       case('windtunn')
@@ -364,10 +366,12 @@ module readwrite
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
           write(*,'(18X,(A))',advance='no')'inflow turbulence : '
           !
-          if(turbinf=='none') then
-            write(*,'(A)')'      no inflow turbulence'
+          if(turbinf=='prof') then
+            write(*,'(A)')'            read a profile'
           elseif(turbinf=='intp') then
             write(*,'(A)')' interpolation of database'
+          elseif(turbinf=='free') then
+            write(*,'(A)')' free stream incoming flow'
           else
             print*,' !! turbinf: ',turbinf
             stop ' !! ERROR in defining turbinf @ bc 11 !!'
@@ -394,9 +398,22 @@ module readwrite
       write(*,'(2X,62A)')('-',i=1,62)
       !
       if(limmbou) then
-        write(*,'(2X,A)')'                    *** Solid Body Immersed ***'
-        write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
-        write(*,'(2X,62A)')('-',i=1,62)
+        write(*,'(2X,A)')'                   *** Immersed Boundary ON ***'
+        if(trim(ibmode)=='stl') then
+          write(*,'(2X,A,A)')'solid body file: ',trim(solidfile)
+          write(*,'(2X,62A)')('-',i=1,62)
+        elseif(trim(ibmode)=='grid') then
+          write(*,'(2X,A,A)')' solid nodes are defined in grid: ',trim(gridfile)
+          write(*,'(2X,62A)')('-',i=1,62)
+          stop ' !! NOT READY YET !!'  
+        elseif(trim(ibmode)=='udf') then
+          write(*,'(2X,A,A)')' solid nodes are user defined'
+          write(*,'(2X,A,A)')' solid geom: ',trim(solidfile)
+          write(*,'(2X,62A)')('-',i=1,62)
+        else
+          print*,ibmode
+          stop ' !! ibmode not defined !!'
+        endif
       endif
       !
 
@@ -471,7 +488,7 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,schmidt
+                        bfacmpld,shkcrt,turbmode,schmidt,ibmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -574,7 +591,7 @@ module readwrite
       read(fh,'(A)')gridfile
       if(limmbou) then
         read(fh,'(/)')
-        read(fh,'(A)')solidfile
+        read(fh,*)ibmode,solidfile
       endif
 #ifdef COMB
       if(.not.nondimen) then
@@ -617,6 +634,7 @@ module readwrite
     call bcast(flowtype)
     call bcast(turbmode)
     call bcast(iomode)
+    call bcast(ibmode)
     !
     call bcast(conschm)
     call bcast(difschm)
@@ -970,7 +988,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*17)
+          open(fh(n),file=trim(filename),access='direct',recl=8*4)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1026,8 +1044,9 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
-                               tmp(i,j,k),dvel(i,j,k,:,:)
+        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
+        !                        tmp(i,j,k),dvel(i,j,k,:,:)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
       enddo
@@ -1050,16 +1069,23 @@ module readwrite
   !| -------------                                                     |
   !| 07-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine readgrid
+  subroutine readgrid(gridh5file)
     !
-    use commvar,   only : im,jm,km,gridfile
-    use commarray, only : x
+    use commvar,   only : im,jm,km,limmbou,ibmode
+    use commarray, only : x,nodestat
     use hdf5io
     !
-    call h5io_init(filename=trim(gridfile),mode='read')
+    character(len=*),intent(in) :: gridh5file
+    !
+    call h5io_init(filename=gridh5file,mode='read')
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
+    !
+    if(limmbou .and. trim(ibmode)=='grid') then
+      call h5read(varname='nodestat',var=nodestat(0:im,0:jm,0:km))
+    endif
+    !
     call h5io_end
     !
     return
@@ -1355,6 +1381,7 @@ module readwrite
     character(len=2) :: spname,qname
     character(len=128) :: infilename
     character(len=4) :: stepname
+    logical :: lexist
     !
     if(present(mode)) then
       modeio=mode
@@ -1375,10 +1402,12 @@ module readwrite
     call h5read(varname='nsamples',var=nsamples)
     call h5io_end
     !
-    if(lwsequ) then
-      write(stepname,'(i4.4)')filenumb
-      infilename='outdat/flowfield'//stepname//'.'//modeio//'5'
-    else
+    write(stepname,'(i4.4)')filenumb
+    infilename='outdat/flowfield'//stepname//'.'//modeio//'5'
+    !
+    ! if the file is not found, just go to the default flow field file
+    inquire(file=infilename, exist=lexist)
+    if(.not. lexist) then
       infilename=folder//'/flowfield.'//modeio//'5'
     endif
     !
@@ -1589,13 +1618,15 @@ module readwrite
   !| -------------                                                     |
   !| 07-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writegrid
+  subroutine writegrid(gridh5file)
     !
     use commvar,   only : im,jm,km
     use commarray, only : x
     use hdf5io
     !
-    call h5io_init('./grid.h5',mode='write')
+    character(len=*),intent(in) :: gridh5file
+    !
+    call h5io_init(gridh5file,mode='write')
     call h5write(varname='x',var=x(0:im,0:jm,0:km,1),mode='h5')
     call h5write(varname='y',var=x(0:im,0:jm,0:km,2),mode='h5')
     call h5write(varname='z',var=x(0:im,0:jm,0:km,3),mode='h5')
@@ -1640,9 +1671,11 @@ module readwrite
   subroutine writeflfed(subtime)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ
+                       km,lwsequ,turbmode,feqwsequ,force
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
+    use statistic,only : nsamples,liosta,massflux,massflux_target
+    use bc,       only : ninflowslice
     use hdf5io
     !
     ! arguments
@@ -1651,25 +1684,31 @@ module readwrite
     ! local data
     integer :: i,j,k,jsp
     character(len=4) :: stepname
-    character(len=64) :: outfilename
+    character(len=64) :: outfilename,outauxiname
+    character(len=64),save :: savfilenmae='first'
     character(len=2) :: spname
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       !
-      filenumb=filenumb+1
+      if(nstep/=0) filenumb=filenumb+1
       !
       write(stepname,'(i4.4)')filenumb
       !
       outfilename='outdat/flowfield'//stepname//'.'//iomode//'5'
+      outauxiname='outdat/auxiliary'//stepname//'.'//iomode//'5'
+      !
     else
       stepname=''
       outfilename='outdat/flowfield.'//iomode//'5'
+      outauxiname='outdat/auxiliary.'//iomode//'5'
     endif
     !
     ! outfilename='outdat/flowfield.h5'
     call h5io_init(trim(outfilename),mode='write')
+    !
     call h5write(varname='ro',var=rho(0:im,0:jm,0:km),  mode=iomode)
+    !
     call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),mode=iomode)
     call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),mode=iomode)
     call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),mode=iomode)
@@ -1682,35 +1721,35 @@ module readwrite
       enddo
     endif
     !
-    ! if(allocated(ssf)) then
-    !   call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km))
-    ! endif
-    ! if(allocated(lshock)) then
-    !   allocate(rshock(0:im,0:jm,0:km))
-    !   allocate(rcrinod(0:im,0:jm,0:km))
-    !   do k=0,km
-    !   do j=0,jm
-    !   do i=0,im
-    !     !
-    !     if(lshock(i,j,k)) then
-    !       rshock(i,j,k)=1.d0
-    !     else
-    !       rshock(i,j,k)=0.d0
-    !     endif
-    !     !
-    !     if(crinod(i,j,k)) then
-    !       rcrinod(i,j,k)=1.d0
-    !     else
-    !       rcrinod(i,j,k)=0.d0
-    !     endif
-    !     !
-    !   enddo
-    !   enddo
-    !   enddo
-    !   !
-    !   call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km))
-    !   call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km))
-    ! endif
+    if(allocated(ssf)) then
+      call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km),mode=iomode)
+    endif
+    if(allocated(lshock)) then
+      allocate(rshock(0:im,0:jm,0:km))
+      allocate(rcrinod(0:im,0:jm,0:km))
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        if(lshock(i,j,k)) then
+          rshock(i,j,k)=1.d0
+        else
+          rshock(i,j,k)=0.d0
+        endif
+        !
+        if(crinod(i,j,k)) then
+          rcrinod(i,j,k)=1.d0
+        else
+          rcrinod(i,j,k)=0.d0
+        endif
+        !
+      enddo
+      enddo
+      enddo
+      !
+      ! call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km),mode=iomode)
+      ! call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km),mode=iomode)
+    endif
     !
     if(trim(turbmode)=='k-omega') then
       call h5write(varname='k',     var=tke(0:im,0:jm,0:km),mode=iomode)
@@ -1723,9 +1762,40 @@ module readwrite
     call h5io_end
     !
     if(lio) then
+      !
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
       call h5srite(varname='time',var=time,filename=trim(outfilename))
+      !
+
+      call h5srite(varname='nstep',var=nstep,                          &
+                          filename=trim(outauxiname),newfile=.true.)
+      call h5srite(varname='filenumb',var=filenumb,                    &
+                      filename=trim(outauxiname))
+      call h5srite(varname='fnumslic',var=fnumslic,                    &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='ninflowslice',var=ninflowslice,            &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='massflux',var=massflux,                    &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='massflux_target',var=massflux_target,      &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='force',var=force,                          &
+                                         filename=trim(outauxiname))
+      call h5srite(varname='nsamples',var=nsamples,                    &
+                                         filename=trim(outauxiname))
     endif
+    !
+    if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
+      call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='newvisu')
+    else
+      call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='animati')
+    endif
+    !
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='u1',mode='data')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='u2',mode='data')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='u3',mode='data')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='p',mode='data')
+    call xdmfwriter(flowh5file=trim(outfilename),dataname='t',mode='data')
     !
     if(ndims==1) then
       !
@@ -1750,11 +1820,104 @@ module readwrite
       !
     endif
     !
+    savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ
     !
   end subroutine writeflfed
   !+-------------------------------------------------------------------+
   !| The end of the subroutine writeflfed.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to write a xdmf head file for             |
+  !| visulisation of flow field.                                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-07-2022  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine xdmfwriter(gridh5file,flowh5file,dataname,timesec,mode)
+    !
+    use parallel,only : ia,ja,ka
+    !
+    ! arguments
+    character(len=*),intent(in),optional :: gridh5file,flowh5file,dataname
+    real(8),intent(in),optional :: timesec
+    character(*),intent(in) :: mode
+    !
+    ! local data
+    integer :: fh,i
+    !
+    if(lio) then
+      !
+      fh=get_unit()
+      !
+      if(mode=='grid') then
+        ! write the head of xdmf and grid
+        open(fh,file='visu.xdmf',form='formatted')
+        write(fh,'(A)')'<?xml version="1.0" ?>'
+        write(fh,'(A)')'<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>'
+        write(fh,'(A)')'<Xdmf xmlns:xi="http://www.w3.org/2001/XInclude" Version="2.0">'
+        write(fh,'(A)')'  <Domain>'
+        !
+        write(fh,'(A,3(1X,I0),A)')'    <Topology name="topo" TopologyType="3DSMESH" Dimensions="',  &
+                                  ka+1,ja+1,ia+1,'"> </Topology>'
+        write(fh,'(A)')'    <Geometry name="geo" Type="X_Y_Z">'
+        write(fh,'(A)')'      <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),3(A))')'                Dimensions="',ka+1,ja+1,ia+1,'"> ',gridh5file,':x </DataItem>'
+        write(fh,'(A)')'      <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),3(A))')'                Dimensions="',ka+1,ja+1,ia+1,'"> ',gridh5file,':y </DataItem>'
+        write(fh,'(A)')'      <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),3(A))')'                Dimensions="',ka+1,ja+1,ia+1,'"> ',gridh5file,':z </DataItem>'
+        write(fh,'(A)')'    </Geometry>'
+        !
+        write(fh,'(A)')'  </Domain>'
+        write(fh,'(A)')'</Xdmf>'
+        close(fh)
+        print*,' ** grid: ',gridh5file,' >> visu.xdmf'
+      elseif(mode=='newvisu') then
+        ! connect to a new flowfield data file
+        open(fh,file='visu.xdmf',form='formatted')
+        read(fh,'(////////////)')
+        write(fh,*)
+        write(fh,'(A)')'    <Grid Name="001" GridType="Uniform">'
+        write(fh,'(A,F12.6,A)')'      <Time Value="',timesec,'" />'
+        write(fh,'(A)')'      <Topology Reference="/Xdmf/Domain/Topology[1]"/>'
+        write(fh,'(A)')'      <Geometry Reference="/Xdmf/Domain/Geometry[1]"/>'
+      elseif(mode=='animati') then
+        open(fh,file='visu.xdmf',form='formatted',access='append')
+        backspace(fh)
+        backspace(fh)
+        write(fh,*)
+        write(fh,'(A)')'    <Grid Name="001" GridType="Uniform">'
+        write(fh,'(A,F12.6,A)')'      <Time Value="',timesec,'" />'
+        write(fh,'(A)')'      <Topology Reference="/Xdmf/Domain/Topology[1]"/>'
+        write(fh,'(A)')'      <Geometry Reference="/Xdmf/Domain/Geometry[1]"/>'
+      elseif(mode=='data') then
+        open(fh,file='visu.xdmf',form='formatted',access='append')
+        backspace(fh)
+        backspace(fh)
+        backspace(fh)
+      endif
+      !
+      if(present(dataname)) then
+        write(fh,'(3(A))')'      <Attribute Name="',dataname,'" Center="Node">'
+        write(fh,'(A)')'        <DataItem Format="HDF" DataType="Float" Precision="8" Endian="little" Seek="0"'
+        write(fh,'(A,3(1X,I0),5(A))')'                   Dimensions="',ka+1,ja+1,ia+1,'"> ',flowh5file,':',dataname,'</DataItem>'
+        write(fh,'(A)')'      </Attribute>'
+      endif
+      !
+      write(fh,'(A)')'    </Grid>'
+      write(fh,'(A)')'  </Domain>'
+      write(fh,'(A)')'</Xdmf>'
+      close(fh)
+      print*,' ** ',flowh5file,':',dataname,' >> visu.xdmf'
+      !
+    endif
+    !
+  end subroutine xdmfwriter
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine xdmfwriter.                             |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -1878,8 +2041,8 @@ module readwrite
                        turbmode,feqchkpt,iomode
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
-    use statistic,only : nsamples,liosta,massflux,massflux_target
-    use bc,       only : ninflowslice
+    use statistic,only : liosta!,nsamples,massflux,massflux_target
+    ! use bc,       only : ninflowslice
     !
     use hdf5io
     !
@@ -1930,8 +2093,8 @@ module readwrite
     ! close(21)
     ! if(lio) print*,' << ',trim(outfilename)
     !
-    if(lio) call bakupfile('outdat/auxiliary.h5')
-    if(lio) call bakupfile('outdat/flowfield.'//iomode//'5')
+    if(lio.and.(.not.lwsequ)) call bakupfile('outdat/auxiliary.h5')
+    if(lio.and.(.not.lwsequ)) call bakupfile('outdat/flowfield.'//iomode//'5')
     !
     call writeflfed()
     !
@@ -1942,25 +2105,25 @@ module readwrite
     ! enddo
     ! call h5io_end
     !
-    if(lio) then
-      !
-      call h5srite(varname='nstep',var=nstep,                          &
-                          filename='outdat/auxiliary.h5',newfile=.true.)
-      call h5srite(varname='filenumb',var=filenumb,                    &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='fnumslic',var=fnumslic,                    &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='ninflowslice',var=ninflowslice,            &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='massflux',var=massflux,                    &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='massflux_target',var=massflux_target,      &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='force',var=force,                          &
-                                         filename='outdat/auxiliary.h5')
-      call h5srite(varname='nsamples',var=nsamples,                    &
-                                         filename='outdat/auxiliary.h5')
-    endif
+    ! if(lio) then
+    !   !
+    !   call h5srite(varname='nstep',var=nstep,                          &
+    !                       filename='outdat/auxiliary.h5',newfile=.true.)
+    !   call h5srite(varname='filenumb',var=filenumb,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='fnumslic',var=fnumslic,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='ninflowslice',var=ninflowslice,            &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='massflux',var=massflux,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='massflux_target',var=massflux_target,      &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='force',var=force,                          &
+    !                                      filename='outdat/auxiliary.h5')
+    !   call h5srite(varname='nsamples',var=nsamples,                    &
+    !                                      filename='outdat/auxiliary.h5')
+    ! endif
     !
     if(limmbou .and. mpirank==imbroot) then
       ! call imboundarydata 
@@ -2329,11 +2492,18 @@ module readwrite
         write(hand_rp,'(1(A,I0))')'     mpi size: ',mpirankmax+1
         write(hand_rp,'(2X,A,E13.6E2)')'time cost for preparation : ',preptime
         !
+        close(hand_rp)
+        !
         repsp=0
         !
         linit=.false.
         !
       endif
+      !
+      if(nstep<=repsp+1) return 
+      ! just reported
+      !
+      open(hand_rp,file='report.txt',position="append")
       !
       write(hand_rp,'(2X,62A)')('-',i=1,62)
       write(hand_rp,'(2X,2(A,I7))')'time report from nstep : ',repsp,  &
@@ -2362,8 +2532,14 @@ module readwrite
                           ctime(23),' - ',100.d0*ctime(23)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - sta       : ',    &
                             ctime(5),' - ',100.d0*ctime(5)/ctime(2),' %'
-      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - bc        : ',    &
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - ib        : ',    &
                           ctime(11),' - ',100.d0*ctime(11)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - image   : ',    &
+                          ctime(24),' - ',100.d0*ctime(24)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - sync    : ',    &
+                          ctime(25),' - ',100.d0*ctime(25)/ctime(2),' %'
+      write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'      - ghost   : ',    &
+                          ctime(26),' - ',100.d0*ctime(26)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - com         : ',    &
                            ctime(7), ' - ',100.d0*ctime(7)/ctime(2),' %'
       write(hand_rp,'(2X,A,E13.6E2,A,F6.2,A)')'    - q_sum       : ',    &
@@ -2375,10 +2551,9 @@ module readwrite
       !
       flush(hand_rp)
       !
-      if(nstep>=maxstep) then
-        close(hand_rp)
-        print*,' << report.txt'
-      endif
+      close(hand_rp)
+      !
+      print*,' << report.txt'
       !
     endif
     !
