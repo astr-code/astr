@@ -345,6 +345,8 @@ module readwrite
         elseif(bctype(n)==41) then
           write(*,'(37X,I0,2(A))')bctype(n),' isothermal wall at: ',bcdir(n)
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+        elseif(bctype(n)==42) then
+          write(*,'(37X,I0,2(A))')bctype(n),'  adiabatic wall at: ',bcdir(n)
         elseif(bctype(n)==411) then
           write(*,'(23X,I0,2(A))')bctype(n),' slip-nonslip isothermal wall at: ',bcdir(n)
           write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip

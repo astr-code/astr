@@ -580,7 +580,7 @@ module solver
     !
     real(8) :: time_beg
     !
-    logical :: lsh,lso,sson,hdiss
+    logical :: lsh,lso,sson,hdiss,lvar
     !
     if(present(subtime)) time_beg=ptime() 
     !
@@ -674,7 +674,6 @@ module solver
           !
           ! if(irk==0) then
           !   print*,'---------------------------------------------------------'
-          !   Pmult=MatMul(LEV,REV)
           !   write(*,"(5(F7.4))")Pmult(1,:)
           !   write(*,"(5(F7.4))")Pmult(2,:)
           !   write(*,"(5(F7.4))")Pmult(3,:)
@@ -790,7 +789,6 @@ module solver
     ! end of calculation at i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along j direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -869,6 +867,10 @@ module solver
                           vel(i,j,k,:),  dxi(i,j,k,2,:),               &
                           rho(i,j+1,k),  prs(i,j+1,k),q(i,j+1,k,5),    &
                           vel(i,j+1,k,:),dxi(i,j+1,k,2,:),REV,LEV)
+          !
+          ! Pmult=MatMul(LEV,REV)
+          ! !
+          ! call check_mat55_unit(Pmult,lvar)
           !
           ! Project to characteristic space using local eigenvector
           do m=1,5
@@ -1048,16 +1050,19 @@ module solver
         ! hdiss=.true.
         !
         if(lchardecomp) then
+        ! if(.false.) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
                           vel(i,j,k,:),  dxi(i,j,k,3,:),               &
                           rho(i,j,k+1),  prs(i,j,k+1),q(i,j,k+1,5),    &
                           vel(i,j,k+1,:),dxi(i,j,k+1,3,:),REV,LEV)
           !
+          !
           ! Project to characteristic space using local eigenvector
           do m=1,5
             !
             do n=1,8
+              !
               ! plus flux
               nwd=iwind8(k,n,kss,kee,'+')
               Flcp(m,n)=LEV(m,1)*Fswp(nwd,1)+                        &
@@ -1104,9 +1109,7 @@ module solver
           !
         endif
         !
-        !
         ! Calculating values at i+1/2 using shock-capturing scheme.
-        !
         do m=1,numq
           !
           if(hdiss) then
@@ -1122,6 +1125,7 @@ module solver
             var2=recons_exp(   f=Flcm(m,:), inode=k,       &
                              dim=km,        ntype=npdck,   &
                              reschem=recon_schem,shock=lsh,solid=lso)
+            !
           endif
           !
           Fhc(m)=var1+var2
@@ -1129,6 +1133,7 @@ module solver
         enddo
         !
         if(lchardecomp) then
+        ! if(.false.) then
           do m=1,5
             Fh(k,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -1137,7 +1142,6 @@ module solver
           if(numq>5) then
             Fh(k,6:numq)=Fhc(6:numq)
           endif
-          !
         else
           Fh(k,1:numq)=Fhc(1:numq)
         endif
@@ -1877,6 +1881,10 @@ module solver
   !| this subroutine is to return left or right matrix of              |
   !| characteristc vectpr                                              |
   !+-------------------------------------------------------------------+
+  !| ref: J. Wang, S. Pan, X. Y. Hu, and N. A. Adams, Partial          |
+  !| characteristic decomposition for multi-species Euler equations,   |
+  !| Comput. Fluids 181, 364, (2019).                                  |
+  !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 22-03-2021: Created by J. Fang @ Warrington.                      |
@@ -1891,6 +1899,7 @@ module solver
     real(8),intent(out) :: REV(5,5),LEV(5,5)
     !
     ! local data
+    real(8),parameter :: rero=1.d-12
     real(8) :: WRoe,WRoe1,u1Roe,u2Roe,u3Roe,HL,HR,HRoe,CssRoe,        &
                KRoe,ugp,rcs,var1,var2,var3,var4,rgp,gpd(3),b1,b2
     !
@@ -1910,45 +1919,15 @@ module solver
     var1=0.5d0*(ddi_l(1)+ddi_r(1))
     var2=0.5d0*(ddi_l(2)+ddi_r(2))
     var3=0.5d0*(ddi_l(3)+ddi_r(3))
-    if(abs(var1)<1d-30) var1=1d-30
-    var4=sqrt(var1*var1+var2*var2+var3*var3)
-    gpd(1)=var1/var4
-    gpd(2)=var2/var4
-    gpd(3)=var3/var4
+    var4=1.d0/sqrt(var1*var1+var2*var2+var3*var3)
+    !
+    gpd(1)=var1*var4
+    gpd(2)=var2*var4
+    gpd(3)=var3*var4
+    !
     ugp=u1Roe*gpd(1)+u2Roe*gpd(2)+u3Roe*gpd(3)
-    rgp=1.d0/gpd(1)
     !
     ! Calculating Left and Right eigenvectors
-    REV(1,1)=1.d0
-    REV(1,2)=0.d0
-    REV(1,3)=0.d0
-    REV(1,4)=1.d0
-    REV(1,5)=1.d0
-    !                          
-    REV(2,1)=u1Roe-CssRoe*gpd(1)
-    REV(2,2)=-gpd(2)
-    REV(2,3)=-gpd(3)
-    REV(2,4)=u1Roe
-    REV(2,5)=u1Roe+CssRoe*gpd(1)
-    !
-    REV(3,1)=u2Roe-CssRoe*gpd(2)
-    REV(3,2)=gpd(1)
-    REV(3,3)=0.d0
-    REV(3,4)=u2Roe
-    REV(3,5)=u2Roe+CssRoe*gpd(2)
-    !
-    REV(4,1)=u3Roe-CssRoe*gpd(3)
-    REV(4,2)=0.d0
-    REV(4,3)=gpd(1)
-    REV(4,4)=u3Roe
-    REV(4,5)=u3Roe+CssRoe*gpd(3)
-    !
-    REV(5,1)=HRoe-ugp*CssRoe
-    REV(5,2)=u2Roe*gpd(1)-u1Roe*gpd(2)
-    REV(5,3)=u3Roe*gpd(1)-u1Roe*gpd(3)
-    REV(5,4)=KRoe
-    REV(5,5)=HRoe+ugp*CssRoe
-    !
     b1=(gamma-1.d0)/(CssRoe*CssRoe)
     b2=b1*KRoe
     !
@@ -1958,29 +1937,120 @@ module solver
     LEV(1,4)=-0.5d0*(b1*u3Roe+gpd(3)*rcs)
     LEV(1,5)= 0.5d0*b1
     !
-    LEV(2,1)=u1Roe*gpd(2)-u2Roe*(1.d0-gpd(2)**2)*rgp+u3Roe*gpd(2)*gpd(3)*rgp
-    LEV(2,2)=-gpd(2)
-    LEV(2,3)=(1.d0-gpd(2)**2)*rgp
-    LEV(2,4)=-gpd(2)*gpd(3)*rgp
-    LEV(2,5)=0.d0
+    REV(1,1)=1.d0
+    REV(2,1)=u1Roe-CssRoe*gpd(1)
+    REV(3,1)=u2Roe-CssRoe*gpd(2)
+    REV(4,1)=u3Roe-CssRoe*gpd(3)
+    REV(5,1)=HRoe-ugp*CssRoe
     !
-    LEV(3,1)=u1Roe*gpd(3)+u2Roe*gpd(2)*gpd(3)*rgp-u3Roe*(1.d0-gpd(3)**2)*rgp
-    LEV(3,2)=-gpd(3)
-    LEV(3,3)=-gpd(2)*gpd(3)*rgp
-    LEV(3,4)=(1.d0-gpd(3)**2)*rgp
-    LEV(3,5)=0.d0
+    LEV(2,1)=1.d0-b2
+    LEV(2,2)=b1*u1Roe
+    LEV(2,3)=b1*u2Roe
+    LEV(2,4)=b1*u3Roe
+    LEV(2,5)=-b1
     !
-    LEV(4,1)=1.d0-b2
-    LEV(4,2)=b1*u1Roe
-    LEV(4,3)=b1*u2Roe
-    LEV(4,4)=b1*u3Roe
-    LEV(4,5)=-b1
-    
+    REV(1,2)=1.d0
+    REV(2,2)=u1Roe
+    REV(3,2)=u2Roe
+    REV(4,2)=u3Roe
+    REV(5,2)=HRoe-1.d0/b1
+    !
+    if(abs(var1)>rero) then
+      rgp=1.d0/gpd(1)
+      !
+      LEV(3,1)=(ugp*gpd(2)-u2Roe)*rgp
+      LEV(3,2)=-gpd(2)
+      LEV(3,3)=(1.d0-gpd(2)**2)*rgp
+      LEV(3,4)=-gpd(2)*gpd(3)*rgp
+      LEV(3,5)=0.d0
+      !
+      LEV(4,1)=(ugp*gpd(3)-u3Roe)*rgp
+      LEV(4,2)=-gpd(3)
+      LEV(4,3)=-gpd(2)*gpd(3)*rgp
+      LEV(4,4)=(1.d0-gpd(3)**2)*rgp
+      LEV(4,5)=0.d0
+      !
+      REV(1,3)=0.d0
+      REV(2,3)=-gpd(2)
+      REV(3,3)= gpd(1)
+      REV(4,3)=0.d0
+      REV(5,3)=u2Roe*gpd(1)-u1Roe*gpd(2)
+      !
+      REV(1,4)=0.d0
+      REV(2,4)=-gpd(3)
+      REV(3,4)= 0.d0
+      REV(4,4)= gpd(1)
+      REV(5,4)=u3Roe*gpd(1)-u1Roe*gpd(3)
+      !
+    elseif(abs(var2)>rero) then
+      rgp=1.d0/gpd(2)
+      !
+      LEV(3,1)=(ugp*gpd(1)-u1Roe)*rgp
+      LEV(3,2)=(1.d0-gpd(1)**2)*rgp
+      LEV(3,3)=-gpd(1)
+      LEV(3,4)=-gpd(1)*gpd(3)*rgp
+      LEV(3,5)=0.d0
+      !
+      LEV(4,1)=(ugp*gpd(3)-u3Roe)*rgp
+      LEV(4,2)=-gpd(1)*gpd(3)*rgp
+      LEV(4,3)=-gpd(3)
+      LEV(4,4)=(1.d0-gpd(3)**2)*rgp
+      LEV(4,5)=0.d0
+      !
+      REV(1,3)=0.d0
+      REV(2,3)= gpd(2)
+      REV(3,3)=-gpd(1)
+      REV(4,3)=0.d0
+      REV(5,3)=u1Roe*gpd(2)-u2Roe*gpd(1)
+      !
+      REV(1,4)=0.d0
+      REV(2,4)=0.d0
+      REV(3,4)=-gpd(3)
+      REV(4,4)= gpd(2)
+      REV(5,4)=u3Roe*gpd(2)-u2Roe*gpd(3)
+      !
+    elseif(abs(var3)>rero) then
+      rgp=1.d0/gpd(3)
+      !
+      LEV(3,1)=(ugp*gpd(1)-u1Roe)*rgp
+      LEV(3,2)=(1.d0-gpd(1)**2)*rgp
+      LEV(3,3)=-gpd(1)*gpd(2)*rgp
+      LEV(3,4)=-gpd(1)
+      LEV(3,5)=0.d0
+      !
+      LEV(4,1)=(ugp*gpd(2)-u2Roe)*rgp
+      LEV(4,2)=-gpd(1)*gpd(2)*rgp
+      LEV(4,3)=(1.d0-gpd(2)**2)*rgp
+      LEV(4,4)=-gpd(2)
+      LEV(4,5)=0.d0
+      !
+      REV(1,3)=0.d0
+      REV(2,3)= gpd(3)
+      REV(3,3)=0.d0
+      REV(4,3)=-gpd(1)
+      REV(5,3)=u1Roe*gpd(3)-u3Roe*gpd(1)
+      !
+      REV(1,4)=0.d0
+      REV(2,4)=0.d0
+      REV(3,4)= gpd(3)
+      REV(4,4)=-gpd(2)
+      REV(5,4)=u2Roe*gpd(3)-u3Roe*gpd(2)
+      !
+    else
+      stop ' !! ERROR 1 @ chardecomp'
+    endif
+    !
     LEV(5,1)= 0.5d0*(b2-ugp*rcs)           
     LEV(5,2)=-0.5d0*(b1*u1Roe-gpd(1)*rcs)  
     LEV(5,3)=-0.5d0*(b1*u2Roe-gpd(2)*rcs)  
     LEV(5,4)=-0.5d0*(b1*u3Roe-gpd(3)*rcs)  
     LEV(5,5)= 0.5d0*b1 
+    !
+    REV(1,5)= 1.d0
+    REV(2,5)=u1Roe+CssRoe*gpd(1)
+    REV(3,5)=u2Roe+CssRoe*gpd(2)
+    REV(4,5)=u3Roe+CssRoe*gpd(3)
+    REV(5,5)=HRoe+ugp*CssRoe
     !
     return
     !
@@ -3300,7 +3370,41 @@ module solver
   ! End of the subroutine filterq.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
-
+  subroutine check_mat55_unit(matrix,normal)
+    !
+    real(8),intent(in) :: matrix(5,5)
+    logical,intent(out) :: normal
+    !
+    real(8) :: epslion
+    integer :: i,j
+    !
+    epslion=1.d-8
+    !
+    normal=.true.
+    !
+    do j=1,5
+    do i=1,5
+     if( i==j ) then
+       if(abs(matrix(i,j)-1.d0)<epslion) then
+        continue
+       else
+         print*,' !! WARNING of UNIT MARTIX'
+         print*, i,j,matrix(i,j)
+         normal=.false.
+       endif
+     else
+       if(abs(matrix(i,j))<epslion) then
+        continue
+       else
+         print*,' !! WARNING of UNIT MARTIX'
+         print*, i,j,matrix(i,j)
+         normal=.false.
+       endif
+     endif
+    enddo
+    enddo
+    !
+  end subroutine check_mat55_unit
   !!
   subroutine gradtest
     !
