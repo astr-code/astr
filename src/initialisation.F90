@@ -1929,7 +1929,7 @@ module initialisation
     xwid=xmax/8.d0
     !
     l_0=xmax/(2.d0*pi)
-    uinf=2.52*4.d0
+    uinf=6.25*4.d0
     roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
     !
     ! nonpremixed reactants include fuel and oxidizer
