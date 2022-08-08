@@ -138,7 +138,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
+    call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -1931,7 +1931,7 @@ module initialisation
     xwid=xmax/8.d0
     !
     l_0=xmax/(2.d0*pi)
-    uinf=4.d0
+    uinf=6.25*4.d0
     roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
     !
     ! nonpremixed reactants include fuel and oxidizer
@@ -1939,6 +1939,14 @@ module initialisation
     specr(spcindex('H2'))=0.0556 
     specr(spcindex('O2'))=0.233  
     specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    !specr(spcindex('C7H8'))=0.004180329
+    !specr(spcindex('MCYC6'))=0.016037004
+    !specr(spcindex('NC10H22'))=0.009037498
+    !specr(spcindex('NC12H26'))=0.007728134
+    !specr(spcindex('IC16H34'))=0.030821078
+    !specr(spcindex('O2'))=0.233
+    !specr(spcindex('N2'))=1.d0-sum(specr)
     !
     call tranco(den=roinf,tmp=tinf,mu=miu,spc=spcinf)
     if(lio) print*, &
@@ -1957,6 +1965,14 @@ module initialisation
       specp(spcindex('H2'))=specr(spcindex('H2'))*(1.d0-prgvar)
       specp(spcindex('O2'))=specr(spcindex('O2'))*prgvar
       specp(spcindex('N2'))=1.d0-sum(specp)
+      !
+      !specp(spcindex('C7H8'))=specr(spcindex('C7H8'))*(1.d0-prgvar)
+      !specp(spcindex('MCYC6'))=specr(spcindex('MCYC6'))*(1.d0-prgvar)
+      !specp(spcindex('NC10H22'))=specr(spcindex('NC10H22'))*(1.d0-prgvar)
+      !specp(spcindex('NC12H26'))=specr(spcindex('NC12H26'))*(1.d0-prgvar)
+      !specp(spcindex('IC16H34'))=specr(spcindex('IC16H34'))*(1.d0-prgvar)
+      !specp(spcindex('O2'))=specr(spcindex('O2'))*prgvar
+      !specp(spcindex('N2'))=1.d0-sum(specp)
       !
       spc(i,j,k,:)=specp(:)
       !

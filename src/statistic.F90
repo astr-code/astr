@@ -506,6 +506,8 @@ module statistic
       umax=maxval(vel(0:im,0:jm,0:km,1))
       umax=pmax(umax)
       !
+      enstophy=enstophycal()
+      !
       qdotmax=-1.d30
       do i=0,im
         do j=0,jm
@@ -635,7 +637,7 @@ module statistic
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
               .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame') then
             write(hand_fs,"(2(A10,1X),5(A12,1X))") &
-              'nstep','clock','time','maxT','maxU','maxRho','maxHRR'
+              'nstep','clock','time','maxT','maxU','enstophy','maxHRR'
           else
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -659,7 +661,7 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
       elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic') then
         walltime=int(ptime()-time_verybegin)
-        write(hand_fs,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,rhomax,qdotmax
+        write(hand_fs,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
       else
         ! general flowstate
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
@@ -681,7 +683,7 @@ module statistic
           elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                   .or.flowtype=='h2supersonic') then
             write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
-              'maxU','maxRho','maxHRR'
+              'maxU','enstophy','maxHRR'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
           endif
@@ -701,7 +703,7 @@ module statistic
           write(*,"(2X,I7,1X,F13.7,3(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                 .or.flowtype=='h2supersonic') then
-          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,rhomax,qdotmax
+          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
         else
           write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
