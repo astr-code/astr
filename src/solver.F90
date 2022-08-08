@@ -665,7 +665,7 @@ module solver
         !
         ! hdiss=.true.
         !
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
                           vel(i,j,k,:),  dxi(i,j,k,1,:),               &
@@ -760,7 +760,7 @@ module solver
           !
         enddo
         !
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
           do m=1,5
             Fh(i,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -861,7 +861,7 @@ module solver
         !
         ! hdiss=.true.
         !
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
                           vel(i,j,k,:),  dxi(i,j,k,2,:),               &
@@ -946,7 +946,7 @@ module solver
           !
         enddo
         !
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
           do m=1,5
             Fh(j,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -1049,7 +1049,7 @@ module solver
         !
         ! hdiss=.true.
         !
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
         ! if(.false.) then
           !
           call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
@@ -1132,7 +1132,7 @@ module solver
           !
         enddo
         !
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
         ! if(.false.) then
           do m=1,5
             Fh(k,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &

@@ -650,9 +650,9 @@ module bc
       if(pb%nodetype=='g') then
         ! for ghost nodes
         !
-        vel(i,j,k,1)=1.d0-(var_u(1)-1.d0)*pb%dis2ghost/pb%dis2image
-        vel(i,j,k,2)=    -1.d0*var_u(2)*pb%dis2ghost/pb%dis2image
-        vel(i,j,k,3)=    -1.d0*var_u(3)*pb%dis2ghost/pb%dis2image
+        vel(i,j,k,1)= -1.d0*var_u(1)*pb%dis2ghost/pb%dis2image
+        vel(i,j,k,2)= -1.d0*var_u(2)*pb%dis2ghost/pb%dis2image
+        vel(i,j,k,3)= -1.d0*var_u(3)*pb%dis2ghost/pb%dis2image
           ! tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
           tmp(i,j,k)=var_t
           prs(i,j,k)=var_p
@@ -665,7 +665,7 @@ module bc
       elseif(pb%nodetype=='b') then
         ! for boundary nodes
         !
-        vel(i,j,k,1)=1.d0
+        vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
           tmp(i,j,k)=var_t
@@ -707,7 +707,7 @@ module bc
       ! if(nodestat(i,j,k)>0) then
         ! all solid nodes
         !
-        vel(i,j,k,1)=1.d0
+        vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
         ! tmp(i,j,k)  =twall(3)
@@ -1243,7 +1243,7 @@ module bc
     !
     ! local data
     integer :: i,j,k,l,jspc
-    real(8) :: css,csse,ub,pe,roe,ue
+    real(8) :: css,csse,ub,pe,roe,ue,pwave_out,pwave_in,malo
     !
     logical,save :: lfirstcal=.true.
     !
@@ -1280,8 +1280,10 @@ module bc
       do k=0,km
       do j=0,jm
         !
-        css=sos(tmp(i,j,k))
-        ub =vel_in(j,k,1)
+        ! css=sos(tmp(i,j,k))
+        ! ub =vel_in(j,k,1)
+        css=sos(tmp_prof(j))
+        ub=vel_prof(j,1)
         ! ub =vel(i,j,k,1)
         !
         ! if(.true.) then
@@ -1303,21 +1305,33 @@ module bc
           roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),  dv=0.d0)
           ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
           !
-          ! vel(i,j,k,1)=vel_in(j,k,1)
-          ! vel(i,j,k,2)=vel_in(j,k,2)
-          ! vel(i,j,k,3)=vel_in(j,k,3)
-          ! tmp(i,j,k)  =tmp_in(j,k)
-          ! prs(i,j,k)  =pe
-          ! rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
-          prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
-          rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
-          !
+          vel(i,j,k,1)=vel_in(j,k,1)
           vel(i,j,k,2)=vel_in(j,k,2)
           vel(i,j,k,3)=vel_in(j,k,3)
+          tmp(i,j,k)  =tmp_in(j,k)
           !
-          tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+          pwave_out  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
+          ! ! Rudy & Strikwerda, 1980
+          ! pwave_out  = pe
+          ! !
+          ! pwave_in   = prs_in(j,k)
+          ! ! !
+          ! malo=(ub/css)
+          ! !
+          ! prs(i,j,k)=malo*pwave_in+(1.d0-malo)*pwave_out
+          prs(i,j,k) = pwave_out
+          ! prs(i,j,k) = pwave_out
+          !
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+          !
+          ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
+          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
+          ! rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
+          ! !
+          ! vel(i,j,k,2)=vel_in(j,k,2)
+          ! vel(i,j,k,3)=vel_in(j,k,3)
+          ! !
+          ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           !
           do jspc=1,num_species
             spc(i,j,k,jspc)=spc_in(j,k,jspc) 
@@ -2298,7 +2312,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine outflow(ndir)
     !
-    use commvar,   only : turbmode
+    use commvar,   only : turbmode,deltat
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
@@ -2309,10 +2323,12 @@ module bc
     ! local data
     integer :: i,j,k,l,jspec
     real(8) :: css,csse,ub,pe,roe,ue,ve,we,spce(1:num_species),        &
-               vnb,vtb,vne,vte
+               vnb,vtb,vne,vte,alpha,pwave_in,pwave_out
     real(8) :: var1
     !
     logical,save :: lfirstcal=.true.
+    !
+    alpha=0.3d0
     !
     if(ndir==2 .and. irk==irkm) then
       !
@@ -2360,7 +2376,8 @@ module bc
         !
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
-        if(ub>=css) then
+        if(.true.) then
+        ! if(ub>=css) then
           ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
@@ -2371,16 +2388,27 @@ module bc
           !
         else !if(ub<css .and. ub>=0.d0) then
           ! subsonic outlet
-          prs(i,j,k)= pinf
-          rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
-          vel(i,j,k,1)= ue + (pe-prs(i,j,k))/roe/csse
-          vel(i,j,k,2)= ve
-          vel(i,j,k,3)= we
-          ! vel(i,j,k,1)=ue 
-          ! vel(i,j,k,2)=ve 
-          ! vel(i,j,k,3)=0.d0 
-          ! prs(i,j,k)  =pe
-          ! rho(i,j,k)  =roe
+          !
+          ! prs(i,j,k)= pinf
+          ! rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
+          ! vel(i,j,k,1)= ue+ (pe-prs(i,j,k))/roe/csse
+          ! vel(i,j,k,2)= ve
+          ! vel(i,j,k,3)= we
+          !
+          ! pwave_in = (prs(i,j,k)+alpha*deltat*pinf+rho(i,j,k)*css*(ue-vel(i,j,k,1)))/(1.d0+alpha*deltat)
+          ! RUDY & STRIKWERDA, 1981
+          pwave_in = pinf
+          pwave_out=pe
+          !
+          var1=ub/css
+          prs(i,j,k)=var1*pwave_out+(1.d0-var1)*pwave_in
+          !
+          vel(i,j,k,1)=ue 
+          vel(i,j,k,2)=ve 
+          vel(i,j,k,3)=we
+          !
+          rho(i,j,k)  =roe
+          !
         ! else
         !   stop ' !! velocity at outflow error !! @ outflow'
         endif
@@ -2877,8 +2905,8 @@ module bc
         !    dxi(i,j,k,2,2)*vel(i,j,k,2) +                       &
         !    dxi(i,j,k,2,3)*vel(i,j,k,3)
         ! if(uu>=0.d0) then
-          ! kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
-          ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
           ! LODi(5)=kinout*(prs(i,j,k)-prs_prof(jm))/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
@@ -3608,36 +3636,36 @@ module bc
         !
         css=sos(tmp(i,j,k))
         !
-        if(uu>=0.d0) then
-          !
-          if(uu<css) then
-            kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
-            LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
-          endif
-          ! else
-          !   LODi(5)=0.d0
-          ! endif
-          !
-          ! kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
-          ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
-          ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
-        else
-          ! back flow
-          var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &
-                          dxi(i,j,k,1,3)**2 )
-          kin=-0.250*(1.d0-gmachmax2)*css/(xmax-xmin)
-          !
-          LODi(1)=0.d0
-          !
-          LODi(2)=kin*0.5d0*( dxi(i,j,k,1,1)*var1*(vel(i,j,k,3)-winf)- &
-                              dxi(i,j,k,1,3)*var1*(vel(i,j,k,1)-uinf) )
-          LODi(3)=kin*0.5d0*(-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+ &
-                              dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf) )
-          LODi(5)=kin*(dxi(i,j,k,1,1)*var1*(vel(i,j,k,1)-uinf)+        &
-                       dxi(i,j,k,1,2)*var1*(vel(i,j,k,2)-vinf)+        &
-                       dxi(i,j,k,1,3)*var1*(vel(i,j,k,3)-winf)+        &
-                       (prs(i,j,k)-pinf)/rho(i,j,k)/css )
-        endif  
+        ! if(uu>=0.d0) then
+        !   !
+        !   ! if(uu<css) then
+        !   !   kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
+        !   !   LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+        !   ! endif
+        !   ! else
+        !   !   LODi(5)=0.d0
+        !   ! endif
+        !   !
+        !   ! kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+        !   ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
+        !   ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+        ! else
+        !   ! back flow
+        !   var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &
+        !                   dxi(i,j,k,1,3)**2 )
+        !   kin=-0.250*(1.d0-gmachmax2)*css/(xmax-xmin)
+        !   !
+        !   LODi(1)=0.d0
+        !   !
+        !   LODi(2)=kin*0.5d0*( dxi(i,j,k,1,1)*var1*(vel(i,j,k,3)-winf)- &
+        !                       dxi(i,j,k,1,3)*var1*(vel(i,j,k,1)-uinf) )
+        !   LODi(3)=kin*0.5d0*(-dxi(i,j,k,2,1)*var1*(vel(i,j,k,2)-vinf)+ &
+        !                       dxi(i,j,k,2,2)*var1*(vel(i,j,k,1)-uinf) )
+        !   LODi(5)=kin*(dxi(i,j,k,1,1)*var1*(vel(i,j,k,1)-uinf)+        &
+        !                dxi(i,j,k,1,2)*var1*(vel(i,j,k,2)-vinf)+        &
+        !                dxi(i,j,k,1,3)*var1*(vel(i,j,k,3)-winf)+        &
+        !                (prs(i,j,k)-pinf)/rho(i,j,k)/css )
+        ! endif  
         !
         LODi1=MatMul(pnor,LODi)*jacob(i,j,k)
         !
@@ -4783,7 +4811,7 @@ module bc
           pe=num1d3*(4.d0*prs(i,1,k)-prs(i,2,k))
           te=num1d3*(4.d0*tmp(i,1,k)-tmp(i,2,k))
           !
-          vel(i,j,k,1)=1.d0
+          vel(i,j,k,1)=0.d0
           vel(i,j,k,2)=vwall(i,k)
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe
@@ -4828,7 +4856,7 @@ module bc
           pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
           te=num1d3*(4.d0*tmp(i,j-1,k)-tmp(i,j-2,k))
           !
-          vel(i,j,k,1)=1.d0
+          vel(i,j,k,1)=0.d0
           vel(i,j,k,2)=0.d0
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe

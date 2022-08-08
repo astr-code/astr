@@ -1469,7 +1469,7 @@ module initialisation
                                 var1=rho_prof,     var2=vel_prof(:,1), &
                                 var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
       !
-      vel_prof(:,1)=vel_prof(:,1)+1.d0
+      ! vel_prof(:,1)=vel_prof(:,1) + 1.d0
       !
       prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
       !
