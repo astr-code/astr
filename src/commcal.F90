@@ -8,6 +8,7 @@
 module commcal
   !
   use parallel, only: mpirank,mpistop,mpirankname
+  use utility,  only: timereporter
   !
   implicit none
   !
@@ -192,14 +193,14 @@ module commcal
   !| -------------                                                     |
   !| 08-10-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine ducrossensor(subtime)
+  subroutine ducrossensor(timerept)
     !
     use commvar,  only : im,jm,km,is,ie,js,je,ks,ke,ia,ja,ka,hm,      &
-                         npdci,npdcj,npdck,shkcrt,lreport
+                         npdci,npdcj,npdck,shkcrt,lreport,ltimrpt
     use commarray,only : ssf,lshock,dvel,prs
     use parallel, only : dataswap,pmin,pmax,psum,lio,ptime
     !
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     logical,save :: firstcall=.true.
@@ -208,8 +209,9 @@ module commcal
     integer :: i,j,k,i1,j1,k1,ii,jj,kk,ip1,jp1,kp1,im1,jm1,km1,nshknod,nijka
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(firstcall) then
       !
@@ -265,7 +267,7 @@ module commcal
     enddo
     enddo
     !
-    call dataswap(ssf)
+    call dataswap(ssf,timerept=ltimrpt)
     !
     nshknod=0
     !
@@ -337,7 +339,14 @@ module commcal
       !
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='ducrossensor', &
+                                             timecost=subtime, &
+                                              message='shock sensor')
+    endif
     !
     return
     !
@@ -357,7 +366,7 @@ module commcal
   subroutine ShockSolid
     !
     use parallel, only : npdci,npdcj,npdck,dataswap
-    use commvar,  only : im,jm,km,hm
+    use commvar,  only : im,jm,km,hm,ltimrpt
     use commarray,only : nodestat,lsolid,x
     use tecio
     !
@@ -382,7 +391,7 @@ module commcal
     end do
     end do
     !
-    call dataswap(lss)
+    call dataswap(lss,timerept=ltimrpt)
     !
     lsolid=lss
     !
@@ -425,7 +434,7 @@ module commcal
     end do
     end do
     !
-    call dataswap(lsolid)
+    call dataswap(lsolid,timerept=ltimrpt)
     !
     deallocate(lss)
     !

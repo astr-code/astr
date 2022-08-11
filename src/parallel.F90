@@ -9,8 +9,9 @@ module parallel
   !
   use mpi
   use commvar,   only : im,jm,km,hm,ia,ja,ka,lihomo,ljhomo,lkhomo,     &
-                        npdci,npdcj,npdck,lfftk
-  use stlaio,  only: get_unit
+                        npdci,npdcj,npdck,lfftk,lreport,ltimrpt
+  use stlaio,    only : get_unit
+  use utility,   only : timereporter
   !
   implicit none
   !
@@ -1443,18 +1444,26 @@ module parallel
   end subroutine updatable_int
   !
   subroutine updatable_int_a2a_v(datasend,datarecv,                    &
-                                 sendtabl,recvtabl)
+                                 sendtabl,recvtabl,                 &
+                                 timerept)
     !
     ! arguments
     integer,intent(in) :: datasend(:)
     integer,allocatable,intent(out) :: datarecv(:)
     integer,intent(in) :: sendtabl(0:),recvtabl(0:)
     !
+    logical,intent(in),optional :: timerept
+    !
     ! local data
     integer :: nvar,ierr,incode,jrank,recvsize
     integer,allocatable :: senddispls(:),recvdispls(:)
     !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
     ! start
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     nvar=1
     !
@@ -1475,21 +1484,41 @@ module parallel
     !
     deallocate(senddispls,recvdispls)
     !
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='updatable_int_a2a_v', &
+                                             timecost=subtime, &
+                                              message='used to sync ib nodes')
+      !
+    endif
+    !
+    return
+    !
   end subroutine updatable_int_a2a_v
   !
   subroutine updatable_rel_a2a_v(datasend,datarecv,                    &
-                                 sendtabl,recvtabl)
+                                 sendtabl,recvtabl,                 &
+                                 timerept)
     !
     ! arguments
     real(8),intent(in) :: datasend(:)
     real(8),allocatable,intent(out) :: datarecv(:)
     integer,intent(in) :: sendtabl(0:),recvtabl(0:)
     !
+    logical,intent(in),optional :: timerept
+    !
     ! local data
     integer :: nvar,ierr,incode,jrank,recvsize
     integer,allocatable :: senddispls(:),recvdispls(:)
     !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
     ! start
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     nvar=1
     !
@@ -1510,22 +1539,42 @@ module parallel
     !
     deallocate(senddispls,recvdispls)
     !
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='updatable_rel_a2a_v', &
+                                             timecost=subtime, &
+                                              message='')
+      !
+    endif
+    !
+    return
+    !
   end subroutine updatable_rel_a2a_v
   !
   subroutine updatable_rel2d_a2a_v(datasend,datarecv,                 &
-                                   sendtabl,recvtabl)
+                                   sendtabl,recvtabl,                 &
+                                   timerept)
     !
     ! arguments
     real(8),intent(in) :: datasend(:,:)
     real(8),allocatable,intent(out) :: datarecv(:,:)
     integer,intent(in) :: sendtabl(0:),recvtabl(0:)
     !
+    logical,intent(in),optional :: timerept
+    !
     ! local data
     integer :: nvar,ierr,incode,jrank,recvsize,n2size,j
     integer :: newtype
     integer,allocatable :: senddispls(:),recvdispls(:)
     !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
     ! start
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     nvar=1
     !
@@ -1554,6 +1603,18 @@ module parallel
     ! enddo
     !
     deallocate(senddispls,recvdispls)
+    !
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='updatable_rel2d_a2a_v', &
+                                             timecost=subtime, &
+                                              message='used to sync ib nodes')
+      !
+    endif
+    !
+    return
     !
   end subroutine updatable_rel2d_a2a_v
   !+-------------------------------------------------------------------+
@@ -2623,19 +2684,20 @@ module parallel
   !| -------------                                                     |
   !| -Jul-2021 | Created by J. Fang @ Warringon.                       |
   !+-------------------------------------------------------------------+
-  subroutine array3d_sendrecv_log(var,subtime)
+  subroutine array3d_sendrecv_log(var,timerept)
     !
     ! arguments
     logical,intent(inout) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! logical data
     integer :: ncou,j,k
     integer :: ierr
     logical,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -2819,7 +2881,15 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='array3d_sendrecv_log', &
+                                              timecost=subtime, &
+                                              message='communication 3D logical array')
+      !
+    endif
     !
     return
     !
@@ -2835,19 +2905,20 @@ module parallel
   !| -------------                                                     |
   !| -Jul-2021 | Created by J. Fang @ Warringon.                       |
   !+-------------------------------------------------------------------+
-  subroutine array3d_sendrecv_int(var,subtime)
+  subroutine array3d_sendrecv_int(var,timerept)
     !
     ! arguments
     integer,intent(inout) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! logical data
     integer :: ncou,j,k
     integer :: ierr
     integer,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -3031,7 +3102,15 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='array3d_sendrecv_int', &
+                                              timecost=subtime, &
+                                              message='communication 3D integer array')
+      !
+    endif
     !
     return
     !
@@ -3047,19 +3126,20 @@ module parallel
   !| -------------                                                     |
   !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
   !+-------------------------------------------------------------------+
-  subroutine array3d_sendrecv(var,subtime)
+  subroutine array3d_sendrecv(var,timerept)
     !
     ! arguments
     real(8),intent(inout) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! logical data
     integer :: ncou,j,k
     integer :: ierr
     real(8),allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -3245,7 +3325,14 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='array3d_sendrecv', &
+                                              timecost=subtime, &
+                                              message='message passing 3D real8 array')
+    endif
     !
     return
     !
@@ -3262,19 +3349,20 @@ module parallel
   !| -------------                                                     |
   !| 25-Jun-2021 | Created by J. Fang @ Warringon.                     |
   !+-------------------------------------------------------------------+
-  subroutine array3d_sync(var,subtime)
+  subroutine array3d_sync(var,timerept)
     !
     ! arguments
     real(8),intent(inout) :: var(0:im,0:jm,0:km)
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! logical data
     integer :: ncou,j,k
     integer :: ierr
     real(8),allocatable,dimension(:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -3440,7 +3528,13 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='array3d_sync', &
+                                              timecost=subtime, &
+                                              message='synconise interface')
+    endif
     !
     return
     !
@@ -3456,21 +3550,22 @@ module parallel
   !| -------------                                                     |
   !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
   !+-------------------------------------------------------------------+
-  subroutine array4d_sendrecv(var,direction,debug,subtime)
+  subroutine array4d_sendrecv(var,direction,debug,timerept)
     !
     ! arguments
     real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:)
     integer,intent(in),optional :: direction
     logical,intent(in),optional :: debug
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: ncou,nx,dir
     integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -3677,7 +3772,14 @@ module parallel
       !
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='array4d_sendrecv', &
+                                              timecost=subtime, &
+                                              message='message passing 4D real8 array')
+    endif
     !
     return
     !
@@ -3693,19 +3795,20 @@ module parallel
   !| -------------                                                     |
   !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
   !+-------------------------------------------------------------------+
-  subroutine array5d_sendrecv(var,subtime)
+  subroutine array5d_sendrecv(var,timerept)
     !
     ! arguments
     real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:,1:)
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! logical data
     integer :: ncou,nx,mx
     integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -3893,7 +3996,13 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='array5d_sendrecv', &
+                                              timecost=subtime, &
+                                              message='message passing 5D real8 array')
+    endif
     !
     return
     !
@@ -3902,11 +4011,11 @@ module parallel
   !| The end of the subroutine array5d_sendrecv.                       |
   !+-------------------------------------------------------------------+
   !
-  subroutine yflux_sendrecv(var,subtime)
+  subroutine yflux_sendrecv(var,timerept)
     !
     ! arguments
     real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:,1:)
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! logical data
     integer,save :: nx,mx
@@ -3915,9 +4024,10 @@ module parallel
                                                      sbufy1,sbufy2,rbufy1,rbufy2, &
                                                      sbufz1,sbufz2,rbufz1,rbufz2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     logical,save :: firstcall=.true.
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -4121,7 +4231,13 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='yflux_sendrecv', &
+                                              timecost=subtime )
+    endif
     !
     return
     !
@@ -4135,22 +4251,23 @@ module parallel
   !| -------------                                                     |
   !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
   !+-------------------------------------------------------------------+
-  subroutine qswap(subtime)
+  subroutine qswap(timerept)
     !
     use commvar,   only: numq,turbmode
     use commarray, only: q,rho,vel,prs,tmp,spc,tke,omg
     use fludyna,   only: q2fvar
     !
     ! argument
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: ncou
     integer :: ierr,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime()
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! buf1: send buffer
@@ -4548,7 +4665,13 @@ module parallel
     if(mpitag>10000) mpitag=100
     ! reset mpitag
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='qswap', &
+                                              timecost=subtime )
+    endif
     !
     return
     !

@@ -10,7 +10,9 @@ module solver
   use constdef
   use parallel, only : mpirankname,mpistop,mpirank,lio,dataswap,       &
                        datasync,ptime,irk,jrk,krk,irkm,jrkm,krkm
-  use commvar,  only : ndims,ks,ke,hm,lfftk,ctime,nondimen
+  use commvar,  only : ndims,ks,ke,hm,lfftk,ctime,nondimen,lreport,    &
+                       ltimrpt
+  use utility,  only : timereporter
   !
   implicit none
   !
@@ -36,7 +38,11 @@ module solver
                         tempconst1,reynolds,ref_t,mach,                &
                         num_modequ,turbmode,spcinf,nondimen
     use thermchem, only: spcindex
-    use fludyna, only: thermal
+    use fludyna,   only: thermal
+    use parallel,  only: mpisize
+    !
+    ! local data
+    character(len=8) :: mpimaxname
     !
     if(trim(turbmode)=='k-omega') then
       num_modequ=2
@@ -117,6 +123,11 @@ module solver
       roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
       !
     endif 
+    !
+    if(lio) then
+      write(mpimaxname,'(i8.8)')mpisize
+      call timereporter(message=mpimaxname)
+    endif
     !
   end subroutine refcal
   !+-------------------------------------------------------------------+
@@ -209,7 +220,7 @@ module solver
   !| -------------                                                     |
   !| 09-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine rhscal(subtime)
+  subroutine rhscal(timerept)
     !
     use commarray, only : qrhs,x,q
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
@@ -218,7 +229,7 @@ module solver
     use tecio
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     logical,save :: firstcall=.true.
     !
     ! local data
@@ -226,8 +237,9 @@ module solver
     integer :: nconv
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(flowtype(1:2)/='0d') then
       !
@@ -238,23 +250,23 @@ module solver
         firstcall=.false.
       endif
       !
-      call gradcal(subtime=ctime(10))
+      call gradcal(timerept=ltimrpt)
       !
       if(mod(nconv,2)==0) then
-        call convrsdcal6(subtime=ctime(9))
+        call convrsdcal6(timerept=ltimrpt)
       else
         !
         if(conschm(4:4)=='e') then
           !
-          if(recon_schem==5 .or. lchardecomp) call ducrossensor(ctime(12))
+          if(recon_schem==5 .or. lchardecomp) call ducrossensor(timerept=ltimrpt)
           !
-          call convrsduwd(subtime=ctime(9))
+          call convrsduwd(timerept=ltimrpt)
           !
         elseif(conschm(4:4)=='c') then
           !
-          if(lchardecomp) call ducrossensor(ctime(12))
+          if(lchardecomp) call ducrossensor(timerept=ltimrpt)
           !
-          call convrsdcmp(subtime=ctime(9))
+          call convrsdcmp(timerept=ltimrpt)
           !
         else
           stop ' !! error @ conschm'
@@ -267,7 +279,7 @@ module solver
     !
     qrhs=-qrhs
     !
-    if(diffterm) call diffrsdcal6(subtime=ctime(10))
+    if(diffterm) call diffrsdcal6(timerept=ltimrpt)
     !
     if(trim(flowtype)=='channel') then 
       call src_chan
@@ -278,10 +290,17 @@ module solver
     endif
     !
 #ifdef COMB
-    call srccomb(subtime=ctime(13))
+    call srccomb(timerept=ltimrpt)
 #endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='rhscal', &
+                                              timecost=subtime, &
+                                              message='RHS term')
+    endif
     !
     ! call tecbin('testout/tecqrhs'//mpirankname//'.plt',            &
     !                                   x(0:im,0:jm,0,1),'x',        &
@@ -453,7 +472,7 @@ module solver
     end do
     end do
     !
-    call dataswap(arytmp)
+    call dataswap(arytmp,timerept=ltimrpt)
     !
     drho=grad(arytmp(:,:,:,1))
     du1 =grad(arytmp(:,:,:,2))
@@ -513,7 +532,7 @@ module solver
   !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
 #ifdef COMB
-  subroutine srccomb(subtime)
+  subroutine srccomb(timerept)
     !
     use commvar,  only : im,jm,km,numq,num_species,odetype,lcomb
     use commarray,only : qrhs,rho,tmp,spc,jacob
@@ -521,13 +540,14 @@ module solver
     use parallel, only : ptime 
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(odetype(1:2)=='rk' .and. lcomb) then
       do k=0,km
@@ -540,7 +560,14 @@ module solver
       enddo
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='srccomb', &
+                                             timecost=subtime, &
+                                              message='SRC term for combustion')
+    endif
     !
   end subroutine srccomb
 #endif 
@@ -553,7 +580,7 @@ module solver
   !| 22-03-2021: Created by J. Fang @ Warrington.                      |
   !| add the round scheme: by Xi Deng.                                 |
   !+-------------------------------------------------------------------+
-  subroutine convrsduwd(subtime)
+  subroutine convrsduwd(timerept)
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
@@ -566,7 +593,7 @@ module solver
     use thermchem,only: aceval,gammarmix
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,iss,iee,jss,jee,kss,kee,nwd
@@ -579,10 +606,11 @@ module solver
     real(8), allocatable, dimension(:,:) :: fswp,fswm,Fh
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
     logical :: lsh,lso,sson,hdiss,lvar
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     sson=allocated(lshock)
     !
@@ -1162,8 +1190,15 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
-    !
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='convrsduwd', &
+                                             timecost=subtime, &
+                                              message='convection term using explicit upwind scheme')
+    endif
+    !  
     return
     !
   end subroutine convrsduwd
@@ -1236,7 +1271,7 @@ module solver
   !| 22-03-2021: Created by J. Fang @ Warrington.                      |
   !| 15-02-2022: Finished by J. Fang @ Warrington.                     |
   !+-------------------------------------------------------------------+
-  subroutine convrsdcmp(subtime)
+  subroutine convrsdcmp(timerept)
     !
     use commvar,  only: im,jm,km,hm,numq,                              &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
@@ -1246,7 +1281,7 @@ module solver
     use riemann,  only: flux_steger_warming
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,iss,iee,jss,jee,kss,kee,nwd
@@ -1260,10 +1295,11 @@ module solver
     real(8), allocatable, dimension(:,:) :: fswp,fswm,fhcp,fhcm,Fh
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
     logical :: lsh,sson,hdiss
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     sson=allocated(lshock)
     !
@@ -1868,7 +1904,14 @@ module solver
     ! ! end of calculation at k direction
     ! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='convrsdcmp', &
+                                             timecost=subtime, &
+                                              message='convection term using compact upwind scheme')
+    endif
     !
     return
     !
@@ -2065,7 +2108,7 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2009-06-03.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine convrsdcal6(subtime)
+  subroutine convrsdcal6(timerept)
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
                         conschm,npdci,npdcj,npdck,is,ie,js,je,ks,ke
@@ -2073,15 +2116,16 @@ module solver
     use commfunc, only: ddfc
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,jspc,jmod,n
     real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:)
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along i direction
@@ -2214,7 +2258,14 @@ module solver
       !
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='convrsdcal6', &
+                                             timecost=subtime, &
+                                              message='diffusion term with central scheme')
+    endif
     !
     return
     !
@@ -2314,7 +2365,7 @@ module solver
   !| -------------                                                     |
   !| 08-10-2021  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
   !+-------------------------------------------------------------------+
-  subroutine gradcal(subtime)
+  subroutine gradcal(timerept)
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims,    &
                           num_species,num_modequ,is,ie,js,je,ks,ke,    &
@@ -2324,15 +2375,16 @@ module solver
     use commfunc,  only : ddfc
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,n,ncolm
     real(8),allocatable :: df(:,:),ff(:,:)
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     dvel=0.d0
     dtmp=0.d0
@@ -2551,7 +2603,14 @@ module solver
       deallocate(ff,df)
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='gradcal', &
+                                             timecost=subtime,  &
+                                              message='calculation of gradients')
+    endif
     !
     return
     !
@@ -2568,7 +2627,7 @@ module solver
   ! Writen by Fang Jian, 2009-06-09.
   ! Add scalar transport equation by Fang Jian, 2022-01-12.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine diffrsdcal6(subtime)
+  subroutine diffrsdcal6(timerept)
     !
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,num_modequ,        &
@@ -2586,7 +2645,7 @@ module solver
 #endif
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,n,ncolm,jspc,idir
@@ -2604,8 +2663,9 @@ module solver
     logical,save :: firstcall=.true.
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(firstcall) then
       allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
@@ -2809,24 +2869,20 @@ module solver
     enddo !j
     enddo !i
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    call dataswap(sigma,timerept=ltimrpt)
     !
-    call dataswap(sigma,subtime=ctime(7))
-    !
-    call dataswap(qflux,subtime=ctime(7))
+    call dataswap(qflux,timerept=ltimrpt)
     !
     if(num_species>0) then
-      call dataswap(yflux,subtime=ctime(7))
-      ! call yflux_sendrecv(yflux,subtime=ctime(7))
+      call dataswap(yflux,timerept=ltimrpt)
+      ! call yflux_sendrecv(yflux,timerept=ltimrpt)
     endif
     !
     if(trim(turbmode)=='k-omega') then
-      call dataswap(dkflux,subtime=ctime(7))
+      call dataswap(dkflux,timerept=ltimrpt)
       !
-      call dataswap(doflux,subtime=ctime(7))
+      call dataswap(doflux,timerept=ltimrpt)
     endif
-    !
-    if(present(subtime)) time_beg=ptime() 
     !
     ! Calculating along i direction.
     !
@@ -3068,7 +3124,14 @@ module solver
     if(allocated(dispec)) deallocate(dispec)
     if(allocated(dfu))    deallocate(dfu)
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='diffrsdcal6', &
+                                             timecost=subtime,      &
+                                              message='diffusion term')
+    endif
     !
     return
     !
@@ -3086,7 +3149,7 @@ module solver
     integer :: i,j,k
     real(8),allocatable :: phtemp(:,:,:)
     !
-    call dataswap(phi)
+    call dataswap(phi,timerept=ltimrpt)
     !
     allocate(phtemp(is:ie,js:je,ks:ke))
     do k=ks,ke
@@ -3115,7 +3178,7 @@ module solver
     integer :: i,j,k
     real(8),allocatable :: phtemp(:,:,:)
     !
-    call dataswap(phi)
+    call dataswap(phi,timerept=ltimrpt)
     !
     allocate(phtemp(is:ie,js:je,ks:ke))
     do k=ks,ke
@@ -3165,7 +3228,7 @@ module solver
     !
     if(lisponge) then
       !
-      call dataswap(q,direction=1,subtime=ctime(7))
+      call dataswap(q,direction=1,timerept=ltimrpt)
       !
       if(spg_imax>0) then
         !
@@ -3234,7 +3297,7 @@ module solver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2008-11-03.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine filterq(subtime)
+  subroutine filterq(timerept)
     !
     use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
                          alfa_filter,ndims,is,ie,js,je,ks,ke,turbmode
@@ -3242,18 +3305,19 @@ module solver
     use commfunc, only : spafilter10,spafilter6exp
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,n,m
     real(8),allocatable :: phi(:,:),fph(:,:)
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     ! filtering in i direction
-    call dataswap(q,direction=1,subtime=ctime(7))
+    call dataswap(q,direction=1,timerept=ltimrpt)
     !
     allocate(phi(-hm:im+hm,1:numq),fph(0:im,1:numq))
     !
@@ -3287,7 +3351,7 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
     ! filtering in j direction
-    call dataswap(q,direction=2,subtime=ctime(7))
+    call dataswap(q,direction=2,timerept=ltimrpt)
     !
     allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
     !
@@ -3323,7 +3387,7 @@ module solver
     !
     if(ndims==3) then
       !
-      call dataswap(q,direction=3,subtime=ctime(7))
+      call dataswap(q,direction=3,timerept=ltimrpt)
       !
       !
       allocate(phi(-hm:km+hm,1:numq),fph(0:km,1:numq))
@@ -3361,7 +3425,14 @@ module solver
       call filter2e(q(:,:,:,7))
     endif
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='filterq', &
+                                             timecost=subtime, &
+                                              message='low-pass filter')
+    endif
     !
     return
     !
@@ -3432,7 +3503,7 @@ module solver
     ! enddo
     ! enddo
     !
-    call dataswap(q,subtime=ctime(7))
+    call dataswap(q,timerept=ltimrpt)
     ! !
     ! call boucon
     !

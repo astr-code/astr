@@ -9,10 +9,12 @@ module statistic
   !
   use constdef
   use commvar,  only : im,jm,km,ia,ja,ka,ndims,xmin,xmax,ymin,ymax,    &
-                       zmin,zmax,nstep,deltat,force,numq,num_species
+                       zmin,zmax,nstep,deltat,force,numq,num_species,  &
+                       lreport,ltimrpt
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
                        irk,jrk,jrkm,ptime
   use stlaio,  only: get_unit
+  use utility, only: timereporter
   !
   implicit none
   !
@@ -133,14 +135,14 @@ module statistic
   !| -------------                                                     |
   !| 19-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine meanflowcal(subtime)
+  subroutine meanflowcal(timerept)
     !
     use commvar,   only : reynolds,nstep,time
     use commarray, only : rho,vel,prs,tmp,dvel
     use fludyna,   only : miucal
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     real(8) :: rho_t,prs_t,tmp_t,u,v,w
@@ -149,8 +151,9 @@ module statistic
                s23,s33,skk,miu,div
     !
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(nsamples==0) then
       !
@@ -308,7 +311,15 @@ module statistic
     !
     if(lio) print*,' ** meanflow calculated, nsamples=',nsamples,'nstep=',nstep
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='meanflowcal', &
+                                              timecost=subtime, &
+                                              message='data collection for statistics')
+      !
+    endif
     !
     return
     !
@@ -426,20 +437,21 @@ module statistic
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine statcal(subtime)
+  subroutine statcal(timerept)
     !
     use commvar,  only : flowtype
     use commarray,only : vel,prs,rho,tmp,spc
     use thermchem,only : heatrate
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k
     real(8) :: time_beg,qdot
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(trim(flowtype)=='tgv') then
       enstophy=enstophycal()
@@ -523,7 +535,15 @@ module statistic
     !
     call maxmincal
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='statcal', &
+                                              timecost=subtime, &
+                                              message='on-fly statistics')
+      !
+    endif
     !
   end subroutine statcal
   !+-------------------------------------------------------------------+

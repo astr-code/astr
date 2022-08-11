@@ -10,9 +10,10 @@ module readwrite
   use constdef
   use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
                       ptime,bcast,mpirankmax,ig0,jg0,kg0
-  use commvar, only : ndims,im,jm,km,iomode
+  use commvar, only : ndims,im,jm,km,iomode,lreport,ltimrpt
   use tecio
   use stlaio,  only: get_unit
+  use utility, only: timereporter
   !
   implicit none
   !
@@ -490,7 +491,7 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,schmidt,ibmode
+                        bfacmpld,shkcrt,turbmode,schmidt,ibmode,ltimrpt
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -526,9 +527,9 @@ module readwrite
       if(lkhomo) write(*,'(A)')' k'
       read(fh,'(/)')
 #ifdef COMB
-      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,ltimrpt,lcomb
 #else
-      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,ltimrpt
 #endif
       read(fh,'(/)')
       read(fh,*)lrestart
@@ -630,6 +631,7 @@ module readwrite
     call bcast(lfftk)
     call bcast(limmbou)
     call bcast(lchardecomp)
+    call bcast(ltimrpt)
     !
     call bcast(lrestart)
     !
@@ -1670,7 +1672,7 @@ module readwrite
   !| -------------                                                     |
   !| 28-12-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writeflfed(subtime)
+  subroutine writeflfed(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwsequ,turbmode,feqwsequ,force
@@ -1681,7 +1683,7 @@ module readwrite
     use hdf5io
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,jsp
@@ -1690,6 +1692,11 @@ module readwrite
     character(len=64),save :: savfilenmae='first'
     character(len=2) :: spname
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
+    !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       !
@@ -1787,17 +1794,17 @@ module readwrite
                                          filename=trim(outauxiname))
     endif
     !
-    if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
-      call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='newvisu')
-    else
-      call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='animati')
-    endif
-    !
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='u1',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='u2',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='u3',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='p',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='t',mode='data')
+    ! if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
+    !   call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='newvisu')
+    ! else
+    !   call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='animati')
+    ! endif
+    ! !
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='u1',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='u2',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='u3',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='p',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='t',mode='data')
     !
     if(ndims==1) then
       !
@@ -1824,6 +1831,16 @@ module readwrite
     !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ
+    !
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='writeflfed', &
+                                              timecost=subtime, &
+                                              message='write flow data')
+      !
+    endif
     !
   end subroutine writeflfed
   !+-------------------------------------------------------------------+
@@ -2036,7 +2053,7 @@ module readwrite
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writechkpt(stepsequ,subtime)
+  subroutine writechkpt(stepsequ,timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwsequ,lavg,force,numq,imbroot,limmbou,      &
@@ -2051,7 +2068,7 @@ module readwrite
     !
     ! arguments
     integer,intent(in) :: stepsequ
-    real(8),intent(inout),optional :: subtime
+    logical,intent(in),optional :: timerept
     !
     ! local data
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
@@ -2059,8 +2076,9 @@ module readwrite
     integer :: jsp,i,fh,ios,j,k
     logical :: lfopen
     real(8) :: time_beg
+    real(8),save :: subtime=0.d0
     !
-    if(present(subtime)) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     ! if(lwsequ) then
     !   write(stepname,'(i4.4)')filenumb
@@ -2163,7 +2181,15 @@ module readwrite
     !
     nxtchkpt=nstep+feqchkpt
     !
-    if(present(subtime)) subtime=subtime+ptime()-time_beg 
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='writechkpt', &
+                                              timecost=subtime, &
+                                              message='write checkpoint')
+      !
+    endif
     !
     return
     !

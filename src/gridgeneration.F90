@@ -412,7 +412,7 @@ module gridgeneration
     if(mpirank==0) print*,' **            mesh size:',ia,ja,ka
     !
     lx_solid=len_chara
-    ly_solid=0.5d0*len_chara
+    ly_solid=len_chara
     lz_solid=len_chara
     !
     allocate(xx(0:ia),yy(0:ja),zz(0:ka))
@@ -441,6 +441,10 @@ module gridgeneration
     !
     ! sponge region
     call spongstretch(ia-2*imm,20.d0*lx_solid,xx(imm+imm-2:ia))
+    !
+    x0=xx(0)
+    xx=xx-x0
+    !
     if(mpirank==0) then
       print*,' ** -------------------- mesh report --------------------'
       print*,'    x direction'
@@ -459,9 +463,6 @@ module gridgeneration
       print*,' ** -----------------------------------------------------'
     endif
     !
-    x0=xx(0)
-    xx=xx-x0
-    !
     ! core regjon 
     do j=jmm,jmm+jm4
       yy(j)=ly_solid/dble(jm4)*dble(j-jmm)
@@ -473,6 +474,9 @@ module gridgeneration
     do j=0,jmm-1
       yy(j)=-yy(jmm+jmm-j)
     enddo
+    y0=yy(0)
+    yy=yy-y0
+    !
     if(mpirank==0) then
       print*,'    y djrectjon'
       print*,'       core zone '
@@ -485,9 +489,6 @@ module gridgeneration
       write(*,'(1(A,1x,F12.8))')'         dy:',yy(jmm+jmm)-yy(jmm+jmm-1)
       print*,' ** -----------------------------------------------------'
     endif
-    !
-    y0=yy(0)
-    yy=yy-y0
     !
     if(ndims==3) then
       !

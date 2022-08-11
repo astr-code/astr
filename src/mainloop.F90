@@ -10,10 +10,12 @@ module mainloop
   use constdef
   use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
                       ptime,irk,jrk,irkm,jrkm
-  use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep,lcracon
+  use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep,lcracon,lreport,   &
+                      ltimrpt
   use commarray,only: crinod
   use tecio
-  use stlaio,  only: get_unit
+  use stlaio,   only: get_unit
+  use utility,  only: timereporter
   !
   implicit none
   !
@@ -45,8 +47,12 @@ module mainloop
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
     integer,dimension(8) :: value
+    real(8) :: time_total,time_dowhile
     !
     time_start=ptime()
+    time_total  =0.d0
+    time_dowhile=0.d0
+    !
     nstep0=nstep
     !
     if(firstcall) then
@@ -65,6 +71,9 @@ module mainloop
     fhand_err=get_unit()
     open(fhand_err,file='errnode.log')
     !
+    if(lio) call timereporter(routine='steploop',timecost=time_dowhile,  &
+                              message='init file')
+    !
     do while(nstep<=maxstep)
       !
       time_beg=ptime()
@@ -72,12 +81,12 @@ module mainloop
       call crashcheck
       !
       if(rkscheme=='rk3') then
-        call rk3
+        call rk3(timerept=ltimrpt)
       elseif(rkscheme=='rk4') then
         call rk4
       endif
       !
-      ctime(2)=ctime(2)+ptime()-time_beg
+      time_dowhile=time_dowhile+ptime()-time_beg
       !
       if(loop_counter==feqchkpt .or. loop_counter==0) then
         !
@@ -149,13 +158,15 @@ module mainloop
             !
             nsrpt=nstep
             !
+            call timereporter(routine='steploop',timecost=time_dowhile,  &
+                              message='main loop')
           endif
           !
         endif
         !
-        call timerept
+        ! call timerept
         !
-        if(limmbou) call ibforce
+        ! if(limmbou) call ibforce
         !
         loop_counter=0
         !
@@ -167,11 +178,13 @@ module mainloop
       !
     enddo
     !
-    if(limmbou) call timerept
+    ! if(limmbou) call timerept
     !
-    call ibforce
+    ! call ibforce
     !
-    ctime(1)=ptime()-time_start
+    time_total=ptime()-time_start
+    !
+    if(lio) call timereporter(timecost=time_total,mode='final')
     !
     ! call errest
     !
@@ -252,7 +265,7 @@ module mainloop
   !| -------------                                                     |
   !| 27-Nov-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  subroutine rk3
+  subroutine rk3(timerept)
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
                          lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
@@ -268,7 +281,10 @@ module mainloop
     use commvar,  only : odetype
 #endif 
     !
-    ! logical data
+    ! argument
+    logical,intent(in),optional :: timerept
+    !
+    ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
     integer :: nrk,i,j,k,m
@@ -276,6 +292,7 @@ module mainloop
     real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
     real(8) :: hrr,time_beg_2
+    real(8),save :: subtime=0.d0
     !
     time_beg=ptime()
     !
@@ -321,18 +338,15 @@ module mainloop
       !
       qrhs=0.d0
       !
-      if(limmbou) call immbody(subtime1=ctime(11), &
-                               subtime2=ctime(24), &
-                               subtime3=ctime(25), &
-                               subtime4=ctime(26))
+      if(limmbou) call immbody(timerept=ltimrpt)
       !
-      if(flowtype(1:2)/='0d') call qswap(ctime(7))
+      if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
       !
       if(flowtype(1:2)/='0d') call boucon
       !
-      if(flowtype(1:2)/='0d') call qswap(ctime(7))
+      if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
       !
-      call rhscal(ctime(4))
+      call rhscal(timerept=ltimrpt)
       !
       if(flowtype(1:2)=='0d') jacob=1.d0
       !
@@ -361,7 +375,7 @@ module mainloop
       !
       ctime(14)=ctime(14)+ptime()-time_beg_2
       !
-      if(lfilter) call filterq(ctime(8))
+      if(lfilter) call filterq(timerept=ltimrpt)
       !
       if(flowtype(1:2)/='0d') call spongefilter
       !
@@ -464,8 +478,6 @@ module mainloop
     !
     enddo !rk
     !
-    ctime(3)=ctime(3)+ptime()-time_beg
-    !
 #ifdef COMB
     if(odetype=='dnn') then 
       if(nstep==maxstep) call finalize()
@@ -473,6 +485,14 @@ module mainloop
     endif
     !
 #endif
+    !
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. loop_counter==feqchkpt) call timereporter(routine='rk3',   &
+                                                            timecost=subtime)
+    endif
     !
     ! call mpistop
     !
@@ -537,15 +557,15 @@ module mainloop
       !
       qrhs=0.d0
       !
-      if(limmbou) call immbody(ctime(11))
+      if(limmbou) call immbody(timerept=ltimrpt)
       !
-      call qswap(ctime(7))
+      call qswap(timerept=ltimrpt)
       !
       call boucon
       !
-      call qswap(ctime(7))
+      call qswap(timerept=ltimrpt)
       !
-      call rhscal(ctime(4))
+      call rhscal(timerept=ltimrpt)
       !
       if(nrk==1) then
         !
@@ -580,7 +600,7 @@ module mainloop
         enddo
       endif
       !
-      if(lfilter) call filterq(ctime(8))
+      if(lfilter) call filterq(timerept=ltimrpt)
       !
       call spongefilter
       !
@@ -627,7 +647,7 @@ module mainloop
       firstcall = .false.
     endif
     !
-    call statcal(ctime(5))
+    call statcal(timerept=ltimrpt)
     !
     call statout(time_start)
     !
@@ -638,7 +658,7 @@ module mainloop
       !
       if(lavg) then
         if(nstep==nxtavg) then
-          call meanflowcal(ctime(5))
+          call meanflowcal(timerept=ltimrpt)
           !
           nxtavg=nstep+feqavg
         endif
@@ -664,13 +684,13 @@ module mainloop
       if(nstep==nxtchkpt) then
         !
         ! the checkpoint and flowfield may be writen in the same time
-        call writechkpt(nxtwsequ,ctime(6))
+        call writechkpt(nxtwsequ,timerept=ltimrpt)
         !
       endif
       !
       if(lwsequ .and. nstep==nxtwsequ) then
         !
-        call writeflfed(ctime(6))
+        call writeflfed(timerept=ltimrpt)
         !
       endif
       !

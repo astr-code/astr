@@ -37,7 +37,8 @@ module commvar
   !|       solidbodyfile | the file contains solid body geometry .     |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
-  logical :: nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcracon
+  logical :: nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,        &
+             lcracon,ltimrpt
   character(len=3) :: rkscheme
   !+---------------------+---------------------------------------------+
   !| lihomo,ljhomo,lkhomo| to define homogeneous direction.            |

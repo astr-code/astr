@@ -13,10 +13,11 @@ module geom
                        datasync,ptime,irk,jrk,krk,ig0,jg0,kg0,         &
                        mpirankmax,psum,pmax
   use commvar,  only : ndims,ks,ke,hm,hm,lfftk,ctime,im,jm,km,         &
-                       npdci,npdcj,npdck
+                       npdci,npdcj,npdck,ltimrpt
   use tecio
   use stlaio,  only: get_unit
   use commcal, only: ijkcellin,ijkin
+  use utility, only: timereporter
   !
   implicit none
   !
@@ -79,6 +80,9 @@ module geom
     if(lio) print*,' ** grid in solid calculated'
     !
     if(lio) write(*,'(A,F12.8)')'  ** time cost in processing immersed grid :',subtime
+    !
+    if(lio) call timereporter(routine='immsgrid',timecost=subtime, &
+                              message='processing immersed grid')
     !
   end subroutine immsgrid
   !+-------------------------------------------------------------------+
@@ -342,7 +346,7 @@ module geom
     ! end of cal d<x,y,z>/d<i,j,k>
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    call dataswap(dx,subtime=ctime(7))
+    call dataswap(dx,timerept=ltimrpt)
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Calculating geometrical 
@@ -379,9 +383,9 @@ module geom
       stop ' !! ndimes not defined at jacob calculation.'
     endif
     !
-    call dataswap(jacob,subtime=ctime(7))
+    call dataswap(jacob,timerept=ltimrpt)
     !
-    call datasync(jacob(0:im,0:jm,0:km),subtime=ctime(7))
+    call datasync(jacob(0:im,0:jm,0:km),timerept=ltimrpt)
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! End of Calculating 
@@ -538,7 +542,7 @@ module geom
       !
     endif
     !
-    call dataswap(dxi,subtime=ctime(7))
+    call dataswap(dxi,timerept=ltimrpt)
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Calculating geometrical
@@ -668,11 +672,11 @@ module geom
     ! geometrical vector.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    call dataswap(dxi,subtime=ctime(7))
+    call dataswap(dxi,timerept=ltimrpt)
     !
     do j=1,3
     do i=1,3
-      call datasync(dxi(0:im,0:jm,0:km,i,j),subtime=ctime(7))
+      call datasync(dxi(0:im,0:jm,0:km,i,j))
     enddo
     enddo
     !
@@ -908,7 +912,7 @@ module geom
     ncou=psum(ncou)
     if(lio) write(*,'(A,I0)')'  ** total number of solide nodes: ',ncou
     !
-    call dataswap(nodestat)
+    call dataswap(nodestat,timerept=ltimrpt)
     !
     if(lio) print*,' ** state of grid nodes calculated'
     !
@@ -973,7 +977,7 @@ module geom
       enddo
       enddo
       !
-      call dataswap(nodestat)
+      call dataswap(nodestat,timerept=ltimrpt)
       !
       n=n+1
       !
@@ -1032,7 +1036,7 @@ module geom
     enddo
     enddo
     !
-    call dataswap(nodestat)
+    call dataswap(nodestat,timerept=ltimrpt)
     !
     ! set bc for nodes, no need to go to the dummy edge or corner
     nodestat(-hm:-1,     -hm:-1,   :)=10

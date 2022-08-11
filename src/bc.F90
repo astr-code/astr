@@ -13,7 +13,7 @@ module bc
   use commvar, only: hm,im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims, &
                      num_species,flowtype,gamma,numq,npdci,npdcj,      &
                      npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
-                     zmin,zmax,time,num_modequ
+                     zmin,zmax,time,num_modequ,ltimrpt
   use commarray, only : x,dxi,jacob,prs,vel,tmp,rho,spc,q,qrhs
   use tecio
   use stlaio,  only: get_unit
@@ -410,20 +410,21 @@ module bc
   !| -------------                                                     |
   !| 30-06-2021: Created by J. Fang @ Warrington                       |
   !+-------------------------------------------------------------------+
-  subroutine immbody(subtime1,subtime2,subtime3,subtime4)
+  subroutine immbody(timerept)
     !
     use commtype,  only : sboun
     !
     use commvar,   only : pinf,immbond,num_species,              &
-                          num_icell_rank,num_ighost_rank
+                          num_icell_rank,num_ighost_rank,lreport
     use commarray, only : nodestat,vel,x
     use commcal,   only : ijkin,ijkcellin
     use fludyna,   only : fvar2q,q2fvar,thermal
     use parallel,  only : ig0,jg0,kg0,npdci,npdcj,npdck,qswap,msize
     use commfunc,  only : median
+    use utility,   only : timereporter
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime1,subtime2,subtime3,subtime4
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: i,j,k,m,kb,iss,jss,kss,n,jspec,jq,jb,jc,jsup,ncube,counter
@@ -439,10 +440,9 @@ module bc
     integer,allocatable,save :: nbnode(:),ngnode(:),ijkcub(:,:,:),ijkgho(:,:)
     !
     real(8) :: time_beg,time_tmp
+    real(8),save :: subtime1=0.d0,subtime2=0.d0,subtime3=0.d0,subtime4=0.d0
     !
-    if(present(subtime1) .or. present(subtime2) ) then
-      time_beg=ptime()
-    endif
+    if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(npdci==1) then
       iss=0
@@ -619,15 +619,19 @@ module bc
       !
     enddo
     !
-    subtime2=subtime2+ptime()-time_beg
-    time_tmp=ptime()
+    if(present(timerept) .and. timerept) then
+      subtime1=subtime1+ptime()-time_beg
+      time_tmp=ptime()
+    endif
     !
-    call syncqimag_nonlocal
+    call syncqimag_nonlocal(timerept=ltimrpt)
     ! call syncqimag_nonlocal(subtime1=subtime2,subtime2=subtime3, &
     !                         subtime3=subtime4)
     !
-    subtime3=subtime3+ptime()-time_tmp
-    time_tmp=ptime()
+    if(present(timerept) .and. timerept) then
+      subtime2=subtime2+ptime()-time_tmp
+      time_tmp=ptime()
+    endif
     !
     ! call syncqimag(qimag(:,1:counter))
     !
@@ -724,8 +728,21 @@ module bc
     enddo
     enddo
     !
-    subtime4=subtime4+ptime()-time_tmp
-    if(present(subtime1)) subtime1=subtime1+ptime()-time_beg
+    if(present(timerept) .and. timerept) then
+      !
+      subtime3=subtime3+ptime()-time_tmp
+      subtime4=subtime4+ptime()-time_beg
+      !
+      if(lio .and. lreport) then
+        call timereporter(routine='immbody..',timecost=subtime4, &
+                          message='immersed boundary calculation')
+        call timereporter(routine='--immbody',timecost=subtime1, &
+                          message='image nodes')
+        call timereporter(routine='--immbody',timecost=subtime3, &
+                          message='ghost nodes')
+      endif
+      !
+    endif
     !
     ! call mpistop
     !
@@ -744,14 +761,15 @@ module bc
   !| -------------                                                     |
   !| 21-Jun-2022: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  subroutine syncqimag_nonlocal(subtime1,subtime2,subtime3)
+  subroutine syncqimag_nonlocal(timerept)
     !
     use commtype, only : sboun
     use parallel, only : mpirankmax,pswapall,ptabupd,msize
-    use commvar,  only : immbond
+    use commvar,  only : immbond,lreport
+    use utility,  only : timereporter
     !
     ! arguments
-    real(8),intent(inout),optional :: subtime1,subtime2,subtime3
+    logical,intent(in),optional :: timerept
     !
     ! local data
     integer :: nsize,jb,js,kb,qsize,jrank,qzmax,offset,bignumber,jsend,n,nnl
@@ -762,14 +780,13 @@ module bc
     type(sboun),pointer :: pbon
     !
     real(8) :: time_beg,time_tmp
+    real(8),save :: subtime=0.d0
     !
     integer,save :: nsend,nrecv
     !
     logical,save :: lfirstcal=.true.
     !
-    if(present(subtime1) .or. present(subtime2) .or. present(subtime3) ) then
-      time_beg=ptime()
-    endif
+    if(present(timerept) .and. timerept) time_beg=ptime()
     !
     if(lfirstcal) then
       !
@@ -870,7 +887,7 @@ module bc
         !
       endif
       !
-      call ptabupd(num_bound_elemt_send,num_bound_elemt_recv,isendtable,irecvtable)
+      call ptabupd(num_bound_elemt_send,num_bound_elemt_recv,isendtable,irecvtable,timerept=ltimrpt)
       !
       nrecv=msize(num_bound_elemt_recv)
       !
@@ -919,18 +936,8 @@ module bc
       !
     enddo
     !
-    if(present(subtime1)) then
-      subtime1=subtime1+ptime()-time_beg
-      time_tmp=ptime()
-    endif
-    !
     ! data passing via alltoall
-    call ptabupd(q2send,q2recv,isendtable,irecvtable)
-    !
-    if(present(subtime2)) then
-      subtime2=subtime2+ptime()-time_tmp
-      time_tmp=ptime()
-    endif
+    call ptabupd(q2send,q2recv,isendtable,irecvtable,timerept=ltimrpt)
     !
     ! unpack received data
     do n=1,nrecv
@@ -942,8 +949,14 @@ module bc
     !
     deallocate(q2send,q2recv)
     !
-    if(present(subtime3)) then
-      subtime3=subtime3+ptime()-time_tmp
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport) call timereporter(routine='syncqimag_nonlocal', &
+                                              timecost=subtime, &
+                                              message='sync immersed nodesy')
+      !
     endif
     ! print*,mpirank,'|',isendtable
     ! print*,mpirank,'-',sum(irecvtable),size(num_bound_elemt_recv)

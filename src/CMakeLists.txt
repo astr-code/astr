@@ -17,8 +17,8 @@ add_executable(astr
                     geom.F90
                     gridgeneration.F90
                     hdf5io.F90
-		    ibmethod.F90
-		    initialisation.F90
+		            ibmethod.F90
+		            initialisation.F90
                     interp.F90
                     mainloop.F90
                     models.F90
@@ -32,7 +32,8 @@ add_executable(astr
                     stlaio.F90
                     tecio.F90
                     thermchem.F90
-                    vtkio.F90)
+                    vtkio.F90
+                    utility.F90)
 #add_executable(astr ${files_astr})
 target_link_libraries(astr)
 if (MPI_FOUND)

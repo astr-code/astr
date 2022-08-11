@@ -11,8 +11,8 @@ swbli
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 f,f,t
 
-# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou     : Parameters
-t,t,f,t,f,f
+# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt : Parameters
+t,t,f,t,f,f,t
 
 # lrestar                                               : start mode
 f

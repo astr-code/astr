@@ -39,7 +39,7 @@ module initialisation
     use bc,       only: ninflowslice,turbinf
     !
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
-       trim(flowtype)=='tbl') then
+       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn') then
       !
       call blprofile
       !
