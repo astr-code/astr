@@ -209,9 +209,9 @@ module utility
         if(commtime>1.d-10) then
           !
           percent=commtime/total_time*100.d0
-          write(hand_rp,'(7X,55A)')('-',i=1,55)
+          write(hand_rp,'(5X,57A)')('-',i=1,57)
           write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'Comm Time',commtime,percent,'%'
-          write(hand_rp,'(2X,A16,A14,A11,A20)')('----------',i=1,4)
+          write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
           !
           do n=1,counter
             !
@@ -231,9 +231,9 @@ module utility
           !
           ! output the other part
           percent=iotime/total_time*100.d0
-          write(hand_rp,'(7X,55A)')('-',i=1,55)
+          write(hand_rp,'(5X,57A)')('-',i=1,57)
           write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'IO Time',xtratime,percent,'%'
-          write(hand_rp,'(2X,A16,A14,A11,A20)')('----------',i=1,4)
+          write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
           !
           do n=1,counter
             !
@@ -253,9 +253,9 @@ module utility
           !
           ! output the other part
           percent=100.d0-(iotime+commtime)/total_time*100.d0
-          write(hand_rp,'(7X,55A)')('-',i=1,55)
+          write(hand_rp,'(5X,57A)')('-',i=1,57)
           write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'Other Part',xtratime,percent,'%'
-          write(hand_rp,'(2X,A16,A14,A11,A20)')('----------',i=1,4)
+          write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
           !
           do n=1,counter
             !
