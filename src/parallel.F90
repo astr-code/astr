@@ -94,6 +94,7 @@ module parallel
     module procedure pgather_int2d_array
     module procedure pgather_int1d_array
     module procedure pgather_int
+    module procedure pgather_int_comm
     module procedure pgather_cha1_array
   end interface
   !
@@ -123,6 +124,7 @@ module parallel
   integer :: mpi_imin,mpi_imax,mpi_jmin,mpi_jmax
   integer :: irk_islice,jrk_jslice,krk_kslice
   integer :: mpi_islice,mpi_jslice,mpi_kslice
+  integer :: mpi_ibcom
   integer,allocatable :: mpi_ikgroup(:)
   integer,allocatable :: mpi_kgroup(:,:)
   character(mpi_max_processor_name) :: processor_name
@@ -469,6 +471,70 @@ module parallel
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! the end of the subroutine parapp.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to create a sub-communicator from mpiranks.    |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 12-08-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine subcomm_group(rank,communicator,newrank,newsize)
+    !
+    ! arguments
+    integer,intent(in) :: rank
+    integer,intent(out) :: communicator,newrank,newsize
+    !
+    ! local data
+    integer :: group_mpi,mpi_group_world
+    integer :: ierr,ncout,jrank
+    integer,allocatable :: rank_use(:),ranktemp(:)
+    !
+    allocate(ranktemp(0:mpirankmax))
+    !
+    call pgather(rank,ranktemp)
+    !
+    ncout=0
+    do jrank=0,mpirankmax
+      !
+      if(ranktemp(jrank)>=0) then
+        ncout=ncout+1
+      endif
+      !
+    enddo
+    !
+    allocate(rank_use(1:ncout))
+    !
+    ncout=0
+    do jrank=0,mpirankmax
+      !
+      if(ranktemp(jrank)>=0) then
+        ncout=ncout+1
+        !
+        rank_use(ncout)=ranktemp(jrank)
+        !
+      endif
+      !
+    enddo
+    !
+    call mpi_comm_group(mpi_comm_world,mpi_group_world,ierr)
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+    call mpi_comm_create(mpi_comm_world,group_mpi,communicator,ierr)
+    !
+    if(any(rank_use==mpirank)) then
+      call mpi_comm_size(communicator,newsize,ierr)
+      call mpi_comm_rank(communicator,newrank,ierr)
+      if(newrank==0) print*,' ** new subcomm created, size: ',newsize
+      ! print*,' ** local rank:',newrank,', gloable rank:',mpirank
+    else
+      newrank=-1
+      newsize=0
+    endif
+    !
+  end subroutine subcomm_group
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine subcomm_group.                          |
+  !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to assign sub-communicator.                    |
@@ -1555,17 +1621,18 @@ module parallel
   !
   subroutine updatable_rel2d_a2a_v(datasend,datarecv,                 &
                                    sendtabl,recvtabl,                 &
-                                   timerept)
+                                   comm,timerept)
     !
     ! arguments
     real(8),intent(in) :: datasend(:,:)
     real(8),allocatable,intent(out) :: datarecv(:,:)
     integer,intent(in) :: sendtabl(0:),recvtabl(0:)
     !
+    integer,optional,intent(in) :: comm
     logical,intent(in),optional :: timerept
     !
     ! local data
-    integer :: nvar,ierr,incode,jrank,recvsize,n2size,j
+    integer :: nvar,ierr,incode,jrank,recvsize,n2size,j,rankmax,comms
     integer :: newtype
     integer,allocatable :: senddispls(:),recvdispls(:)
     !
@@ -1583,20 +1650,28 @@ module parallel
     call mpi_type_contiguous(n2size,mpi_real8,newtype,ierr)
     call mpi_type_commit(newtype,ierr)
     !
-    allocate(senddispls(0:mpirankmax),recvdispls(0:mpirankmax))
+    if(present(comm)) then
+      comms=comm
+      call mpi_comm_size(comms,rankmax,ierr)
+      rankmax=rankmax-1
+    else
+      comms=mpi_comm_world
+      rankmax=mpirankmax
+    endif
     !
+    allocate(senddispls(0:rankmax),recvdispls(0:rankmax))
     senddispls=0
     recvdispls=0
-    do jrank=1,mpirankmax
+    do jrank=1,rankmax
       senddispls(jrank)=senddispls(jrank-1)+sendtabl(jrank-1)
       recvdispls(jrank)=recvdispls(jrank-1)+recvtabl(jrank-1)
     enddo
-    recvsize=recvdispls(mpirankmax)+recvtabl(mpirankmax)
+    recvsize=recvdispls(rankmax)+recvtabl(rankmax)
     allocate(datarecv(n2size,recvsize))
     !
     call mpi_alltoallv(datasend, sendtabl, senddispls, newtype, &
                        datarecv, recvtabl, recvdispls, newtype, &
-                       mpi_comm_world, ierr)
+                       comms, ierr)
     !
     ! do j=1,size(datarecv,1)
     ! if(mpirank==11) print*,datasend
@@ -1730,6 +1805,20 @@ module parallel
                         mpi_comm_world, ierr)
     !
   end subroutine pgather_int1d_array
+  !
+  subroutine pgather_int_comm(var,data,comm)
+    !
+    ! arguments
+    integer,intent(in) :: var,comm
+    integer,intent(inout) :: data(:)
+    !
+    ! local data
+    integer :: ierr,jrank,ncou
+    !
+    call mpi_allgather(var, 1, mpi_integer, data, 1, mpi_integer,  &
+                       comm, ierr)
+    !
+  end subroutine pgather_int_comm
   !
   subroutine pgather_int(var,data,mode)
     !

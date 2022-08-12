@@ -738,6 +738,8 @@ module bc
                           message='immersed boundary calculation')
         call timereporter(routine='--immbody',timecost=subtime1, &
                           message='image nodes')
+        call timereporter(routine='--immbody',timecost=subtime2, &
+                          message='ghost nodes')
         call timereporter(routine='--immbody',timecost=subtime3, &
                           message='ghost nodes')
       endif
@@ -764,7 +766,8 @@ module bc
   subroutine syncqimag_nonlocal(timerept)
     !
     use commtype, only : sboun
-    use parallel, only : mpirankmax,pswapall,ptabupd,msize
+    use parallel, only : mpirankmax,pswapall,ptabupd,msize,mpi_ibcom,  &
+                         subcomm_group,pgather_int_comm
     use commvar,  only : immbond,lreport
     use utility,  only : timereporter
     !
@@ -772,9 +775,10 @@ module bc
     logical,intent(in),optional :: timerept
     !
     ! local data
-    integer :: nsize,jb,js,kb,qsize,jrank,qzmax,offset,bignumber,jsend,n,nnl
+    integer :: nsize,jb,js,kb,qsize,jrank,krank,qzmax,offset,bignumber,jsend,n,nnl
     integer,allocatable :: recorder(:,:)
     integer,allocatable,save :: isendtable(:),irecvtable(:), &
+                                isend(:),irecv(:), &
                                 num_bound_elemt_send(:),num_bound_elemt_recv(:)
     real(8),allocatable :: q2send(:,:),q2recv(:,:)
     type(sboun),pointer :: pbon
@@ -782,9 +786,11 @@ module bc
     real(8) :: time_beg,time_tmp
     real(8),save :: subtime=0.d0
     !
-    integer,save :: nsend,nrecv
+    integer,save :: nsend,nrecv,rank2coll,ibcom_rank,ibcom_size
+    integer,allocatable :: mpirank_glob(:)
     !
     logical,save :: lfirstcal=.true.
+    logical,save :: lactive=.false.
     !
     if(present(timerept) .and. timerept) time_beg=ptime()
     !
@@ -887,13 +893,49 @@ module bc
         !
       endif
       !
-      call ptabupd(num_bound_elemt_send,num_bound_elemt_recv,isendtable,irecvtable,timerept=ltimrpt)
+      call ptabupd(num_bound_elemt_send, num_bound_elemt_recv, &
+                   isendtable,irecvtable)
       !
       nrecv=msize(num_bound_elemt_recv)
       !
       if(sum(irecvtable) .ne. size(num_bound_elemt_recv)) then
         print*,mpirank,'-',sum(irecvtable),size(num_bound_elemt_recv)
         print*,' !! WARNING !! sum of  irecvtable not compatable with size of num_bound_elemt_recv'
+      endif
+      !
+      ! print*,mpirank,'|',nsend,nrecv
+      !
+      if(nsend==0 .and. nrecv==0) then
+        rank2coll=-1
+        lactive=.false.
+      else
+        rank2coll=mpirank
+        lactive=.true.
+      endif
+      !
+      call subcomm_group(rank2coll,mpi_ibcom,ibcom_rank,ibcom_size)
+      !
+      if(lactive) then
+        !
+        allocate(mpirank_glob(0:ibcom_size-1))
+        allocate(isend(0:ibcom_size-1),irecv(0:ibcom_size-1))
+        !
+        call pgather_int_comm(var=mpirank,data=mpirank_glob,comm=mpi_ibcom)
+        !
+        ! print*,mpirank,'-',ibcom_rank,':',mpirank_glob
+        !
+        do jrank=0,ibcom_size-1
+          !
+          krank=mpirank_glob(jrank)
+          !
+          isend(jrank)=isendtable(krank)
+          irecv(jrank)=irecvtable(krank)
+          !
+        enddo
+        !
+        ! print*,mpirank,'-',irecvtable
+        ! print*,mpirank,'-',irecv
+        !
       endif
       !
       ! if(allocated(irecvtable) .and. size(irecvtable)>0) then
@@ -925,29 +967,37 @@ module bc
       !
     endif
     !
-    allocate(q2send(numq,nsend),q2recv(numq,nrecv))
+    if(lactive) then
+      !
+      allocate(q2send(numq,nsend),q2recv(numq,nrecv))
+      !
+      ! pack the data to send
+      do n=1,nsend
+        !
+        jb=num_bound_elemt_send(n)
+        !
+        q2send(:,n)=immbond(jb)%qimag(:)
+        !
+      enddo
+      !
+      ! data passing via alltoall
+      call ptabupd(q2send,q2recv,isend,irecv,comm=mpi_ibcom)
+      !
+      ! unpack received data
+      do n=1,nrecv
+        !
+        jb=num_bound_elemt_recv(n)
+        immbond(jb)%qimag(:)=q2recv(:,n)
+        !
+      enddo
+      !
+      deallocate(q2send,q2recv)
+      !
+    endif
+    ! print*,mpirank,'|',isendtable
+    ! print*,mpirank,'-',sum(irecvtable),size(num_bound_elemt_recv)
     !
-    ! pack the data to send
-    do n=1,nsend
-      !
-      jb=num_bound_elemt_send(n)
-      !
-      q2send(:,n)=immbond(jb)%qimag(:)
-      !
-    enddo
-    !
-    ! data passing via alltoall
-    call ptabupd(q2send,q2recv,isendtable,irecvtable,timerept=ltimrpt)
-    !
-    ! unpack received data
-    do n=1,nrecv
-      !
-      jb=num_bound_elemt_recv(n)
-      immbond(jb)%qimag(:)=q2recv(:,n)
-      !
-    enddo
-    !
-    deallocate(q2send,q2recv)
+    ! call mpistop
     !
     if(present(timerept) .and. timerept) then
       !
@@ -958,8 +1008,6 @@ module bc
                                               message='sync immersed nodesy')
       !
     endif
-    ! print*,mpirank,'|',isendtable
-    ! print*,mpirank,'-',sum(irecvtable),size(num_bound_elemt_recv)
     !
   end subroutine syncqimag_nonlocal
   !+-------------------------------------------------------------------+
