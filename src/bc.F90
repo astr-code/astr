@@ -657,10 +657,8 @@ module bc
         vel(i,j,k,1)= -1.d0*var_u(1)*pb%dis2ghost/pb%dis2image
         vel(i,j,k,2)= -1.d0*var_u(2)*pb%dis2ghost/pb%dis2image
         vel(i,j,k,3)= -1.d0*var_u(3)*pb%dis2ghost/pb%dis2image
-          !
-          tmp(i,j,k)=twall(3)-(var_t-twall(3))*pb%dis2ghost/pb%dis2image
-          ! tmp(i,j,k)=var_t
-          !
+          ! tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
+          tmp(i,j,k)=var_t
           prs(i,j,k)=var_p
           rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
         !
@@ -674,8 +672,8 @@ module bc
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-          ! tmp(i,j,k)=var_t
-          tmp(i,j,k)=twall(3)
+          tmp(i,j,k)=var_t
+          ! tmp(i,j,k)=tinf
           prs(i,j,k)=var_p
           rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
         !
@@ -716,8 +714,8 @@ module bc
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-        tmp(i,j,k)  =twall(3)
-        ! tmp(i,j,k)  =tinf
+        ! tmp(i,j,k)  =twall(3)
+        tmp(i,j,k)  =tinf
         prs(i,j,k)  =pinf
         rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
         !
@@ -2439,8 +2437,8 @@ module bc
         !
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
-        ! if(.true.) then
-        if(ub>=css) then
+        if(.true.) then
+        ! if(ub>=css) then
           ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
@@ -2461,7 +2459,7 @@ module bc
           ! pwave_in = (prs(i,j,k)+alpha*deltat*pinf+rho(i,j,k)*css*(ue-vel(i,j,k,1)))/(1.d0+alpha*deltat)
           ! RUDY & STRIKWERDA, 1981
           pwave_in = pinf
-          pwave_out= pe
+          pwave_out=pe
           !
           var1=ub/css
           prs(i,j,k)=var1*pwave_out+(1.d0-var1)*pwave_in
