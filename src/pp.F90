@@ -45,6 +45,10 @@ module pp
       call readinput
       !
       call gridgen
+    elseif(trim(cmd)=='divfree') then
+      call readinput
+      !
+      call div_free_gen
     elseif(trim(cmd)=='solid') then
       call solidpp
     elseif(trim(cmd)=='datacon') then
@@ -1990,6 +1994,276 @@ module pp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowfieldview.                          |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate a divergence free fluctuation.|
+  !+-------------------------------------------------------------------+
+  !| Ref: Blaisdell, G. A., Numerical simulation of compressible       |
+  !|      homogeneous turbulence, Phd, 1991, Stanford University       |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 26-09-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine div_free_gen
+    !
+    use singleton
+    use commvar, only : ia,ja,ka,mach
+    use hdf5io,   only: h5srite
+    !
+    ! local data
+    integer :: kmi,kmj,kmk,kmax
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! kmi: maximal wavenumber in i direction
+    ! kmj: maximal wavenumber in j direction
+    ! kmk: maximal wavenumber in k direction
+    ! kmax: maximal wavenumber in all direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: wn1,wn2,wn3,wn12,wna
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! wn1: modul of wavenumber in i direction
+    ! wn2: modul of wavenumber in j direction
+    ! wn3: modul of wavenumber in k direction
+    ! wn12: wn12=sqrt(wn1**2+wn2**2)
+    ! wna: modul of wavenumber in all direction
+    ! (k0*1.d0): the wavenumber at maximum given 
+    !     spectrum
+    ! Ac: the intensity of given spectrum
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8), allocatable, dimension(:,:,:) :: u1tp,u2tp,u3tp,u1,u2,u3
+    !
+    complex(8), allocatable, dimension(:,:,:) :: u1c,u2c,u3c,u1ct,u2ct,u3ct,u4ct
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Egv: the given initial energy spectrum
+    ! u1c: the spectral velocity in k1 direction
+    ! u2c: the spectral velocity in k2 direction
+    ! u3c: the spectral velocity in k3 direction
+    ! uct: the spectrl variable in (1~*2km)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    real(8) :: Kenergy,Enstropy,ITGscale,LETT,KolmLength,urms,ufmx
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Kenergy: initial volume averaged turbulent 
+    !          kinetic energy
+    ! Enstropy: initial volume averaged e
+    !           nstrophy
+    ! ITGscale: initial integral length scale
+    ! LETT: initial large-eddy-turnover time
+    ! KolmLength: initial Kolmogorov scale
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    integer :: k1,k2,k3,k0,i,j,k
+    real(8) :: ran1,ran2,ran3,rn1,rn2,rn3,var1,var2,var3,ISEA
+    complex(8) :: vac1,vac2,vac3,vac4,crn1,crn2
+    real(8) :: dudi,lambda
+    !
+    kmi=ia/2
+    kmj=ja/2
+    kmk=ka/2
+    kmax=idnint(sqrt((kmi**2+kmj**2+kmk**2)*1.d0))+1
+    !
+    allocate(u1c(-kmi:kmi,-kmj:kmj,-kmk:kmk),                        &
+             u2c(-kmi:kmi,-kmj:kmj,-kmk:kmk),                        &
+             u3c(-kmi:kmi,-kmj:kmj,-kmk:kmk)                         )
+    allocate(u1ct(1:ia,1:ja,1:ka),u2ct(1:ia,1:ja,1:ka),              &  
+             u3ct(1:ia,1:ja,1:ka) )
+    allocate(u1tp(1:ia,1:ja,1:ka),u2tp(1:ia,1:ja,1:ka),              &
+             u3tp(1:ia,1:ja,1:ka),u4ct(1:ia,1:ja,1:ka)               )
+    !
+    ! Give the inital energy spectrum.
+    ISEA=1.d0/224.7699d0
+    k0=4
+    !
+    ! Generate the random velocity field according the given energy 
+    ! spectrum
+    ! Blaisdell, G. A. 1991 took E(k)=Integer(ui*uicoj*dA(k)). 
+    ! This program takes E(k)=Integer(0.5*ui*uicoj*dA(k)). 
+    ! Therefor, we take the Ek as twice of that from Blaisdell.
+    print*,' ** Generate the random velocity field according the given energy spectrum'
+    do k1=0,kmi
+    do k2=-kmj,kmj
+    do k3=-kmk,kmk
+      !
+      call random_number(ran1)
+      call random_number(ran2)
+      call random_number(ran3)
+      ! ran1,ran2,ran3: random number distributied in (0,1)
+      !
+      rn1=ran1*2.d0*pi
+      rn2=ran2*2.d0*pi
+      rn3=ran3*2.d0*pi
+      !
+      ! Calculate the modul of the wavenumber in each direction
+      wn1=real(k1,8)
+      wn2=real(k2,8)
+      wn3=real(k3,8)
+      wn12=sqrt(wn1**2+wn2**2)
+      wna=sqrt(wn1**2+wn2**2+wn3**2)
+      !
+      ! Calculate the initial energy spectral
+      if(k1==0 .and. k2==0 .and. k3==0) then
+        var1=0.d0
+        var2=0.d0
+      else
+        var1=IniEnergDis(ISEA*2.d0,K0*1.d0,wna)
+        var2=sqrt(var1/4.d0/pi/wna**2)
+        ! var2=1.d0
+      end if
+      !
+      ! Gererate the velocity spectrum in half-wavenumber space.
+      crn1=rn1*(0.d0,1.d0)
+      crn2=rn2*(0.d0,1.d0)
+      !
+      vac1=var2*cdexp(crn1)*dcos(rn3)
+      vac2=var2*cdexp(crn2)*dsin(rn3)
+      !
+      if(k1==0 .and. k2==0 .and. k3==0) then
+        u1c(k1,k2,k3)=0.d0
+        u2c(k1,k2,k3)=0.d0
+        u3c(k1,k2,k3)=0.d0
+      elseif(k1==0 .and. k2==0) then
+        u1c(k1,k2,k3)=vac1
+        u2c(k1,k2,k3)=vac2
+        u3c(k1,k2,k3)=0.d0
+      else
+        u1c(k1,k2,k3)=(vac1*wna*wn2+vac2*wn1*wn3)/(wna*wn12)
+        u2c(k1,k2,k3)=(vac2*wn2*wn3-vac1*wna*wn1)/(wna*wn12)
+        u3c(k1,k2,k3)=-vac2*wn12/wna
+      end if
+      !
+    end do
+    end do
+    end do
+    !
+    print*,' ** Generate the velocity spectrum in another half-wavenumber space '
+    ! Generate the velocity spectrum in another half-wavenumber space
+    ! by using conjunction relation
+    do k1=-kmi,-1
+    do k2=-kmj,kmj
+    do k3=-kmk,kmk
+      u1c(k1,k2,k3)=conjg(u1c(-k1,-k2,-k3))
+      u2c(k1,k2,k3)=conjg(u2c(-k1,-k2,-k3))
+      u3c(k1,k2,k3)=conjg(u3c(-k1,-k2,-k3))
+    end do
+    end do
+    end do
+    ! !
+    ! Transform the spectrum from (-N/2+1,N/2) to (1,N) fo rthe 
+    ! convenience of using external FFT subroutine
+    print*,' ** Transform the spectrum from (-N/2+1,N/2) to (1,N)  '
+    !
+    do k=1,ka
+    do j=1,ja
+    do i=1,ia
+      if(i<=ia/2+1) then
+        k1=i-1
+      else
+        k1=i-ia-1
+      end if
+      if(j<=ja/2+1) then
+        k2=j-1
+      else
+        k2=j-ja-1
+      end if
+      if(k<=ka/2+1) then
+        k3=k-1
+      else
+        k3=k-ka-1
+      end if
+      !
+      u1ct(i,j,k)=u1c(k1,k2,k3)
+      u2ct(i,j,k)=u2c(k1,k2,k3)
+      u3ct(i,j,k)=u3c(k1,k2,k3)
+    end do
+    end do
+    end do
+    ! !
+    u1ct=FFT(u1ct,inv=.true.)
+    u2ct=FFT(u2ct,inv=.true.)
+    u3ct=FFT(u3ct,inv=.true.)
+    !
+    print*,' ** project to physical space. '
+    !
+    allocate(u1(0:ia,0:ja,0:ka),u2(0:ia,0:ja,0:ka),u3(0:ia,0:ja,0:ka))
+    do k=1,ka
+    do j=1,ja
+    do i=1,ia
+      ! multiply sqrt(NxNyNz) for return standard FFT
+      u1(i,j,k)=real(u1ct(i,j,k),8)*sqrt(real(ia*ja*ka,8))
+      u2(i,j,k)=real(u2ct(i,j,k),8)*sqrt(real(ia*ja*ka,8))
+      u3(i,j,k)=real(u3ct(i,j,k),8)*sqrt(real(ia*ja*ka,8))
+      !
+    end do
+    end do
+    end do
+    !
+    u1(0,1:ja,1:ka)=u1(ia,1:ja,1:ka)
+    u2(0,1:ja,1:ka)=u2(ia,1:ja,1:ka)
+    u3(0,1:ja,1:ka)=u3(ia,1:ja,1:ka)
+    !
+    u1(0:ia,0,1:ka)=u1(0:ia,ja,1:ka)
+    u2(0:ia,0,1:ka)=u2(0:ia,ja,1:ka)
+    u3(0:ia,0,1:ka)=u3(0:ia,ja,1:ka)
+    !
+    u1(0:ia,0:ja,0)=u1(0:ia,0:ja,ka)
+    u2(0:ia,0:ja,0)=u2(0:ia,0:ja,ka)
+    u3(0:ia,0:ja,0)=u3(0:ia,0:ja,ka)
+    !
+    urms=0.d0
+    ufmx=0.d0
+    Kenergy=0.d0
+    do k=1,ka
+    do j=1,ja
+    do i=1,ia
+      Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
+      urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
+      ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
+    end do
+    end do
+    end do
+    urms=sqrt(urms/real(ia*ja*ka,8))
+    Kenergy=Kenergy/real(ia*ja*ka,8)
+    !
+    u1=u1/urms
+    u2=u2/urms
+    u3=u3/urms
+    Kenergy=Kenergy/urms/urms
+    urms=urms/urms
+    !
+    print*,'Kenergy',Kenergy,'urms',urms,'Mat=',urms*Mach
+    !
+    call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
+    call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
+    call h5srite(var=u3,varname='u3',filename='velocity.h5',explicit=.true.)
+    !
+    deallocate(u1,u2,u3)
+    deallocate(u1c,u2c,u3c)
+    deallocate(u1ct,u2ct,u3ct)
+    deallocate(u1tp,u2tp,u3tp)
+    !
+  end subroutine div_free_gen
+  !+-------------------------------------------------------------------+
+  !| The end of the function div_free_gen.                             |
+  !+-------------------------------------------------------------------+
+  !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This function is used to calcuate the spectral energy at any 
+  ! wavenumber.
+  ! Ref: S. JAMME, et al. Direct Numerical Simulation of the 
+  ! Interaction between a Shock Wave and Various Types of Isotropic 
+  ! Turbulence, Flow, Turbulence and Combustion, 2002, 68:227每268.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  function IniEnergDis(Ac,k0,wnb)
+    !
+    real(8) :: k0,Ac,var1,wnb,IniEnergDis
+    !
+    var1=-2.d0*(wnb/k0)**2
+    IniEnergDis=Ac*wnb**4*dexp(var1)
+    !IniEnergDis=Ac*wnb**(-5.d0/3.d0)
+    !
+    return
+    !
+  end function IniEnergDis
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the function Ek.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
   !
 end module pp

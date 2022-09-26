@@ -152,6 +152,8 @@ module readwrite
         typedefine='                              channel flow'
       case('tgv')
         typedefine='                  Taylor-Green Vortex flow'
+      case('hit')
+        typedefine='          homogeneous isotropic turbulence'
       case('jet')
         typedefine='                                  Jet flow'
       case('accutest')

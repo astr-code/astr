@@ -453,7 +453,7 @@ module statistic
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
     !
-    if(trim(flowtype)=='tgv') then
+    if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
       enstophy=enstophycal()
       kenergy =kenergycal()
       dissipation=diss_rate_cal()
@@ -642,7 +642,7 @@ module statistic
         else
           ! a new flowstat file
           !
-          if(trim(flowtype)=='tgv') then
+          if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
             write(hand_fs,"(A7,1X,A13,3(1X,A20))")'nstep','time',      &
                                       'kenergy','enstophy','dissipation'
           elseif(trim(flowtype)=='channel') then
@@ -669,7 +669,7 @@ module statistic
         linit=.false.
       endif
       !
-      if(trim(flowtype)=='tgv') then
+      if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,kenergy,enstophy,dissipation
       elseif(trim(flowtype)=='channel') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
@@ -690,7 +690,7 @@ module statistic
       if(mod(nstep,feqlist)==0) then
         !
         if(mod(nstep,nprthead*feqlist)==0) then
-          if(trim(flowtype)=='tgv') then
+          if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
             write(*,"(2X,A7,3(1X,A13))")'nstep','time','enstophy','kenergy'
           elseif(trim(flowtype)=='channel') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','forcex','wrms'
@@ -710,7 +710,7 @@ module statistic
           write(*,'(2X,78A)')('-',i=1,77)
         endif
         !
-        if(trim(flowtype)=='tgv') then
+        if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
           l_0=xmax/(2.d0*pi)
           write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time/(l_0/uinf),enstophy,kenergy
         elseif(trim(flowtype)=='channel') then

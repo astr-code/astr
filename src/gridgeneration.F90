@@ -39,6 +39,8 @@ module gridgeneration
         endif 
       elseif(trim(flowtype)=='jet') then
         call gridjet
+      elseif(trim(flowtype)=='hit') then
+        call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
       elseif(trim(flowtype)=='2dvort') then
         call gridcube(20.d0,10.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then

@@ -80,6 +80,8 @@ module initialisation
           call chanini
         case('tgv')
           call tgvini
+        case('hit')
+          call hitini
         case('jet')
           call jetini
         case('accutest')
@@ -623,6 +625,82 @@ module initialisation
   end subroutine vortini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine vortini.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate initial flow  for homogeneous |
+  !| isotropic turbulence.                                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 26-09-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine hitini
+    !
+    use commvar,  only: ia,ja,ka
+    use commarray,only: x,vel,rho,prs,spc,tmp,q,dvel
+    use fludyna,  only: thermal
+    use solver,   only: grad
+    use parallel, only: psum,pmax,pmin
+    use hdf5io
+    !
+    ! local data
+    integer :: i,j,k,jspc
+    real(8) :: div,div_min,div_max,div_avg
+    !
+    call h5io_init(filename='datin/velocity.h5',mode='read')
+    ! 
+    call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1),mode='h')
+    call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2),mode='h')
+    call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3),mode='h')
+    !
+    call h5io_end
+    !
+    dvel(0:im,0:jm,0:km,1,:)=grad(vel(:,:,:,1))
+    dvel(0:im,0:jm,0:km,2,:)=grad(vel(:,:,:,2))
+    dvel(0:im,0:jm,0:km,3,:)=grad(vel(:,:,:,3))
+    !
+    div=0.d0
+    div_min= 1.d10
+    div_max=-1.d10
+    div_avg=0.d0
+    !
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      div=dvel(i,j,k,1,1)+dvel(i,j,k,2,2)+dvel(i,j,k,3,3)
+      !
+      div_avg=div_avg+div
+      div_min=min(div_min,div)
+      div_max=max(div_max,div)
+    enddo
+    enddo
+    enddo
+    !
+    div_avg=psum(div_avg)/dble(ia*ja*ka)
+    div_min=pmin(div_min)
+    div_max=pmax(div_max)
+    !
+    if(lio) print*,' ** velocity divgence, average:',div_avg,' min:',div_min,' max:',div_max
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  =roinf
+      tmp(i,j,k)  =tinf 
+      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D homogeneous isotropic fluctuation initialised.'
+    !
+  end subroutine hitini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine hitini.                                 |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
