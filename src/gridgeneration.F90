@@ -411,13 +411,13 @@ module gridgeneration
     if(mpirank==0) print*,' **  characteristic size:',len_chara
     if(mpirank==0) print*,' **            mesh size:',ia,ja,ka
     !
-    lx_solid=len_chara
-    ly_solid=len_chara
-    lz_solid=len_chara
+    lx_solid=lx_solid
+    ly_solid=ly_solid
+    lz_solid=lz_solid
     !
     allocate(xx(0:ia),yy(0:ja),zz(0:ka))
     !
-    isp=28
+    isp=20
     !
     imm=(ia-isp)/2
     jmm=ja/2
@@ -440,7 +440,7 @@ module gridgeneration
     enddo
     !
     ! sponge region
-    call spongstretch(ia-2*imm,20.d0*lx_solid,xx(imm+imm-2:ia))
+    call spongstretch(ia-2*imm,10.d0*lx_solid,xx(imm+imm-2:ia))
     !
     x0=xx(0)
     xx=xx-x0
@@ -498,7 +498,8 @@ module gridgeneration
       enddo
       !
       ! effeckve regkon
-      call spongstretch(kmm-km4,5.d0*lz_solid,zz(kmm+km4-2:kmm+kmm))
+      ! call spongstretch(kmm-km4,5.d0*lz_solid,zz(kmm+km4-2:kmm+kmm))
+      call spongstretch(kmm-km4,5.d0,zz(kmm+km4-2:kmm+kmm))
       !
       do k=0,kmm-1
         zz(k)=-zz(kmm+kmm-k)

@@ -363,6 +363,8 @@ module readwrite
             write(*,'(30X,A,F12.6)')' R-H jump point at x: ',xrhjump
           endif
           !
+        elseif(bctype(n)==50) then
+          write(*,'(38X,I0,2(A))')bctype(n),'  extrapolation at: ',bcdir(n)
         elseif(bctype(n)==52) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
