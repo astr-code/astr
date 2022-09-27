@@ -1079,7 +1079,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readgrid(gridh5file)
     !
-    use commvar,   only : im,jm,km,limmbou,ibmode
+    use commvar,   only : im,jm,km,limmbou,ibmode,nondimen
     use commarray, only : x,nodestat
     use hdf5io
     !
@@ -1089,6 +1089,8 @@ module readwrite
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
+    !
+    if(.not.nondimen)then x=x*1.d-3
     !
     if(limmbou .and. trim(ibmode)=='grid') then
       call h5read(varname='nodestat',var=nodestat(0:im,0:jm,0:km))
