@@ -1090,7 +1090,7 @@ module readwrite
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
     !
-    if(.not.nondimen)then x=x*1.d-3
+    if(.not.nondimen) x(:,:,:,:)=x(:,:,:,:)*1.d-3
     !
     if(limmbou .and. trim(ibmode)=='grid') then
       call h5read(varname='nodestat',var=nodestat(0:im,0:jm,0:km))
