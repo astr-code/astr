@@ -4428,6 +4428,7 @@ module geom
   subroutine solid_udf_backfacestep(xp,inside,bnode)
     !
     use commtype,  only : sboun
+    use commvar,   only : nondimen
     !
     real(8),intent(in) :: xp(3)
     logical,intent(out),optional :: inside
