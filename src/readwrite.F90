@@ -10,9 +10,10 @@ module readwrite
   use constdef
   use parallel,only : mpirank,mpirankname,mpistop,lio,irk,jrkm,jrk,    &
                       ptime,bcast,mpirankmax,ig0,jg0,kg0
-  use commvar, only : ndims,im,jm,km,iomode
+  use commvar, only : ndims,im,jm,km,iomode,lreport,ltimrpt
   use tecio
   use stlaio,  only: get_unit
+  use utility, only: timereporter
   !
   implicit none
   !
@@ -151,6 +152,8 @@ module readwrite
         typedefine='                              channel flow'
       case('tgv')
         typedefine='                  Taylor-Green Vortex flow'
+      case('hit')
+        typedefine='          homogeneous isotropic turbulence'
       case('jet')
         typedefine='                                  Jet flow'
       case('accutest')
@@ -345,6 +348,8 @@ module readwrite
         elseif(bctype(n)==41) then
           write(*,'(37X,I0,2(A))')bctype(n),' isothermal wall at: ',bcdir(n)
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+        elseif(bctype(n)==42) then
+          write(*,'(37X,I0,2(A))')bctype(n),'  adiabatic wall at: ',bcdir(n)
         elseif(bctype(n)==411) then
           write(*,'(23X,I0,2(A))')bctype(n),' slip-nonslip isothermal wall at: ',bcdir(n)
           write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
@@ -360,6 +365,8 @@ module readwrite
             write(*,'(30X,A,F12.6)')' R-H jump point at x: ',xrhjump
           endif
           !
+        elseif(bctype(n)==50) then
+          write(*,'(38X,I0,2(A))')bctype(n),'  extrapolation at: ',bcdir(n)
         elseif(bctype(n)==52) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
         elseif(bctype(n)==11) then
@@ -488,7 +495,7 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,schmidt,ibmode
+                        bfacmpld,shkcrt,turbmode,schmidt,ibmode,ltimrpt
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -524,9 +531,9 @@ module readwrite
       if(lkhomo) write(*,'(A)')' k'
       read(fh,'(/)')
 #ifdef COMB
-      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,lcomb
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,ltimrpt,lcomb
 #else
-      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou
+      read(fh,*)nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,ltimrpt
 #endif
       read(fh,'(/)')
       read(fh,*)lrestart
@@ -628,6 +635,7 @@ module readwrite
     call bcast(lfftk)
     call bcast(limmbou)
     call bcast(lchardecomp)
+    call bcast(ltimrpt)
     !
     call bcast(lrestart)
     !
@@ -1791,17 +1799,17 @@ module readwrite
                                          filename=trim(outauxiname))
     endif
     !
-    if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
-      call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='newvisu')
-    else
-      call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='animati')
-    endif
-    !
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='u1',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='u2',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='u3',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='p',mode='data')
-    call xdmfwriter(flowh5file=trim(outfilename),dataname='t',mode='data')
+    ! if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
+    !   call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='newvisu')
+    ! else
+    !   call xdmfwriter(flowh5file=trim(outfilename),dataname='ro',timesec=time,mode='animati')
+    ! endif
+    ! !
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='u1',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='u2',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='u3',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='p',mode='data')
+    ! call xdmfwriter(flowh5file=trim(outfilename),dataname='t',mode='data')
     !
     if(ndims==1) then
       !
@@ -1833,9 +1841,9 @@ module readwrite
       !
       subtime=subtime+ptime()-time_beg
       !
-      ! if(lio .and. lreport) call timereporter(routine='writeflfed', &
-      !                                         timecost=subtime, &
-      !                                         message='write flow data')
+      if(lio .and. lreport) call timereporter(routine='writeflfed', &
+                                              timecost=subtime, &
+                                              message='write flow data')
       !
     endif
     !
@@ -2183,9 +2191,9 @@ module readwrite
       !
       subtime=subtime+ptime()-time_beg
       !
-      ! if(lio .and. lreport) call timereporter(routine='writechkpt', &
-      !                                         timecost=subtime, &
-      !                                         message='write checkpoint')
+      if(lio .and. lreport) call timereporter(routine='writechkpt', &
+                                              timecost=subtime, &
+                                              message='write checkpoint')
       !
     endif
     !
