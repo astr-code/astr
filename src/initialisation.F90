@@ -1250,7 +1250,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blini
     !
-    use commvar,  only: turbmode,Reynolds
+    use commvar,  only: turbmode,Reynolds,nondimen
     use commarray,only: x,vel,rho,prs,spc,tmp,q,tke,omg
     use fludyna,  only: thermal,miucal
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
@@ -1274,14 +1274,22 @@ module initialisation
       !
       tmp(i,j,k)  = tmp_prof(j)
       !
-      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-      !
-      if(num_species>1) then
-        spc(i,j,k,1)=0.d0
+      if(nondimen) then 
+        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
-        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+        if(num_species>1) then
+          spc(i,j,k,1)=0.d0
+          !
+          spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
+          !
+        endif
         !
-      endif
+      else 
+        !
+        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                           species=spc(i,j,k,:))
+        !
+      endif 
       !
       if(trim(turbmode)=='k-omega') then
         ! tke(i,j,k)=1.5d0*0.0001d0
