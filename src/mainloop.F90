@@ -287,7 +287,7 @@ module mainloop
     ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    integer :: nrk,i,j,k,m
+    integer :: nrk,i,j,k,m,n
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
@@ -348,6 +348,22 @@ module mainloop
       !
       call rhscal(timerept=ltimrpt)
       !
+      !for debug
+      ! do k=0,km
+      ! do j=0,jm
+      ! do i=0,im
+      !   !
+      !   do n=1,numq
+      !     if(isnan(qrhs(i,j,k,n))) then
+      !       print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',nrk
+      !       stop
+      !     endif
+      !   enddo
+      !   !
+      ! enddo
+      ! enddo
+      ! enddo
+      !
       if(flowtype(1:2)=='0d') jacob=1.d0
       !
       time_beg_2=ptime()
@@ -382,6 +398,22 @@ module mainloop
       time_beg_2=ptime()
       !
       call updatefvar
+      !
+      !for debug
+      ! do k=0,km
+      ! do j=0,jm
+      ! do i=0,im
+      !   !
+      !   do n=1,num_species
+      !     if(isnan(spc(i,j,k,n))) then
+      !       print*,'!! have NaN in spc !! is ',n,'in rk = ',nrk
+      !       stop
+      !     endif
+      !   enddo
+      !   !
+      ! enddo
+      ! enddo
+      ! enddo
       !
       ctime(15)=ctime(15)+ptime()-time_beg_2
       !
