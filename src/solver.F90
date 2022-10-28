@@ -591,7 +591,9 @@ module solver
     use commfunc, only: recons_exp
     use riemann,  only: flux_steger_warming
     use fludyna,  only: sos
-    use thermchem,only: aceval,gammarmix
+#ifdef COMB
+    use thermchem,only: gammarmix
+#endif
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -669,7 +671,11 @@ module solver
         !
         ! get value of gamma of this point
         if(.not.nondimen) then 
+          !
+#ifdef COMB
           gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+#endif
+          !
         endif
         ! 
         lso=.false.
@@ -873,7 +879,11 @@ module solver
         ! 
         ! get value of gamma of this point
         if(.not.nondimen) then 
+          !
+#ifdef COMB
           gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+#endif
+          !
         endif
         !
         lso=.false.
@@ -1067,7 +1077,11 @@ module solver
         !
         ! get value of gamma of this point
         if(.not.nondimen) then 
+          !
+#ifdef COMB
           gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+#endif
+          !
         endif
         ! 
         lso=.false.

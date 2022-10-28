@@ -1358,7 +1358,9 @@ module bc
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
+#ifdef COMB
     use thermchem, only : aceval
+#endif
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -1407,7 +1409,11 @@ module bc
         if(nondimen) then 
           css=sos(tmp_prof(j))
         else
+          !
+#ifdef COMB    
           call aceval(tmp_prof(j),spcinf,css)
+#endif
+          !
         endif
         ub=vel_prof(j,1)
         ! ub =vel(i,j,k,1)
@@ -2692,7 +2698,9 @@ module bc
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
+#ifdef COMB
     use thermchem, only : aceval
+#endif
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -2738,7 +2746,11 @@ module bc
         if(nondimen) then 
           css=sos(tmp(i,j,k))
         else
+          !
+#ifdef COMB
           call aceval(tmp(i,j,k),spcinf,css)
+#endif
+          !
         endif
         ub =vel(i,j,k,1)*bvec_im(j,k,1)+vel(i,j,k,2)*bvec_im(j,k,2)+   &
             vel(i,j,k,3)*bvec_im(j,k,3)
@@ -2751,9 +2763,13 @@ module bc
         if(nondimen) then 
           csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
         else
+          !
+#ifdef COMB
           call aceval(tmp(i-1,j,k),spcinf,css1)
           call aceval(tmp(i-2,j,k),spcinf,css2)
           csse=extrapolate(css1,css2,dv=0.d0)
+#endif
+          !
         endif
         !
         do jspec=1,num_species

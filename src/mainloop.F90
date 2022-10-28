@@ -349,20 +349,20 @@ module mainloop
       call rhscal(timerept=ltimrpt)
       !
       !for debug
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        !
-        do n=1,numq
-          if(isnan(qrhs(i,j,k,n))) then
-            print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',nrk
-            stop
-          endif
-        enddo
-        !
-      enddo
-      enddo
-      enddo
+      ! do k=0,km
+      ! do j=0,jm
+      ! do i=0,im
+      !   !
+      !   do n=1,numq
+      !     if(isnan(qrhs(i,j,k,n))) then
+      !       print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',nrk
+      !       stop
+      !     endif
+      !   enddo
+      !   !
+      ! enddo
+      ! enddo
+      ! enddo
       !
       if(flowtype(1:2)=='0d') jacob=1.d0
       !
@@ -400,20 +400,20 @@ module mainloop
       call updatefvar
       !
       !for debug
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        !
-        do n=1,num_species
-          if(isnan(spc(i,j,k,n))) then
-            print*,'!! have NaN in spc !! is ',n,'in rk = ',nrk
-            stop
-          endif
-        enddo
-        !
-      enddo
-      enddo
-      enddo
+      ! do k=0,km
+      ! do j=0,jm
+      ! do i=0,im
+      !   !
+      !   do n=1,num_species
+      !     if(isnan(spc(i,j,k,n))) then
+      !       print*,'!! have NaN in spc !! is ',n,'in rk = ',nrk
+      !       stop
+      !     endif
+      !   enddo
+      !   !
+      ! enddo
+      ! enddo
+      ! enddo
       !
       ctime(15)=ctime(15)+ptime()-time_beg_2
       !

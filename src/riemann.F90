@@ -22,7 +22,9 @@ module riemann
     !
     use commvar,  only: numq,gamma,nondimen
     use fludyna,  only: sos
+#ifdef COMB
     use thermchem,only:aceval,gammarmix
+#endif
     !
     real(8),intent(out) :: fplus(:,:),fmius(:,:)
     real(8),intent(in) ::  rho(:),vel(:,:),prs(:),tmp(:),spc(:,:),   &
@@ -51,9 +53,13 @@ module riemann
         gm2=0.5d0/gamma
         css=sos(tmp(i))
       else
+        !
+#ifdef COMB
         gamma = gammarmix(tmp(i),spc(i,:))
         gm2=0.5d0/gamma
         call aceval(tmp(i),spc(i,:),css)
+#endif
+        !
       endif
       csa=css/var0
       lmach=uu/csa
