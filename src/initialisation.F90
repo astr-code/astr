@@ -1250,7 +1250,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blini
     !
-    use commvar,  only: turbmode,Reynolds,nondimen
+    use commvar,  only: turbmode,Reynolds,nondimen,spcinf
     use commarray,only: x,vel,rho,prs,spc,tmp,q,tke,omg
     use fludyna,  only: thermal,miucal
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
@@ -1274,7 +1274,8 @@ module initialisation
       !
       tmp(i,j,k)  = tmp_prof(j)
       !
-      if(nondimen) then 
+      if(nondimen) then
+        !
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
         if(num_species>1) then
@@ -1283,13 +1284,13 @@ module initialisation
           spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
           !
         endif
+      else
         !
-      else 
-        !
+        spc(i,j,k,:)=spcinf
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
                            species=spc(i,j,k,:))
         !
-      endif 
+      endif
       !
       if(trim(turbmode)=='k-omega') then
         ! tke(i,j,k)=1.5d0*0.0001d0
@@ -1516,14 +1517,14 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blprofile
     !
-    use commvar,  only: flowtype
+    use commvar,  only: flowtype,nondimen,spcinf,num_species
     use readwrite,only: readprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
     use stlaio,   only: get_unit
     !
     ! local data
-    integer :: fh
+    integer :: fh,i
     !
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
@@ -1557,7 +1558,16 @@ module initialisation
       !
       ! vel_prof(:,1)=vel_prof(:,1) + 1.d0
       !
-      prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
+      if(nondimen) then 
+        prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
+      else
+        !
+        do i=1,num_species
+          spc_prof(:,i) = spcinf(i)
+        enddo
+        !
+        prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
+      endif
       !
     else
       !
@@ -1571,7 +1581,17 @@ module initialisation
       vel_prof(:,2)=vinf
       vel_prof(:,3)=winf
       tmp_prof(:)  =tinf
-      prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
+      !
+      if(nondimen) then 
+        prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
+      else
+        !
+        do i=1,num_species
+          spc_prof(:,i) = spcinf(i)
+        enddo
+        !
+        prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),species=spc_prof(:,:),dim=jm+1)
+      endif
       !
     endif
     !

@@ -584,13 +584,16 @@ module solver
     !
     use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
-                        recon_schem,lchardecomp,conschm,bfacmpld
+                        recon_schem,lchardecomp,conschm,bfacmpld,      &
+                        nondimen
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid,   &
                         lshock,crinod
     use commfunc, only: recons_exp
     use riemann,  only: flux_steger_warming
     use fludyna,  only: sos
-    use thermchem,only: aceval,gammarmix
+#ifdef COMB
+    use thermchem,only: gammarmix
+#endif
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -615,7 +618,7 @@ module solver
     sson=allocated(lshock)
     !
     eps=0.04d0
-    gm2=0.5d0/gamma
+    ! gm2=0.5d0/gamma
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along i direction
@@ -647,6 +650,7 @@ module solver
                                   vel=  vel(iss:iee,j,k,:),     &
                                   prs=  prs(iss:iee,j,k),       &
                                   tmp=  tmp(iss:iee,j,k),       &
+                                  spc=  spc(iss:iee,j,k,:),     &
                                     q=    q(iss:iee,j,k,:),     &
                                   dxi=  dxi(iss:iee,j,k,1,:),   &
                                 jacob=jacob(iss:iee,j,k))
@@ -665,6 +669,15 @@ module solver
         !   lso=lsolid(i,j,k) .or. lsolid(i+1,j,k)
         ! end if
         !
+        ! get value of gamma of this point
+        if(.not.nondimen) then 
+          !
+#ifdef COMB
+          gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+#endif
+          !
+        endif
+        ! 
         lso=.false.
         !
         if(sson) then
@@ -847,6 +860,7 @@ module solver
                                   vel=  vel(i,jss:jee,k,:),     &
                                   prs=  prs(i,jss:jee,k),       &
                                   tmp=  tmp(i,jss:jee,k),       &
+                                  spc=  spc(i,jss:jee,k,:),     &
                                     q=    q(i,jss:jee,k,:),     &
                                   dxi=  dxi(i,jss:jee,k,2,:),   &
                                 jacob=jacob(i,jss:jee,k))
@@ -862,6 +876,15 @@ module solver
         ! else
         !   lso=lsolid(i,j,k) .or. lsolid(i,j+1,k)
         ! end if
+        ! 
+        ! get value of gamma of this point
+        if(.not.nondimen) then 
+          !
+#ifdef COMB
+          gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+#endif
+          !
+        endif
         !
         lso=.false.
         !
@@ -1033,6 +1056,7 @@ module solver
                                   vel=  vel(i,j,kss:kee,:),     &
                                   prs=  prs(i,j,kss:kee),       &
                                   tmp=  tmp(i,j,kss:kee),       &
+                                  spc=  spc(i,j,kss:kee,:),     &
                                     q=    q(i,j,kss:kee,:),     &
                                   dxi=  dxi(i,j,kss:kee,3,:),   &
                                 jacob=jacob(i,j,kss:kee))
@@ -1051,6 +1075,15 @@ module solver
         !   lso=lsolid(i,j,k) .or. lsolid(i,j,k+1)
         ! end if
         !
+        ! get value of gamma of this point
+        if(.not.nondimen) then 
+          !
+#ifdef COMB
+          gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+#endif
+          !
+        endif
+        ! 
         lso=.false.
         !
         if(sson) then
@@ -1336,6 +1369,7 @@ module solver
                                   vel=  vel(iss:iee,j,k,:),     &
                                   prs=  prs(iss:iee,j,k),       &
                                   tmp=  tmp(iss:iee,j,k),       &
+                                  spc=  spc(iss:iee,j,k,:),     &
                                     q=    q(iss:iee,j,k,:),     &
                                   dxi=  dxi(iss:iee,j,k,1,:),   &
                                 jacob=jacob(iss:iee,j,k))
@@ -1536,6 +1570,7 @@ module solver
                                   vel=  vel(i,jss:jee,k,:),     &
                                   prs=  prs(i,jss:jee,k),       &
                                   tmp=  tmp(i,jss:jee,k),       &
+                                  spc=  spc(i,jss:jee,k,:),     &
                                     q=    q(i,jss:jee,k,:),     &
                                   dxi=  dxi(i,jss:jee,k,2,:),   &
                                 jacob=jacob(i,jss:jee,k))
@@ -1736,6 +1771,7 @@ module solver
                                   vel=  vel(i,j,kss:kee,:),     &
                                   prs=  prs(i,j,kss:kee),       &
                                   tmp=  tmp(i,j,kss:kee),       &
+                                  spc=  spc(i,j,kss:kee,:),     &
                                     q=    q(i,j,kss:kee,:),     &
                                   dxi=  dxi(i,j,kss:kee,3,:),   &
                                 jacob=jacob(i,j,kss:kee))
