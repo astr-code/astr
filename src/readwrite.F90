@@ -1079,7 +1079,7 @@ module readwrite
   !+-------------------------------------------------------------------+
   subroutine readgrid(gridh5file)
     !
-    use commvar,   only : im,jm,km,limmbou,ibmode
+    use commvar,   only : im,jm,km,limmbou,ibmode,nondimen
     use commarray, only : x,nodestat
     use hdf5io
     !
@@ -1089,6 +1089,8 @@ module readwrite
     call h5read(varname='x',var=x(0:im,0:jm,0:km,1),mode=iomode)
     call h5read(varname='y',var=x(0:im,0:jm,0:km,2),mode=iomode)
     call h5read(varname='z',var=x(0:im,0:jm,0:km,3),mode=iomode)
+    !
+    if(.not.nondimen) x(:,:,:,:)=x(:,:,:,:)*1.d-3
     !
     if(limmbou .and. trim(ibmode)=='grid') then
       call h5read(varname='nodestat',var=nodestat(0:im,0:jm,0:km))
@@ -1284,7 +1286,7 @@ module readwrite
     ! local data
     !
     integer :: jsp
-    character(len=2) :: spname
+    character(len=3) :: spname
     !
     call h5io_init(filename='datin/flowini3d.h5',mode='read')
     ! 
@@ -1324,7 +1326,7 @@ module readwrite
     ! local data
     !
     integer :: jsp,i,j,k
-    character(len=2) :: spname
+    character(len=3) :: spname
     !
     call h5io_init(filename='datin/flowini2d.h5',mode='read')
     !
@@ -1386,7 +1388,8 @@ module readwrite
     ! local data
     integer :: nstep_1,jsp
     character(len=1) :: modeio
-    character(len=2) :: spname,qname
+    character(len=2) :: qname
+    character(len=3) :: spname
     character(len=128) :: infilename
     character(len=4) :: stepname
     logical :: lexist
@@ -1432,7 +1435,7 @@ module readwrite
       call h5read(varname='p',   var=prs(0:im,0:jm,0:km)  ,mode=modeio)
       call h5read(varname='t',   var=tmp(0:im,0:jm,0:km)  ,mode=modeio)
       do jsp=1,num_species
-         write(spname,'(i2.2)')jsp
+         write(spname,'(i3.3)')jsp
         call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode=modeio)
       enddo
       !
@@ -1694,13 +1697,13 @@ module readwrite
     character(len=4) :: stepname
     character(len=64) :: outfilename,outauxiname
     character(len=64),save :: savfilenmae='first'
-    character(len=2) :: spname
+    character(len=3) :: spname
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
     !
-    if(present(timerept) .and. timerept) time_beg=ptime() 
+    if(present(timerept) .and. timerept) time_beg=ptime()
     !
     if(lwsequ .and. nstep==nxtwsequ) then
       !
@@ -1729,7 +1732,7 @@ module readwrite
     call h5write(varname='t', var=tmp(0:im,0:jm,0:km),  mode=iomode)
     if(num_species>0) then
       do jsp=1,num_species
-         write(spname,'(i2.2)')jsp
+         write(spname,'(i3.3)')jsp
         call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode=iomode)
       enddo
     endif
@@ -2076,7 +2079,8 @@ module readwrite
     !
     ! local data
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
-    character(len=2) :: spname,qname
+    character(len=2) :: qname
+    character(len=3) :: spname
     integer :: jsp,i,fh,ios,j,k
     logical :: lfopen
     real(8) :: time_beg

@@ -4428,6 +4428,7 @@ module geom
   subroutine solid_udf_backfacestep(xp,inside,bnode)
     !
     use commtype,  only : sboun
+    use commvar,   only : nondimen
     !
     real(8),intent(in) :: xp(3)
     logical,intent(out),optional :: inside
@@ -4438,6 +4439,11 @@ module geom
     !
     step_right_x=7.32d0
     step_upper_y=3.05d0
+    !
+    if(.not.nondimen)then 
+      step_right_x=step_right_x*1.d-3
+      step_upper_y=step_upper_y*1.d-3
+    endif 
     !
     if(xp(2)<step_upper_y .and. xp(1)<=step_right_x) then
       !
