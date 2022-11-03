@@ -2299,6 +2299,8 @@ module solver
     !
     allocate(ff(-hm:im+hm),df(0:im))
     !
+    dvar=0.d0
+    !
     do k=0,km
     do j=0,jm
       !

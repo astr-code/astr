@@ -754,7 +754,10 @@ module initialisation
       !
       if(nondimen) then
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
-        if(num_species>1) spc(i,j,k,1)=1.d0
+        if(num_species>1) then
+          spc(i,j,k,1)=0.5d0+0.499d0*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
+          spc(i,j,k,2)=1.d0-spc(i,j,k,1)
+        endif
       else 
         spc(i,j,k,:)=spcinf(:)
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
