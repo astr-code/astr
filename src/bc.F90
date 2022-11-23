@@ -1411,7 +1411,7 @@ module bc
         else
           !
 #ifdef COMB    
-          call aceval(tmp_prof(j),spcinf,css)
+          call aceval(tmp_prof(j),spc_prof(j,:),css)
 #endif
           !
         endif
@@ -1586,24 +1586,30 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine inflowintp
     !
-    use commvar, only : time,nstep,nondimen
+    use commvar, only : time,nstep,nondimen,num_species,spcinf
     use commfunc,only : cubic
     use parallel,only : mpi_imin
     use fludyna, only : thermal
     use hdf5io
     use tecio
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
     !
     ! local data
     real(8),pointer,dimension(:,:,:) :: vp1,vp2,vp3,vp4
     integer,save :: nstep_save=-1
     logical,save :: loadiniflow=.true.
-    integer :: n,n2,n0,i,j,k
+    integer :: n,n2,n0,i,j,k,jsp
+    integer :: num_vars
     character(len=5) :: isname
     integer :: nvp(0:3)
     real(8) :: vartime(0:3)
     real(8) :: time0,deltime,var0
+    character(len=10) :: varname
     !
-    if(.not.nondimen) print*,'!! error: dimensional version is not available' 
+    num_vars=5+num_species
+    ! 
     if(nstep<nstep_save) then
       ! this can happen when the solver is recovered from a bakup
       loadiniflow=.true.
@@ -1618,7 +1624,7 @@ module bc
       !
       if(loadiniflow) then
         !
-        allocate(flowvarins(0:jm,0:km,1:5,0:3),timeins(0:3) )
+        allocate(flowvarins(0:jm,0:km,1:num_vars,0:3),timeins(0:3) )
         !
         do n=0,3
           !
@@ -1637,6 +1643,32 @@ module bc
           call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
           call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
           !
+#ifdef COMB
+          if(.not.nondimen) then
+            ! rho
+            flowvarins(0:jm,0:km,1,n)=flowvarins(0:jm,0:km,1,n)*0.174395d0
+            ! u1
+            flowvarins(0:jm,0:km,2,n)=flowvarins(0:jm,0:km,2,n)*950.9810724d0
+            ! u2
+            flowvarins(0:jm,0:km,3,n)=flowvarins(0:jm,0:km,3,n)*950.9810724d0
+            ! u3
+            flowvarins(0:jm,0:km,4,n)=flowvarins(0:jm,0:km,4,n)*950.9810724d0
+            ! t
+            flowvarins(0:jm,0:km,5,n)=flowvarins(0:jm,0:km,5,n)*1000.0d0
+            ! spc
+            do k=0,km
+            do j=0,jm
+              flowvarins(j,k,6:num_vars,n)=spcinf
+            enddo
+            enddo
+            ! phi = 0.4
+            ! flowvarins(0:jm,0:km,6:num_vars,n)=0.d0
+            ! flowvarins(0:jm,0:km,5+spcindex('O2'),n)=0.2302d0
+            ! flowvarins(0:jm,0:km,5+spcindex('H2'),n)=0.0116d0
+            ! flowvarins(0:jm,0:km,5+spcindex('N2'),n)=0.7582d0
+          endif
+          !
+#endif
           call h5io_end
           ! 
         enddo
@@ -1644,10 +1676,10 @@ module bc
         time0=timeins(0)
         deltime=timeins(1)-timeins(0)
         !
-        vp1=>flowvarins(0:jm,0:km,1:5,0)
-        vp2=>flowvarins(0:jm,0:km,1:5,1)
-        vp3=>flowvarins(0:jm,0:km,1:5,2)
-        vp4=>flowvarins(0:jm,0:km,1:5,3)
+        vp1=>flowvarins(0:jm,0:km,1:num_vars,0)
+        vp2=>flowvarins(0:jm,0:km,1:num_vars,1)
+        vp3=>flowvarins(0:jm,0:km,1:num_vars,2)
+        vp4=>flowvarins(0:jm,0:km,1:num_vars,3)
         !
         do k=0,km
         do j=0,jm
@@ -1674,7 +1706,19 @@ module bc
           tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
                               vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
                                          time0,deltime,time) + tmp_prof(j)
-          prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+          if(.not.nondimen) then
+            do jsp=1,num_species
+              spc_in(j,k,jsp)  =cubic(vp1(j+1,k+1,5+jsp),vp2(j+1,k+1,5+jsp),           &
+                                      vp3(j+1,k+1,5+jsp),vp4(j+1,k+1,5+jsp),           &
+                                            time0,deltime,time) + spc_prof(j,jsp)
+            enddo
+          endif
+          !
+          if(nondimen) then
+            prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+          else
+            prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
+          endif
           !
         end do
         end do
@@ -1750,6 +1794,33 @@ module bc
           call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
           call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
           !
+#ifdef COMB
+          if(.not.nondimen) then
+            ! rho
+            flowvarins(0:jm,0:km,1,n)=flowvarins(0:jm,0:km,1,n)*0.174395d0
+            ! u1
+            flowvarins(0:jm,0:km,2,n)=flowvarins(0:jm,0:km,2,n)*950.9810724d0
+            ! u2
+            flowvarins(0:jm,0:km,3,n)=flowvarins(0:jm,0:km,3,n)*950.9810724d0
+            ! u3
+            flowvarins(0:jm,0:km,4,n)=flowvarins(0:jm,0:km,4,n)*950.9810724d0
+            ! t
+            flowvarins(0:jm,0:km,5,n)=flowvarins(0:jm,0:km,5,n)*1000.0d0
+            ! spc
+            do k=0,km
+            do j=0,jm
+              flowvarins(j,k,6:num_vars,n)=spcinf
+            enddo
+            enddo
+            ! phi = 0.4
+            ! flowvarins(0:jm,0:km,6:num_vars,n)=0.d0
+            ! flowvarins(0:jm,0:km,5+spcindex('O2'),n)=0.2302d0
+            ! flowvarins(0:jm,0:km,5+spcindex('H2'),n)=0.0116d0
+            ! flowvarins(0:jm,0:km,5+spcindex('N2'),n)=0.7582d0
+          endif
+          !
+#endif
+          !
           call h5io_end
           ! 
           vp1=>flowvarins(:,:,:,nvp(1))
@@ -1792,8 +1863,19 @@ module bc
           tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
                               vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
                                          time0,deltime,time) + tmp_prof(j)
+          if(.not.nondimen) then
+            do jsp=1,num_species
+              spc_in(j,k,jsp)  =cubic(vp1(j+1,k+1,5+jsp),vp2(j+1,k+1,5+jsp),           &
+                                      vp3(j+1,k+1,5+jsp),vp4(j+1,k+1,5+jsp),           &
+                                            time0,deltime,time) + spc_prof(j,jsp)
+            enddo
+          endif
           !
-          prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+          if(nondimen) then
+            prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+          else
+            prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
+          endif
           !
         end do
         end do
@@ -2503,17 +2585,17 @@ module bc
         !   spc(i,j,k,:)=spce(:)
         !   !
         ! endif
-          prs(i,j,k)=pe
-          rho(i,j,k)=roe
-          !
-          vel(i,j,k,1)=ue
-          vel(i,j,k,2)=ve
-          vel(i,j,k,3)=we
-          tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          spc(i,j,k,:)=spce(:)
+        prs(i,j,k)=pe
+        rho(i,j,k)=roe
         !
+        vel(i,j,k,1)=ue
+        vel(i,j,k,2)=ve
+        vel(i,j,k,3)=we
+        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        spc(i,j,k,:)=spce(:)
+      ! 
         call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
                     species=spc(i,j,k,:)                               )
         !
         qrhs(i,j,k,:)=0.d0
@@ -2748,7 +2830,7 @@ module bc
         else
           !
 #ifdef COMB
-          call aceval(tmp(i,j,k),spcinf,css)
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
 #endif
           !
         endif
@@ -2765,8 +2847,8 @@ module bc
         else
           !
 #ifdef COMB
-          call aceval(tmp(i-1,j,k),spcinf,css1)
-          call aceval(tmp(i-2,j,k),spcinf,css2)
+          call aceval(tmp(i-1,j,k),spc(i-1,j,k,:),css1)
+          call aceval(tmp(i-2,j,k),spc(i-2,j,k,:),css2)
           csse=extrapolate(css1,css2,dv=0.d0)
 #endif
           !
@@ -6193,7 +6275,7 @@ module bc
         endif
         !
       else
-        spc_in(j,k,:)= spcinf
+        spc_in(j,k,:)= spc_prof(j,:)
         prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
       endif
     enddo

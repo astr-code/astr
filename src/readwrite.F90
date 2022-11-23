@@ -1318,10 +1318,13 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine readflowini2d
     !
-    use commvar,   only : im,jm,km,num_species
+    use commvar,   only : im,jm,km,num_species,nondimen,spcinf
     use commarray, only : rho,vel,prs,tmp,spc
     use fludyna,   only : thermal
     use hdf5io
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
     !
     ! local data
     !
@@ -1345,17 +1348,38 @@ module readwrite
     do j=0,jm
     do i=0,im
       !
-      rho(i,j,k)  =rho(i,j,0)  
-      vel(i,j,k,1)=vel(i,j,0,1)
-      vel(i,j,k,2)=vel(i,j,0,2)
-      vel(i,j,k,3)=0.d0
-      tmp(i,j,k)  =tmp(i,j,0)
-      prs(i,j,k)  =thermal(temperature=tmp(i,j,k),density=rho(i,j,k)) 
-      !
-      do jsp=1,num_species
-        spc(i,j,k,jsp)=0.d0 !spc(i,j,0,jsp)
-      enddo
-      !
+      if(nondimen) then
+        rho(i,j,k)  =rho(i,j,0)
+        vel(i,j,k,1)=vel(i,j,0,1)
+        vel(i,j,k,2)=vel(i,j,0,2)
+        vel(i,j,k,3)=0.d0
+        tmp(i,j,k)  =tmp(i,j,0)
+        !
+        prs(i,j,k)  =thermal(temperature=tmp(i,j,k),density=rho(i,j,k)) 
+        !
+        do jsp=1,num_species
+          spc(i,j,k,jsp)=0.d0 !spc(i,j,0,jsp)
+        enddo
+        !
+      else
+        rho(i,j,k)  =rho(i,j,0)*0.174395d0 
+        vel(i,j,k,1)=vel(i,j,0,1)*950.9810724d0
+        vel(i,j,k,2)=vel(i,j,0,2)*950.9810724d0
+        vel(i,j,k,3)=0.d0
+        tmp(i,j,k)  =tmp(i,j,0)*1000.0d0
+        !
+! #ifdef COMB
+        ! phi = 0.4 
+        ! spc(i,j,k,:)=0.d0
+        ! spc(i,j,k,spcindex('O2'))=0.2302d0
+        ! spc(i,j,k,spcindex('H2'))=0.0116d0
+        ! spc(i,j,k,spcindex('N2'))=1.d0-sum(spc(i,j,k,:))
+! #endif
+        ! non-reacting
+        spc(i,j,k,:)=spcinf
+        prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                           species=spc(i,j,k,:))
+      endif
     enddo
     enddo
     enddo
