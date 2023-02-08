@@ -691,7 +691,9 @@ module bc
         vel(i,j,k,2)= -1.d0*var_u(2)*pb%dis2ghost/pb%dis2image
         vel(i,j,k,3)= -1.d0*var_u(3)*pb%dis2ghost/pb%dis2image
           ! tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
+        ! adiabatic
         tmp(i,j,k)=var_t
+        ! tmp(i,j,k)=twall(3)
         prs(i,j,k)=var_p
         if(nondimen) then 
           rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
@@ -709,8 +711,9 @@ module bc
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
+        ! aidabatic
         tmp(i,j,k)=var_t
-          ! tmp(i,j,k)=tinf
+        ! tmp(i,j,k)=twall(3)
         prs(i,j,k)=var_p
         !
         if(nondimen) then 
@@ -1601,14 +1604,16 @@ module bc
     integer,save :: nstep_save=-1
     logical,save :: loadiniflow=.true.
     integer :: n,n2,n0,i,j,k,jsp
-    integer :: num_vars
+    integer :: turn
     character(len=5) :: isname
     integer :: nvp(0:3)
-    real(8) :: vartime(0:3)
+    real(8) :: vartime(0:3),time_final
     real(8) :: time0,deltime,var0
     character(len=10) :: varname
     !
-    num_vars=5+num_species
+    ! call h5io_init(filename='inflow/islice00100.h5',mode='read',comm=mpi_imin)
+    ! call h5read(varname='time',var=time_final)
+    ! call h5io_end
     ! 
     if(nstep<nstep_save) then
       ! this can happen when the solver is recovered from a bakup
@@ -1624,14 +1629,20 @@ module bc
       !
       if(loadiniflow) then
         !
-        allocate(flowvarins(0:jm,0:km,1:num_vars,0:3),timeins(0:3) )
+        allocate(flowvarins(0:jm,0:km,1:5,0:3),timeins(0:3) )
         !
         do n=0,3
           !
           if(ninflowslice<=3) then
-            write(isname,'(i5.5)')n
+           write(isname,'(i5.5)')n  ! origin
+            ! in case of lacking of inflow slices  
+            ! write(isname,'(i5.5)')mod(n,6000)
+            ! turn=n/6000
           else 
-            write(isname,'(i5.5)')n+ninflowslice-3
+            write(isname,'(i5.5)')n+ninflowslice-3 ! origin
+            ! in case of lacking of inflow slices
+            ! write(isname,'(i5.5)')mod(n+ninflowslice-3,6000)
+            ! turn=(n+ninflowslice-3)/6000
           endif
           !
           call h5io_init(filename='inflow/islice'//isname//'.h5',mode='read',comm=mpi_imin)
@@ -1643,81 +1654,102 @@ module bc
           call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
           call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
           !
-#ifdef COMB
-          if(.not.nondimen) then
-            ! rho
-            flowvarins(0:jm,0:km,1,n)=flowvarins(0:jm,0:km,1,n)*0.174395d0
-            ! u1
-            flowvarins(0:jm,0:km,2,n)=flowvarins(0:jm,0:km,2,n)*950.9810724d0
-            ! u2
-            flowvarins(0:jm,0:km,3,n)=flowvarins(0:jm,0:km,3,n)*950.9810724d0
-            ! u3
-            flowvarins(0:jm,0:km,4,n)=flowvarins(0:jm,0:km,4,n)*950.9810724d0
-            ! t
-            flowvarins(0:jm,0:km,5,n)=flowvarins(0:jm,0:km,5,n)*1000.0d0
-            ! spc
-            do k=0,km
-            do j=0,jm
-              flowvarins(j,k,6:num_vars,n)=spcinf
-            enddo
-            enddo
-            ! phi = 0.4
-            ! flowvarins(0:jm,0:km,6:num_vars,n)=0.d0
-            ! flowvarins(0:jm,0:km,5+spcindex('O2'),n)=0.2302d0
-            ! flowvarins(0:jm,0:km,5+spcindex('H2'),n)=0.0116d0
-            ! flowvarins(0:jm,0:km,5+spcindex('N2'),n)=0.7582d0
-          endif
-          !
-#endif
           call h5io_end
+          !
+          ! in case of lacking of inflow slices
+          ! timeins(n)=timeins(n)+turn*4.3863268002697250E-004
+          if(lio) print*,' >> real load inflow time ',timeins(n)
+          ! if(.not.nondimen) then
+          !   timeins(n)=timeins(n)*1.546d-06
+          !   ! print*,'dimensional time ',timeins(n)
+          ! endif
           ! 
         enddo
         !
         time0=timeins(0)
         deltime=timeins(1)-timeins(0)
         !
-        vp1=>flowvarins(0:jm,0:km,1:num_vars,0)
-        vp2=>flowvarins(0:jm,0:km,1:num_vars,1)
-        vp3=>flowvarins(0:jm,0:km,1:num_vars,2)
-        vp4=>flowvarins(0:jm,0:km,1:num_vars,3)
+        vp1=>flowvarins(0:jm,0:km,1:5,0)
+        vp2=>flowvarins(0:jm,0:km,1:5,1)
+        vp3=>flowvarins(0:jm,0:km,1:5,2)
+        vp4=>flowvarins(0:jm,0:km,1:5,3)
         !
         do k=0,km
         do j=0,jm
           !
-          rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
-                              vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
-                                         time0,deltime,time) + rho_prof(j)
-          vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
-                              vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
-                                         time0,deltime,time)
-          !
-          if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
-            vel_in(j,k,1)=vel_prof(j,1)
-          else
-            vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
-          endif
-          !
-          vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
-                              vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
-                                         time0,deltime,time) + vel_prof(j,2)
-          vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
-                              vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
-                                         time0,deltime,time)
-          tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
-                              vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
-                                         time0,deltime,time) + tmp_prof(j)
-          if(.not.nondimen) then
-            do jsp=1,num_species
-              spc_in(j,k,jsp)  =cubic(vp1(j+1,k+1,5+jsp),vp2(j+1,k+1,5+jsp),           &
-                                      vp3(j+1,k+1,5+jsp),vp4(j+1,k+1,5+jsp),           &
-                                            time0,deltime,time) + spc_prof(j,jsp)
-            enddo
-          endif
-          !
           if(nondimen) then
+            rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
+                                vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
+                                          time0,deltime,time) + rho_prof(j)
+            vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
+                                vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
+                                          time0,deltime,time)
+            !
+            if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
+              vel_in(j,k,1)=vel_prof(j,1)
+            else
+              vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
+            endif
+            !
+            vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
+                                vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
+                                          time0,deltime,time) + vel_prof(j,2)
+            vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
+                                vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
+                                          time0,deltime,time)
+            tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
+                                vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
+                                          time0,deltime,time) + tmp_prof(j)
             prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+            !
           else
+            rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
+                                vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
+                                          time0,deltime,time)+ rho_prof(j)
+            vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
+                                vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
+                                          time0,deltime,time)
+            !
+            if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
+              vel_in(j,k,1)=vel_prof(j,1)
+            else
+              vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
+            endif
+            !
+            vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
+                                vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
+                                          time0,deltime,time) + vel_prof(j,2)
+            vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
+                                vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
+                                          time0,deltime,time)
+            tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
+                                vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
+                                          time0,deltime,time) + tmp_prof(j)
+            ! non-reacting
+            do jsp=1,num_species
+              spc_in(j,k,jsp)  = spcinf(jsp)
+            enddo
+            ! reacting
+#ifdef COMB
+            ! phi = 0.4 
+            ! spc_in(j,k,:)=0.d0
+            ! spc_in(j,k,spcindex('O2'))=0.2302d0
+            ! spc_in(j,k,spcindex('H2'))=0.0116d0
+            ! spc_in(j,k,spcindex('N2'))=0.7582d0
+            ! phi=0.2
+            ! spc_in(j,k,:)=0.d0
+            ! spc_in(j,k,spcindex('O2'))=0.23154d0
+            ! spc_in(j,k,spcindex('H2'))=0.00583d0
+            ! spc_in(j,k,spcindex('N2'))=0.76263d0
+            ! phi=0.3
+            ! spc_in(j,k,:)=0.d0
+            ! spc_in(j,k,spcindex('O2'))=0.23087d0
+            ! spc_in(j,k,spcindex('H2'))=0.00873d0
+            ! spc_in(j,k,spcindex('N2'))=0.76040d0
+#endif
+            !
             prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
+            !
           endif
           !
         end do
@@ -1781,7 +1813,10 @@ module bc
           !
           ninflowslice=ninflowslice+1
           !
-          write(isname,'(i5.5)')ninflowslice
+          write(isname,'(i5.5)')ninflowslice ! origin
+          ! in case of lacking of inflow slices
+          ! write(isname,'(i5.5)')mod(ninflowslice,6000)
+          ! turn=(ninflowslice+2)/6000
           !
           call h5io_init(filename='inflow/islice'//isname//'.h5',      &
                                               mode='read',comm=mpi_imin)
@@ -1794,34 +1829,15 @@ module bc
           call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
           call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
           !
-#ifdef COMB
-          if(.not.nondimen) then
-            ! rho
-            flowvarins(0:jm,0:km,1,n)=flowvarins(0:jm,0:km,1,n)*0.174395d0
-            ! u1
-            flowvarins(0:jm,0:km,2,n)=flowvarins(0:jm,0:km,2,n)*950.9810724d0
-            ! u2
-            flowvarins(0:jm,0:km,3,n)=flowvarins(0:jm,0:km,3,n)*950.9810724d0
-            ! u3
-            flowvarins(0:jm,0:km,4,n)=flowvarins(0:jm,0:km,4,n)*950.9810724d0
-            ! t
-            flowvarins(0:jm,0:km,5,n)=flowvarins(0:jm,0:km,5,n)*1000.0d0
-            ! spc
-            do k=0,km
-            do j=0,jm
-              flowvarins(j,k,6:num_vars,n)=spcinf
-            enddo
-            enddo
-            ! phi = 0.4
-            ! flowvarins(0:jm,0:km,6:num_vars,n)=0.d0
-            ! flowvarins(0:jm,0:km,5+spcindex('O2'),n)=0.2302d0
-            ! flowvarins(0:jm,0:km,5+spcindex('H2'),n)=0.0116d0
-            ! flowvarins(0:jm,0:km,5+spcindex('N2'),n)=0.7582d0
-          endif
-          !
-#endif
-          !
           call h5io_end
+          !
+          ! in case of lacking of inflow slices
+          ! timeins(n)=timeins(n)+turn*4.3863268002697250E-004
+          if(lio) print*,' >> real load inflow time ',timeins(n)
+          ! if(.not.nondimen) then
+          !   timeins(n)=timeins(n)*1.546d-06
+          !   ! print*,'dimensional time ',timeins(n)
+          ! endif
           ! 
           vp1=>flowvarins(:,:,:,nvp(1))
           vp2=>flowvarins(:,:,:,nvp(2))
@@ -1841,40 +1857,79 @@ module bc
         do k=0,km
         do j=0,jm
           !
-          rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
-                              vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
-                                         time0,deltime,time) + rho_prof(j)
-          vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
-                              vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
-                                         time0,deltime,time)
-          !
-          if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
-            vel_in(j,k,1)=vel_prof(j,1)
-          else
-            vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
-          endif
-          !
-          vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
-                              vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
-                                         time0,deltime,time) + vel_prof(j,2)
-          vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
-                              vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
-                                         time0,deltime,time)
-          tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
-                              vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
-                                         time0,deltime,time) + tmp_prof(j)
-          if(.not.nondimen) then
-            do jsp=1,num_species
-              spc_in(j,k,jsp)  =cubic(vp1(j+1,k+1,5+jsp),vp2(j+1,k+1,5+jsp),           &
-                                      vp3(j+1,k+1,5+jsp),vp4(j+1,k+1,5+jsp),           &
-                                            time0,deltime,time) + spc_prof(j,jsp)
-            enddo
-          endif
-          !
           if(nondimen) then
+            rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
+                                vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
+                                          time0,deltime,time) + rho_prof(j)
+            vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
+                                vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
+                                          time0,deltime,time)
+            !
+            if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
+              vel_in(j,k,1)=vel_prof(j,1)
+            else
+              vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
+            endif
+            !
+            vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
+                                vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
+                                          time0,deltime,time) + vel_prof(j,2)
+            vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
+                                vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
+                                          time0,deltime,time)
+            tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
+                                vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
+                                          time0,deltime,time) + tmp_prof(j)
             prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+            !
           else
+            rho_in(j,k)  =cubic(vp1(j+1,k+1,1),vp2(j+1,k+1,1),           &
+                                vp3(j+1,k+1,1),vp4(j+1,k+1,1),           &
+                                          time0,deltime,time) + rho_prof(j)
+            vel_in(j,k,1)=cubic(vp1(j+1,k+1,2),vp2(j+1,k+1,2),           &
+                                vp3(j+1,k+1,2),vp4(j+1,k+1,2),           &
+                                          time0,deltime,time)
+            !
+            if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
+              vel_in(j,k,1)=vel_prof(j,1)
+            else
+              vel_in(j,k,1)=vel_prof(j,1)+vel_in(j,k,1)
+            endif
+            !
+            vel_in(j,k,2)=cubic(vp1(j+1,k+1,3),vp2(j+1,k+1,3),           &
+                                vp3(j+1,k+1,3),vp4(j+1,k+1,3),           &
+                                          time0,deltime,time) + vel_prof(j,2)
+            vel_in(j,k,3)=cubic(vp1(j+1,k+1,4),vp2(j+1,k+1,4),           &
+                                vp3(j+1,k+1,4),vp4(j+1,k+1,4),           &
+                                          time0,deltime,time)
+            tmp_in(j,k)  =cubic(vp1(j+1,k+1,5),vp2(j+1,k+1,5),           &
+                                vp3(j+1,k+1,5),vp4(j+1,k+1,5),           &
+                                          time0,deltime,time) + tmp_prof(j)
+            ! non-reacting
+            do jsp=1,num_species
+              spc_in(j,k,jsp)  = spcinf(jsp)
+            enddo
+            ! reacting
+#ifdef COMB
+            ! phi = 0.4 
+            ! spc_in(j,k,:)=0.d0
+            ! spc_in(j,k,spcindex('O2'))=0.2302d0
+            ! spc_in(j,k,spcindex('H2'))=0.0116d0
+            ! spc_in(j,k,spcindex('N2'))=0.7582d0
+            ! phi=0.2
+            ! spc_in(j,k,:)=0.d0
+            ! spc_in(j,k,spcindex('O2'))=0.23154d0
+            ! spc_in(j,k,spcindex('H2'))=0.00583d0
+            ! spc_in(j,k,spcindex('N2'))=0.76263d0
+            ! phi=0.3
+            ! spc_in(j,k,:)=0.d0
+            ! spc_in(j,k,spcindex('O2'))=0.23087d0
+            ! spc_in(j,k,spcindex('H2'))=0.00873d0
+            ! spc_in(j,k,spcindex('N2'))=0.76040d0
+#endif
+            !
             prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
+            !
           endif
           !
         end do
@@ -5034,7 +5089,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine noslip(ndir,tw)
     !
-    use commvar,   only : Reynolds,turbmode,lreport
+    use commvar,   only : Reynolds,turbmode,lreport,nondimen,spcinf
     use commarray, only : tke,omg
     use fludyna,   only : thermal,fvar2q,q2fvar,miucal
     use commfunc,  only : dis2point2
@@ -5137,13 +5192,27 @@ module bc
             spc(i,j,k,jspec)=num1d3*(4.d0*spc(i,1,k,jspec)-spc(i,2,k,jspec))
           enddo
           !
-          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          call fvar2q(      q=  q(i,j,k,:),                            &
-                      density=rho(i,j,k),                              &
-                     velocity=vel(i,j,k,:),                            &
-                     pressure=prs(i,j,k),                              &
-                      species=spc(i,j,k,:)                             )
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
           !
           if(trim(turbmode)=='k-omega') then
             tke(i,j,k)=0.d0
@@ -5181,13 +5250,27 @@ module bc
             spc(i,j,k,1)=num1d3*(4.d0*spc(i,j-1,k,1)-spc(i,j-2,k,1))
           endif
           !
-          rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-          !
-          call fvar2q(      q=  q(i,j,k,:),                            &
-                      density=rho(i,j,k),                              &
-                     velocity=vel(i,j,k,:),                            &
-                     pressure=prs(i,j,k),                              &
-                      species=spc(i,j,k,:)                             )
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
           !
           if(trim(turbmode)=='k-omega') then
             tke(i,j,k)=0.d0

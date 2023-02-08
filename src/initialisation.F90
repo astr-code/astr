@@ -1581,6 +1581,16 @@ module initialisation
         ! spc_prof(:,spcindex('O2'))=0.2302d0
         ! spc_prof(:,spcindex('H2'))=0.0116d0
         ! spc_prof(:,spcindex('N2'))=0.7582d0
+        ! phi=0.2
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.23154d0
+        ! spc_prof(:,spcindex('H2'))=0.00583d0
+        ! spc_prof(:,spcindex('N2'))=0.76263d0
+        ! phi=0.3
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.23087d0
+        ! spc_prof(:,spcindex('H2'))=0.00873d0
+        ! spc_prof(:,spcindex('N2'))=0.76040d0
         ! phi = 0.8
         ! spc_prof(:,:)=0.d0
         ! spc_prof(:,spcindex('O2'))=0.22756d0
@@ -1592,6 +1602,7 @@ module initialisation
         ! spc_prof(:,spcindex('H2'))=0.01730d0
         ! spc_prof(:,spcindex('N2'))=0.75383d0
 #endif
+        ! non-reacting
         do i=1,num_species
           spc_prof(:,i) = spcinf(i)
         enddo

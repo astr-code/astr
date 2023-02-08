@@ -24,6 +24,7 @@ module statistic
   real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
              wallheatflux,dissipation,nominal_thickness
+  real(8) :: maxT,overall_qdot,v_H2O,v_HO2
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8) :: umax,rhomax,tmpmax,qdotmax
   real(8),allocatable :: max_q(:),min_q(:)
@@ -439,9 +440,11 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine statcal(timerept)
     !
-    use commvar,  only : flowtype
-    use commarray,only : vel,prs,rho,tmp,spc
-    use thermchem,only : heatrate
+    use commvar,  only : flowtype,voldom
+    use commarray,only : vel,prs,rho,tmp,spc,cell
+#ifdef COMB
+    use thermchem,only : heatrate,spcindex
+#endif
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -462,6 +465,29 @@ module statistic
       massflux=massfluxcal()
       wrms=wrmscal()
       wallheatflux=whfbl()
+      !
+      ! can be used for reacting case
+      ! maxT=maxval(tmp(0:im,0:jm,0:km))
+      ! maxT=pmax(maxT)
+      ! !
+      ! overall_qdot=0.d0
+      ! v_H2O=0.d0
+      ! v_HO2=0.d0
+      ! !
+      ! do i=1,im
+      !   do j=1,jm
+      !     do k=1,km
+      !       overall_qdot=overall_qdot+heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))*cell(i,j,k)%vol
+      !       v_H2O =v_H2O+spc(i,j,k,spcindex('H2O'))*rho(i,j,k)*cell(i,j,k)%vol
+      !       v_HO2 =v_HO2+spc(i,j,k,spcindex('HO2'))*rho(i,j,k)*cell(i,j,k)%vol
+      !     enddo 
+      !   enddo 
+      ! enddo   
+      ! !
+      ! overall_qdot=psum(overall_qdot)
+      ! v_H2O =psum(v_H2O) /voldom
+      ! v_HO2 =psum(v_HO2) /voldom
+      !
     elseif(trim(flowtype)=='tbl') then
       !
       call meanflowxzm
@@ -651,6 +677,9 @@ module statistic
           elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','wallheatflux','wrms'
+            !can be used for reacting case
+            ! write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
+            !                  'maxT','overall-qdot','H2O_aver','HO2_aver'
           elseif(trim(flowtype)=='tbl') then
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','blthickness','wrms'
@@ -675,6 +704,8 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
       elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
+        ! can be used for reacting case
+        ! write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,maxT,overall_qdot,v_H2O,v_HO2
       elseif(trim(flowtype)=='tbl') then
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
       elseif(trim(flowtype)=='cylinder') then
@@ -696,6 +727,8 @@ module statistic
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','forcex','wrms'
           elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','wallheatflux','wrms'
+            ! can be used for reacting case
+            ! write(*,"(2X,A7,5(1X,A13))")'nstep','time','maxT','overall-qdot','H2O_aver','HO2_aver'
           elseif(trim(flowtype)=='tbl') then
             write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','δ','wrms'
           elseif(trim(flowtype)=='cylinder') then
@@ -712,15 +745,17 @@ module statistic
         !
         if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
           l_0=xmax/(2.d0*pi)
-          write(*,"(2X,I7,1X,F13.7,2(1X,E13.6E2))")nstep,time/(l_0/uinf),enstophy,kenergy
+          write(*,"(2X,I7,1X,3(1X,E13.6E2))")nstep,time/(l_0/uinf),enstophy,kenergy
         elseif(trim(flowtype)=='channel') then
-          write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
+          write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
-          write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
+          write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
+          ! can be used for reacting case
+          ! write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,maxT,overall_qdot,v_H2O,v_HO2
         elseif(trim(flowtype)=='tbl') then
-          write(*,"(2X,I7,1X,F13.7,4(1X,E13.6E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
+          write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
         elseif(trim(flowtype)=='cylinder') then
-          write(*,"(2X,I7,1X,F13.7,3(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
+          write(*,"(2X,I7,1X,4(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                 .or.flowtype=='h2supersonic') then
           write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
@@ -947,7 +982,7 @@ module statistic
   !+-------------------------------------------------------------------+
   real(8) function fbcxbl()
     !
-    use commvar,  only : reynolds
+    use commvar,  only : reynolds,nondimen
     use commarray,only : tmp,dvel,x
     use parallel, only : jrk,jrkm
     use fludyna,  only : miucal
@@ -967,7 +1002,11 @@ module statistic
       !
       do k=0,km
       do i=0,im
-        miu=miucal(tmp(i,j,k))/reynolds
+        if(nondimen) then
+          miu=miucal(tmp(i,j,k))/reynolds
+        else
+          miu=1.d0
+        endif
         !
         tau(i,k)=miu*dvel(i,j,k,1,2)
       enddo
@@ -1068,7 +1107,7 @@ module statistic
   !+-------------------------------------------------------------------+
   real(8) function whfbl()
     !
-    use commvar,  only : reynolds,const5,prandtl
+    use commvar,  only : reynolds,const5,prandtl,nondimen
     use commarray,only : tmp,dtmp,x
     use parallel, only : jrk,jrkm
     use fludyna,  only : miucal
@@ -1088,8 +1127,12 @@ module statistic
       !
       do k=0,km
       do i=0,im
-        miu=miucal(tmp(i,j,k))/reynolds
-        hcc=(miu/prandtl)/const5
+        if(nondimen) then
+          miu=miucal(tmp(i,j,k))/reynolds
+          hcc=(miu/prandtl)/const5
+        else
+          hcc=1.d0
+        endif
         !
         qw(i,k)=hcc*dtmp(i,j,k,2)
       enddo
