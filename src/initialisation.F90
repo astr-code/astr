@@ -1258,6 +1258,9 @@ module initialisation
     use fludyna,  only: thermal,miucal
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
     use commfunc, only: dis2point2
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
     !
     ! local data
     integer :: i,j,k
@@ -1290,6 +1293,13 @@ module initialisation
       else
         !
         spc(i,j,k,:)=spcinf
+! #ifdef COMB
+!         ! phi = 0.4 
+!         spc(i,j,k,:)=0.d0
+!         spc(i,j,k,spcindex('O2'))=0.2302d0
+!         spc(i,j,k,spcindex('H2'))=0.0116d0
+!         spc(i,j,k,spcindex('N2'))=1.d0-sum(spc(i,j,k,:))
+! #endif
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
                            species=spc(i,j,k,:))
         !
@@ -1525,6 +1535,9 @@ module initialisation
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
     use stlaio,   only: get_unit
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
     !
     ! local data
     integer :: fh,i
@@ -1565,6 +1578,34 @@ module initialisation
         prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
       else
         !
+#ifdef COMB
+        ! phi = 0.4
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.2302d0
+        ! spc_prof(:,spcindex('H2'))=0.0116d0
+        ! spc_prof(:,spcindex('N2'))=0.7582d0
+        ! phi=0.2
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.23154d0
+        ! spc_prof(:,spcindex('H2'))=0.00583d0
+        ! spc_prof(:,spcindex('N2'))=0.76263d0
+        ! phi=0.3
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.23087d0
+        ! spc_prof(:,spcindex('H2'))=0.00873d0
+        ! spc_prof(:,spcindex('N2'))=0.76040d0
+        ! phi = 0.8
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.22756d0
+        ! spc_prof(:,spcindex('H2'))=0.02294d0
+        ! spc_prof(:,spcindex('N2'))=0.74950d0
+        ! phi = 0.6
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('O2'))=0.22887d0
+        ! spc_prof(:,spcindex('H2'))=0.01730d0
+        ! spc_prof(:,spcindex('N2'))=0.75383d0
+#endif
+        ! non-reacting
         do i=1,num_species
           spc_prof(:,i) = spcinf(i)
         enddo

@@ -3,12 +3,12 @@
 #
 #FCFLAGS=  -Wuse-without-only -g
 #FC=mpif90
-FC=h5pfc
+FC=ftn
 
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
-CTRDIR =  /opt/cantera_2.5.1
+CTRDIR = /work/e01/e01/fangjian/opt/cantera-2.5.1
 
 FCFLAGS= -O3 -fbounds-check
 
@@ -16,7 +16,7 @@ FCFLAGS= -O3 -fbounds-check
 OPTIONS2 = -J $(OBJDIR)
 OPTIONS3 = -DHDF5
 OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
-OMP = -fopenmp
+# OMP = -fopenmp
 
 EXE=astr
 
