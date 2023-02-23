@@ -537,6 +537,8 @@ module statistic
       !
     elseif(flowtype=='tgvflame'.or. flowtype=='1dflame'.or.flowtype=='0dreactor' &
         .or.flowtype=='h2supersonic') then
+      
+#ifdef COMB
       tmpmax=maxval(tmp(0:im,0:jm,0:km))
       tmpmax=pmax(tmpmax)
       rhomax=maxval(rho(0:im,0:jm,0:km))
@@ -556,6 +558,7 @@ module statistic
         enddo 
       enddo  
       qdotmax=pmax(qdotmax)
+#endif
       !
     endif
     !

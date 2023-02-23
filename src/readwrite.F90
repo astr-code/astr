@@ -2149,6 +2149,7 @@ module readwrite
         write(fh,'(A,F12.6,A)')'      <Time Value="',timesec,'" />'
         write(fh,'(A)')'      <Topology Reference="/Xdmf/Domain/Topology[1]"/>'
         write(fh,'(A)')'      <Geometry Reference="/Xdmf/Domain/Geometry[1]"/>'
+        close(fh)
       elseif(mode=='animati') then
         open(fh,file='visu.xdmf',form='formatted',access='append')
         backspace(fh)
@@ -2158,6 +2159,7 @@ module readwrite
         write(fh,'(A,F12.6,A)')'      <Time Value="',timesec,'" />'
         write(fh,'(A)')'      <Topology Reference="/Xdmf/Domain/Topology[1]"/>'
         write(fh,'(A)')'      <Geometry Reference="/Xdmf/Domain/Geometry[1]"/>'
+        close(fh)
       elseif(mode=='data') then
         open(fh,file='visu.xdmf',form='formatted',access='append')
         backspace(fh)
@@ -2172,11 +2174,12 @@ module readwrite
         write(fh,'(A)')'      </Attribute>'
       endif
       !
-      write(fh,'(A)')'    </Grid>'
-      write(fh,'(A)')'  </Domain>'
-      write(fh,'(A)')'</Xdmf>'
-      close(fh)
-      print*,' ** ',flowh5file,':',dataname,' >> visu.xdmf'
+      ! open(fh,file='visu.xdmf',form='formatted',access='append')
+      ! write(fh,'(A)')'    </Grid>'
+      ! write(fh,'(A)')'  </Domain>'
+      ! write(fh,'(A)')'</Xdmf>'
+      ! close(fh)
+      ! print*,' ** ',flowh5file,':',dataname,' >> visu.xdmf'
       !
     endif
     !
