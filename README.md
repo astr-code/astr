@@ -7,7 +7,8 @@ ASTR code is a high-order finite-difference flow solver for compressible turbule
 Required dependencies: Fortran 90, MPI, HDF5
 
 ## Download the astr code:
-git clone git@gitlab.com:astr-code/astr.git
+#git clone git@gitlab.com:astr-code/astr.git
+git clone git@github.com:astr-code/astr.git
 
 ## Compilation and installation:
 ASTR 2.0 supports both gnu make and cmake.
