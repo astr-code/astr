@@ -526,8 +526,6 @@ module mainloop
                                                             timecost=subtime)
     endif
     !
-    ! call mpistop
-    !
     return
     !
   end subroutine rk3

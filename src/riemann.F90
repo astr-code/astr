@@ -7,6 +7,8 @@
 !+---------------------------------------------------------------------+
 module riemann
   !
+  use parallel, only : mpirank
+  !
   implicit none
   !
   contains
