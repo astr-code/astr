@@ -706,8 +706,8 @@ module solver
         !
         ! hdiss=.true.
         !
-        ! if(lchardecomp .and. lsh) then
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
+        ! if(lchardecomp) then
           !
           ! if(mpirank==0 .and. i==11 .and. j==0 .and. k==0) then
           !   ldebug=.true.
@@ -715,10 +715,10 @@ module solver
           !   ldebug=.false.
           ! endif
           !
-          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
-                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,1,:),               &
-                          rho(i+1,j,k),  prs(i+1,j,k),q(i+1,j,k,5),    &
-                          vel(i+1,j,k,:),spc(i+1,j,k,:),dxi(i+1,j,k,1,:), &
+          call chardecomp(tmp(i,j,k),rho(i,j,k),prs(i,j,k),q(i,j,k,5),    &
+                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,1,:),     &
+                          tmp(i+1,j,k),rho(i+1,j,k), prs(i+1,j,k),q(i+1,j,k,5),  &
+                          vel(i+1,j,k,:),spc(i+1,j,k,:),dxi(i+1,j,k,1,:),         &
                           REV,LEV)
           !
           ! if(mpirank==0) call check_LR55_unit(LEV,REV,i,j,k)
@@ -811,8 +811,8 @@ module solver
           !
         enddo
         !
-        ! if(lchardecomp .and. lsh) then
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
+        ! if(lchardecomp) then
           do m=1,5
             Fh(i,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -925,13 +925,13 @@ module solver
         ! hdiss=.true.
         !
         ! lchardecomp=.false.
-        ! if(lchardecomp .and. lsh) then
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
+        ! if(lchardecomp) then
           !
-          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
-                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,2,:),  &
-                          rho(i,j+1,k),  prs(i,j+1,k),q(i,j+1,k,5),    &
-                          vel(i,j+1,k,:),spc(i,j+1,k,:),dxi(i,j+1,k,2,:), &
+          call chardecomp(tmp(i,j,k),rho(i,j,k),prs(i,j,k),q(i,j,k,5),   &
+                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,2,:),    &
+                          tmp(i,j+1,k),rho(i,j+1,k),  prs(i,j+1,k),q(i,j+1,k,5),  &
+                          vel(i,j+1,k,:),spc(i,j+1,k,:),dxi(i,j+1,k,2,:),         &
                           REV,LEV)
           !
           ! Pmult=MatMul(LEV,REV)
@@ -1021,8 +1021,8 @@ module solver
           !
         enddo
         !
-        ! if(lchardecomp .and. lsh) then
-        if(lchardecomp) then
+        if(lchardecomp .and. lsh) then
+        ! if(lchardecomp) then
           do m=1,5
             Fh(j,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -1136,15 +1136,16 @@ module solver
         ! hdiss=.true.
         !
         ! if(lchardecomp .and. lsh) then
-        if(lchardecomp) then
-        ! if(.false.) then
+        ! if(lchardecomp) then
+        if(.false.) then
           !
-          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
-                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,3,:),  &
-                          rho(i,j,k+1),  prs(i,j,k+1),q(i,j,k+1,5),    &
+          call chardecomp(tmp(i,j,k),rho(i,j,k), prs(i,j,k), q(i,j,k,5),      &
+                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,3,:),         &
+                          tmp(i,j,k+1),rho(i,j,k+1),  prs(i,j,k+1),q(i,j,k+1,5), &
                           vel(i,j,k+1,:),spc(i,j,k+1,:),dxi(i,j,k+1,3,:), &
                           REV,LEV)
           !
+          if(mpirank==0) call check_LR55_unit(LEV,REV,i,j,k)
           !
           ! Project to characteristic space using local eigenvector
           do m=1,5
@@ -1221,8 +1222,8 @@ module solver
         enddo
         !
         ! if(lchardecomp .and. lsh) then
-        if(lchardecomp) then
-        ! if(.false.) then
+        ! if(lchardecomp) then
+        if(.false.) then
           do m=1,5
             Fh(k,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -1415,9 +1416,9 @@ module solver
         !
         if(lchardecomp) then
           !
-          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
-                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,1,:),  &
-                          rho(i+1,j,k),  prs(i+1,j,k),q(i+1,j,k,5),    &
+          call chardecomp(tmp(i,j,k),rho(i,j,k),prs(i,j,k),q(i,j,k,5),      &
+                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,1,:),       &
+                          tmp(i+1,j,k),rho(i+1,j,k),  prs(i+1,j,k),q(i+1,j,k,5),& 
                           vel(i+1,j,k,:),spc(i+1,j,k,:),dxi(i+1,j,k,1,:), &
                           REV,LEV)
           ! Project to characteristic space using local eigenvector
@@ -1617,10 +1618,10 @@ module solver
         !
         if(lchardecomp) then
           !
-          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
-                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,2,:),  &
-                          rho(i,j+1,k),  prs(i,j+1,k),q(i,j+1,k,5),    &
-                          vel(i,j+1,k,:),spc(i,j+1,k,:),dxi(i,j+1,k,2,:), &
+          call chardecomp(tmp(i,j,k),rho(i,j,k),prs(i,j,k),q(i,j,k,5),      &
+                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,2,:),       &
+                          tmp(i,j+1,k),rho(i,j+1,k),  prs(i,j+1,k),q(i,j+1,k,5), &
+                          vel(i,j+1,k,:),spc(i,j+1,k,:),dxi(i,j+1,k,2,:),        &
                           REV,LEV)
           !
           ! Project to characteristic space using local eigenvector
@@ -1819,9 +1820,9 @@ module solver
         !
         if(lchardecomp) then
           !
-          call chardecomp(rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
-                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,3,:),  &
-                          rho(i,j,k+1),  prs(i,j,k+1),q(i,j,k+1,5),    &
+          call chardecomp(tmp(i,j,k),rho(i,j,k),    prs(i,j,k),  q(i,j,k,5),      &
+                          vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,3,:),             &
+                          tmp(i,j,k+1),rho(i,j,k+1),  prs(i,j,k+1),q(i,j,k+1,5),  &
                           vel(i,j,k+1,:),spc(i,j,k+1,:),dxi(i,j,k+1,3,:),REV,LEV)
           !
           ! Project to characteristic space using local eigenvector
@@ -2002,17 +2003,17 @@ module solver
   !| 22-03-2021: Created by J. Fang @ Warrington.                      |
   !| 28-02-2023: Modified to adapt multi-species equations.            |
   !+-------------------------------------------------------------------+
-  subroutine chardecomp(ro_l,p_l,E_l,vel_l,spc_L,ddi_l,             &
-                        ro_r,p_r,E_r,vel_r,spc_R,ddi_r,REV,LEV,debug)
+  subroutine chardecomp(tmp_l,ro_l,p_l,E_l,vel_l,spc_l,ddi_l,             &
+                        tmp_r,ro_r,p_r,E_r,vel_r,spc_r,ddi_r,REV,LEV,debug)
     !
     use commvar, only: gamma,num_species
 #ifdef COMB
-    use thermchem,only:aceval,temperature_calc
+    use thermchem,only:aceval,temperature_calc,gammarmix
 #endif
     !
-    real(8),intent(in) :: ro_l,p_l,E_l,vel_l(3),ddi_l(3),              &
-                          ro_r,p_r,E_r,vel_r(3),ddi_r(3)
-    real(8),intent(in) :: spc_L(:),spc_R(:)
+    real(8),intent(in) :: tmp_l,ro_l,p_l,E_l,vel_l(3),ddi_l(3),       &
+                          tmp_r,ro_r,p_r,E_r,vel_r(3),ddi_r(3)
+    real(8),intent(in) :: spc_l(:),spc_r(:)
     real(8),intent(out) :: REV(5,5),LEV(5,5)
     !
     logical,optional,intent(in) :: debug
@@ -2022,7 +2023,7 @@ module solver
     real(8) :: WRoe,WRoe1,u1Roe,u2Roe,u3Roe,HL,HR,HRoe,CssRoe,        &
                KRoe,ugp,rcs,var1,var2,var3,var4,rgp,gpd(3),           &
                ee_L,ee_R,eeRoe,tmpRoe,roRoe,b1,b2
-    real(8) :: spcRoe(num_species)
+    real(8) :: spcRoe(num_species),gamavg,gamL,gamR,CssL,CssR,KL,KR
     logical :: ldebug
     !
     if(present(debug)) then
@@ -2040,27 +2041,30 @@ module solver
     u3Roe=WRoe*vel_l(3)+WRoe1*vel_r(3)
     !
     KRoe=0.5d0*(u1Roe*u1Roe+u2Roe*u2Roe+u3Roe*u3Roe)
-    !
-    HL=(E_l+p_l)/ro_l
-    HR=(E_r+p_r)/ro_r
-    HRoe=WRoe*HL+WRoe1*HR
+    KL=0.5d0*(vel_l(1)*vel_l(1)+vel_l(2)*vel_l(2)+vel_l(3)*vel_l(3))
+    KR=0.5d0*(vel_r(1)*vel_r(1)+vel_r(2)*vel_r(2)+vel_r(3)*vel_r(3))
     !
     if(nondimen) then
+      !
+      HL=(E_l+p_l)/ro_l
+      HR=(E_r+p_r)/ro_r
+      HRoe=WRoe*HL+WRoe1*HR
+      !
       CssRoe=sqrt((gamma-1.d0)*(HRoe-KRoe))
     else
-      ee_L=E_l/ro_l
-      ee_R=E_R/ro_R
-      !
-      eeRoe=WRoe*ee_L+WRoe1*ee_R-KRoe
-      !
-      spcRoe(:)=WRoe*spc_L(:)+WRoe1*spc_R(:)
+      gamL = gammarmix(tmp_l,spc_l(:))
+      gamR = gammarmix(tmp_r,spc_r(:))
+      gamavg=0.5d0*(gamL+gamR)
       !
 #ifdef COMB
-      call temperature_calc(tmp=tmpRoe,den=roRoe, &
-                                    spc=spcRoe(:),eint=eeRoe)
-      !
-      call aceval(tmpRoe,spcRoe(:),CssRoe)
+      call aceval(tmp_l,spc_l(:),CssL)
+      call aceval(tmp_R,spc_R(:),CssR)
 #endif
+      HL=CssL*CssL/(gamL-1.d0)+KL
+      HR=CssR*CssR/(gamR-1.d0)+KR
+      HRoe=WRoe*HL+WRoe1*HR
+      !
+      CssRoe=sqrt((gamavg-1.d0)*(HRoe-KRoe))
       !
     endif
     rcs=1.d0/CssRoe
@@ -2088,12 +2092,6 @@ module solver
     LEV(1,3)=-0.5d0*(b1*u2Roe+gpd(2)*rcs)
     LEV(1,4)=-0.5d0*(b1*u3Roe+gpd(3)*rcs)
     LEV(1,5)= 0.5d0*b1
-    !
-    ! print*,' ** CssRoe',CssRoe
-    ! if(ldebug) then
-    !   print*,LEV(1,:)
-    !   print*,gamma,HRoe,ERoe,KRoe,CssRoe
-    ! endif
     !
     REV(1,1)=1.d0
     REV(2,1)=u1Roe-CssRoe*gpd(1)
