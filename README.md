@@ -8,6 +8,7 @@ Required dependencies: Fortran 90, MPI, HDF5
 
 ## Download the astr code:
 #git clone git@gitlab.com:astr-code/astr.git
+
 git clone git@github.com:astr-code/astr.git
 
 ## Compilation and installation:
@@ -26,6 +27,14 @@ make install
 make test
 
 The code will be installed in test_case and excutable can be found at test_case/bin/astr
+
+If you want to use the chemstry function, you need first to install cantera. After download and unpack the cantera, you can use the following script to install:
+python scons/scripts/scons.py build python_package=none FORTRAN=<your fortran compiler> f90_interface=y prefix=<the directory of centera to install> boost_inc_dir=<to boost directory>
+
+python scons/scripts/scons.py test
+
+python scons/scripts/scons.py install
+
 
 ## Run the solver:
 
