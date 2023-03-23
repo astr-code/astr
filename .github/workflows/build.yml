@@ -36,5 +36,5 @@ jobs:
          conda create --name ct-dev --channel cantera/label/dev libcantera-devel
          conda activate ct-dev
          conda install make cmake scons pkg-config
-         export CANTERA_DIR=~/miniconda3/env/ct-dev/
+         export CANTERA_DIR=~/miniconda3/envs/ct-dev
          make 
