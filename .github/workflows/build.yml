@@ -1,0 +1,39 @@
+name: build test
+on: 
+  push:
+    branches:
+     - master
+  pull_request:
+    branches:
+     - master
+jobs:
+  build_validation:  
+    container: 
+      image: ubuntu:20.04
+    steps:
+     - name: Checkout
+       uses: actions/checkout@v3
+       run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+     - name: install dependencies
+       env:
+        OMPI_ALLOW_RUN_AS_ROOT: 1 
+        OMPI_ALLOW_RUN_AS_ROOT_CONFIRM: 1 
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+        DEBIAN_FRONTEND: noninteractive
+       run: |
+        apt-get update 
+        apt-get install -y sudo git software-properties-common make cmake mpich openmpi-bin libopenmpi-dev libscalapack-mpi-dev vim   
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+        wget https://mirrors.edge.kernel.org/ubuntu/pool/main/libf/libffi/libffi7_3.3-4_amd64.deb
+        bash Miniconda3-latest-Linux-x86_64.sh -b
+        . ~/miniconda3/etc/profile.d/conda.sh
+        conda create --name ct-dev --channel cantera/label/dev libcantera-devel
+        conda activate ct-dev
+        conda install make cmake scons pkg-config      
+ 
+        
