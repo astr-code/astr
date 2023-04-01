@@ -3,6 +3,7 @@ message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
 add_executable(astr 
+                    fdnn.F90
                     astr.F90
                     bc.F90
                     CMakeLists.txt
@@ -17,8 +18,8 @@ add_executable(astr
                     geom.F90
                     gridgeneration.F90
                     hdf5io.F90
-		            ibmethod.F90
-		            initialisation.F90
+		                ibmethod.F90
+		                initialisation.F90
                     interp.F90
                     mainloop.F90
                     models.F90

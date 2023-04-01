@@ -11,8 +11,8 @@ windtunn
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 f,f,t
 
-# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt : Parameters
-t,t,f,f,f,t,t
+# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt,lcomb : Parameters
+t,t,f,f,f,t,t,f
 
 # lrestar                                               : start mode
 f
@@ -23,8 +23,8 @@ f
 # ref_t,reynolds,mach                                   : Reference variables
 273.15d0,  200.d0,  0.1d0 
 
-# conschm,difschm,rkscheme                              : Numerical scheme
-742e, 642e, rk3 
+# conschm,difschm,rkscheme,odetype                              : Numerical scheme
+742e, 642e, rk3, rk3
 
 # recon_schem, lchardecomp,bfacmpld,shkcrt              : Parameters for upwind-biased scheme
 5, t, 0.3d0, 0.001d0
