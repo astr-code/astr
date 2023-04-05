@@ -1,0 +1,40 @@
+name: build
+on: 
+  push:
+    branches:
+     - main
+  pull_request:
+    branches:
+     - main
+jobs:
+  environment-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "The job was automatically triggered by a ${{ github.event_name }} event."
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - run: echo "The ${{ github.repository }} repository has been cloned to the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - run: echo "🍏 This job's status is ${{ job.status }}." 
+      - name: install dependencies
+        env:
+         OMPI_ALLOW_RUN_AS_ROOT: 1 
+         OMPI_ALLOW_RUN_AS_ROOT_CONFIRM: 1 
+         OMPI_MCA_btl_vader_single_copy_mechanism: none
+         DEBIAN_FRONTEND: noninteractive
+        run: |
+         sudo apt-get update 
+         sudo apt-get install -y sudo git software-properties-common make cmake mpich openmpi-bin libopenmpi-dev libscalapack-mpi-dev vim
+         sudo apt-get install -y libhdf5-openmpi-dev
+         ls /usr/lib/x86_64-linux-gnu
+         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+         wget https://mirrors.edge.kernel.org/ubuntu/pool/main/libf/libffi/libffi7_3.3-4_amd64.deb
+         bash Miniconda3-latest-Linux-x86_64.sh -b
+         . ~/miniconda3/etc/profile.d/conda.sh
+         conda create --name ct-dev --channel cantera/label/dev libcantera-devel
+         conda activate ct-dev
+         conda install make cmake scons pkg-config
+         export CANTERA_DIR=~/miniconda3/envs/ct-dev
+         make 

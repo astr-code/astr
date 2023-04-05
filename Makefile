@@ -2,25 +2,29 @@
 # The compiler: gfortran compiler
 #
 #FCFLAGS=  -Wuse-without-only -g
-#FC=mpif90
-FC=ftn
-
+FC=mpif90
+#include /usr/include/hdf5/openmpi/hdf5.mod   
+#include /usr/include/Openmp/ompt.h
+#FC=gfortran
+#FMODDIR = $(CANTERA_FORTRAN_MODS)
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
-CTRDIR = /work/e01/e01/fangjian/opt/cantera-2.5.1
+CTRDIR = $(CANTERA_DIR)
+
+#LDLIBS = $(CANTERA_FORTRAN_LIBS)
 
 FCFLAGS= -O3 -fbounds-check
 
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
-OPTIONS3 = -DHDF5
+OPTIONS3 = -DHDF5 -I/usr/include/hdf5/openmpi
 OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
-# OMP = -fopenmp
+#OMP = -fopenmp
 
 EXE=astr
-
-LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread
+#INC = -I/usr/include/hdf5/openmpi
+LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread -L/usr/lib/x86_64-linux-gnu -lhdf5_openmpi_fortran -lhdf5_openmpihl_fortran
 # LIBS= -lz -lm 
 
 TARGET = $(BINDIR)/$(EXE)
