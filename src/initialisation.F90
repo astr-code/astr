@@ -140,7 +140,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    call writeflfed
+    ! call writeflfed
     ! stop
     !
   end subroutine flowinit
