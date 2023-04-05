@@ -42,7 +42,7 @@ module test
   !
   subroutine enstest
 
-    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf,hm
+    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf,hm,is,ie,js,je,ks,ke
     use commarray, only : x,vel,dvel,rho
     use solver,    only : gradcal
     use statistic, only : enstophycal

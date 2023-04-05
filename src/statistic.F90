@@ -801,23 +801,40 @@ module statistic
     real(8) :: l_0,u_0
     !
     vout=0.d0
-    do k=1,km
-    do j=1,jm
-    do i=1,im
-      ! dx=
-      omega(1)=dvel(i,j,k,3,2)-dvel(i,j,k,2,3)
-      omega(2)=dvel(i,j,k,1,3)-dvel(i,j,k,3,1)
-      omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
-      omegam=omega(1)*omega(1)+omega(2)*omega(2)+omega(3)*omega(3)
-      !
-      vout=vout+rho(i,j,k)*omegam
-      !
-      !
-    enddo
-    enddo
-    enddo
     !
-    vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+    if(ndims==2) then
+      k=0
+      do j=1,jm
+      do i=1,im
+        !
+        omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
+        omegam=omega(3)*omega(3)
+        !
+        vout=vout+rho(i,j,k)*omegam
+        !
+        !
+      enddo
+      enddo
+      vout=0.5d0*psum(vout)/real(ia*ja,8)
+    elseif(ndims==3) then
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        ! dx=
+        omega(1)=dvel(i,j,k,3,2)-dvel(i,j,k,2,3)
+        omega(2)=dvel(i,j,k,1,3)-dvel(i,j,k,3,1)
+        omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
+        omegam=omega(1)*omega(1)+omega(2)*omega(2)+omega(3)*omega(3)
+        !
+        vout=vout+rho(i,j,k)*omegam
+        !
+        !
+      enddo
+      enddo
+      enddo
+      !
+      vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+    endif
     !
     l_0=xmax/(2.d0*pi)
     !
@@ -850,18 +867,32 @@ module statistic
     real(8) :: var1
     !
     vout=0.d0
-    do k=1,km
-    do j=1,jm
-    do i=1,im
-      ! 
-      var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
+    if(ndims==2) then
+      k=0
+      do j=1,jm
+      do i=1,im
+        ! 
+        var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
+        !
+        vout=vout+rho(i,j,k)*var1
+      enddo
+      enddo
       !
-      vout=vout+rho(i,j,k)*var1
-    enddo
-    enddo
-    enddo
-    !
-    vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+      vout=0.5d0*psum(vout)/real(ia*ja,8)
+    elseif(ndims==3) then
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        ! 
+        var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
+        !
+        vout=vout+rho(i,j,k)*var1
+      enddo
+      enddo
+      enddo
+      !
+      vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+    endif
     vout=vout/(roinf*uinf*uinf)
     !
     return
