@@ -3,25 +3,25 @@
 #
 #FCFLAGS=  -Wuse-without-only -g
 #FC=mpif90
-FC=ftn
+FC=h5pfc
 
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
-CTRDIR = /work/e01/e01/fangjian/opt/cantera-2.5.1
+CTRDIR = /home/fangjian/opt/cantera-2.5.1
 
 FCFLAGS= -O3 -fbounds-check
 
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
 OPTIONS3 = -DHDF5
-OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
+#OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
 # OMP = -fopenmp
 
 EXE=astr
 
-LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread
-# LIBS= -lz -lm 
+#LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread
+LIBS= -lz -lm 
 
 TARGET = $(BINDIR)/$(EXE)
 
