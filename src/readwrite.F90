@@ -128,7 +128,7 @@ module readwrite
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
                         spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,schmidt,ibmode,gridfile
+                        turbmode,schmidt,ibmode,gridfile,testmode
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
 #ifdef COMB
     use commvar, only : odetype,lcomb
@@ -469,6 +469,11 @@ module readwrite
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       !
+      if(testmode=='test') then
+        write(*,'(2X,A)')'                          !!! TEST Mode !!!'
+        write(*,'(2X,62A)')('-',i=1,62)
+      endif
+      !
     endif
     !
   end subroutine infodisp
@@ -495,7 +500,8 @@ module readwrite
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
                         spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
                         recon_schem,lrestart,limmbou,solidfile,        &
-                        bfacmpld,shkcrt,turbmode,schmidt,ibmode,ltimrpt
+                        bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
+                        ltimrpt,testmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -512,9 +518,11 @@ module readwrite
     !
     if(mpirank==0) then
       !
-      call readkeyboad(inputfile)
+      testmode='....'
+      inputfile='datin/input.dat'
       !
-      if(trim(inputfile)=='.') inputfile='datin/input.dat'
+      call readkeyboad(inputfile)
+      call readkeyboad(testmode)
       !
       fh=get_unit()
       !
@@ -682,6 +690,7 @@ module readwrite
     call bcast(turbinf)
     call bcast(xrhjump)
     call bcast(angshk)
+    call bcast(testmode)
     !
     call readslic
     !

@@ -1145,7 +1145,7 @@ module solver
                           vel(i,j,k+1,:),spc(i,j,k+1,:),dxi(i,j,k+1,3,:), &
                           REV,LEV)
           !
-          if(mpirank==0) call check_LR55_unit(LEV,REV,i,j,k)
+          ! if(mpirank==0) call check_LR55_unit(LEV,REV,i,j,k)
           !
           ! Project to characteristic space using local eigenvector
           do m=1,5
@@ -2052,11 +2052,11 @@ module solver
       !
       CssRoe=sqrt((gamma-1.d0)*(HRoe-KRoe))
     else
+#ifdef COMB
       gamL = gammarmix(tmp_l,spc_l(:))
       gamR = gammarmix(tmp_r,spc_r(:))
       gamavg=0.5d0*(gamL+gamR)
       !
-#ifdef COMB
       call aceval(tmp_l,spc_l(:),CssL)
       call aceval(tmp_R,spc_R(:),CssR)
 #endif
@@ -3660,92 +3660,7 @@ module solver
     !
   end subroutine check_LR55_unit
   !!
-  subroutine gradtest
-    !
-    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie
-    use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
-    use bc,       only : boucon
-    !
-    ! local data
-    integer :: i,j,k,n
-    real(8) :: dx
-    real(8),allocatable :: dq(:,:),qhp(:),qhm(:)
-    !
-    ! do k=0,km
-    ! do j=0,jm
-    ! do i=0,im
-    !   ! q(i,j,k,1)=sin(4.d0*x(1,1,k,3)) !+0.1d0*sin(pi*j+0.5d0*pi)
-    !   do n=1,numq
-    !     q(i,j,k,n)=sin(pi*x(i,j,k,2))
-    !     ! sin(10.d0*(x(1,1,k,3)-0.5*pi))*exp(-4.d0*(x(1,1,k,3)-0.5*pi)**2)+0.1d0*sin(pi*k+0.5d0*pi)
-    !   enddo
-    !   !
-    ! enddo
-    ! enddo
-    ! enddo
-    !
-    call dataswap(q,timerept=ltimrpt)
-    ! !
-    ! call boucon
-    !
-    ! allocate(dq(0:im,1:2),qhp(is-1:ie),qhm(is-1:ie))
-    ! !
-    ! qhp(:)=recons(q(:,0,0,1),conschm,npdci,im,alfa_con,uci,windir='+')
-    ! !
-    ! qhm(:)=recons(q(:,0,0,1),conschm,npdci,im,alfa_con,bci,windir='-')
-    ! !
-    ! dx=x(1,0,0,1)-x(0,0,0,1)
-    ! !
-    ! do i=is,ie
-    !   dq(i,1)=(qhp(i)-qhp(i-1))/dx
-    ! enddo
-    ! !
-    ! do i=is,ie
-    !   dq(i,2)=(qhm(i)-qhm(i-1))/dx
-    ! enddo
-    !
-    ! dq=ddfc(q(:,1,1,1),conschm,npdci,im,alfa_con,cci)*dxi(:,1,1,1,1)
-    
-    ! dq=spafilter10(q(:,jm,0,2),npdci,im,alfa_filter,fci)
-    !
-    allocate(dq(0:jm,1:1))
-    ! dq(:,1)=ddfc(q(0,:,0,2),conschm,npdcj,jm,alfa_con,ccj)*dxi(0,0:jm,0,2,2)
-    !
-    ! dq(:,1)=spafilter10(q(1,:,0,3),npdcj,jm,alfa_filter,fcj)
-    dq(:,1)=spafilter6exp(q(1,:,0,3),npdcj,jm)
-    !
-    ! allocate(dq(0:km,1:numq))
-    ! do n=1,numq
-    !   ! dq(:,n)=ddfc(q(1,1,:,n),conschm,npdck,km,alfa_con,cck,lfft=.true.)
-    !   dq(:,n)=spafilter10(q(1,1,:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
-    ! enddo
-    !
-    ! do n=1,numq
-    !   dq(:,n)=dq(:,n)*dxi(1,1,0:km,3,3)
-    ! enddo
-    ! !
-    ! if(mpirank==0) then
-    !   do k=0,km
-    !     print*,k,dxi(1,1,k,3,3)
-    !   enddo
-    ! endif
-    !
-    ! dq=ddfc(q(1,1,:,1),conschm,npdck,km,alfa_con,cck)/(x(1,1,1,3)-x(1,1,0,3))
-    !
-    open(18,file='testout/profile'//mpirankname//'.dat')
-    do j=0,jm
-      write(18,'(3(1X,E15.7E3))')x(1,j,0,2),q(1,j,0,3),dq(j,1)
-    enddo
-    close(18)
-    print*,' << testout/profile',mpirankname,'.dat'
-    !
-    deallocate(dq)
-    !
-  end subroutine gradtest
-  !
 end module solver
 !+---------------------------------------------------------------------+
-!| The end of the module commarray.                                    |
+!| The end of the module solver.                                       |
 !+---------------------------------------------------------------------+

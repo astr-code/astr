@@ -154,6 +154,7 @@ module parallel
     !
     if(mpisize==1) then
       print*,' ** the program is working in serial environment!'
+      mpirank=0
     else
       if(mpirank==0)  then
         write(*,'(A,I0,A)')' ** the program is working with ',mpisize, &
@@ -2604,6 +2605,15 @@ module parallel
       !
       deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
       !
+    else
+      !
+      if(ia>0) then
+        do n=1,hm
+          x(im+n,0:jm,0:km,:)=x(im,0:jm,0:km,:)+(x(n,0:jm,0:km,:) -x(0,0:jm,0:km,:))
+          x(  -n,0:jm,0:km,:)=x( 0,0:jm,0:km,:)-(x(im,0:jm,0:km,:)-x(im-n,0:jm,0:km,:))
+        enddo
+      endif
+      !
     endif
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -2678,6 +2688,11 @@ module parallel
           x(0:im,j,0:km,3)=x(0:im,0,0:km,3)
         enddo
         !
+      else
+        do n=1,hm
+          x(0:im,jm+n,0:km,:)=x(0:im,jm,0:km,:)+(x(0:im, n,0:km,1:3)-x(0:im,   0,0:km,1:3))
+          x(0:im,  -n,0:km,:)=x(0:im, 0,0:km,:)-(x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3))
+        enddo
       endif
       !
     endif
@@ -2753,6 +2768,11 @@ module parallel
           x(0:im,0:jm,k,3)=x(0:im,0:jm,0,3)+real(k,8)
         enddo
         !
+      else
+        do n=1,hm
+          x(0:im,0:jm,km+n,:)=x(0:im,0:jm,km,:)+(x(0:im,0:jm, n,1:3)-x(0:im,0:jm,   0,1:3))
+          x(0:im,0:jm,  -n,:)=x(0:im,0:jm, 0,:)-(x(0:im,0:jm,km,1:3)-x(0:im,0:jm,km-n,1:3))
+        enddo
       endif
       !
     end if
@@ -2799,6 +2819,9 @@ module parallel
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
+      !
+      var( -hm:-1,   0:jm,0:km) =var(im-hm:im-1,0:jm,0:km)
+      var(im+1:im+hm,0:jm,0:km) =var(    1:hm,  0:jm,0:km)
       !
     else
       !
@@ -3021,6 +3044,9 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
       !
+      var( -hm:-1,   0:jm,0:km) =var(im-hm:im-1,0:jm,0:km)
+      var(im+1:im+hm,0:jm,0:km) =var(    1:hm,  0:jm,0:km)
+      !
     else
       !
       ncou=(jm+1)*(km+1)*hm
@@ -3242,7 +3268,8 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
       !
-
+      var( -hm:-1,   0:jm,0:km) =var(im-hm:im-1,0:jm,0:km)
+      var(im+1:im+hm,0:jm,0:km) =var(    1:hm,  0:jm,0:km)
       !
     else
       !
@@ -3463,8 +3490,13 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
+      !
+      var( 0,0:jm,0:km)=0.5d0*(var(0,0:jm,0:km)+var(im,0:jm,0:km))
+      var(im,0:jm,0:km)=var(0,0:jm,0:km)
+      !
     else 
+      !
       ncou=(jm+1)*(km+1)
       !
       allocate( sbuf1(0:jm,0:km),sbuf2(0:jm,0:km),           &
@@ -3677,6 +3709,9 @@ module parallel
       ! Message pass in i direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       if(isize==1) then
+        !
+        var( -hm:-1,   0:jm,0:km,:) =var(im-hm:im-1,0:jm,0:km,:)
+        var(im+1:im+hm,0:jm,0:km,:) =var(    1:hm,  0:jm,0:km,:)
         !
       else
         !
@@ -3913,6 +3948,9 @@ module parallel
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
+      !
+      var( -hm:-1   ,0:jm,0:km,:,:)=var(im-hm:im-1,0:jm,0:km,:,:)
+      var(im+1:im+hm,0:jm,0:km,:,:)=var(    1:hm,  0:jm,0:km,:,:)
       !
     else
       !
@@ -4152,6 +4190,9 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
       !
+      var( -hm:-1,   0:jm,0:km,:,:) =var(im-hm:im-1,0:jm,0:km,:,:)
+      var(im+1:im+hm,0:jm,0:km,:,:) =var(    1:hm,  0:jm,0:km,:,:)
+      !
     else
       !
       ncou=(jm+1)*(km+1)*nx*mx*hm
@@ -4369,7 +4410,49 @@ module parallel
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
+      !
+      q( -hm:-1   ,0:jm,0:km,:)=q(im-hm:im-1,0:jm,0:km,:)
+      q(im+1:im+hm,0:jm,0:km,:)=q(    1:hm,  0:jm,0:km,:)
+      !
+      q( 0,0:jm,0:km,:)=0.5d0*(q(0,0:jm,0:km,:)+q(im,0:jm,0:km,:))
+      q(im,0:jm,0:km,:)=q(0,0:jm,0:km,:)
+      !
+      if(trim(turbmode)=='k-omega') then
+        call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
+                                     density=rho(im:im+hm,0:jm,0:km),  &
+                                    velocity=vel(im:im+hm,0:jm,0:km,:),&
+                                    pressure=prs(im:im+hm,0:jm,0:km),  &
+                                 temperature=tmp(im:im+hm,0:jm,0:km),  &
+                                     species=spc(im:im+hm,0:jm,0:km,:),&
+                                         tke=tke(im:im+hm,0:jm,0:km),  &
+                                       omega=omg(im:im+hm,0:jm,0:km) )
+        call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
+                                       density=rho(-hm:0,0:jm,0:km),   &
+                                      velocity=vel(-hm:0,0:jm,0:km,:), &
+                                      pressure=prs(-hm:0,0:jm,0:km),   &
+                                   temperature=tmp(-hm:0,0:jm,0:km),   &
+                                       species=spc(-hm:0,0:jm,0:km,:), &
+                                           tke=tke(-hm:0,0:jm,0:km),   &
+                                         omega=omg(-hm:0,0:jm,0:km)    )
+      elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
+        call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
+                                     density=rho(im:im+hm,0:jm,0:km),  &
+                                    velocity=vel(im:im+hm,0:jm,0:km,:),&
+                                    pressure=prs(im:im+hm,0:jm,0:km),  &
+                                 temperature=tmp(im:im+hm,0:jm,0:km),  &
+                                     species=spc(im:im+hm,0:jm,0:km,:) )
+        call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
+                                       density=rho(-hm:0,0:jm,0:km),   &
+                                      velocity=vel(-hm:0,0:jm,0:km,:), &
+                                      pressure=prs(-hm:0,0:jm,0:km),   &
+                                   temperature=tmp(-hm:0,0:jm,0:km),   &
+                                       species=spc(-hm:0,0:jm,0:km,:)  )
+      else
+        stop ' !! ERROR 1 turbmode @ qswap'
+      endif
+      ! 
     else
+      !
       ncou=(jm+1)*(km+1)*numq*(hm+1)
       !
       allocate( sbuf1(0:hm, 0:jm,0:km,1:numq),                        &

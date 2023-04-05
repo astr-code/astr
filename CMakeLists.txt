@@ -16,6 +16,22 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/opt" CACHE PATH "..." FORCE)
 endif()
 
+if(DEFINED ENV{CANTERA_DIR})
+	MESSAGE(STATUS "cantera directory " $ENV{CANTERA_DIR})
+  set(CTRDIR $ENV{CANTERA_DIR})
+  include_directories(${CTRDIR}/include/cantera)
+  link_libraries(${CTRDIR}/lib/libcantera_fortran.so ${CTRDIR}/lib/libcantera.so)
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  add_definitions(-DCOMB)
+else()
+	message(FATAL_ERROR "CANTERA is not included")
+endif(DEFINED ENV{CANTERA_DIR})
+
+set(ASTR_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+message(STATUS "ASTR directory: ${ASTR_ROOT}")
+set(CMAKE_INSTALL_PREFIX ${ASTR_ROOT})
+
+
 # Add support for CMAKE_DEPENDENT_OPTION
 INCLUDE(CMakeDependentOption)
 INCLUDE(CMakeParseArguments)

@@ -165,6 +165,7 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|             lreport | to control report of subroutines            |
   !+---------------------+---------------------------------------------+
+  character(len=4) :: testmode
   !
 #ifdef COMB
   logical :: lcomb
