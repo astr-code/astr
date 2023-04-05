@@ -230,17 +230,17 @@ module parallel
       !
       if(ndims==3 .and. mpisize<8) then
         print*,' !! minimal 8 ranks required for 3-D simulations'
-        stop
+        ! stop
       endif
       !
       if(ndims==2 .and. mpisize<4) then
         print*,' !! minimal 4 ranks required for 2-D simulations'
-        stop
+        ! stop
       endif
       !
       if(ndims==1 .and. mpisize<2) then
         print*,' !! minimal 2 ranks required for 1-D simulations'
-        stop
+        ! stop
       endif
       !
       n=0
@@ -2604,6 +2604,16 @@ module parallel
       !
       deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
       !
+    else
+      ! case of one core
+      do n=1,hm
+        x(-n,0:jm,0:km,1:3)=2.d0*x(0,0:jm,0:km,1:3)-x(n,0:jm,0:km,1:3) ! even
+      enddo
+      !
+      do n=1,hm
+        x(im+n,0:jm,0:km,1:3)=2.d0*x(im,0:jm,0:km,1:3)-x(im-n,0:jm,0:km,1:3)
+      enddo
+      !
     endif
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -2669,6 +2679,14 @@ module parallel
       ! Finish message pass in j direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     else
+      !case of one core
+      do n=1,hm
+        x(0:im,-n,0:km,1:3)=2.d0*x(0:im,0,0:km,1:3)-x(0:im,n,0:km,1:3)
+      enddo
+      !
+      do n=1,hm
+        x(0:im,jm+n,0:km,1:3)=2.d0*x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3)
+      enddo
       !
       if(ja==0) then
         !
@@ -2745,6 +2763,14 @@ module parallel
       ! Finish message pass in k direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     else
+      ! case of one core
+      do n=1,hm
+        x(0:im,0:jm,-n,1:3)=2.d0*x(0:im,0:jm,0,1:3)-x(0:im,0:jm,n,1:3)
+      end do
+      !
+      do n=1,hm
+        x(0:im,0:jm,km+n,1:3)=2.d0*x(0:im,0:jm,km,1:3)-x(0:im,0:jm,km-n,1:3)
+      end do
       !
       if(ka==0) then
         !
@@ -2780,7 +2806,7 @@ module parallel
     logical,intent(in),optional :: timerept
     !
     ! logical data
-    integer :: ncou,j,k
+    integer :: ncou,i,j,k
     integer :: ierr
     logical,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
@@ -2798,7 +2824,16 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
+      !
+      if(ia==0) then 
+        do i=-hm,hm
+          var(i,0:jm,0:km)    =var(0,0:jm,0:km)
+        enddo
+      else
+        var(-hm:-1,0:jm,0:km)    =var(im-hm:im-1,0:jm,0:km)
+        var(im+1:im+hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+      endif
       !
     else
       !
@@ -3001,7 +3036,7 @@ module parallel
     logical,intent(in),optional :: timerept
     !
     ! logical data
-    integer :: ncou,j,k
+    integer :: ncou,i,j,k
     integer :: ierr
     integer,allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
@@ -3019,7 +3054,16 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
+      !
+      if(ia==0) then 
+        do i=-hm,hm
+          var(i,0:jm,0:km)    =var(0,0:jm,0:km)
+        enddo
+      else
+        var(-hm:-1,0:jm,0:km)    =var(im-hm:im-1,0:jm,0:km)
+        var(im+1:im+hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+      endif
       !
     else
       !
@@ -3222,7 +3266,7 @@ module parallel
     logical,intent(in),optional :: timerept
     !
     ! logical data
-    integer :: ncou,j,k
+    integer :: ncou,i,j,k
     integer :: ierr
     real(8),allocatable,dimension(:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
@@ -3240,9 +3284,16 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
       !
-
+      if(ia==0) then 
+        do i=-hm,hm
+          var(i,0:jm,0:km)    =var(0,0:jm,0:km)
+        enddo
+      else
+        var(-hm:-1,0:jm,0:km)    =var(im-hm:im-1,0:jm,0:km)
+        var(im+1:im+hm,0:jm,0:km)=var(1:hm,0:jm,0:km)
+      endif
       !
     else
       !
@@ -3463,7 +3514,11 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
+      !
+      var(0,0:jm,0:km)  =0.5d0*(var(0,0:jm,0:km)+var(im,0:jm,0:km))
+      var(im,0:jm,0:km)   =var(0,0:jm,0:km)
+      !          
     else 
       ncou=(jm+1)*(km+1)
       !
@@ -3649,7 +3704,7 @@ module parallel
     !
     ! local data
     integer :: ncou,nx,dir
-    integer :: ierr,j,k
+    integer :: ierr,i,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
@@ -3676,7 +3731,16 @@ module parallel
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! Message pass in i direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      if(isize==1) then
+      if(isize==1 .and. lihomo) then
+        !
+        if(ia==0) then
+          do i=-hm,hm
+            var(i,0:jm,0:km,:)=var(0,0:jm,0:km,:)
+          enddo
+        else
+          var(-hm:-1,0:jm,0:km,:)    =var(im-hm:im-1,0:jm,0:km,:)
+          var(im+1:im+hm,0:jm,0:km,:)=var(1:hm,0:jm,0:km,:)
+        endif
         !
       else
         !
@@ -3892,7 +3956,7 @@ module parallel
     !
     ! logical data
     integer :: ncou,nx,mx
-    integer :: ierr,j,k
+    integer :: ierr,i,j,k
     real(8),allocatable,dimension(:,:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
@@ -3912,8 +3976,17 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
       !
+      if(ia==0) then 
+        do i=-hm,hm
+          var(i,0:jm,0:km,:,:)=var(0,0:jm,0:km,:,:)
+        enddo
+      else
+        var(-hm:-1, 0:jm   ,0:km,:,:)=var(jm-hm:jm-1,0:jm,0:km,:,:)
+        var(jm+1:jm+hm,0:jm,0:km,:,:)=var(1:hm,    0:jm,  0:km,:,:)
+      endif
+      !  
     else
       !
       ncou=(jm+1)*(km+1)*nx*mx*hm
@@ -4351,7 +4424,7 @@ module parallel
     !
     ! local data
     integer :: ncou
-    integer :: ierr,j,k
+    integer :: ierr,i,j,k
     real(8),allocatable,dimension(:,:,:,:) :: sbuf1,sbuf2,rbuf1,rbuf2
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
@@ -4368,7 +4441,54 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1) then
+    if(isize==1 .and. lihomo) then
+      !
+      if(im==0) then
+        do i=-hm,hm
+          q(i,0:jm,0:km,:)=q(0,0:jm,0:km,:)
+        enddo
+      else
+        q(-hm:-1     ,0:jm ,0:km,:)=q(im-hm:im-1,0:jm ,0:km,:)
+        q(im+1:im+hm ,0:jm ,0:km,:)=q(1:hm      ,0:jm ,0:km,:)
+        !
+        q(0, 0:jm,0:km,:)=0.5d0*(q(0,0:jm,0:km,:)+q(im,0:jm,0:km,:))
+        q(im,0:jm,0:km,:)=q(0,0:jm,0:km,:)
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
+                                       density=rho(-hm:0,0:jm,0:km),   &
+                                      velocity=vel(-hm:0,0:jm,0:km,:), &
+                                      pressure=prs(-hm:0,0:jm,0:km),   &
+                                   temperature=tmp(-hm:0,0:jm,0:km),   &
+                                       species=spc(-hm:0,0:jm,0:km,:), &
+                                           tke=tke(-hm:0,0:jm,0:km),   &
+                                         omega=omg(-hm:0,0:jm,0:km)    )
+        call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
+                                  density=rho(im:im+hm,0:jm,0:km),     &
+                                 velocity=vel(im:im+hm,0:jm,0:km,:),   &
+                                 pressure=prs(im:im+hm,0:jm,0:km),     &
+                              temperature=tmp(im:im+hm,0:jm,0:km),     &
+                                  species=spc(im:im+hm,0:jm,0:km,:),   &
+                                      tke=tke(im:im+hm,0:jm,0:km),     &
+                                    omega=omg(im:im+hm,0:jm,0:km)      )
+      elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
+        call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
+                                       density=rho(-hm:0,0:jm,0:km),   &
+                                      velocity=vel(-hm:0,0:jm,0:km,:), &
+                                      pressure=prs(-hm:0,0:jm,0:km),   &
+                                   temperature=tmp(-hm:0,0:jm,0:km),   &
+                                       species=spc(-hm:0,0:jm,0:km,:)  )
+        call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
+                                  density=rho(im:im+hm,0:jm,0:km),     &
+                                 velocity=vel(im:im+hm,0:jm,0:km,:),   &
+                                 pressure=prs(im:im+hm,0:jm,0:km),     &
+                              temperature=tmp(im:im+hm,0:jm,0:km),     &
+                                  species=spc(im:im+hm,0:jm,0:km,:)    )
+      else
+        stop ' !! ERROR 3 turbmode @ qswap'
+      endif
+      !
     else
       ncou=(jm+1)*(km+1)*numq*(hm+1)
       !
