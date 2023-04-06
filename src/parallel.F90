@@ -985,6 +985,7 @@ module parallel
         mpileft =MPI_PROC_NULL
         mpiright=MPI_PROC_NULL
         !
+        npdci=4
       else
         !
         if(irk==0) then
@@ -1044,6 +1045,8 @@ module parallel
       if(jsize==1) then
         mpidown=MPI_PROC_NULL
         mpiup  =MPI_PROC_NULL
+        !
+        npdcj=4
       else
         if(jrk==0) then
           js=1
@@ -1102,6 +1105,8 @@ module parallel
       if(ksize==1) then
         mpiback=MPI_PROC_NULL
         mpifront=MPI_PROC_NULL
+        !
+        npdck=4
       else
         !
         if(krk==0) then

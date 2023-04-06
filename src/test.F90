@@ -7,6 +7,8 @@
 !+---------------------------------------------------------------------+
 module test
   !
+  use constdef
+  !
   implicit none
   !
   contains
@@ -29,6 +31,8 @@ module test
       call gradtest
     elseif(testmode=='enst') then 
       call enstest
+    elseif(testmode=='filt') then 
+      call filtertest
     else
       return
     endif
@@ -107,7 +111,7 @@ module test
     integer :: i,j,k,n
     real(8) :: dx
     real(8),allocatable :: vtest(:,:,:)
-    real(8),allocatable :: dq(:),qhp(:),qhm(:)
+    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
     !
     ! print*,x(:,0,0,1)
     !
@@ -141,7 +145,7 @@ module test
     do j=0,jm
     do i=0,im
       !
-      q(i,j,k,1)=sin(x(i,j,k,2))
+      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))
       !
     enddo
     enddo
@@ -149,24 +153,29 @@ module test
     !
     call dataswap(q)
     !
-    allocate(dq(0:jm))
+    allocate(dq(0:jm),dqref(0:jm))
     !
     dq(:)=ddfc(q(0,:,0,1),conschm,npdcj,jm,alfa_con,ccj)*dxi(0,0:jm,0,2,2)
     !
+    i=0; k=0
+    do j=0,jm
+      dqref(j)=0.5d0*pi*cos(0.5d0*pi*x(i,j,k,2))
+    end do
+    !
     open(18,file='testout/ddy_i=0_k=0.dat')
-    write(18,'(3(1X,A15))')'y','dqdy','cosy'
-    write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),dq(j),cos(x(0,j,0,2)),j=0,jm)
+    write(18,'(4(1X,A15))')'y','q','dqdy','dq_ref'
+    write(18,'(4(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),dqref(j),j=0,jm)
     close(18)
     print*,' << testout/ddy_i=0_k=0.dat'
     !
-    deallocate(dq)
+    deallocate(dq,dqref)
     !
     ! testing ddz
     do k=0,km
     do j=0,jm
     do i=0,im
       !
-      q(i,j,k,1)=sin(x(i,j,k,3))
+      q(i,j,k,1)=sin(2.d0*x(i,j,k,3))
       !
     enddo
     enddo
@@ -243,6 +252,101 @@ module test
     ! deallocate(dq)
     !
   end subroutine gradtest
+  !
+  subroutine filtertest
+    !
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
+                          alfa_filter,numq,is,ie
+    use commarray, only : x,q,dxi
+    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use bc,        only : boucon
+    use parallel,  only : dataswap,mpirankname
+    use solver,    only : alfa_con,fci,fcj,fck
+    !
+    ! local data
+    integer :: i,j,k,n
+    real(8) :: dx
+    real(8),allocatable :: vtest(:,:,:)
+    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
+    !
+    ! print*,x(:,0,0,1)
+    !
+    ! testing ddx
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(10.d0*x(i,j,k,1))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:im))
+    !
+    dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
+    !
+    open(18,file='testout/filterx.dat')
+    write(18,'(3(1X,A15))')'x','q','q~'
+    write(18,'(3(1X,E15.7E3))')(x(i,0,0,1),q(i,0,0,1),dq(i),i=0,im)
+    close(18)
+    print*,' << testout/filterx.dat'
+    !
+    deallocate(dq)
+    !
+    ! testing ddy
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(6.5d0*pi*x(i,j,k,2))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:jm))
+    !
+    dq(:)=spafilter10(q(0,:,0,1),npdcj,jm,alfa_filter,fcj)
+    !
+    open(18,file='testout/filtery.dat')
+    write(18,'(3(1X,A15))')'y','q','q~'
+    write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
+    close(18)
+    print*,' << testout/filtery.dat'
+    !
+    deallocate(dq)
+    !
+    ! testing ddz
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(6.d0*x(i,j,k,3))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:km))
+    !
+    dq(:)=spafilter10(q(0,0,:,1),npdck,km,alfa_filter,fck)
+    !
+    open(18,file='testout/filterz.dat')
+    write(18,'(3(1X,A15))')'y','q','q~'
+    write(18,'(3(1X,E15.7E3))')(x(0,0,k,3),q(0,0,k,1),dq(k),k=0,km)
+    close(18)
+    print*,' << testout/filterz.dat'
+    !
+    deallocate(dq)
+    !
+  end subroutine filtertest
   !
     !
 end module test
