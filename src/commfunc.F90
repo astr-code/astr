@@ -957,13 +957,26 @@ module commfunc
       deallocate(cf,kama)
         !
     else
-      aff(1)=0.d0
+      aff(1)=af
       aff(2)=af
       aff(3)=af
       ! b =pfilterrhs(f,dim,ntype)
       ! ff=ptdsfilter_cal(b,af,fc,dim,ntype)
       b =PFilterRHS2(f,dim,ntype)
       ff=ptds_cal(b,aff,fc,dim,ntype)
+      !
+      ! reset the value at the boundary to avoid the drift 
+      ! caused by the compact filter
+      if(ntype==1 .or. ntype==4) then
+        ff(0)=f(0)
+      elseif(ntype==2 .or. ntype==4) then
+        ff(dim)=f(dim)
+      elseif(ntype==3) then
+        continue
+      else
+        stop ' ntype error @ spafilter10_basic'
+      endif
+      !
     endif
     !
     ! do i=0,dim
@@ -1275,7 +1288,9 @@ module commfunc
     !
     if(ntype==1) then
       ! the block with boundary at 0
-      b(0)=var(0)
+      b(0)=coefb(0,0)*var(0)+coefb(0,1)*var(1)+coefb(0,2)*var(2)+      &
+           coefb(0,3)*var(3)+coefb(0,4)*var(4)+coefb(0,5)*var(5)+      &
+           coefb(0,6)*var(6)
       !
       b(1)=coefb(1,0)*var(0)+coefb(1,1)*var(1)+coefb(1,2)*var(2)+      &
            coefb(1,3)*var(3)+coefb(1,4)*var(4)+coefb(1,5)*var(5)+      &
@@ -1391,7 +1406,10 @@ module commfunc
                coefb(1,4)*var(dim-4)+coefb(1,5)*var(dim-5)+            &
                coefb(1,6)*var(dim-6)
       !
-      b(dim)=var(dim)
+      b(dim)=coefb(0,0)*var(dim)  +coefb(0,1)*var(dim-1)+            &
+             coefb(0,2)*var(dim-2)+coefb(0,3)*var(dim-3)+            &
+             coefb(0,4)*var(dim-4)+coefb(0,5)*var(dim-5)+            &
+             coefb(0,6)*var(dim-6)
       !
     elseif(ntype==3) then
       ! inner block
@@ -1449,7 +1467,9 @@ module commfunc
     elseif(ntype==4) then
       ! the block with boundary at i=0 and i=im
       !
-      b(0)=var(0)
+      b(0)=coefb(0,0)*var(0)+coefb(0,1)*var(1)+coefb(0,2)*var(2)+      &
+           coefb(0,3)*var(3)+coefb(0,4)*var(4)+coefb(0,5)*var(5)+      &
+           coefb(0,6)*var(6)
       !
       b(1)=coefb(1,0)*var(0)+coefb(1,1)*var(1)+coefb(1,2)*var(2)+      &
            coefb(1,3)*var(3)+coefb(1,4)*var(4)+coefb(1,5)*var(5)+      &
@@ -1513,7 +1533,10 @@ module commfunc
                coefb(1,4)*var(dim-4)+coefb(1,5)*var(dim-5)+            &
                coefb(1,6)*var(dim-6)
       !
-      b(dim)=var(dim)
+      b(dim)=coefb(0,0)*var(dim)  +coefb(0,1)*var(dim-1)+            &
+             coefb(0,2)*var(dim-2)+coefb(0,3)*var(dim-3)+            &
+             coefb(0,4)*var(dim-4)+coefb(0,5)*var(dim-5)+            &
+             coefb(0,6)*var(dim-6)
       !
     else
       print*,' !! error in subroutine pfilterrhs2!'
@@ -1724,7 +1747,7 @@ module commfunc
   !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to generate the coefficient for the filter,
-  ! and bounday filter is included.
+  ! and boundary filter is included.
   ! The boundary filter is lower order (0-6-6-6-8...) using one side
   ! filter.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2579,7 +2602,7 @@ module commfunc
       return
     endif
     !
-    af_1=0.d0
+    af_1=af
     af_2=af
     af_3=af
     !

@@ -301,11 +301,13 @@ module test
     do j=0,jm
     do i=0,im
       !
-      q(i,j,k,1)=sin(6.5d0*pi*x(i,j,k,2))
+      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))+0.1d0*sin((dble(j)+0.5d0)*pi)
       !
     enddo
     enddo
     enddo
+    q(:, 0,:,1)=0.d0
+    q(:,jm,:,1)=0.d0
     !
     call dataswap(q)
     !
