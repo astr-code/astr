@@ -17,7 +17,6 @@ program astr
   use pp
   use geom
   use ibmethod
-  use test
   !
   implicit none
   !
@@ -69,9 +68,9 @@ program astr
     !
     call flowinit
     !
-    call codetest
-    !
     call steploop
+    !
+    ! call gradcal
     !
     call mpistop
     !

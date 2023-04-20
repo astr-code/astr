@@ -332,7 +332,7 @@ module commcal
         write(*,"(4x,A,11X,F12.5)")'      max ssf: ',ssfmax
         write(*,"(4x,A,11X,F12.5)")'      min ssf: ',ssfmin
         write(*,"(4x,A,11X,F12.5)")'      avg ssf: ',ssfavg
-        write(*,"(4x,2(A,I0),(A,F10.5,A))")'  shock nodes:  ',       &
+        write(*,"(4x,2(A,I0),(A,F5.2,A))")'  shock nodes:  ',       &
                  nshknod,'/',nijka,' = ',dble(100*nshknod)/dble(nijka),' %'
         print*,' ----------------------------------------'
       endif

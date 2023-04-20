@@ -49,7 +49,7 @@ module initialisation
     !
     if(lrestart) then
       !
-      call readcheckpoint(folder='outdat',mode='h')
+      call readcheckpoint(folder='checkpoint',mode='h')
       !
       call updateq
       !
@@ -80,8 +80,6 @@ module initialisation
           call chanini
         case('tgv')
           call tgvini
-        case('hit')
-          call hitini
         case('jet')
           call jetini
         case('accutest')
@@ -140,7 +138,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
+    call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -628,82 +626,6 @@ module initialisation
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is used to generate initial flow  for homogeneous |
-  !| isotropic turbulence.                                             |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 26-09-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
-  !+-------------------------------------------------------------------+
-  subroutine hitini
-    !
-    use commvar,  only: ia,ja,ka
-    use commarray,only: x,vel,rho,prs,spc,tmp,q,dvel
-    use fludyna,  only: thermal
-    use solver,   only: grad
-    use parallel, only: psum,pmax,pmin
-    use hdf5io
-    !
-    ! local data
-    integer :: i,j,k,jspc
-    real(8) :: div,div_min,div_max,div_avg
-    !
-    call h5io_init(filename='datin/velocity.h5',mode='read')
-    ! 
-    call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1),mode='h')
-    call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2),mode='h')
-    call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3),mode='h')
-    !
-    call h5io_end
-    !
-    dvel(0:im,0:jm,0:km,1,:)=grad(vel(:,:,:,1))
-    dvel(0:im,0:jm,0:km,2,:)=grad(vel(:,:,:,2))
-    dvel(0:im,0:jm,0:km,3,:)=grad(vel(:,:,:,3))
-    !
-    div=0.d0
-    div_min= 1.d10
-    div_max=-1.d10
-    div_avg=0.d0
-    !
-    do k=1,km
-    do j=1,jm
-    do i=1,im
-      div=dvel(i,j,k,1,1)+dvel(i,j,k,2,2)+dvel(i,j,k,3,3)
-      !
-      div_avg=div_avg+div
-      div_min=min(div_min,div)
-      div_max=max(div_max,div)
-    enddo
-    enddo
-    enddo
-    !
-    div_avg=psum(div_avg)/dble(ia*ja*ka)
-    div_min=pmin(div_min)
-    div_max=pmax(div_max)
-    !
-    if(lio) print*,' ** velocity divgence, average:',div_avg,' min:',div_min,' max:',div_max
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      rho(i,j,k)  =roinf
-      tmp(i,j,k)  =tinf 
-      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-      !
-    enddo
-    enddo
-    enddo
-    !
-    !
-    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D homogeneous isotropic fluctuation initialised.'
-    !
-  end subroutine hitini
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine hitini.                                 |
-  !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
   !| This subroutine is used to generate 3d TGV initial flow           |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -754,10 +676,7 @@ module initialisation
       !
       if(nondimen) then
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
-        if(num_species>1) then
-          spc(i,j,k,1)=0.5d0+0.499d0*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
-          spc(i,j,k,2)=1.d0-spc(i,j,k,1)
-        endif
+        if(num_species>1) spc(i,j,k,1)=1.d0
       else 
         spc(i,j,k,:)=spcinf(:)
         tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
@@ -1253,14 +1172,11 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blini
     !
-    use commvar,  only: turbmode,Reynolds,nondimen,spcinf
+    use commvar,  only: turbmode,Reynolds
     use commarray,only: x,vel,rho,prs,spc,tmp,q,tke,omg
     use fludyna,  only: thermal,miucal
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
     use commfunc, only: dis2point2
-#ifdef COMB
-    use thermchem, only: spcindex
-#endif
     !
     ! local data
     integer :: i,j,k
@@ -1280,28 +1196,12 @@ module initialisation
       !
       tmp(i,j,k)  = tmp_prof(j)
       !
-      if(nondimen) then
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(num_species>1) then
+        spc(i,j,k,1)=0.d0
         !
-        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-        !
-        if(num_species>1) then
-          spc(i,j,k,1)=0.d0
-          !
-          spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
-          !
-        endif
-      else
-        !
-        spc(i,j,k,:)=spcinf
-! #ifdef COMB
-!         ! phi = 0.4 
-!         spc(i,j,k,:)=0.d0
-!         spc(i,j,k,spcindex('O2'))=0.2302d0
-!         spc(i,j,k,spcindex('H2'))=0.0116d0
-!         spc(i,j,k,spcindex('N2'))=1.d0-sum(spc(i,j,k,:))
-! #endif
-        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
-                           species=spc(i,j,k,:))
+        spc(i,j,k,num_species)=1.d0-sum(spc(i,j,k,1:num_species-1))
         !
       endif
       !
@@ -1530,17 +1430,14 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine blprofile
     !
-    use commvar,  only: flowtype,nondimen,spcinf,num_species
+    use commvar,  only: flowtype
     use readwrite,only: readprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
     use stlaio,   only: get_unit
-#ifdef COMB
-    use thermchem, only: spcindex
-#endif
     !
     ! local data
-    integer :: fh,i
+    integer :: fh
     !
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
@@ -1574,44 +1471,7 @@ module initialisation
       !
       ! vel_prof(:,1)=vel_prof(:,1) + 1.d0
       !
-      if(nondimen) then 
-        prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
-      else
-        !
-#ifdef COMB
-        ! phi = 0.4
-        ! spc_prof(:,:)=0.d0
-        ! spc_prof(:,spcindex('O2'))=0.2302d0
-        ! spc_prof(:,spcindex('H2'))=0.0116d0
-        ! spc_prof(:,spcindex('N2'))=0.7582d0
-        ! phi=0.2
-        ! spc_prof(:,:)=0.d0
-        ! spc_prof(:,spcindex('O2'))=0.23154d0
-        ! spc_prof(:,spcindex('H2'))=0.00583d0
-        ! spc_prof(:,spcindex('N2'))=0.76263d0
-        ! phi=0.3
-        ! spc_prof(:,:)=0.d0
-        ! spc_prof(:,spcindex('O2'))=0.23087d0
-        ! spc_prof(:,spcindex('H2'))=0.00873d0
-        ! spc_prof(:,spcindex('N2'))=0.76040d0
-        ! phi = 0.8
-        ! spc_prof(:,:)=0.d0
-        ! spc_prof(:,spcindex('O2'))=0.22756d0
-        ! spc_prof(:,spcindex('H2'))=0.02294d0
-        ! spc_prof(:,spcindex('N2'))=0.74950d0
-        ! phi = 0.6
-        ! spc_prof(:,:)=0.d0
-        ! spc_prof(:,spcindex('O2'))=0.22887d0
-        ! spc_prof(:,spcindex('H2'))=0.01730d0
-        ! spc_prof(:,spcindex('N2'))=0.75383d0
-#endif
-        ! non-reacting
-        do i=1,num_species
-          spc_prof(:,i) = spcinf(i)
-        enddo
-        !
-        prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
-      endif
+      prs_prof=thermal(density=rho_prof,temperature=tmp_prof,dim=jm+1)
       !
     else
       !
@@ -1625,17 +1485,7 @@ module initialisation
       vel_prof(:,2)=vinf
       vel_prof(:,3)=winf
       tmp_prof(:)  =tinf
-      !
-      if(nondimen) then 
-        prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
-      else
-        !
-        do i=1,num_species
-          spc_prof(:,i) = spcinf(i)
-        enddo
-        !
-        prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),species=spc_prof(:,:),dim=jm+1)
-      endif
+      prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
       !
     endif
     !

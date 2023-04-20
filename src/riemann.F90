@@ -7,8 +7,6 @@
 !+---------------------------------------------------------------------+
 module riemann
   !
-  use parallel, only : mpirank
-  !
   implicit none
   !
   contains
@@ -20,17 +18,14 @@ module riemann
   !| -------------                                                     |
   !| 10-02-2022: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine flux_steger_warming(fplus,fmius,rho,vel,prs,tmp,spc,q,dxi,jacob)
+  subroutine flux_steger_warming(fplus,fmius,rho,vel,prs,tmp,q,dxi,jacob)
     !
-    use commvar,  only: numq,gamma,nondimen
+    use commvar,  only: numq,gamma
     use fludyna,  only: sos
-#ifdef COMB
-    use thermchem,only:aceval,gammarmix
-#endif
     !
     real(8),intent(out) :: fplus(:,:),fmius(:,:)
-    real(8),intent(in) ::  rho(:),vel(:,:),prs(:),tmp(:),spc(:,:),   &
-                           q(:,:),dxi(:,:),jacob(:)
+    real(8),intent(in) ::  rho(:),vel(:,:),prs(:),tmp(:),q(:,:),       &
+                           dxi(:,:),jacob(:)
     !
     ! local data
     real(8) :: uu,eps,gm2,css,csa,lmach,fhi,jro
@@ -39,7 +34,7 @@ module riemann
     integer :: nsize,i
     !
     eps=0.04d0
-    ! gm2=0.5d0/gamma
+    gm2=0.5d0/gamma
     nsize=size(rho,1)
     !
     do i=1,nsize
@@ -51,18 +46,7 @@ module riemann
       gpd(2)=dxi(i,2)*var0
       gpd(3)=dxi(i,3)*var0
       !
-      if(nondimen) then 
-        gm2=0.5d0/gamma
-        css=sos(tmp(i))
-      else
-        !
-#ifdef COMB
-        gamma = gammarmix(tmp(i),spc(i,:))
-        gm2=0.5d0/gamma
-        call aceval(tmp(i),spc(i,:),css)
-#endif
-        !
-      endif
+      css=sos(tmp(i))
       csa=css/var0
       lmach=uu/csa
       !

@@ -39,8 +39,6 @@ module gridgeneration
         endif 
       elseif(trim(flowtype)=='jet') then
         call gridjet
-      elseif(trim(flowtype)=='hit') then
-        call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
       elseif(trim(flowtype)=='2dvort') then
         call gridcube(20.d0,10.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then
@@ -413,13 +411,13 @@ module gridgeneration
     if(mpirank==0) print*,' **  characteristic size:',len_chara
     if(mpirank==0) print*,' **            mesh size:',ia,ja,ka
     !
-    lx_solid=lx_solid
-    ly_solid=ly_solid
-    lz_solid=lz_solid
+    lx_solid=len_chara
+    ly_solid=len_chara
+    lz_solid=len_chara
     !
     allocate(xx(0:ia),yy(0:ja),zz(0:ka))
     !
-    isp=20
+    isp=28
     !
     imm=(ia-isp)/2
     jmm=ja/2
@@ -442,7 +440,7 @@ module gridgeneration
     enddo
     !
     ! sponge region
-    call spongstretch(ia-2*imm,10.d0*lx_solid,xx(imm+imm-2:ia))
+    call spongstretch(ia-2*imm,20.d0*lx_solid,xx(imm+imm-2:ia))
     !
     x0=xx(0)
     xx=xx-x0
@@ -500,8 +498,7 @@ module gridgeneration
       enddo
       !
       ! effeckve regkon
-      ! call spongstretch(kmm-km4,5.d0*lz_solid,zz(kmm+km4-2:kmm+kmm))
-      call spongstretch(kmm-km4,5.d0,zz(kmm+km4-2:kmm+kmm))
+      call spongstretch(kmm-km4,5.d0*lz_solid,zz(kmm+km4-2:kmm+kmm))
       !
       do k=0,kmm-1
         zz(k)=-zz(kmm+kmm-k)

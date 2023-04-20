@@ -154,7 +154,6 @@ module parallel
     !
     if(mpisize==1) then
       print*,' ** the program is working in serial environment!'
-      mpirank=0
     else
       if(mpirank==0)  then
         write(*,'(A,I0,A)')' ** the program is working with ',mpisize, &
@@ -192,6 +191,16 @@ module parallel
     !
     integer :: ndims
     !
+    if(mpisize==1) then
+       !
+      isize=1
+      jsize=1
+      ksize=1
+      !
+      return
+      !
+    endif
+    !
     if(ja==0 .and. ka==0) then
       ndims=1
     elseif(ka==0) then
@@ -219,112 +228,102 @@ module parallel
         stop
       end if
       !
-      ! if(ndims==3 .and. mpisize<8) then
-      !   print*,' !! minimal 8 ranks required for 3-D simulations'
-      !   stop
-      ! endif
-      ! !
-      ! if(ndims==2 .and. mpisize<4) then
-      !   print*,' !! minimal 4 ranks required for 2-D simulations'
-      !   stop
-      ! endif
-      ! !
-      ! if(ndims==1 .and. mpisize<2) then
-      !   print*,' !! minimal 2 ranks required for 1-D simulations'
-      !   stop
-      ! endif
+      if(ndims==3 .and. mpisize<8) then
+        print*,' !! minimal 8 ranks required for 3-D simulations'
+        stop
+      endif
       !
-      if(mpisize==1) then
+      if(ndims==2 .and. mpisize<4) then
+        print*,' !! minimal 4 ranks required for 2-D simulations'
+        stop
+      endif
+      !
+      if(ndims==1 .and. mpisize<2) then
+        print*,' !! minimal 2 ranks required for 1-D simulations'
+        stop
+      endif
+      !
+      n=0
+      do i=1,mpisize
         !
-        isize=1
-        jsize=1
-        ksize=1
+        if(mod(mpisize,i)==0) then
+          n=n+1
+          nfactor(n)=mpisize/i
+        end if
         !
-      else
+      end do
+      print*,' ** Number of factor is ',n
+      !
+      do n1=1,n
+      do n2=1,n
+      do n3=1,n
         !
-        n=0
-        do i=1,mpisize
-          !
-          if(mod(mpisize,i)==0) then
-            n=n+1
-            nfactor(n)=mpisize/i
-          end if
-          !
-        end do
-        print*,' ** Number of factor is ',n
         !
-        do n1=1,n
-        do n2=1,n
-        do n3=1,n
+        if(ndims==1) then
           !
+          nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
           !
-          if(ndims==1) then
-            !
+          if(nfactor(n2) .ne. 1) cycle
+          if(nfactor(n3) .ne. 1) cycle
+          !
+          ! print*,n1,n2,n3,'|',nfactor(n1),nfactor(n2),nfactor(n3)
+        elseif(ndims==2 .or. lfftk) then
+          !
+          nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
+          if(nfactor(n3) .ne. 1) cycle
+          if(nfactor(n2) == 1) cycle
+          if(nfactor(n1) == 1) cycle
+          !
+        else
+          !
+          if(nfactor(n3)>1 .and. nfactor(n2)>1 .and. nfactor(n1)>1) then
             nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
-            !
-            if(nfactor(n2) .ne. 1) cycle
-            if(nfactor(n3) .ne. 1) cycle
-            !
-            ! print*,n1,n2,n3,'|',nfactor(n1),nfactor(n2),nfactor(n3)
-          elseif(ndims==2 .or. lfftk) then
-            !
-            nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
-            if(nfactor(n3) .ne. 1) cycle
-            ! if(nfactor(n2) == 1) cycle
-            ! if(nfactor(n1) == 1) cycle
-            !
           else
-            !
-            if(nfactor(n3)>=1 .and. nfactor(n2)>=1 .and. nfactor(n1)>=1) then
-              nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
-            else
-             ! for 3D  calculation, the mpisize at k direction should not
-             ! be 1
-             cycle
-            end if
-            !
+           ! for 3D  calculation, the mpisize at k direction should not
+           ! be 1
+           cycle
           end if
-          !
-          if(nsize .eq. mpisize) then
-            !
-            nvar1=int(ja,8)*int(kaa,8)*int(nfactor(n1),8)
-            !
-            nvar1=nvar1+int(ia,8)*int(kaa,8)*int(nfactor(n2),8)
-            !
-            nvar1=nvar1+int(ia,8)*int(ja,8)*int(nfactor(n3),8)
-            !
-            ! print*,nvar1,nvar2,'-',nfactor(n1),nfactor(n2),nfactor(n3)
-            !
-            if(nvar1<nvar2) then
-              !
-              nvar2=nvar1
-              !
-              isize=nfactor(n1)
-              jsize=nfactor(n2)
-              ksize=nfactor(n3)
-              !
-              print*,' ** isze,jsize,ksize= ',isize,jsize,ksize
-              !
-              lallo=.true.
-              !
-            end if
-            !
-          end if
-          !
-        end do
-        end do
-        end do
-        !
-        if(.not. lallo) then
-          !
-          print*,' !! Size of ranks can not be allocated !!'
-          stop
           !
         end if
         !
-      endif
+        if(nsize .eq. mpisize) then
+          !
+          nvar1=int(ja,8)*int(kaa,8)*int(nfactor(n1),8)
+          !
+          nvar1=nvar1+int(ia,8)*int(kaa,8)*int(nfactor(n2),8)
+          !
+          nvar1=nvar1+int(ia,8)*int(ja,8)*int(nfactor(n3),8)
+          !
+          ! print*,nvar1,nvar2,'-',nfactor(n1),nfactor(n2),nfactor(n3)
+          !
+          if(nvar1<nvar2) then
+            !
+            nvar2=nvar1
+            !
+            isize=nfactor(n1)
+            jsize=nfactor(n2)
+            ksize=nfactor(n3)
+            !
+            print*,' ** isze,jsize,ksize= ',isize,jsize,ksize
+            !
+            lallo=.true.
+            !
+          end if
+          !
+        end if
+        !
+      end do
+      end do
+      end do
       !
       write(*,'(3(A,I0))')'  ** mpi size= ',isize,' x ',jsize,' x ',ksize
+      !
+      if(.not. lallo) then
+        !
+        print*,' !! Size of ranks can not be allocated !!'
+        stop
+        !
+      end if
       !
     end if
     !
@@ -985,7 +984,6 @@ module parallel
         mpileft =MPI_PROC_NULL
         mpiright=MPI_PROC_NULL
         !
-        npdci=4
       else
         !
         if(irk==0) then
@@ -1045,8 +1043,6 @@ module parallel
       if(jsize==1) then
         mpidown=MPI_PROC_NULL
         mpiup  =MPI_PROC_NULL
-        !
-        npdcj=4
       else
         if(jrk==0) then
           js=1
@@ -1105,8 +1101,6 @@ module parallel
       if(ksize==1) then
         mpiback=MPI_PROC_NULL
         mpifront=MPI_PROC_NULL
-        !
-        npdck=4
       else
         !
         if(krk==0) then
@@ -2610,15 +2604,6 @@ module parallel
       !
       deallocate( sendbuf1,sendbuf2,recvbuf1,recvbuf2 )
       !
-    else
-      !
-      if(ia>0) then
-        do n=1,hm
-          x(im+n,0:jm,0:km,:)=x(im,0:jm,0:km,:)+(x(n,0:jm,0:km,:) -x(0,0:jm,0:km,:))
-          x(  -n,0:jm,0:km,:)=x( 0,0:jm,0:km,:)-(x(im,0:jm,0:km,:)-x(im-n,0:jm,0:km,:))
-        enddo
-      endif
-      !
     endif
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Finish message pass in i direction.
@@ -2693,11 +2678,6 @@ module parallel
           x(0:im,j,0:km,3)=x(0:im,0,0:km,3)
         enddo
         !
-      else
-        do n=1,hm
-          x(0:im,jm+n,0:km,:)=x(0:im,jm,0:km,:)+(x(0:im, n,0:km,1:3)-x(0:im,   0,0:km,1:3))
-          x(0:im,  -n,0:km,:)=x(0:im, 0,0:km,:)-(x(0:im,jm,0:km,1:3)-x(0:im,jm-n,0:km,1:3))
-        enddo
       endif
       !
     endif
@@ -2773,11 +2753,6 @@ module parallel
           x(0:im,0:jm,k,3)=x(0:im,0:jm,0,3)+real(k,8)
         enddo
         !
-      else
-        do n=1,hm
-          x(0:im,0:jm,km+n,:)=x(0:im,0:jm,km,:)+(x(0:im,0:jm, n,1:3)-x(0:im,0:jm,   0,1:3))
-          x(0:im,0:jm,  -n,:)=x(0:im,0:jm, 0,:)-(x(0:im,0:jm,km,1:3)-x(0:im,0:jm,km-n,1:3))
-        enddo
       endif
       !
     end if
@@ -2824,11 +2799,6 @@ module parallel
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
-      !
-      if(lihomo) then
-        var( -hm:-1,   0:jm,0:km) =var(im-hm:im-1,0:jm,0:km)
-        var(im+1:im+hm,0:jm,0:km) =var(    1:hm,  0:jm,0:km)
-      endif
       !
     else
       !
@@ -3051,11 +3021,6 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
       !
-      if(lihomo) then
-        var( -hm:-1,   0:jm,0:km) =var(im-hm:im-1,0:jm,0:km)
-        var(im+1:im+hm,0:jm,0:km) =var(    1:hm,  0:jm,0:km)
-      endif
-      !
     else
       !
       ncou=(jm+1)*(km+1)*hm
@@ -3277,10 +3242,7 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
       !
-      if(lihomo) then
-        var( -hm:-1,   0:jm,0:km) =var(im-hm:im-1,0:jm,0:km)
-        var(im+1:im+hm,0:jm,0:km) =var(    1:hm,  0:jm,0:km)
-      endif
+
       !
     else
       !
@@ -3501,15 +3463,8 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(isize==1 .and. lihomo) then
-      !
-      if(lihomo) then
-        var( 0,0:jm,0:km)=0.5d0*(var(0,0:jm,0:km)+var(im,0:jm,0:km))
-       var(im,0:jm,0:km)=var(0,0:jm,0:km)
-     endif
-      !
+    if(isize==1) then
     else 
-      !
       ncou=(jm+1)*(km+1)
       !
       allocate( sbuf1(0:jm,0:km),sbuf2(0:jm,0:km),           &
@@ -3722,11 +3677,6 @@ module parallel
       ! Message pass in i direction.
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       if(isize==1) then
-        !
-        if(lihomo) then
-          var( -hm:-1,   0:jm,0:km,:) =var(im-hm:im-1,0:jm,0:km,:)
-          var(im+1:im+hm,0:jm,0:km,:) =var(    1:hm,  0:jm,0:km,:)
-        endif
         !
       else
         !
@@ -3963,11 +3913,6 @@ module parallel
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
-      !
-      if(lihomo) then
-        var( -hm:-1   ,0:jm,0:km,:,:)=var(im-hm:im-1,0:jm,0:km,:,:)
-        var(im+1:im+hm,0:jm,0:km,:,:)=var(    1:hm,  0:jm,0:km,:,:)
-      endif
       !
     else
       !
@@ -4207,11 +4152,6 @@ module parallel
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
       !
-      if(lihomo) then
-        var( -hm:-1,   0:jm,0:km,:,:) =var(im-hm:im-1,0:jm,0:km,:,:)
-        var(im+1:im+hm,0:jm,0:km,:,:) =var(    1:hm,  0:jm,0:km,:,:)
-      endif
-      !
     else
       !
       ncou=(jm+1)*(km+1)*nx*mx*hm
@@ -4429,53 +4369,7 @@ module parallel
     ! Message pass in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(isize==1) then
-      !
-      if(lihomo) then
-        !
-        q( -hm:-1   ,0:jm,0:km,:)=q(im-hm:im-1,0:jm,0:km,:)
-        q(im+1:im+hm,0:jm,0:km,:)=q(    1:hm,  0:jm,0:km,:)
-        !
-        q( 0,0:jm,0:km,:)=0.5d0*(q(0,0:jm,0:km,:)+q(im,0:jm,0:km,:))
-        q(im,0:jm,0:km,:)=q(0,0:jm,0:km,:)
-        !
-        if(trim(turbmode)=='k-omega') then
-          call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
-                                       density=rho(im:im+hm,0:jm,0:km),  &
-                                      velocity=vel(im:im+hm,0:jm,0:km,:),&
-                                      pressure=prs(im:im+hm,0:jm,0:km),  &
-                                   temperature=tmp(im:im+hm,0:jm,0:km),  &
-                                       species=spc(im:im+hm,0:jm,0:km,:),&
-                                           tke=tke(im:im+hm,0:jm,0:km),  &
-                                         omega=omg(im:im+hm,0:jm,0:km) )
-          call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
-                                         density=rho(-hm:0,0:jm,0:km),   &
-                                        velocity=vel(-hm:0,0:jm,0:km,:), &
-                                        pressure=prs(-hm:0,0:jm,0:km),   &
-                                     temperature=tmp(-hm:0,0:jm,0:km),   &
-                                         species=spc(-hm:0,0:jm,0:km,:), &
-                                             tke=tke(-hm:0,0:jm,0:km),   &
-                                           omega=omg(-hm:0,0:jm,0:km)    )
-        elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
-          call q2fvar(q=q(im:im+hm,0:jm,0:km,:),                         &
-                                       density=rho(im:im+hm,0:jm,0:km),  &
-                                      velocity=vel(im:im+hm,0:jm,0:km,:),&
-                                      pressure=prs(im:im+hm,0:jm,0:km),  &
-                                   temperature=tmp(im:im+hm,0:jm,0:km),  &
-                                       species=spc(im:im+hm,0:jm,0:km,:) )
-          call q2fvar(q=q(-hm:0,0:jm,0:km,:),                            &
-                                         density=rho(-hm:0,0:jm,0:km),   &
-                                        velocity=vel(-hm:0,0:jm,0:km,:), &
-                                        pressure=prs(-hm:0,0:jm,0:km),   &
-                                     temperature=tmp(-hm:0,0:jm,0:km),   &
-                                         species=spc(-hm:0,0:jm,0:km,:)  )
-        else
-          stop ' !! ERROR 1 turbmode @ qswap'
-        endif
-        !
-      endif
-      ! 
     else
-      !
       ncou=(jm+1)*(km+1)*numq*(hm+1)
       !
       allocate( sbuf1(0:hm, 0:jm,0:km,1:numq),                        &

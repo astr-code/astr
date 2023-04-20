@@ -27,6 +27,7 @@ module pp
     use cmdefne
     use readwrite,       only : readinput
     use gridgeneration,  only : gridgen
+    use solver,          only : refcal
     !
     ! local data
     character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
@@ -51,6 +52,15 @@ module pp
       call div_free_gen
     elseif(trim(cmd)=='solid') then
       call solidpp
+      !
+    elseif(trim(cmd)=='lamprof') then
+      !
+      call readinput
+      !
+      call refcal
+      !
+      call lamprof
+      !
     elseif(trim(cmd)=='datacon') then
       !
       call readkeyboad(inputfile)
@@ -87,6 +97,391 @@ module pp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine preprocess.                             |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a laminar boundary layer profile.  |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-04-2023  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine lamprof
+    !
+    use cmdefne,   only : readkeyboad
+    use commvar,   only : gridfile,im,jm,km,ia,ja,ka,Mach,Reynolds
+    use bc,        only : twall
+    use readwrite, only : readgrid
+    use commarray, only : x
+    use str2real_m
+    !
+    ! local data
+    integer :: j,j0
+    real(8) :: red
+    character(len=16) :: cnumb
+    real(8),allocatable :: u(:),v(:),t(:),ro(:),y(:)
+    !
+    call readkeyboad(cnumb)
+    !
+    red=str2real(trim(cnumb))
+    print*,' ** target Reynolds number is:',red
+    !
+    im=ia
+    jm=ja
+    km=ka
+    !
+    allocate(u(0:jm),v(0:jm),t(0:jm),ro(0:jm),y(0:jm))
+    !
+    call readgrid(trim(gridfile))
+    !
+    y(:)=x(0,0:jm,0,2)
+    !
+    do j=0,jm
+      !
+      if(x(0,j,0,2)>=0.d0) then
+        j0=j
+        exit
+      endif
+      !
+    enddo
+    write(*,'(A,I0,A,F10.5)')'  ** the wall boundary located at j=',j0,', y=',x(0,j0,0,2)
+    !
+    call laminar_boundary_layer_solution(      ma=  Mach,      &
+                                               re=  Reynolds,  &
+                                               tw=  twall(3),  &
+                                         retarget=  red,       &
+                                                y=  y,         &
+                                               u1=  u,         &
+                                               u2=  v,         &
+                                              tmp=  t )
+    !
+  end subroutine lamprof
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine lamprof.                                |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is a laminar boundaryer solution.                 |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-04-2023  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine laminar_boundary_layer_solution(ma,re,tw,retarget,y,u1,u2,tmp)
+    !
+    use commvar,   only : prandtl,gamma,const2,const5,pinf
+    use fludyna,   only : miucal
+    use interp,    only : regularlinearinterp1d1v
+    !
+    real(8),intent(in) :: ma,re,tw,retarget
+    real(8),intent(in) :: y(:)
+    real(8),intent(out),allocatable :: u1(:),u2(:),tmp(:)
+    !
+    ! local data
+    integer :: jmax
+    real(8),allocatable,dimension(:) :: ye,y2,f,f1,f2,f3,t,t1,t2,u,v,ro
+    real(8) :: tadi,dye,pre,den,thick1,thick2,thick3,miu
+    !
+    integer :: n,j,j1,i
+    real(8) :: xin,erru,errt,df2,dt,f210,f211,t00,t01,var0,var1,var2
+    !
+    logical :: lcalcu=.true.
+    !
+    tadi=1.d0+0.5d0*const5*sqrt(prandtl)
+    !
+    ! print*,' **     wall temperature=',tw
+    ! print*,' ** adibatic temperature=',tadi
+    !
+    jmax=256
+    !
+    allocate( ye(0:jmax),y2(0:jmax),f(0:jmax),f1(0:jmax),f2(0:jmax),f3(0:jmax), &
+              t(0:jmax),t1(0:jmax),t2(0:jmax),u(0:jmax),v(0:jmax),ro(0:jmax)    )
+    !
+    do j=0,jmax
+      ye(j)=20.d0/jmax*j
+    end do
+    dye=ye(1)-ye(0)
+    !
+    ! initial guess a x location, and change it according the Reynolds number
+    xin=20.d0
+    !
+    do while(lcalcu)
+      !
+      !
+      ! Initial Boundary value
+      f(0)=0.d0
+      f1(0)=0.d0
+      !
+      ! shooting
+      f2(0)=0.33206d0 
+      !
+      f3(0)=-1.d0*f(0)*f2(0)
+      !
+      !
+      ! shooting
+      t(0)=tw
+      !
+      t(jmax)=1.d0
+      ! print*,' ** Twall=',t(0)
+      !
+      den=pinf/t(0)*const2
+      miu=MiuCal(t(0))
+      !
+      ! adiabatic wall
+      t1(0)= 1.d0
+      t2(0)=-const5*den*miu*f2(0)**2-f(0)*t1(0)
+      !
+      
+      
+      erru=1.d0  ; errt=1.d0
+      df2=0.01d0 ; dt=0.01d0
+      n=0
+      !
+      do while(errt>1.d-6 .and. erru>1.d-6)
+        !
+        n=n+1
+        !
+        erru=0.d0; errt=0.d0
+        !
+        f210=f1(jmax)-1.d0
+        t00 =t(jmax)-1.d0
+        !
+        call blasius_solution(f,f1,f2,f3,t,t1,t2,dye)
+        !
+        ! shooting f2(0) to satisify f1(jmax)=1.d0
+        erru=max(erru,dabs(f1(jmax)-1.d0))
+        !
+        f211=f1(jmax)-1.d0
+        !
+        if(f210*f211>0.d0) then
+        else
+          df2=df2*0.25d0
+        end if
+        !
+        if(f1(jmax)<1.d0) then
+          f2(0)=f2(0)+df2
+        elseif(f1(jmax)>1.d0) then
+          f2(0)=f2(0)-df2
+        end if
+        !
+        ! shooting t1(0) to satisify t(jmax)=1.d0
+        errt=max(errt,dabs(t(jmax)-1.d0))
+        t01=t(jmax)-1.d0
+        if(t00*t01>0.d0) then
+        else
+          dt=dt*0.5d0
+        end if
+        !
+        if(t(jmax)<1.d0) then
+          t1(0)=t1(0)+dt
+        elseif(t(jmax)>1.d0) then
+          t1(0)=t1(0)-dt
+        end if
+        !
+        ! print*,n,errt,t1(0),t(jmax),dt
+        !
+      end do
+      print*,' ** solution converged at errors:',erru,errt
+      !
+      var0=1.d0/sqrt(2.d0*xin*re)
+      do j=0,jmax
+        u(j)=f1(j)
+        v(j)=0.d0
+        do i=1,j
+          var1=0.5d0*(t(i)+t(i-1))*dye
+          var2=0.5d0*(u(i)+u(i-1))*dye
+          v(j)=v(j)+var0*(u(j)*var1-t(j)*var2)
+        end do
+      end do
+      !
+      y2(0)=0.d0
+      var1=sqrt(2.d0*xin/re)
+      do j=1,jmax
+        y2(j)=0.d0
+        do i=1,j
+          y2(j)=y2(j)+var1*0.5d0*(t(i)+t(i-1))*dye
+        end do
+      end do
+      !
+      ! Calculationg of boundary thickness
+      thick1=0.d0
+      thick2=0.d0
+      thick3=0.d0
+      !
+      var0=u(jmax)*0.99d0
+      do j=1,jmax
+        if(u(j-1)<=var0 .and. u(j)>=var0) then
+          thick1=(y2(j)-y2(j-1))/(u(j)-u(j-1))*(var0-u(j-1))+y2(j-1)
+          j1=j
+          exit
+        end if
+      end do
+      
+      ro=1.d0/t
+      
+      var0=ro(jmax)*u(jmax)
+      do j=1,jmax
+        var1=0.5d0*(ro(j)+ro(j-1))
+        var2=0.5d0*(u(j)+u(j-1))
+        thick2=thick2+(1.d0-var1*var2/var0)*(y2(j)-y2(j-1))
+      end do
+      !
+      var0=ro(jmax)*u(jmax)**2
+      do j=1,jmax
+        var1=0.5d0*(ro(j)+ro(j-1))
+        var2=0.5d0*(u(j)+u(j-1))
+        thick3=thick3+(var1*var2*(u(jmax)-var2))/var0*(y2(j)-y2(j-1))
+      end do
+      !
+      ! print*,'norminal thickness=',thick1
+      ! print*,'displacement thickness=',thick2
+      ! print*,'momentum thickness=',thick3
+      ! !
+      ! print*,'Reynolds Based on x=',re*xin
+      ! print*,'Reynolds Based on δ=',re*thick1
+      ! print*,'Reynolds Based on δ*=',re*thick2
+      ! print*,'Reynolds Based on θ=',re*thick3
+      !
+      write(*,'(3(A,F10.5))')'  ** Reδ=',re*thick1,'at x=',xin,' -- target Reδ=',retarget
+      !
+      if(abs(retarget-re*thick1)/retarget<0.05d0) then
+        lcalcu=.false.
+      else
+        xin=xin*retarget/(re*thick1)
+      endif
+      !
+    enddo
+    !
+    deallocate(ro)
+    !
+    allocate(u1(1:size(y)),u2(1:size(y)),tmp(1:size(y)),ro(1:size(y)))
+    !
+    call regularlinearinterp1d1v(y2,u,y,u1)
+    call regularlinearinterp1d1v(y2,v,y,u2)
+    call regularlinearinterp1d1v(y2,t,y,tmp)
+    !
+    ro=1.d0/tmp
+    !
+    open(16,file='inlet.prof')    
+    write(16,"(A26)")'# parameters of inlet flow'
+    write(16,"(4(1X,A14))")'delta','delta*','theter','utaw'
+    write(16,"(4(1X,E14.7E2))")thick1,thick2,thick3,0.d0
+    write(16,"(4(1X,A14))")'ro','u1','u2','t'
+    write(16,"(4(1X,E14.7E2))")(ro(j),u1(j),u2(j),tmp(j),j=1,size(y))
+    close(16)
+    print*,' <<< inlet.prof ... done!'
+    !
+    open(18,file='inlet.dat')
+    write(18,"(5(1X,A15))")'y','ro','u','v','T'
+    do j=1,size(y)
+      write(18,"(5(1X,E15.7E3))")y(j),ro(j),u1(j),u2(j),tmp(j)
+    end do
+    close(18)
+    print*,' << inlet.dat ... done.'
+    !
+    ! do j=1,size(y)
+    !   print*,j,y(j),u1(j),u2(j),tmp(j)
+    ! enddo
+    !
+    ! !
+    ! open(18,file='CompBlasius.dat')
+    ! write(18,"(5(1X,A15))")'y','yn','u','v','t'
+    ! do j=0,jmax
+    !   write(18,"(5(1X,E15.7E3))")y2(j),y2(j)*sqrt(re/xin),u(j),v(j),t(j)
+    ! end do
+    ! close(18)
+    ! print*,' << CompBlasius.dat'
+    ! !
+    ! print*,'Reynolds ',re
+    !
+  end subroutine laminar_boundary_layer_solution
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine laminar_boundary_layer_solution.        |
+  !+-------------------------------------------------------------------+
+  !
+  subroutine blasius_solution(f,f1,f2,f3,t,t1,t2,dy)
+    !
+    use commvar,   only : prandtl,const2,const5,pinf
+    use fludyna,   only : miucal
+    !
+    real(8),intent(inout),dimension(:) ::  f,f1,f2,f3,t,t1,t2
+    real(8),intent(in) ::  dy
+    !
+    ! local data
+    integer :: jdim,j,n
+    real(8) :: err,var0,var1,var2,var3,var4,var5,var6,miu,den,rom,rom2,p0,p1,p2,p3,q0,q1,q2
+    !
+    jdim=size(f)
+    !
+    err=1.d0
+    n=0
+    do while(err>1d-6)
+      !
+      n=n+1
+      err=0.d0
+      !
+      do j=2,jdim
+        !
+        ! predictor
+        miu=miucal(t(j-1))
+        den=pinf/t(j-1)*const2
+        rom=miu*den
+        rom2=miu*den/prandtl
+        !
+        p0= f(j-1)+f1(j-1)*dy
+        p1=f1(j-1)+f2(j-1)*dy
+        p2=f2(j-1)+f3(j-1)/rom*dy
+        p3=-1d0*p0*p2
+        !
+        q0=t(j-1)+t1(j-1)*dy
+        miu=miucal(q0)
+        den=pinf/q0*const2
+        rom=miu*den
+        rom2=miu*den/prandtl
+        q1=t1(j-1)+t2(j-1)/rom2*dy
+        q2=-p0*q1-const5*rom*p2**2
+        !
+        ! corrector
+        miu=miucal(q0)
+        den=pinf/q0*const2
+        rom=miu*den
+        rom2=miu*den/prandtl
+        !
+        var0= f(j-1)+0.5d0*(f1(j-1)+p1)*dy
+        var1=f1(j-1)+0.5d0*(f2(j-1)+p2)*dy
+        var2=f2(j-1)+0.5d0*(f3(j-1)+p3)/rom*dy
+        var3=-1d0*f(j)*f2(j)
+        !
+        var4= t(j-1)+0.5d0*(t1(j-1)+q1)*dy
+        miu=miucal(var4)
+        den=pinf/var4*const2
+        rom=miu*den
+        rom2=miu*den/prandtl
+        var5=t1(j-1)+0.5d0*(t2(j-1)+q2)/rom2*dy
+        var6=-var0*var5-const5*rom*var2**2
+        !
+        ! error calculation
+        err=max( err,dabs(var0- f(j)),dabs(var1-f1(j)),        &
+                           dabs(var2-f2(j)),dabs(var3-f3(j)),  &
+                           dabs(var4- t(j)),dabs(var5-t1(j)),  &
+                           dabs(var6-t2(j))                    )
+        !
+         f(j)=var0
+        f1(j)=var1
+        f2(j)=var2
+        f3(j)=var3
+        !
+         t(j)=var4
+        t1(j)=var5
+        t2(j)=var6
+        !
+      end do
+      !
+      !
+      !print*,'n',n,'err',err
+      !
+    end do
+    !
+  end subroutine blasius_solution
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to generate parallel.info file.                |
@@ -1979,10 +2374,10 @@ module pp
       call h5_read2dfrom3d( p_2d,im,jm,km, 'p',flowfile,kslice=0)
       call h5_read2dfrom3d( t_2d,im,jm,km, 't',flowfile,kslice=0)
       !
-      call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
-                                     v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
-       ! call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
-       !                                   v_2d,'v',p_2d,'p',t_2d,'t')
+      ! call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+      !                                v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
+      call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+                                        v_2d,'v',p_2d,'p',t_2d,'t')
     elseif(viewmode=='3d') then
       allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
     else

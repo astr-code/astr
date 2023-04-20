@@ -1189,7 +1189,7 @@ module thermchem
   subroutine aceval(tmp,spc,css)
     !
     ! arguments
-    real(8),intent(in) :: tmp,spc(:)
+    real(8),intent(in),optional :: tmp,spc(:)
     real(8),intent(out) :: css
     !
 #ifdef COMB
