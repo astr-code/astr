@@ -64,12 +64,6 @@ module commarray
     allocate( nodestat(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating nodestat'
     !
-    allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating jacob'
-    !
-    allocate( dxi(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating dxi'
-    !
     allocate( q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating q'
     !
@@ -105,21 +99,6 @@ module commarray
     !
     allocate(lsolid(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating lsolid'
-    !
-    if(ndims==1) then
-      allocate( cell(1:im,0:0,0:0),stat=lallo)
-    elseif(ndims==2) then
-      allocate( cell(1:im,1:jm,0:0),stat=lallo)
-    elseif(ndims==3) then
-      allocate( cell(1:im,1:jm,1:km),stat=lallo)
-    endif
-    if(lallo.ne.0) stop ' !! error at allocating cell'
-    !
-    allocate(dis2wall(0:im,0:jm,0:km),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating dis2wall'
-    !
-    allocate(dgrid(0:im,0:jm,0:km,1:3),stat=lallo)
-    if(lallo.ne.0) stop ' !! error at allocating dgrid'
     !
     allocate(crinod(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating crinod'

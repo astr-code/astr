@@ -2826,7 +2826,8 @@ module commfunc
       end if
       !
     else
-      print*, ' !! error in subroutine ptds_rhs !'
+      print*,ntype
+      print*, ' !! ntype error in subroutine ptds_rhs !'
       stop
     end if
     !

@@ -258,7 +258,7 @@ module gridgeneration
     xmax=pmax(x(im,0,0,1))
     ymax=pmax(yy(jm))
     dymax=pmax(dymax)
-    zmax=pmax(x(im,0,0,3))
+    zmax=pmax(x(0,0,km,3))
     !
     if(lio) then
       !

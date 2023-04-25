@@ -183,6 +183,8 @@ module geom
     !
     if(ndims==1) then
       !
+      allocate( cell(1:im,0:0,0:0))
+      !
       j=0
       k=0
       !
@@ -218,6 +220,8 @@ module geom
       dxyzmin=pmin(dxyzmin)
       !
     elseif(ndims==2) then
+      !
+      allocate( cell(1:im,1:jm,0:0) )
       k=0
       !
       voldom=0.d0
@@ -267,6 +271,9 @@ module geom
       dxyzmin=pmin(dxyzmin)
       !
     elseif(ndims==3) then
+      !
+      allocate( cell(1:im,1:jm,1:km) )
+      !
       voldom=0.d0
       do k=1,km
       do j=1,jm
@@ -317,6 +324,7 @@ module geom
       enddo
       voldom=psum(voldom)
       !
+      allocate( dgrid(0:im,0:jm,0:km,1:3) )
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -352,6 +360,8 @@ module geom
     ! Calculating geometrical 
     ! Jacobian
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm) )
+    !
     if(ndims==3) then
       jacob(0:im,0:jm,0:km)=dx(0:im,0:jm,0:km,1,1)*                    &
                             dx(0:im,0:jm,0:km,2,2)*                    &
@@ -395,6 +405,8 @@ module geom
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Calculating d<i,j,k>/d<x,y,z>
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate( dxi(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3) )
+    !
     dxi=0.d0
     !
     if(ndims==3) then
@@ -697,6 +709,8 @@ module geom
     xmin=pmin(xmin)
     ymin=pmin(ymin)
     zmin=pmin(zmin)
+    !
+    allocate(dis2wall(0:im,0:jm,0:km) )
     !
     do k=0,km
     do j=0,jm

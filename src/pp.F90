@@ -27,6 +27,7 @@ module pp
     use cmdefne
     use readwrite,       only : readinput
     use gridgeneration,  only : gridgen
+    use solver,          only : refcal
     !
     ! local data
     character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
@@ -45,10 +46,10 @@ module pp
       call readinput
       !
       call gridgen
-    elseif(trim(cmd)=='divfree') then
+    elseif(trim(cmd)=='hitgen') then
       call readinput
       !
-      call div_free_gen
+      call hitgen
     elseif(trim(cmd)=='solid') then
       call solidpp
     elseif(trim(cmd)=='datacon') then
@@ -1996,6 +1997,253 @@ module pp
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate a random field for homogeneous|
+  !| isotropic turbulence.                                             |
+  !+-------------------------------------------------------------------+
+  !| Ref: Blaisdell, G. A., Numerical simulation of compressible       |
+  !|      homogeneous turbulence, Phd, 1991, Stanford University       |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-04-2023: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine hitgen
+    !
+    use cmdefne,   only : readkeyboad
+    use commvar,   only : gridfile,im,jm,km,ia,ja,ka,hm,Mach,Reynolds, &
+                          tinf,roinf
+    use bc,        only : twall
+    use readwrite, only : readgrid
+    use commarray, only : x,vel,rho,tmp,prs,dvel
+    use solver,    only : refcal
+    use parallel,  only : mpisizedis,parapp,parallelini
+    use geom,      only : geomcal
+    use fludyna,   only :  thermal
+    use hdf5io,    only : h5srite
+    use tecio
+    !
+    real(8) :: urms,kenergy,ufmx
+    integer :: i,j,k
+    !
+    im=ia
+    jm=ja
+    km=ka
+    !
+    call mpisizedis
+    !
+    call parapp
+    !
+    call parallelini
+    !
+    call refcal
+    !
+    allocate(   x(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    !
+    call readgrid(trim(gridfile))
+    !
+    call geomcal
+    !
+    call div_free_gen(im,jm,km,vel(0:im,0:jm,0:km,1),   &
+                               vel(0:im,0:jm,0:km,2),   &
+                               vel(0:im,0:jm,0:km,3) )
+    !
+    call div_test(vel,dvel)
+    !
+    allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  =roinf
+      tmp(i,j,k)  =tinf 
+      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call hitsta
+    !
+    call h5srite(var=rho,                  varname='ro',filename='flowini3d.h5',explicit=.true.,newfile=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='p', filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='t',filename='flowini3d.h5',explicit=.true.)
+    
+    ! call tecbin('techit.plt',x(0:im,0:jm,0:km,1),'x', &
+    !                          x(0:im,0:jm,0:km,2),'y', &
+    !                          x(0:im,0:jm,0:km,3),'z', &
+    !                        vel(0:im,0:jm,0:km,1),'u', &
+    !                        vel(0:im,0:jm,0:km,2),'v', &
+    !                        vel(0:im,0:jm,0:km,3),'w' )
+    !
+  end subroutine hitgen
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine hitgen.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used calcualted the statistics of hit.         |
+  !+-------------------------------------------------------------------+
+  subroutine hitsta
+    !
+    use constdef
+    use commvar,   only : reynolds,mach,im,jm,km
+    use commarray, only : vel,dvel,rho,tmp,x
+    use fludyna,   only : miucal
+    !
+    real(8) :: roav,kenergy,enstrophy,dissp,miuav,urms,kolmlength,ukolm, &
+               timekolm,taylorlength,retaylor,tav,machrms
+    !
+    integer :: i,j,k
+    real(8) :: var1,vort1,vort2,vort3,vorts,s11,s22,s33,s12,s13,s23, &
+               div,dudx2,miu,ufmx
+    !
+      roav=0.d0
+      tav=0.d0
+      !
+      kenergy=0.d0
+      !
+      enstrophy=0.d0
+      !
+      dissp=0.d0
+      !
+      miuav=0.d0
+      urms=0.d0
+      dudx2=0.d0
+      !
+      ufmx=0.d0
+      !
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        !
+        roav=roav+rho(i,j,k)
+        tav=tav+tmp(i,j,k)
+        !
+        var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
+        kenergy=kenergy+rho(i,j,k)*var1
+        !
+        urms=urms+var1
+        !
+        vort1=dvel(i,j,k,2,3)-dvel(i,j,k,3,2)
+        vort2=dvel(i,j,k,3,1)-dvel(i,j,k,1,3)
+        vort3=dvel(i,j,k,1,2)-dvel(i,j,k,2,1)
+        vorts=vort1*vort1+vort2*vort2+vort3*vort3
+        !
+        enstrophy=enstrophy+rho(i,j,k)*vorts
+        !
+        miu=miucal(tmp(i,j,k))/reynolds
+        miuav=miuav+miu
+        !
+        s11=dvel(i,j,k,1,1)
+        s22=dvel(i,j,k,2,2)
+        s33=dvel(i,j,k,3,3)
+        div=s11+s22+s33
+        s12=0.5d0*(dvel(i,j,k,2,1)+dvel(i,j,k,1,2))
+        s13=0.5d0*(dvel(i,j,k,3,1)+dvel(i,j,k,1,3))
+        s23=0.5d0*(dvel(i,j,k,3,2)+dvel(i,j,k,2,3))
+        dissp=dissp+2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)-num1d3*div**2)
+        
+        !
+        dudx2=dudx2+dvel(i,j,k,1,1)**2+dvel(i,j,k,2,2)**2+dvel(i,j,k,3,3)**2
+        !
+        ufmx=max(ufmx,abs(vel(i,j,k,1)),abs(vel(i,j,k,2)),abs(vel(i,j,k,3)))
+      end do
+      end do
+      end do
+      !
+      var1=dble(im*jm*km)
+
+      roav      =roav     /var1   
+      tav       =tav     /var1     
+      kenergy   =kenergy  /var1*0.5d0
+      enstrophy =enstrophy/var1*0.5d0
+      dissp     =dissp    /var1
+      !
+      miuav     =miuav    /var1
+      !
+      urms      =urms /var1
+      dudx2     =dudx2/var1
+      !
+      kolmlength=sqrt(sqrt((miuav/roav)**3/dissp))
+      !
+      ukolm=sqrt(sqrt(dissp*miuav/roav))
+      !
+      timekolm=sqrt(miuav/roav/dissp)
+      !
+      taylorlength=sqrt(urms/dudx2)
+      retaylor=taylorlength*roav*urms/miuav/1.7320508075688773d0
+      !
+      machrms=urms/sqrt(tav)*mach
+      !
+      print*,' **            urms:',urms
+      print*,' **         machrms:',machrms
+      print*,' **         kenergy:',kenergy
+      print*,' ** max fluctuation:',ufmx
+      print*,' **       Enstrophy:',Enstrophy
+      print*,' **   kolmlength, η:',kolmlength
+      print*,' **             η/Δ:',kolmlength/x(1,0,0,1)
+      print*,' **           ukolm:',ukolm
+      print*,' **    taylorlength:',taylorlength
+      print*,' **        Retaylor:',retaylor
+      !
+  end subroutine hitsta
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine hitsta.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used calcualted the divergence.                |
+  !+-------------------------------------------------------------------+
+  subroutine div_test(u,du)
+    !
+    use commvar,   only : im,jm,km,hm
+    use parallel,  only : dataswap
+    use solver,    only : solvrinit,grad
+    !
+    real(8),intent(inout) :: u(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
+    !
+    real(8),allocatable,intent(out),dimension(:,:,:,:,:) :: du
+    !
+    integer :: i,j,k
+    real(8) :: div,div2
+    !
+    allocate( du(0:im,0:jm,0:km,1:3,1:3))
+    !
+    call dataswap(u)
+    !
+    call solvrinit
+
+    du(:,:,:,:,1)=grad(u(:,:,:,1))
+    du(:,:,:,:,2)=grad(u(:,:,:,2))
+    du(:,:,:,:,3)=grad(u(:,:,:,3))
+    !
+    div=0.d0
+    div2=0.d0
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      div =div +du(i,j,k,1,1)+du(i,j,k,2,2)+du(i,j,k,3,3)
+      div2=div2+(du(i,j,k,1,1)+du(i,j,k,2,2)+du(i,j,k,3,3))**2
+    enddo
+    enddo
+    enddo
+    !
+    div = div/dble(im*jm*km)
+    div2=div2/dble(im*jm*km)
+    !
+    print*,' ** averaged div is:',div
+    print*,' ** variance div is:',div2
+    !
+  end subroutine div_test
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine div_test.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to generate a divergence free fluctuation.|
   !+-------------------------------------------------------------------+
   !| Ref: Blaisdell, G. A., Numerical simulation of compressible       |
@@ -2004,11 +2252,12 @@ module pp
   !| -------------                                                     |
   !| 26-09-2022: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine div_free_gen
+  subroutine div_free_gen(idim,jdim,kdim,u1,u2,u3)
     !
     use singleton
-    use commvar, only : ia,ja,ka,mach
-    use hdf5io,   only: h5srite
+    !
+    integer,intent(in) :: idim,jdim,kdim
+    real(8),intent(out),dimension(0:idim,0:jdim,0:kdim) :: u1,u2,u3
     !
     ! local data
     integer :: kmi,kmj,kmk,kmax
@@ -2029,7 +2278,7 @@ module pp
     !     spectrum
     ! Ac: the intensity of given spectrum
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    real(8), allocatable, dimension(:,:,:) :: u1tp,u2tp,u3tp,u1,u2,u3
+    real(8), allocatable, dimension(:,:,:) :: u1tp,u2tp,u3tp
     !
     complex(8), allocatable, dimension(:,:,:) :: u1c,u2c,u3c,u1ct,u2ct,u3ct,u4ct
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2054,18 +2303,18 @@ module pp
     complex(8) :: vac1,vac2,vac3,vac4,crn1,crn2
     real(8) :: dudi,lambda
     !
-    kmi=ia/2
-    kmj=ja/2
-    kmk=ka/2
+    kmi=idim/2
+    kmj=jdim/2
+    kmk=kdim/2
     kmax=idnint(sqrt((kmi**2+kmj**2+kmk**2)*1.d0))+1
     !
     allocate(u1c(-kmi:kmi,-kmj:kmj,-kmk:kmk),                        &
              u2c(-kmi:kmi,-kmj:kmj,-kmk:kmk),                        &
              u3c(-kmi:kmi,-kmj:kmj,-kmk:kmk)                         )
-    allocate(u1ct(1:ia,1:ja,1:ka),u2ct(1:ia,1:ja,1:ka),              &  
-             u3ct(1:ia,1:ja,1:ka) )
-    allocate(u1tp(1:ia,1:ja,1:ka),u2tp(1:ia,1:ja,1:ka),              &
-             u3tp(1:ia,1:ja,1:ka),u4ct(1:ia,1:ja,1:ka)               )
+    allocate(u1ct(1:idim,1:jdim,1:kdim),u2ct(1:idim,1:jdim,1:kdim),              &  
+             u3ct(1:idim,1:jdim,1:kdim) )
+    allocate(u1tp(1:idim,1:jdim,1:kdim),u2tp(1:idim,1:jdim,1:kdim),              &
+             u3tp(1:idim,1:jdim,1:kdim),u4ct(1:idim,1:jdim,1:kdim)               )
     !
     ! Give the inital energy spectrum.
     ISEA=1.d0/224.7699d0
@@ -2097,7 +2346,7 @@ module pp
       wn12=sqrt(wn1**2+wn2**2)
       wna=sqrt(wn1**2+wn2**2+wn3**2)
       !
-      ! Calculate the initial energy spectral
+      ! Calculate the initidiml energy spectral
       if(k1==0 .and. k2==0 .and. k3==0) then
         var1=0.d0
         var2=0.d0
@@ -2149,23 +2398,23 @@ module pp
     ! convenience of using external FFT subroutine
     print*,' ** Transform the spectrum from (-N/2+1,N/2) to (1,N)  '
     !
-    do k=1,ka
-    do j=1,ja
-    do i=1,ia
-      if(i<=ia/2+1) then
+    do k=1,kdim
+    do j=1,jdim
+    do i=1,idim
+      if(i<=idim/2+1) then
         k1=i-1
       else
-        k1=i-ia-1
+        k1=i-idim-1
       end if
-      if(j<=ja/2+1) then
+      if(j<=jdim/2+1) then
         k2=j-1
       else
-        k2=j-ja-1
+        k2=j-jdim-1
       end if
-      if(k<=ka/2+1) then
+      if(k<=kdim/2+1) then
         k3=k-1
       else
-        k3=k-ka-1
+        k3=k-kdim-1
       end if
       !
       u1ct(i,j,k)=u1c(k1,k2,k3)
@@ -2181,59 +2430,57 @@ module pp
     !
     print*,' ** project to physical space. '
     !
-    allocate(u1(0:ia,0:ja,0:ka),u2(0:ia,0:ja,0:ka),u3(0:ia,0:ja,0:ka))
-    do k=1,ka
-    do j=1,ja
-    do i=1,ia
+    do k=1,kdim
+    do j=1,jdim
+    do i=1,idim
       ! multiply sqrt(NxNyNz) for return standard FFT
-      u1(i,j,k)=real(u1ct(i,j,k),8)*sqrt(real(ia*ja*ka,8))
-      u2(i,j,k)=real(u2ct(i,j,k),8)*sqrt(real(ia*ja*ka,8))
-      u3(i,j,k)=real(u3ct(i,j,k),8)*sqrt(real(ia*ja*ka,8))
+      u1(i,j,k)=real(u1ct(i,j,k),8)*sqrt(real(idim*jdim*kdim,8))
+      u2(i,j,k)=real(u2ct(i,j,k),8)*sqrt(real(idim*jdim*kdim,8))
+      u3(i,j,k)=real(u3ct(i,j,k),8)*sqrt(real(idim*jdim*kdim,8))
       !
     end do
     end do
     end do
     !
-    u1(0,1:ja,1:ka)=u1(ia,1:ja,1:ka)
-    u2(0,1:ja,1:ka)=u2(ia,1:ja,1:ka)
-    u3(0,1:ja,1:ka)=u3(ia,1:ja,1:ka)
+    u1(0,1:jdim,1:kdim)=u1(idim,1:jdim,1:kdim)
+    u2(0,1:jdim,1:kdim)=u2(idim,1:jdim,1:kdim)
+    u3(0,1:jdim,1:kdim)=u3(idim,1:jdim,1:kdim)
     !
-    u1(0:ia,0,1:ka)=u1(0:ia,ja,1:ka)
-    u2(0:ia,0,1:ka)=u2(0:ia,ja,1:ka)
-    u3(0:ia,0,1:ka)=u3(0:ia,ja,1:ka)
+    u1(0:idim,0,1:kdim)=u1(0:idim,jdim,1:kdim)
+    u2(0:idim,0,1:kdim)=u2(0:idim,jdim,1:kdim)
+    u3(0:idim,0,1:kdim)=u3(0:idim,jdim,1:kdim)
     !
-    u1(0:ia,0:ja,0)=u1(0:ia,0:ja,ka)
-    u2(0:ia,0:ja,0)=u2(0:ia,0:ja,ka)
-    u3(0:ia,0:ja,0)=u3(0:ia,0:ja,ka)
+    u1(0:idim,0:jdim,0)=u1(0:idim,0:jdim,kdim)
+    u2(0:idim,0:jdim,0)=u2(0:idim,0:jdim,kdim)
+    u3(0:idim,0:jdim,0)=u3(0:idim,0:jdim,kdim)
     !
-    urms=0.d0
-    ufmx=0.d0
-    Kenergy=0.d0
-    do k=1,ka
-    do j=1,ja
-    do i=1,ia
-      Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
-      urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
-      ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
-    end do
-    end do
-    end do
-    urms=sqrt(urms/real(ia*ja*ka,8))
-    Kenergy=Kenergy/real(ia*ja*ka,8)
+    ! urms=0.d0
+    ! ufmx=0.d0
+    ! Kenergy=0.d0
+    ! do k=1,kdim
+    ! do j=1,jdim
+    ! do i=1,idim
+    !   Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
+    !   urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
+    !   ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
+    ! end do
+    ! end do
+    ! end do
+    ! urms=sqrt(urms/real(idim*jdim*kdim,8))
+    ! Kenergy=Kenergy/real(idim*jdim*kdim,8)
+    ! !
+    ! u1=u1/urms
+    ! u2=u2/urms
+    ! u3=u3/urms
+    ! Kenergy=Kenergy/urms/urms
+    ! urms=urms/urms
+    ! !
+    ! print*,'Kenergy',Kenergy,'urms',urms,'Mat=',urms*Mach
+    ! !
+    ! call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
+    ! call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
+    ! call h5srite(var=u3,varname='u3',filename='velocity.h5',explicit=.true.)
     !
-    u1=u1/urms
-    u2=u2/urms
-    u3=u3/urms
-    Kenergy=Kenergy/urms/urms
-    urms=urms/urms
-    !
-    print*,'Kenergy',Kenergy,'urms',urms,'Mat=',urms*Mach
-    !
-    call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
-    call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
-    call h5srite(var=u3,varname='u3',filename='velocity.h5',explicit=.true.)
-    !
-    deallocate(u1,u2,u3)
     deallocate(u1c,u2c,u3c)
     deallocate(u1ct,u2ct,u3ct)
     deallocate(u1tp,u2tp,u3tp)
