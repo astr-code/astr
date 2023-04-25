@@ -1581,6 +1581,66 @@ module bc
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to interpolate the inflow turbulence under the |
+  !| Taylor forzen hypothesis.                                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-04-2023: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine inflowintx
+    !
+    use commvar, only : time,uinf,im,jm,km
+    use hdf5io
+    use parallel,only : mpi_imin
+    !
+    integer :: j,k
+    integer :: indim(3)
+    integer,save :: idim
+    real(8),allocatable,save :: xi(:),rhoi(:,:,:),veli(:,:,:,:),       &
+                                prsi(:,:,:),tmpi(:,:,:)
+    real(8) :: xintsec
+    logical,save :: loadiniflow=.true.
+    !
+    if(loadiniflow) then
+      !
+      indim=h5getdim3d(varname='x',filenma='inflow/flowin.h5')
+      !
+      idim=indim(1)-1
+      !
+      allocate( xi(0:idim),rhoi(0:idim,0:jm,0:km),veli(0:idim,0:jm,0:km,1:3), &
+                tmpi(0:idim,0:jm,0:km) )
+      !
+      call h5io_init(filename='inflow/flowin.h5',mode='read',comm=mpi_imin)
+      ! !
+      ! call h5read(varname='time',var=timeins(n))
+      call h5r_real8_1d(varname='x', var=xi(:),dim=idim+1)
+      call h5read_istrip_r8(varname='ro', var=rhoi(:,:,:))
+      call h5read_istrip_r8(varname='u1', var=veli(:,:,:,1))
+      call h5read_istrip_r8(varname='u2', var=veli(:,:,:,2))
+      call h5read_istrip_r8(varname='u3', var=veli(:,:,:,3))
+      call h5read_istrip_r8(varname='t',  var=tmpi(:,:,:))
+      ! call h5read(varname='u1', var=flowvarins(0:jm,0:km,2,n),dir='i',display=.false.)
+      ! call h5read(varname='u2', var=flowvarins(0:jm,0:km,3,n),dir='i',display=.false.)
+      ! call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
+      ! call h5read(varname='t',  var=flowvarins(0:jm,0:km,5,n),dir='i',display=.false.)
+      ! !
+      call h5io_end
+      !
+      loadiniflow=.false.
+    endif
+    ! xintsec=time
+    ! do k=0,km
+    ! do j=0,jm
+    ! enddo
+    ! enddo
+    !
+  end subroutine inflowintx
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine inflowintx.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to interpolate the inflow turbulence.          |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |

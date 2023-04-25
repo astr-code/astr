@@ -376,7 +376,9 @@ module readwrite
           if(turbinf=='prof') then
             write(*,'(A)')'            read a profile'
           elseif(turbinf=='intp') then
-            write(*,'(A)')' interpolation of database'
+            write(*,'(A)')' interpolation of database in time'
+          elseif(turbinf=='intx') then
+            write(*,'(A)')' interpolation of database in x space'
           elseif(turbinf=='free') then
             write(*,'(A)')' free stream incoming flow'
           else

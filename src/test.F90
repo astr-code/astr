@@ -25,7 +25,6 @@ module test
     call readkeyboad(testmode)
     !
     call bcast(testmode)
-
     !
     if(testmode=='grad') then 
       call gradtest
@@ -33,6 +32,8 @@ module test
       call enstest
     elseif(testmode=='filt') then 
       call filtertest
+    elseif(testmode=='bc') then 
+      call testbc
     else
       return
     endif
@@ -43,6 +44,17 @@ module test
   !+-------------------------------------------------------------------+
   !| The end of the subroutine codetest                                |  
   !+-------------------------------------------------------------------+
+  !
+  subroutine testbc
+    !
+    use bc,        only : inflowintx
+    use parallel,  only : qswap,psum,irk,jrk,krk,mpirank
+    !
+    if(irk==0) then
+      call inflowintx
+    endif
+    !
+  end subroutine testbc
   !
   subroutine enstest
 

@@ -2064,12 +2064,13 @@ module pp
     !
     call hitsta
     !
-    call h5srite(var=rho,                  varname='ro',filename='flowini3d.h5',explicit=.true.,newfile=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowini3d.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowini3d.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowini3d.h5',explicit=.true.)
-    call h5srite(var=tmp,                  varname='p', filename='flowini3d.h5',explicit=.true.)
-    call h5srite(var=prs,                  varname='t',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='flowin.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=rho,                  varname='ro',filename='flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowin.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='p', filename='flowin.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='t', filename='flowin.h5',explicit=.true.)
     
     ! call tecbin('techit.plt',x(0:im,0:jm,0:km,1),'x', &
     !                          x(0:im,0:jm,0:km,2),'y', &

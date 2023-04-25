@@ -1545,7 +1545,8 @@ module initialisation
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
-    if(turbinf=='prof' .or. turbinf=='intp' .or. trim(flowtype)=='tbl') then
+    if(turbinf=='prof' .or. turbinf=='intp' .or. turbinf=='intx' .or. &
+       trim(flowtype)=='tbl') then
       !
       if(lio) then
         !

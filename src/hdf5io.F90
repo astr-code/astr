@@ -471,7 +471,7 @@ module hdf5io
     var=rvar
     if(h5error.ne.0)  stop ' !! error in h5r_int4 call h5ltread_dataset_f'
     !
-    if(lio) print*,' >> ',varname,' ',var
+    ! if(lio) print*,' >> ',varname,' ',var
     !
 #endif
     !
@@ -547,8 +547,61 @@ module hdf5io
 #endif
     !
   end subroutine h5ra2d_r8
+
+  subroutine h5read_istrip_r8(varname,var)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(inout) :: var(:,:,:)
+    !
+#ifdef HDF5
+    ! local data
+    integer :: jrk
+    integer :: dim(3)
+    integer(hsize_t), dimension(3) :: offset
+    integer :: h5error
+    !
+    integer(hid_t) :: dset_id,filespace,memspace,plist_id
+    integer(hsize_t) :: dimt(3)
+    !
+    dim(1)=size(var,1)
+    dim(2)=size(var,2)
+    dim(3)=size(var,3)
+    !
+    dimt=dim
+    offset=(/0,jg0,kg0/)
+    !
+    ! read the data
+    !
+    call h5dopen_f(h5file_id,varname,dset_id,h5error)
+    call h5screate_simple_f(3,dimt,memspace,h5error)
+    call h5dget_space_f(dset_id,filespace,h5error)
+    call h5sselect_hyperslab_f(filespace,h5s_select_set_f,offset,      &
+                                                           dimt,h5error)
+    ! Create property list for collective dataset read
+    call h5pcreate_f(h5p_dataset_xfer_f,plist_id,h5error)
+    call h5pset_dxpl_mpio_f(plist_id,h5fd_mpio_collective_f,h5error)
+    !
+    ! Read 3D array
+    call h5dread_f(dset_id,h5t_native_double,var,dimt,h5error,         &
+                   mem_space_id=memspace,file_space_id=filespace,      &
+                                                      xfer_prp=plist_id)
+    !Close dataspace
+    call h5sclose_f(filespace,h5error)
+    !
+    call h5sclose_f(memspace,h5error)
+    !
+    call h5dclose_f(dset_id,h5error)
+    !
+    call h5pclose_f(plist_id,h5error)
+    !
+    if(lio) print*,' >> ',varname
+    !
+#endif
+    !
+  end subroutine h5read_istrip_r8
   !+-------------------------------------------------------------------+
-  !| This end of the function h5ra3d_r8.                               |
+  !| This end of the function h5read_istrip_r8.                        |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
