@@ -48,10 +48,13 @@ module test
   subroutine testbc
     !
     use bc,        only : inflowintx
-    use parallel,  only : qswap,psum,irk,jrk,krk,mpirank
+    use parallel,  only : qswap,psum,irk,jrk,krk,mpirank,mpirankname
+    use tecio
     !
     if(irk==0) then
+      !
       call inflowintx
+      !
     endif
     !
   end subroutine testbc
