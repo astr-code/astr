@@ -1398,14 +1398,10 @@ module bc
       !
       i=0
       !
-      if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
-        !
-        if(turbinf=='intp')  then
-          call inflowintp
-        elseif(turbinf=='intpx')  then
-          call inflowintx
-        endif
-        !
+      if(turbinf=='intp')  then
+        call inflowintp
+      elseif(turbinf=='intx')  then
+        call inflowintx
       endif
       !
       do k=0,km
@@ -1594,10 +1590,10 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine inflowintx
     !
-    use commvar, only : time,uinf,im,jm,km
+    use commvar, only : time,roinf,uinf,vinf,tinf,im,jm,km
     use commarray,only: x
     use hdf5io
-    use parallel,only : mpi_imin,mpirankname
+    use parallel,only : mpi_imin,mpirankname,pmax,pmin
     use interp,  only : interlinear
     use fludyna, only : thermal
     !
@@ -1606,7 +1602,7 @@ module bc
     integer,save :: idim
     real(8),allocatable,save :: xi(:),rhoi(:,:,:),veli(:,:,:,:),       &
                                 prsi(:,:,:),tmpi(:,:,:)
-    real(8) :: xintsec
+    real(8) :: xintsec,umax,umin
     real(8),save :: x0,xm
     real(8),allocatable :: xx(:,:,:),yy(:,:,:),zz(:,:,:)
     logical,save :: loadiniflow=.true.
@@ -1629,6 +1625,10 @@ module bc
       call h5read_istrip_r8(varname='u2', var=veli(:,:,:,2))
       call h5read_istrip_r8(varname='u3', var=veli(:,:,:,3))
       call h5read_istrip_r8(varname='t',  var=tmpi(:,:,:))
+      !
+      rhoi=1.d0*rhoi
+      veli=1.d0*veli
+      tmpi=1.d0*tmpi
       ! call h5read(varname='u1', var=flowvarins(0:jm,0:km,2,n),dir='i',display=.false.)
       ! call h5read(varname='u2', var=flowvarins(0:jm,0:km,3,n),dir='i',display=.false.)
       ! call h5read(varname='u3', var=flowvarins(0:jm,0:km,4,n),dir='i',display=.false.)
@@ -1660,9 +1660,6 @@ module bc
       ! 
     endif
     !
-    uinf=1.d0
-    time=5.d0
-    !
     xintsec=xm-time*uinf
     !
     do while(xintsec<0)
@@ -1674,35 +1671,49 @@ module bc
     do i=1,idim
       !
       if(xintsec>=xi(i-1) .and. xintsec<=xi(i)) then
+        !
         rho_in       =interlinear(xi(i-1),xi(i),rhoi(i-1,:,:),   rhoi(i,:,:), xintsec)
         vel_in(:,:,1)=interlinear(xi(i-1),xi(i),veli(i-1,:,:,1),veli(i,:,:,1),xintsec)
         vel_in(:,:,2)=interlinear(xi(i-1),xi(i),veli(i-1,:,:,2),veli(i,:,:,2),xintsec)
         vel_in(:,:,3)=interlinear(xi(i-1),xi(i),veli(i-1,:,:,3),veli(i,:,:,3),xintsec)
         tmp_in       =interlinear(xi(i-1),xi(i),tmpi(i-1,:,:),  tmpi(i,:,:),  xintsec)
+        !
+        exit
+        !
       endif
       !
     enddo
     !
+    umax=-10.d0
+    umin=10.d0
     do k=0,km
     do j=0,jm
       !
-      rho_in(j,k)  =rho_in(j,k)   + rho_prof(j)
+      rho_in(j,k)  =  rho_prof(j) + roinf
       !
       ! to enforce no back flow
-      if(vel_in(j,k,1)+vel_prof(j,1)<0.d0) then
-        vel_in(j,k,1)=vel_prof(j,1)
+      if(vel_in(j,k,1)+uinf<0.d0) then
+        vel_in(j,k,1)=uinf
       else
-        vel_in(j,k,1)=vel_prof(j,1) +vel_in(j,k,1)
+        vel_in(j,k,1)=vel_in(j,k,1) + uinf
       endif
       !
-      vel_in(j,k,2)=vel_in(j,k,2)  +vel_prof(j,2)
+      vel_in(j,k,2)=vel_in(j,k,2)  !+ vinf !vel_prof(j,2)
       vel_in(j,k,3)=vel_in(j,k,3)
-      tmp_in(j,k)  =tmp_in(j,k)    +tmp_prof(j)
+      tmp_in(j,k)  = tmp_in(j,k)  + tinf !tmp_prof(j)
       !
       prs_in(j,k)=thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
+      !
+      ! umax=max(umax,vel_in(j,k,1))
+      ! umin=min(umin,vel_in(j,k,1))
+      !
     enddo
     enddo
     !
+    ! print*,' ** inf',roinf,uinf,tinf
+    ! print*,' ** max and min vel_in1',umax,umin
+    ! umax=pmax(umax)
+    ! umin=pmin
     ! call tecbin('testout/tecfield'//mpirankname//'.plt',x(0,0:jm,0:km,2),'y',    &
     !                                                     x(0,0:jm,0:km,3),'z',     &
     !                                                     vel_in(:,:,1),'u',     &

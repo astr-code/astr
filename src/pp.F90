@@ -2018,11 +2018,12 @@ module pp
     use parallel,  only : mpisizedis,parapp,parallelini
     use geom,      only : geomcal
     use fludyna,   only :  thermal
-    use hdf5io,    only : h5srite
+    use hdf5io,    only : h5srite,h5sread
     use tecio
     !
-    real(8) :: urms,kenergy,ufmx
+    real(8) :: urms,kenergy,ufmx,roav,uav,vav,wav,tav,pav
     integer :: i,j,k
+    character(len=4) :: genmethod
     !
     im=ia
     jm=ja
@@ -2038,29 +2039,88 @@ module pp
     !
     allocate(   x(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
     !
     call readgrid(trim(gridfile))
     !
     call geomcal
     !
-    call div_free_gen(im,jm,km,vel(0:im,0:jm,0:km,1),   &
-                               vel(0:im,0:jm,0:km,2),   &
-                               vel(0:im,0:jm,0:km,3) )
+    call readkeyboad(genmethod)
+    !
+    if(trim(genmethod)=='gen') then
+      call div_free_gen(im,jm,km,vel(0:im,0:jm,0:km,1),   &
+                                 vel(0:im,0:jm,0:km,2),   &
+                                 vel(0:im,0:jm,0:km,3) )
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        rho(i,j,k)  = 0.d0 !roinf
+        tmp(i,j,k)  = 0.d0 !tinf 
+        prs(i,j,k)  = 0.d0 !thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        !
+      enddo
+      enddo
+      enddo
+      !
+    elseif(trim(genmethod)=='read') then
+      !
+      call h5sread(vel(0:im,0:jm,0:km,1),'u1',im,jm,km,'outdat/flowfield.h5')
+      call h5sread(vel(0:im,0:jm,0:km,2),'u2',im,jm,km,'outdat/flowfield.h5')
+      call h5sread(vel(0:im,0:jm,0:km,3),'u3',im,jm,km,'outdat/flowfield.h5')
+      call h5sread(rho(0:im,0:jm,0:km),  'ro',im,jm,km,'outdat/flowfield.h5')
+      call h5sread(tmp(0:im,0:jm,0:km),  't', im,jm,km,'outdat/flowfield.h5')
+      !
+      roav=0.d0
+      uav=0.d0
+      vav=0.d0
+      wav=0.d0
+      tav=0.d0
+      pav=0.d0
+      !
+      do k=0,km
+      do j=0,jm
+      do i=0,im 
+        prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        !
+        if(i==0 .or. j==0 .or. k==0) cycle
+        !
+        roav=roav+rho(i,j,k)
+        uav=uav+vel(i,j,k,1)
+        vav=vav+vel(i,j,k,2)
+        wav=wav+vel(i,j,k,3)
+        tav=tav+tmp(i,j,k)
+        pav=pav+prs(i,j,k)
+      enddo
+      enddo
+      enddo
+      !
+      roav=roav/dble(im*jm*km)
+      uav=uav/dble(im*jm*km)
+      vav=vav/dble(im*jm*km)
+      wav=wav/dble(im*jm*km)
+      tav=tav/dble(im*jm*km)
+      pav=pav/dble(im*jm*km)
+      !
+      print*, '** mean density    :',roav
+      print*, '** mean velocity   :',uav,vav,wav
+      print*, '** mean temperature:',tav
+      print*, '** mean pressure   :',pav
+      !
+      rho(:,:,:)   = rho(:,:,:)  -roav
+      vel(:,:,:,1) = vel(:,:,:,1)-uav
+      vel(:,:,:,2) = vel(:,:,:,2)-vav
+      vel(:,:,:,3) = vel(:,:,:,3)-wav
+      tmp(:,:,:)   = tmp(:,:,:)  -tav
+      prs(:,:,:)   = prs(:,:,:)  -pav
+      !
+    else
+      print*,genmethod
+      stop ' !! genmethod error '
+    endif
     !
     call div_test(vel,dvel)
-    !
-    allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      rho(i,j,k)  =roinf
-      tmp(i,j,k)  =tinf 
-      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-      !
-    enddo
-    enddo
-    enddo
     !
     call hitsta
     !
