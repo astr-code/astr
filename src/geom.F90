@@ -207,6 +207,7 @@ module geom
       enddo
       voldom=psum(voldom)
       !
+      allocate( dgrid(0:im,0:0,0:0,1:3) )
       do i=0,im
         dxyzmax=max(dxyzmax,abs(dx(i,j,k,1,1)))
         dxyzmin=min(dxyzmin,abs(dx(i,j,k,1,1)))
@@ -254,6 +255,7 @@ module geom
       enddo
       voldom=psum(voldom)
       !
+      allocate( dgrid(0:im,0:jm,0:0,1:3) )
       do j=0,jm
       do i=0,im
         var1=sqrt(dx(i,j,k,1,1)**2+dx(i,j,k,2,1)**2)
