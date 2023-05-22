@@ -28,6 +28,8 @@ module test
     !
     if(testmode=='grad') then 
       call gradtest
+    elseif(testmode=='accu') then 
+      call accuracytest
     elseif(testmode=='enst') then 
       call enstest
     elseif(testmode=='filt') then 
@@ -267,6 +269,66 @@ module test
     ! deallocate(dq)
     !
   end subroutine gradtest
+  !
+  subroutine accuracytest
+    !
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
+                          alfa_filter,numq,is,ie,ia
+    use commarray, only : x,q,dxi
+    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use bc,        only : boucon
+    use parallel,  only : dataswap,mpirankname,psum,pmax
+    use solver,    only : alfa_con,cci,ccj,cck
+    !
+    ! local data
+    integer :: i,j,k,n
+    real(8) :: dx,error1,error2,errorinf
+    real(8),allocatable :: vtest(:,:,:)
+    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
+    !
+    ! print*,x(:,0,0,1)
+    !
+    ! testing ddx
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(4.d0*x(i,j,k,1))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    allocate(dqref(0:im))
+    do i=0,im
+      dqref(i)=4.d0*cos(4.d0*x(i,0,0,1))
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:im))
+    !
+    dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(:,0,0,1,1)
+    !
+    error1=0.d0
+    error2=0.d0
+    errorinf=0.d0
+    do i=1,im
+      error1=error1+abs(dq(i)-dqref(i))
+      error2=error2+(dq(i)-dqref(i))**2
+      errorinf=max(errorinf,abs(dq(i)-dqref(i)))
+    enddo
+    !
+    error1=psum(error1)/dble(ia)
+    error2=sqrt(psum(error1)/dble(ia))
+    errorinf=pmax(errorinf)
+    !
+    print*,' ** total number of nodes:',ia
+    print*,' **   L1 error:',error1
+    print*,' **   L2 error:',error2
+    print*,' ** Linf error:',errorinf
+    !
+  end subroutine accuracytest
   !
   subroutine filtertest
     !
