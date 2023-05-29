@@ -2019,6 +2019,7 @@ module pp
     use geom,      only : geomcal
     use fludyna,   only :  thermal
     use hdf5io,    only : h5srite,h5sread
+    use gridgeneration
     use tecio
     !
     real(8) :: urms,kenergy,ufmx,roav,uav,vav,wav,tav,pav
@@ -2041,7 +2042,8 @@ module pp
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
     !
-    call readgrid(trim(gridfile))
+    call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+    ! call readgrid(trim(gridfile))
     !
     call geomcal
     !
