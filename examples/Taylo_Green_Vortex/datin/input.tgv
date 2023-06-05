@@ -3,7 +3,7 @@
 ########################################################################
 
 # flowtype                                              : The type of flow problem
-tgvflame
+tgv
 
 # im,jm,km                                              : The size of grid.
 128,128,128
@@ -12,7 +12,7 @@ tgvflame
 t,t,t
 
 # nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt,lcomb : Parameters
-f,t,t,f,f,f,t,t
+t,t,t,f,f,f,t,t
 
 # lrestar                                               : start mode
 f
@@ -23,11 +23,11 @@ f
 # ref_t,reynolds,mach                                   : Reference variables
 273.15d0, 1600.d0, 0.1d0
 
-# conschm,difschm,rkscheme,odetype                      : Numerical scheme
-642c, 642c, rk3, rk3  
+# conschm,difschm,rkscheme,odetype                              : Numerical scheme
+642c, 642c, rk3, rk3 
 
 # recon_schem, lchardecomp,bfacmpld,shkcrt              : Parameters for upwind-biased scheme
-5, f, 0.3d0, 0.05d0
+5, t, 0.3d0, 0.05d0
 
 # num_species                                           : number of species
 0
@@ -50,11 +50,7 @@ none,h
 0, 0, 0, 0, 0, 0
 
 # gridfile
-''
-
-# chemfile
-datin/ES80_H2-7-16.yaml
-
+datin/grid.h5
 
 
  ########################################################################

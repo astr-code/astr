@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Taylo_Green_Vortex)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Taylo_Green_Vortex)
+install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Taylor_Green_Vortex)
+install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Taylor_Green_Vortex)
 
 # If testing active add test for TGV case
 if (${BUILD_TESTING})
