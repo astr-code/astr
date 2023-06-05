@@ -11,8 +11,8 @@ shuosher
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 f,t,t
 
-# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt : Parameters
-t,f,f,f,f,f,t
+# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt,lcomb : Parameters
+t,f,f,f,f,f,t,f
 
 # lrestar                                               : start mode
 f
@@ -23,8 +23,8 @@ f
 # ref_t,reynolds,mach                                   : Reference variables
 273.15d0,  3000.d0,  3.d0 
 
-# conschm,difschm,rkscheme                              : Numerical scheme
-732e, 642c, rk3 
+# conschm,difschm,rkscheme,odetype                              : Numerical scheme
+732e, 642c, rk3, rk3 
 
 # recon_schem, lchardecomp,bfacmpld                     : Parameters for upwind-biased scheme
 3, t, 0.3d0, 0.01d0
