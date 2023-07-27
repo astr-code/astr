@@ -8,7 +8,7 @@ FC=h5pfc
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
-CTRDIR = $(CANTERA_DIR)
+#CTRDIR = /home/jian/opt/cantera-2.5.1
 
 FCFLAGS= -O3 -fbounds-check -fallow-argument-mismatch
 
@@ -20,8 +20,8 @@ OPTIONS3 = -DHDF5
 
 EXE=astr
 
-#LIBS= -lz -lm -L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread -L/usr/lib/x86_64-linux-gnu -lhdf5_openmpi_fortran -lhdf5_openmpihl_fortran
-LIBS= -lz -lm 
+LIBS= -lz -lm #-L$(CTRDIR)/lib -lcantera_fortran -lcantera -lstdc++ -pthread -L/usr/lib/x86_64-linux-gnu -lhdf5_openmpi_fortran -lhdf5_openmpihl_fortran
+#LIBS= -lz -lm 
 
 
 TARGET = $(BINDIR)/$(EXE)
