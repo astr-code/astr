@@ -182,6 +182,8 @@ module readwrite
         typedefine='                 Taylor-Green Vortex flame'
       case('rti')
         typedefine='               Rayleigh–Taylor instability'
+      case('hitflame')
+        typedefine='    homogeneous isotropic turbulence flame'
       case default
         print*,trim(flowtype)
         stop ' !! flowtype not defined @ infodisp'

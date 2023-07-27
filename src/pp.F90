@@ -2042,8 +2042,8 @@ module pp
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
     !
-    call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
-    ! call readgrid(trim(gridfile))
+    !call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+    call readgrid(trim(gridfile))
     !
     call geomcal
     !
@@ -2054,6 +2054,7 @@ module pp
                                  vel(0:im,0:jm,0:km,2),   &
                                  vel(0:im,0:jm,0:km,3) )
       !
+      urms=5.d0*0.5d0 
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -2061,6 +2062,9 @@ module pp
         rho(i,j,k)  = 0.d0 !roinf
         tmp(i,j,k)  = 0.d0 !tinf 
         prs(i,j,k)  = 0.d0 !thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        vel(i,j,k,1)= urms*vel(i,j,k,1)
+        vel(i,j,k,2)= urms*vel(i,j,k,2)
+        vel(i,j,k,3)= urms*vel(i,j,k,3)
         !
       enddo
       enddo

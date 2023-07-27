@@ -1375,7 +1375,7 @@ module bc
     logical,save :: lfirstcal=.true.
     !
     if(ndir==1 .and. irk==0) then
-      !
+      !   
       if(lfirstcal) then
         !
         call alloinflow(ndir)
@@ -1389,7 +1389,7 @@ module bc
           call profileinflow
           !
         else
-          call freestreaminflow
+          call freestreaminflow 
         endif
         !
         lfirstcal=.false.
@@ -1590,14 +1590,17 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine inflowintx
     !
-    use commvar, only : time,roinf,uinf,vinf,tinf,im,jm,km
+    use commvar, only : time,roinf,uinf,vinf,tinf,im,jm,km,spcinf
     use commarray,only: x
     use hdf5io
     use parallel,only : mpi_imin,mpirankname,pmax,pmin
     use interp,  only : interlinear
     use fludyna, only : thermal
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
     !
-    integer :: i,j,k
+    integer :: i,j,k,jsp
     integer :: indim(3)
     integer,save :: idim
     real(8),allocatable,save :: xi(:),rhoi(:,:,:),veli(:,:,:,:),       &
@@ -1702,11 +1705,16 @@ module bc
       vel_in(j,k,3)=vel_in(j,k,3)
       tmp_in(j,k)  = tmp_in(j,k)  + tinf !tmp_prof(j)
       !
+      do jsp=1,num_species
+        spc_in(j,k,jsp)  = spcinf(jsp)
+      enddo
+      !
       prs_in(j,k)=thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
       !
       ! umax=max(umax,vel_in(j,k,1))
       ! umin=min(umin,vel_in(j,k,1))
       !
+      
     enddo
     enddo
     !
@@ -6528,6 +6536,7 @@ module bc
   subroutine freestreaminflow
     !
     use fludyna, only : jetvel,thermal
+    use commvar, only : nondimen
     !
     ! local data
     integer :: i,j,k,jspec
@@ -6541,14 +6550,41 @@ module bc
       vel_in(j,k,2)=vinf
       vel_in(j,k,3)=winf
       tmp_in(j,k)  =tinf
-      prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
-      !
-      do jspec=1,num_species
-        spc_in(j,k,jspec)=0.d0
-      enddo
+      if(nondimen) then
+        prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+        !
+      else
+#ifdef COMB
+        spc_in(j,k,:)=spcinf(:)
+        prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k),species=spc_in(j,k,:))
+#endif
+      endif
       !
     enddo
     enddo
+    !
+    allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
+              vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
+    !
+    do j=0,jm
+      !
+      rho_prof(j)  =roinf
+      vel_prof(j,1)=uinf
+      vel_prof(j,2)=vinf
+      vel_prof(j,3)=winf
+      tmp_prof(j)  =tinf
+      if(nondimen) then
+        prs_prof(j)  =thermal(density=rho_prof(j),temperature=tmp_prof(j))
+        !
+      else
+#ifdef COMB
+        spc_prof(j,:)=spcinf(:)
+        prs_prof(j)  =thermal(density=rho_prof(j),temperature=tmp_prof(j),species=spc_prof(j,:))
+#endif
+      endif
+      !
+    enddo
+    !
     !
   end subroutine freestreaminflow
   !+-------------------------------------------------------------------+

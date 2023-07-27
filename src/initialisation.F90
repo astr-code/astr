@@ -110,6 +110,8 @@ module initialisation
           call tgvflameini
         case('rti')
           call rtini
+        case('hitflame')
+          call hitflameini
         case default
           print*,trim(flowtype)
           stop ' !! flowtype not defined @ flowinit'
@@ -140,8 +142,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
-    ! stop
+    call writeflfed
     !
   end subroutine flowinit
   !+-------------------------------------------------------------------+
@@ -1867,9 +1868,8 @@ module initialisation
       specp(num_species),arg,prgvar,masflx,specx(num_species),yloc
     !
     tmpr=650.d0
-    xloc=0.25d-2
-    yloc=xloc
-    xwid=0.5d-3
+    xloc=0.d0
+    xwid=1.d-3
     !
     !reactants
     specr(:)=0.d0
@@ -1915,8 +1915,6 @@ module initialisation
       !
       spc(i,j,k,:)=specr(:)!+prgvar*(specp(js)-specr(js))
       !
-      vel(i,j,k,:)=0.d0
-      !
       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
       !
       prs(i,j,k)=pinf
@@ -1924,10 +1922,18 @@ module initialisation
       rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
                           species=spc(i,j,k,:))
       !
+      vel(i,j,k,:)=0.d0
+      !
       ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
     enddo
     enddo
     enddo
+    uinf=0.d0
+    vinf=0.d0
+    winf=0.d0
+    tinf=tmpp
+    spcinf(:)=specr(:)
+    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
     if(lio)  write(*,'(A,I1,A)')'  ** 1D flame initialised.'
     !
@@ -2165,6 +2171,79 @@ module initialisation
   !| The end of the subroutine tgvflameini.                           |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of HIT flame                                           |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 25-May-2023: Created by Yifan Xu @ Peking University              |
+  !+-------------------------------------------------------------------+
+  subroutine hitflameini
+    !
+    use commvar,  only: nondimen,xmax,pinf,ia,num_species
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    !
+#ifdef COMB
+    !
+    use thermchem,only : tranco,spcindex,mixture,convertxiyi
+    use cantera 
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
+      specp(num_species),arg,prgvar,masflx,specx(num_species)
+    !
+    tmpr=300.d0
+    xloc=xmax/2.d0
+    xwid=xmax/(12.d0*5.3d0)
+    !
+    !reactants
+    specr(:)=0.d0
+    specr(spcindex('H2'))=0.0173
+    specr(spcindex('O2'))=0.2289
+    specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    !products
+    tmpp=1808.28d0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      xc=x(i,j,k,1)
+      !
+      !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
+      if(abs(xc-xloc)<xwid*0.5d0*1.2d0) then 
+        prgvar=1.d0
+        if(abs(xc-xloc)>xwid*0.5d0) &
+        prgvar=1.d0-(abs(xc-xloc)-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
+      else
+        prgvar=0.d0
+      endif
+      !
+      spc(i,j,k,:)=specr(:)
+      !
+      vel(i,j,k,:)=0.d0
+      !
+      tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
+      !
+      prs(i,j,k)=pinf
+      !
+      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:))
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
+    !
+#endif
+
+  end subroutine hitflameini
+
+
   function return_30k(x) result(y)
   
     integer ( kind = 4 ), intent(in) :: x
