@@ -38,12 +38,7 @@ module initialisation
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
     !
-    if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
-       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn') then
-      !
-      call blprofile
-      !
-    endif
+    call inletprofile
     !
     call readcont
     !
@@ -1157,6 +1152,7 @@ module initialisation
     !
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal,mixinglayervel
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
     !
     ! local data
     integer :: i,j,k
@@ -1165,11 +1161,13 @@ module initialisation
     do k=0,km
     do j=0,jm
     do i=0,im
-      rho(i,j,k)  = roinf
       !
-      vel(i,j,k,:)= mixinglayervel(x(i,j,k,2))
+      rho(i,j,k)  = rho_prof(j)
       !
-      tmp(i,j,k)  = tinf
+      ! vel(i,j,k,:)= mixinglayervel(x(i,j,k,2))
+      vel(i,j,k,:) = vel_prof(j,:)
+      !
+      tmp(i,j,k)  = tmp_prof(j)
       !
       prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
       !
@@ -1528,7 +1526,7 @@ module initialisation
   !| -------------                                                     |
   !| 27-09-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  subroutine blprofile
+  subroutine inletprofile
     !
     use commvar,  only: flowtype,nondimen,spcinf,num_species
     use readwrite,only: readprofile
@@ -1545,8 +1543,7 @@ module initialisation
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
-    if(turbinf=='prof' .or. turbinf=='intp' .or. &
-       trim(flowtype)=='tbl') then
+    if(turbinf=='prof' .or. turbinf=='intp' .or. turbinf=='intx' ) then
       !
       if(lio) then
         !
@@ -1573,6 +1570,7 @@ module initialisation
                                 var1=rho_prof,     var2=vel_prof(:,1), &
                                 var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
       !
+      vel_prof(:,3)=0.d0
       ! vel_prof(:,1)=vel_prof(:,1) + 1.d0
       !
       if(nondimen) then 
@@ -1640,9 +1638,9 @@ module initialisation
       !
     endif
     !
-  end subroutine blprofile
+  end subroutine inletprofile
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine blprofile.                              |
+  !| The end of the subroutine inletprofile.                           |
   !+-------------------------------------------------------------------+
   !  
   !+-------------------------------------------------------------------+

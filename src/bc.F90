@@ -25,7 +25,7 @@ module bc
   real(8) :: uinf_j0,uinf_jm
   integer :: bctype(6)
   real(8) :: twall(6),xrhjump,angshk,xslip
-  character(len=4) :: turbinf
+  character(len=4) :: turbinf='none'
   !+---------------------+---------------------------------------------+
   !|              bctype | define type of boundary condition.          |
   !|               twall | wall temperature.                           |
@@ -6449,10 +6449,13 @@ module bc
     do k=0,km
     do j=0,jm
       !
-      rho_in(j,k)  =roinf
-      vel_in(j,k,:)=mixinglayervel(x(i,j,k,2))
-      tmp_in(j,k)  =tinf
-      prs_in(j,k)  =thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+      ! rho_in(j,k)  =roinf
+      ! vel_in(j,k,:)=mixinglayervel(x(i,j,k,2))
+      ! tmp_in(j,k)  =tinf
+      rho_in(j,k)   = rho_prof(j)
+      vel_in(j,k,:) = vel_prof(j,:)
+      tmp_in(j,k)   = tmp_prof(j)
+      prs_in(j,k)   = thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
       !
       if(num_species>0) then
         if(vel_in(j,k,1)>(1.d0+1.d-10)*uinf) then

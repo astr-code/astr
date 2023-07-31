@@ -260,7 +260,7 @@ module fludyna
         do n=1,numq
           if(isnan(q(i,j,k,n))) then
             print*,i,j,k,n
-            print*,q(i,j,k,n)
+            print*,'q:',q(i,j,k,:),'@ updateq'
           endif
         enddo
         !
