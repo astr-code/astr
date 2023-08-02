@@ -6,7 +6,7 @@
        t,     f,   f,      f
 
 # maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
-    40000,     500,    100,      50,      1,    50
+    50000,    1000,     100,      50,      1,    50
 
 # deltat
 1.d-8

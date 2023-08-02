@@ -9,7 +9,7 @@
 500,50,0
 
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
-f,f,t
+f,t,t
 
 # nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt,lcomb : Parameters
 f,t,t,f,f,f,t,t
@@ -36,7 +36,7 @@ f
 none,h
 
 # bctype                                                : Boundary condition definition 
-11,free
+11,prof
 21
 1 
 1

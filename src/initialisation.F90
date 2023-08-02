@@ -39,7 +39,7 @@ module initialisation
     use bc,       only: ninflowslice,turbinf
     !
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
-       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn') then
+       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn' .or. trim(flowtype)=='1dflame') then
       !
       call blprofile
       !
@@ -143,6 +143,7 @@ module initialisation
     if(lio) print*,' ** flowfield initialised.'
     !
     call writeflfed
+    ! stop
     !
   end subroutine flowinit
   !+-------------------------------------------------------------------+
@@ -1606,13 +1607,14 @@ module initialisation
         ! spc_prof(:,spcindex('O2'))=0.22887d0
         ! spc_prof(:,spcindex('H2'))=0.01730d0
         ! spc_prof(:,spcindex('N2'))=0.75383d0
-#endif
+
         ! non-reacting
         do i=1,num_species
           spc_prof(:,i) = spcinf(i)
         enddo
         !
         prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
+#endif        
       endif
       !
     else
@@ -2215,12 +2217,12 @@ module initialisation
       xc=x(i,j,k,1)
       !
       !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
-      if(abs(xc-xloc)<xwid*0.5d0*1.2d0) then 
-        prgvar=1.d0
-        if(abs(xc-xloc)>xwid*0.5d0) &
-        prgvar=1.d0-(abs(xc-xloc)-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
-      else
+      if(xc-xloc<xwid*0.5d0*1.2d0) then 
         prgvar=0.d0
+        if(xc-xloc>xwid*0.5d0) &
+        prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
+      else
+        prgvar=1.d0
       endif
       !
       spc(i,j,k,:)=specr(:)
@@ -2240,7 +2242,6 @@ module initialisation
     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
     !
 #endif
-
   end subroutine hitflameini
 
 

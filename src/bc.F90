@@ -1384,7 +1384,7 @@ module bc
           call jetinflow
         elseif(trim(flowtype)=='mixlayer') then
           call mixlayerinflow
-        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
+        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. trim(flowtype)=='1dflame') then
           !
           call profileinflow
           !
