@@ -1607,11 +1607,16 @@ module initialisation
         ! spc_prof(:,spcindex('O2'))=0.22887d0
         ! spc_prof(:,spcindex('H2'))=0.01730d0
         ! spc_prof(:,spcindex('N2'))=0.75383d0
-
+        ! phi = 0.6
+        spc_prof(:,:)=0.d0
+        spc_prof(:,spcindex('H2'))=0.031274d0  
+        spc_prof(:,spcindex('O2'))=0.225630d0 
+        spc_prof(:,spcindex('N2'))=0.743096d0 
+        ! spc_prof(:,spcindex('N2'))=1.d0-sum(spc_prof) 
         ! non-reacting
-        do i=1,num_species
-          spc_prof(:,i) = spcinf(i)
-        enddo
+        ! do i=1,num_species
+        !   spc_prof(:,i) = spcinf(i)
+        ! enddo
         !
         prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
 #endif        
