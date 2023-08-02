@@ -2357,6 +2357,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine zeroextrap(ndir)
     !
+    use commvar,   only : nondimen
     use fludyna,   only : thermal,fvar2q,q2fvar,sos,postshock
     use commfunc,  only : extrapolate
     !
@@ -2366,10 +2367,61 @@ module bc
     ! local data
     integer :: i,j,k,l,jspec
     real(8) :: css,csse,ub,pe,roe,ue,ve,we,spce(1:num_species),        &
-               vnb,vtb,vne,vte
+               vnb,vtb,vne,vte,te
     real(8) :: var1
     !
     logical,save :: lfirstcal=.true.
+    !
+    if(ndir==1 .and. irk==0) then
+      !
+      i=0
+      !
+      do k=0,km
+      do j=0,jm
+        !
+        ue  =extrapolate(vel(i+1,j,k,1),vel(i+2,j,k,1),dv=0.d0)
+        ve  =extrapolate(vel(i+1,j,k,2),vel(i+2,j,k,2),dv=0.d0)
+        we  =extrapolate(vel(i+1,j,k,3),vel(i+2,j,k,3),dv=0.d0)
+        pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),dv=0.d0)
+        roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),dv=0.d0)
+        te  =extrapolate(tmp(i+1,j,k),  tmp(i+2,j,k),dv=0.d0)
+        csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i+1,j,k,jspec),                  &
+                                  spc(i+2,j,k,jspec),dv=0.d0)
+        enddo
+        !
+        prs(i,j,k)=pe
+        tmp(i,j,k)=te
+        !
+        vel(i,j,k,1)=ue
+        vel(i,j,k,2)=ve
+        vel(i,j,k,3)=we
+        spc(i,j,k,:)=spce(:)
+        !
+        if(nondimen) then 
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        else
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        endif
+        !
+        if(nondimen) then 
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),       &
+                      species=spc(i,j,k,:)                               )
+        else
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),    &
+                      species=spc(i,j,k,:)                               )
+        endif
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
     !
     if(ndir==2 .and. irk==irkm) then
       !
@@ -2382,7 +2434,7 @@ module bc
         ve  =extrapolate(vel(i-1,j,k,2),vel(i-2,j,k,2),dv=0.d0)
         we  =extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
         pe  =extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
-        roe =extrapolate(rho(i-1,j,k),  rho(i-2,j,k),dv=0.d0)
+        te  =extrapolate(tmp(i-1,j,k),  tmp(i-2,j,k),dv=0.d0)
         csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
         !
         do jspec=1,num_species
@@ -2391,17 +2443,28 @@ module bc
         enddo
         !
         prs(i,j,k)=pe
-        rho(i,j,k)=roe
+        tmp(i,j,k)=te
         !
         vel(i,j,k,1)=ue
         vel(i,j,k,2)=ve
         vel(i,j,k,3)=we
-        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
         spc(i,j,k,:)=spce(:)
         !
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                    species=spc(i,j,k,:)                               )
+        if(nondimen) then 
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        else
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        endif
+        !
+        if(nondimen) then 
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),       &
+                      species=spc(i,j,k,:)                               )
+        else
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),    &
+                      species=spc(i,j,k,:)                               )
+        endif
         !
         qrhs(i,j,k,:)=0.d0
         !

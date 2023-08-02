@@ -91,6 +91,7 @@ module parallel
   interface pgather
     module procedure pgather_rel2d_array_rank
     module procedure pgather_rel2d_array
+    module procedure pgather_rel1d_array
     module procedure pgather_int2d_array
     module procedure pgather_int1d_array
     module procedure pgather_int
@@ -1902,6 +1903,47 @@ module parallel
                         mpi_comm_world, ierr)
     !
   end subroutine pgather_rel2d_array
+  !
+  subroutine pgather_rel1d_array(array,data)
+    !
+    ! arguments
+    real(8),allocatable,intent(in) :: array(:)
+    real(8),intent(out),allocatable :: data(:)
+    !
+    !
+    ! local data
+    integer :: displs(0:mpirankmax),counts(0:mpirankmax)
+    integer :: ierr,jrank,nrecv(1),nsize,dim1
+    !
+    ! get the size of data to scatter
+    if(.not.allocated(array)) then
+      dim1=0
+    else
+      dim1=size(array)
+    endif
+    ! print*,allocated(array),dim1
+    !
+    nrecv(1)=dim1
+    !
+    dim1=pmax(dim1)
+    !
+    call mpi_allgather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  &
+                    mpi_comm_world, ierr)
+    !
+    displs(0)=0
+    do jrank=1,mpirankmax
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+    !
+    nsize=displs(mpirankmax)+counts(mpirankmax)
+    !
+    allocate(data(nsize))
+    !
+    call mpi_allgatherv(array, nrecv(1), mpi_real8,       &
+                        data,  counts, displs, mpi_real8, &
+                        mpi_comm_world, ierr)
+    !
+  end subroutine pgather_rel1d_array
   !
   subroutine pgather_int2d_array(array,data)
     !

@@ -1762,7 +1762,7 @@ module readwrite
   subroutine writeflfed(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ,force
+                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
@@ -1780,6 +1780,8 @@ module readwrite
     character(len=3) :: spname
     real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
     !
+    real(8) :: ypos
+    logical :: lwprofile
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
     !
@@ -1916,6 +1918,24 @@ module readwrite
       !
     endif
     !
+    lwprofile=.false.
+    ypos=0.5d0*(ymax-ymin)+ymin
+    do j=1,jm
+      if(x(0,j-1,0,2)<ypos .and. x(0,j,0,2)>=ypos) then
+        !
+        lwprofile=.true.
+        
+        exit
+        !
+      endif
+    enddo
+    !
+    call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
+                               var1=rho(0:im,j,0),  var1name='rho', &
+                               var2=vel(0:im,j,0,1),var2name='u',   &
+                               var3=tmp(0:im,j,0),  var3name='T',   &
+                               var4=prs(0:im,j,0),  var4name='P',truewrite=lwprofile)
+    !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ
     !
@@ -1931,6 +1951,115 @@ module readwrite
     !
   end subroutine writeflfed
   !
+  subroutine writexprofile(profilename,var1,var1name, &
+                                       var2,var2name, &
+                                       var3,var3name, &
+                                       var4,var4name, &
+                                       var5,var5name,truewrite)
+    !
+    use parallel,  only : pgather
+    use commarray, only : x
+    !
+    character(len=*),intent(in) :: profilename
+    !
+    real(8),intent(in),optional :: var1(:),var2(:),var3(:),var4(:),var5(:)
+    character(len=*),intent(in),optional :: var1name,var2name,var3name,var4name,var5name
+    logical,intent(in) :: truewrite
+    !
+    integer :: nvar,i
+    real(8),allocatable :: vdum(:)
+    real(8),allocatable :: vout1(:),vout2(:),vout3(:),vout4(:),vout5(:)
+    real(8),allocatable,save :: xx(:)
+    logical,save :: firstcall=.true.
+    !
+    if(firstcall) then
+      if(truewrite) then
+        allocate(vdum(0:im))
+        vdum=x(0:im,0,0,1)
+      endif
+      call pgather(vdum,xx)
+      if(truewrite) deallocate(vdum)
+      !
+      firstcall=.false.
+    endif
+    !
+    nvar=0
+    !
+    if(truewrite) allocate(vdum(1:size(var1)))
+    !
+    if(present(var1)) then
+      nvar=1
+      !
+      if(truewrite) then
+        vdum=var1
+      endif
+      call pgather(vdum,vout1)
+      !
+    endif
+    !
+    if(present(var2)) then
+      nvar=2
+      if(truewrite) then
+        vdum=var2
+      endif
+      call pgather(vdum,vout2)
+      !
+    endif
+    !
+    if(present(var3)) then
+      nvar=3
+      if(truewrite) then
+        vdum=var3
+      endif
+      call pgather(vdum,vout3)
+      !
+    endif
+    !
+    if(present(var4)) then
+      nvar=4
+      if(truewrite) then
+        vdum=var4
+      endif
+      call pgather(vdum,vout4)
+      !
+    endif
+    !
+    if(present(var5)) then
+      nvar=5
+      if(truewrite) then
+        vdum=var5
+      endif
+      call pgather(vdum,vout5)
+      !
+    endif
+    !
+    if(nvar==0) return
+    !
+    if(mpirank==0) then
+      open(18,file=profilename)
+      if(nvar==1) then
+        write(18,"(2(1X,A15))")'x',var1name
+        write(18,"(2(1X,E15.7E3))")(xx(i),vout1(i),i=1,size(xx))
+      elseif(nvar==2) then
+        write(18,"(3(1X,A15))")'x',var1name,var2name
+        write(18,"(3(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),i=1,size(xx))
+      elseif(nvar==3) then
+        write(18,"(4(1X,A15))")'x',var1name,var2name,var3name
+        write(18,"(4(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),i=1,size(xx))
+      elseif(nvar==4) then
+        write(18,"(5(1X,A15))")'x',var1name,var2name,var3name,var4name
+        write(18,"(5(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),vout4(i),i=1,size(xx))
+      elseif(nvar==5) then
+        write(18,"(6(1X,A15))")'x',var1name,var2name,var3name,var4name,var5name
+        write(18,"(6(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),vout4(i),vout5(i),i=1,size(xx))
+      else
+        stop ' !! error1 @ writexprofile'
+      endif
+      close(18)
+      print*,' << ',profilename
+    endif
+    !
+  end subroutine writexprofile
   !
   subroutine writeflfed_2d(timerept)
     !
