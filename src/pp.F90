@@ -2026,8 +2026,10 @@ module pp
     integer :: i,j,k
     character(len=4) :: genmethod
     !
-    im=ia
-    jm=ja
+    im=ka ! ensure a cubic box
+    !
+    jm=ka
+    !
     km=ka
     !
     call mpisizedis
@@ -2042,8 +2044,9 @@ module pp
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
     !
+    call gridhitflame(mode='cubic')
     !call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
-    call readgrid(trim(gridfile))
+    ! call readgrid(trim(gridfile))
     !
     call geomcal
     !

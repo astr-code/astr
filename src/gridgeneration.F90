@@ -42,7 +42,7 @@ module gridgeneration
       elseif(trim(flowtype)=='hit') then
         call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
       elseif(trim(flowtype)=='hitflame') then
-        call gridcube(5.3d0*7.88d-5,5.3d0*7.88d-5,5.3d0*7.88d-5)
+        call gridhitflame(mode='cuboid')
       elseif(trim(flowtype)=='2dvort') then
         call gridcube(20.d0,10.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then
@@ -170,6 +170,63 @@ module gridgeneration
     if(lio) print*,' ** 1-D grid generated'
     !
   end subroutine grid1d
+  !
+  subroutine gridhitflame(mode)
+    !
+    use commvar,  only : im,jm,km,gridfile,ia,ja,ka
+    use parallel, only : ig0,jg0,kg0,lio,bcast
+    use commarray,only : x
+    use hdf5io
+    !
+    ! arguments
+    character(len=*),intent(in) :: mode
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: flamethickness,lx,ly,lz
+    !
+    if(mpirank==0) then
+      open(12,file='datin/userinput.txt')
+      read(12,*)flamethickness
+      close(12)
+    endif
+    !
+    call bcast(flamethickness)
+    !
+    if(mode=='cuboid') then
+      lx=12.d0*5.3d0*flamethickness
+      ly=5.3d0*flamethickness
+      lz=5.3d0*flamethickness
+    elseif(mode=='cubic') then
+      lx=5.3d0*flamethickness
+      ly=5.3d0*flamethickness
+      lz=5.3d0*flamethickness
+    else
+      stop ' !! error1 @ gridhitflame'
+    endif
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1)=lx/real(ia,8)*real(i+ig0,8)
+      if(ja==0) then
+        x(i,j,k,2)=ly
+      else
+        x(i,j,k,2)=ly/real(ja,8)*real(j+jg0,8)
+      endif
+      if(ka==0) then
+        x(i,j,k,3)=0.d0
+      else
+        x(i,j,k,3)=lz/real(ka,8)*real(k+kg0,8)
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio) print*,' ** cubic grid generated'
+    !
+  end subroutine gridhitflame
   !
   subroutine gridcube(lx,ly,lz)
     !
