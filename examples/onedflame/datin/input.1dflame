@@ -50,7 +50,7 @@ none,h
 0, 0, 0, 0, 0, 0
 
 # gridfile
-grid.h5
+'grid.h5'
 
 # chemfile
 datin/ES80_H2-8-16.yaml

@@ -37,12 +37,12 @@ module initialisation
     use fludyna,  only: updateq
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
-    !
+    !      
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
-       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn' .or. trim(flowtype)=='1dflame') then
-      !
+      trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn') then
+    !
       call blprofile
-      !
+    !
     endif
     !
     call readcont
@@ -118,6 +118,7 @@ module initialisation
         end select
         !
       endif
+
       !
       call updateq
       !
@@ -1608,15 +1609,15 @@ module initialisation
         ! spc_prof(:,spcindex('H2'))=0.01730d0
         ! spc_prof(:,spcindex('N2'))=0.75383d0
         ! phi = 0.6
-        spc_prof(:,:)=0.d0
-        spc_prof(:,spcindex('H2'))=0.031274d0  
-        spc_prof(:,spcindex('O2'))=0.225630d0 
-        spc_prof(:,spcindex('N2'))=0.743096d0 
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('H2'))=0.031274d0  
+        ! spc_prof(:,spcindex('O2'))=0.225630d0 
+        ! spc_prof(:,spcindex('N2'))=0.743096d0 
         ! spc_prof(:,spcindex('N2'))=1.d0-sum(spc_prof) 
         ! non-reacting
-        ! do i=1,num_species
-        !   spc_prof(:,i) = spcinf(i)
-        ! enddo
+        do i=1,num_species
+          spc_prof(:,i) = spcinf(i)
+        enddo
         !
         prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
 #endif        
@@ -1898,7 +1899,7 @@ module initialisation
     ! specr(spcindex('n2'))=1.d0-sum(specr)
     !
     !products
-    tmpp=1700.d0
+    tmpp=1.417d+03
     specp(:)=0.d0
     ! specp(spcindex('CO2'))=1.51376d-1
     ! specp(spcindex('H2O'))=1.23853d-1
@@ -2215,6 +2216,8 @@ module initialisation
     !products
     tmpp=1808.28d0
     !
+    pinf=5.d0*pinf
+    !
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -2243,6 +2246,13 @@ module initialisation
     enddo
     enddo
     enddo
+    !
+    uinf=5.d0
+    vinf=0.d0
+    winf=0.d0
+    tinf=tmpr
+    spcinf(:)=specr(:)
+    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
     !

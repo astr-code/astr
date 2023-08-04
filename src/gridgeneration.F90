@@ -189,6 +189,7 @@ module gridgeneration
       open(12,file='datin/userinput.txt')
       read(12,*)flamethickness
       close(12)
+      print*, ' ** flamethickness =',flamethickness
     endif
     !
     call bcast(flamethickness)
