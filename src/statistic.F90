@@ -536,7 +536,7 @@ module statistic
       rho_incom=psum(rho_incom)
       !
     elseif(flowtype=='tgvflame'.or. flowtype=='1dflame'.or.flowtype=='0dreactor' &
-        .or.flowtype=='h2supersonic') then
+        .or.flowtype=='h2supersonic' .or. flowtype=='hitflame') then
       
 #ifdef COMB
       tmpmax=maxval(tmp(0:im,0:jm,0:km))
@@ -687,7 +687,7 @@ module statistic
             write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
                                  'massflux','fbcx','blthickness','wrms'
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-              .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame') then
+              .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame'.or.flowtype=='hitflame') then
             write(hand_fs,"(2(A10,1X),5(A12,1X))") &
               'nstep','clock','time','maxT','maxU','enstophy','maxHRR'
           else
@@ -713,7 +713,8 @@ module statistic
         write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
       elseif(trim(flowtype)=='cylinder') then
         write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
-      elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic') then
+      elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic' &
+            .or.flowtype=='hitflame') then
         walltime=int(ptime()-time_verybegin)
         write(hand_fs,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
       else
@@ -737,7 +738,7 @@ module statistic
           elseif(trim(flowtype)=='cylinder') then
             write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
           elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-                  .or.flowtype=='h2supersonic') then
+                  .or.flowtype=='h2supersonic'.or.flowtype=='hitflame') then
             write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
               'maxU','enstophy','maxHRR'
           else
@@ -760,7 +761,7 @@ module statistic
         elseif(trim(flowtype)=='cylinder') then
           write(*,"(2X,I7,1X,4(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-                .or.flowtype=='h2supersonic') then
+                .or.flowtype=='h2supersonic'.or. flowtype=='hitflame') then
           write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
         else
           write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
