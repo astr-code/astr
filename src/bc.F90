@@ -14,7 +14,9 @@ module bc
                      num_species,flowtype,gamma,numq,npdci,npdcj,      &
                      npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
                      zmin,zmax,time,num_modequ,ltimrpt,spcinf
-  use commarray, only : x,dxi,jacob,prs,vel,tmp,rho,spc,q,qrhs
+  use commarray, only : x,dxi,jacob,prs,vel,tmp,rho,spc,q,qrhs,        &
+                        bnorm_i0,bnorm_im,bnorm_j0,bnorm_jm,           &
+                        bnorm_k0,bnorm_km
   use tecio
   use stlaio,  only: get_unit
   !
@@ -373,6 +375,10 @@ module bc
       !
       if(bctype(n)==51) then
         call farfield(n)
+      endif
+      !
+      if(bctype(n)==60) then
+        call symmetry(n)
       endif
       !
       if(bctype(n)==23) then
@@ -2168,9 +2174,9 @@ module bc
       do j=0,jm
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.false.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,1,:),inv=.false.)
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.true.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,1,:),inv=.true.)
         !
         ! Pmult=MatMul(Pinv,pnor)
         ! if(jrk==0) then
@@ -2385,7 +2391,7 @@ module bc
         pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),dv=0.d0)
         roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),dv=0.d0)
         te  =extrapolate(tmp(i+1,j,k),  tmp(i+2,j,k),dv=0.d0)
-        csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i+1,j,k,jspec),                  &
@@ -2435,7 +2441,7 @@ module bc
         we  =extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
         pe  =extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
         te  =extrapolate(tmp(i-1,j,k),  tmp(i-2,j,k),dv=0.d0)
-        csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i-1,j,k,jspec),                  &
@@ -2480,7 +2486,7 @@ module bc
       do k=0,km
       do i=0,im
         !
-        css=sos(tmp(i,j,k))
+        ! css=sos(tmp(i,j,k))
         ! ub =vel(i,j,k,1)*bvec_jm(i,k,1)+vel(i,j,k,2)*bvec_jm(i,k,2)+   &
         !     vel(i,j,k,3)*bvec_jm(i,k,3)
         !
@@ -2489,7 +2495,7 @@ module bc
         we  =extrapolate(vel(i,j+1,k,3),vel(i,j+2,k,3),dv=0.d0)
         pe  =extrapolate(prs(i,j+1,k),  prs(i,j+2,k),dv=0.d0)
         roe =extrapolate(rho(i,j+1,k),  rho(i,j+2,k),dv=0.d0)
-        csse=extrapolate(sos(tmp(i,j+1,k)),sos(tmp(i,j+2,k)),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j+1,k)),sos(tmp(i,j+2,k)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i,j+1,k,jspec),                  &
@@ -2505,9 +2511,15 @@ module bc
         tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
         spc(i,j,k,:)=spce(:)
         !
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                    species=spc(i,j,k,:)                               )
+        if(nondimen) then 
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),       &
+                      species=spc(i,j,k,:)                               )
+        else
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),    &
+                      species=spc(i,j,k,:)                               )
+        endif
         !
         qrhs(i,j,k,:)=0.d0
         !
@@ -2532,7 +2544,7 @@ module bc
         we  =extrapolate(vel(i,j-1,k,3),vel(i,j-2,k,3),dv=0.d0)
         pe  =extrapolate(prs(i,j-1,k),  prs(i,j-2,k),dv=0.d0)
         roe =extrapolate(rho(i,j-1,k),  rho(i,j-2,k),dv=0.d0)
-        csse=extrapolate(sos(tmp(i,j-1,k)),sos(tmp(i,j-2,k)),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j-1,k)),sos(tmp(i,j-2,k)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i,j-1,k,jspec),                  &
@@ -2575,7 +2587,7 @@ module bc
         we  =extrapolate(vel(i,j,k+1,3),vel(i,j,k+2,3),dv=0.d0)
         pe  =extrapolate(prs(i,j,k+1),  prs(i,j,k+2),dv=0.d0)
         roe =extrapolate(rho(i,j,k+1),  rho(i,j,k+2),dv=0.d0)
-        csse=extrapolate(sos(tmp(i,j,k+1)),sos(tmp(i,j,k+2)),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j,k+1)),sos(tmp(i,j,k+2)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i,j,k+1,jspec),                  &
@@ -2618,7 +2630,7 @@ module bc
         we  =extrapolate(vel(i,j,k-1,3),vel(i,j,k-2,3),dv=0.d0)
         pe  =extrapolate(prs(i,j,k-1),  prs(i,j,k-2),dv=0.d0)
         roe =extrapolate(rho(i,j,k-1),  rho(i,j,k-2),dv=0.d0)
-        csse=extrapolate(sos(tmp(i,j,k-1)),sos(tmp(i,j,k-2)),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j,k-1)),sos(tmp(i,j,k-2)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i,j,k-1,jspec),                  &
@@ -2648,6 +2660,354 @@ module bc
   end subroutine zeroextrap
   !+-------------------------------------------------------------------+
   !| The end of the subroutine zeroextrap.                             |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to apply the symmetrical bc.                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 04-08-2023: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine symmetry(ndir)
+    !
+    use commvar,   only : nondimen
+    use fludyna,   only : thermal,fvar2q,q2fvar,sos,postshock
+    use commfunc,  only : extrapolate
+    !
+    ! arguments
+    integer,intent(in) :: ndir
+    !
+    ! local data
+    integer :: i,j,k,l,jspec
+    real(8) :: css,csse,ub,pe,roe,ue,ve,we,spce(1:num_species),        &
+               vnb,vtb,vne,vte,te
+    real(8) :: var1,vec1(3)
+    !
+    logical,save :: lfirstcal=.true.
+    !
+    if(ndir==1 .and. irk==0) then
+      !
+      i=0
+      !
+      do k=0,km
+      do j=0,jm
+        !
+        ue  =extrapolate(vel(i+1,j,k,1),vel(i+2,j,k,1),dv=0.d0)
+        ve  =extrapolate(vel(i+1,j,k,2),vel(i+2,j,k,2),dv=0.d0)
+        we  =extrapolate(vel(i+1,j,k,3),vel(i+2,j,k,3),dv=0.d0)
+        pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),dv=0.d0)
+        roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),dv=0.d0)
+        te  =extrapolate(tmp(i+1,j,k),  tmp(i+2,j,k),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i+1,j,k,jspec),                  &
+                                  spc(i+2,j,k,jspec),dv=0.d0)
+        enddo
+        !
+        vec1(1)=ue
+        vec1(2)=ve
+        vec1(3)=we
+        vne=dot_product(vec1,bnorm_i0(j,k,:))
+        vec1=vec1-vne*bnorm_i0(j,k,:)
+        !
+        prs(i,j,k)=pe
+        tmp(i,j,k)=te
+        !
+        vel(i,j,k,1)=vec1(1)
+        vel(i,j,k,2)=vec1(2)
+        vel(i,j,k,3)=vec1(3)
+        spc(i,j,k,:)=spce(:)
+        !
+        if(nondimen) then 
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        else
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        endif
+        !
+        if(nondimen) then 
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),       &
+                      species=spc(i,j,k,:)                               )
+        else
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),    &
+                      species=spc(i,j,k,:)                               )
+        endif
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+    if(ndir==2 .and. irk==irkm) then
+      !
+      i=im
+      !
+      do k=0,km
+      do j=0,jm
+        !
+        ue  =extrapolate(vel(i-1,j,k,1),vel(i-2,j,k,1),dv=0.d0)
+        ve  =extrapolate(vel(i-1,j,k,2),vel(i-2,j,k,2),dv=0.d0)
+        we  =extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
+        pe  =extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
+        te  =extrapolate(tmp(i-1,j,k),  tmp(i-2,j,k),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i-1,j,k,jspec),                  &
+                                  spc(i-2,j,k,jspec),dv=0.d0)
+        enddo
+        !
+        prs(i,j,k)=pe
+        tmp(i,j,k)=te
+        !
+        vec1(1)=ue
+        vec1(2)=ve
+        vec1(3)=we
+        !
+        vne=dot_product(vec1,bnorm_im(j,k,:))
+        vec1=vec1-vne*bnorm_im(j,k,:)
+        !
+        vel(i,j,k,1)=vec1(1)
+        vel(i,j,k,2)=vec1(2)
+        vel(i,j,k,3)=vec1(3)
+        !
+        spc(i,j,k,:)=spce(:)
+        !
+        if(nondimen) then 
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        else
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        endif
+        !
+        if(nondimen) then 
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),       &
+                      species=spc(i,j,k,:)                               )
+        else
+          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),    &
+                      species=spc(i,j,k,:)                               )
+        endif
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+    if(ndir==3 .and. jrk==0) then
+      !
+      j=0
+      !
+      do k=0,km
+      do i=0,im
+        !
+        css=sos(tmp(i,j,k))
+        ! ub =vel(i,j,k,1)*bvec_jm(i,k,1)+vel(i,j,k,2)*bvec_jm(i,k,2)+   &
+        !     vel(i,j,k,3)*bvec_jm(i,k,3)
+        !
+        ue  =extrapolate(vel(i,j+1,k,1),vel(i,j+2,k,1),dv=0.d0)
+        ve  =extrapolate(vel(i,j+1,k,2),vel(i,j+2,k,2),dv=0.d0)
+        we  =extrapolate(vel(i,j+1,k,3),vel(i,j+2,k,3),dv=0.d0)
+        pe  =extrapolate(prs(i,j+1,k),  prs(i,j+2,k),dv=0.d0)
+        roe =extrapolate(rho(i,j+1,k),  rho(i,j+2,k),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j+1,k)),sos(tmp(i,j+2,k)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i,j+1,k,jspec),                  &
+                                  spc(i,j+2,k,jspec),dv=0.d0)
+        enddo
+        !
+        prs(i,j,k)=pe
+        rho(i,j,k)=roe
+        !
+        vec1(1)=ue
+        vec1(2)=ve
+        vec1(3)=we
+        !
+        vne=dot_product(vec1,bnorm_j0(i,k,:))
+        vec1=vec1-vne*bnorm_j0(i,k,:)
+        !
+        vel(i,j,k,1)=vec1(1)
+        vel(i,j,k,2)=vec1(2)
+        vel(i,j,k,3)=vec1(3)
+        !
+        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        spc(i,j,k,:)=spce(:)
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+    if(ndir==4 .and. jrk==jrkm) then
+      !
+      j=jm
+      !
+      do k=0,km
+      do i=0,im
+        !
+        css=sos(tmp(i,j,k))
+        ! ub =vel(i,j,k,1)*bvec_jm(i,k,1)+vel(i,j,k,2)*bvec_jm(i,k,2)+   &
+        !     vel(i,j,k,3)*bvec_jm(i,k,3)
+        !
+        ue  =extrapolate(vel(i,j-1,k,1),vel(i,j-2,k,1),dv=0.d0)
+        ve  =extrapolate(vel(i,j-1,k,2),vel(i,j-2,k,2),dv=0.d0)
+        we  =extrapolate(vel(i,j-1,k,3),vel(i,j-2,k,3),dv=0.d0)
+        pe  =extrapolate(prs(i,j-1,k),  prs(i,j-2,k),dv=0.d0)
+        roe =extrapolate(rho(i,j-1,k),  rho(i,j-2,k),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j-1,k)),sos(tmp(i,j-2,k)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i,j-1,k,jspec),                  &
+                                  spc(i,j-2,k,jspec),dv=0.d0)
+        enddo
+        !
+        prs(i,j,k)=pe
+        rho(i,j,k)=roe
+        !
+        vec1(1)=ue
+        vec1(2)=ve
+        vec1(3)=we
+        !
+        vne=dot_product(vec1,bnorm_jm(i,k,:))
+        vec1=vec1-vne*bnorm_jm(i,k,:)
+        !
+        vel(i,j,k,1)=vec1(1)
+        vel(i,j,k,2)=vec1(2)
+        vel(i,j,k,3)=vec1(3)
+        !
+        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        spc(i,j,k,:)=spce(:)
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+    if(ndir==5 .and. krk==0) then
+      !
+      k=0
+      !
+      do j=0,jm
+      do i=0,im
+        !
+        css=sos(tmp(i,j,k))
+        ! ub =vel(i,j,k,1)*bvec_jm(i,k,1)+vel(i,j,k,2)*bvec_jm(i,k,2)+   &
+        !     vel(i,j,k,3)*bvec_jm(i,k,3)
+        !
+        ue  =extrapolate(vel(i,j,k+1,1),vel(i,j,k+2,1),dv=0.d0)
+        ve  =extrapolate(vel(i,j,k+1,2),vel(i,j,k+2,2),dv=0.d0)
+        we  =extrapolate(vel(i,j,k+1,3),vel(i,j,k+2,3),dv=0.d0)
+        pe  =extrapolate(prs(i,j,k+1),  prs(i,j,k+2),dv=0.d0)
+        roe =extrapolate(rho(i,j,k+1),  rho(i,j,k+2),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j,k+1)),sos(tmp(i,j,k+2)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i,j,k+1,jspec),                  &
+                                  spc(i,j,k+2,jspec),dv=0.d0)
+        enddo
+        !
+        prs(i,j,k)=pe
+        rho(i,j,k)=roe
+        !
+        vec1(1)=ue
+        vec1(2)=ve
+        vec1(3)=we
+        !
+        vne=dot_product(vec1,bnorm_k0(i,j,:))
+        vec1=vec1-vne*bnorm_k0(i,j,:)
+        !
+        vel(i,j,k,1)=vec1(1)
+        vel(i,j,k,2)=vec1(2)
+        vel(i,j,k,3)=vec1(3)
+        !
+        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        spc(i,j,k,:)=spce(:)
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+    if(ndir==6 .and. krk==krkm) then
+      !
+      k=km
+      !
+      do j=0,jm
+      do i=0,im
+        !
+        css=sos(tmp(i,j,k))
+        ! ub =vel(i,j,k,1)*bvec_jm(i,k,1)+vel(i,j,k,2)*bvec_jm(i,k,2)+   &
+        !     vel(i,j,k,3)*bvec_jm(i,k,3)
+        !
+        ue  =extrapolate(vel(i,j,k-1,1),vel(i,j,k-2,1),dv=0.d0)
+        ve  =extrapolate(vel(i,j,k-1,2),vel(i,j,k-2,2),dv=0.d0)
+        we  =extrapolate(vel(i,j,k-1,3),vel(i,j,k-2,3),dv=0.d0)
+        pe  =extrapolate(prs(i,j,k-1),  prs(i,j,k-2),dv=0.d0)
+        roe =extrapolate(rho(i,j,k-1),  rho(i,j,k-2),dv=0.d0)
+        ! csse=extrapolate(sos(tmp(i,j,k-1)),sos(tmp(i,j,k-2)),dv=0.d0)
+        !
+        do jspec=1,num_species
+          spce(jspec)=extrapolate(spc(i,j,k-1,jspec),                  &
+                                  spc(i,j,k-2,jspec),dv=0.d0)
+        enddo
+        !
+        prs(i,j,k)=pe
+        rho(i,j,k)=roe
+        !
+        vec1(1)=ue
+        vec1(2)=ve
+        vec1(3)=we
+        !
+        vne=dot_product(vec1,bnorm_km(i,j,:))
+        vec1=vec1-vne*bnorm_km(i,j,:)
+        !
+        vel(i,j,k,1)=vec1(1)
+        vel(i,j,k,2)=vec1(2)
+        vel(i,j,k,3)=vec1(3)
+        !
+        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        spc(i,j,k,:)=spce(:)
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+    !
+  end subroutine symmetry
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine symmetry.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -3136,8 +3496,8 @@ module bc
         !
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
-        if(.true.) then
-        ! if(ub>=css) then
+        ! if(.true.) then
+        if(ub>=css) then
           ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
@@ -3348,9 +3708,9 @@ module bc
       do i=0,im
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,2,:),inv=.false.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,2,:),inv=.false.)
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,2,:),inv=.true.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,2,:),inv=.true.)
         !
         ! Pmult=MatMul(Pinv,pnor)
         ! if(irk==0) then
@@ -3582,9 +3942,9 @@ module bc
       do i=0,im
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,2,:),inv=.false.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,2,:),inv=.false.)
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,2,:),inv=.true.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,2,:),inv=.true.)
         !
         ! Pmult=MatMul(Pinv,pnor)
         ! if(irk==0) then
@@ -3833,9 +4193,9 @@ module bc
         ! do i=is,ie
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,3,:),inv=.false.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,3,:),inv=.false.)
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,3,:),inv=.true.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,3,:),inv=.true.)
         !
         ! Pmult=MatMul(Pinv,pnor)
         ! if(irk==0 .and. jrk==0) then
@@ -4051,9 +4411,9 @@ module bc
       ! do i=is,ie
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,3,:),inv=.false.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,3,:),inv=.false.)
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,3,:),inv=.true.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,3,:),inv=.true.)
         !
         ! Pmult=MatMul(Pinv,pnor)
         ! if(irk==0) then
@@ -4240,10 +4600,13 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine outflow_nscbc(ndir)
     !
-    use commvar,   only : xmin,xmax,mach
+    use commvar,   only : xmin,xmax,mach,nondimen
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : deriv,ddfc,spafilter6exp
     use parallel,  only : psum,mpi_imax
+#ifdef COMB
+    use thermchem, only : aceval
+#endif
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -4256,20 +4619,26 @@ module bc
     real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2,psonic,rncout
     !
     gmachmax2=0.d0
+    !
     if(ndir==2 .and. irk==irkm) then
       i=im
       do k=0,km
       do j=0,jm
-        css=sos(tmp(i,j,k)) 
+        !
+        css=sos(tmp(i,j,k),spc(i,j,k,:))
+        !
         var1=1.d0/( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+               &
                     dxi(i,j,k,1,3)**2 )
         var2=vel(i,j,k,1)*dxi(i,j,k,1,1)+vel(i,j,k,2)*dxi(i,j,k,1,2)+  &
              vel(i,j,k,3)*dxi(i,j,k,1,3)
-        gmachmax2=max(gmachmax2,var2*var2/(var1*css*css))
+        gmachmax2=max(gmachmax2,var2*var2*var1/css/css)
+        !
       enddo
       enddo
     endif
     gmachmax2=pmax(gmachmax2)
+    !
+    ! print*,' ** gmachmax2',gmachmax2
     !
     if(ndir==2 .and. irk==irkm) then
       !
@@ -4320,9 +4689,9 @@ module bc
       do j=0,jm
         !
         pnor=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.false.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,1,:),inv=.false.)
         pinv=pmatrix(rho(i,j,k),vel(i,j,k,1),vel(i,j,k,2),            &
-                     vel(i,j,k,3),tmp(i,j,k),dxi(i,j,k,1,:),inv=.true.)
+                     vel(i,j,k,3),tmp(i,j,k),spc(i,j,k,:),dxi(i,j,k,1,:),inv=.true.)
         !
         ! Pmult=MatMul(pnor,Pinv)
         ! if(jrk==0) then
@@ -4405,7 +4774,7 @@ module bc
         uu=dxi(i,j,k,1,1)*vel(i,j,k,1)+dxi(i,j,k,1,2)*vel(i,j,k,2) + &
            dxi(i,j,k,1,3)*vel(i,j,k,3)
         !
-        css=sos(tmp(i,j,k))
+        css=sos(tmp(i,j,k),spc(i,j,k,:))
         !
         ! if(uu>=0.d0) then
         !   !
@@ -4417,9 +4786,10 @@ module bc
         !   !   LODi(5)=0.d0
         !   ! endif
         !   !
-        !   ! kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
-        !   ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
-        !   ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+        ! kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
+        kinout=0.125d0*(1.d0-gmachmax2)*css/(xmax-xmin)
+        LODi(5)=kinout*(prs(i,j,k)-pinf)
+        ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         ! else
         !   ! back flow
         !   var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &
@@ -4517,7 +4887,7 @@ module bc
     !
   end subroutine outflow_nscbc
   !
-  function pmatrix(rho,u,v,w,t,ddi,inv)
+  function pmatrix(rho,u,v,w,t,sp,ddi,inv)
     !
     use commvar, only : gamma
     use fludyna, only : sos
@@ -4525,12 +4895,12 @@ module bc
     ! arguments
     real(8) :: pmatrix(5,5)
     logical,intent(in) :: inv
-    real(8),intent(in) :: rho,u,v,w,t,ddi(3)
+    real(8),intent(in) :: rho,u,v,w,t,sp(:),ddi(3)
     !
     ! local data
     real(8) :: var1,nx,ny,nz,a1,a2,a3,a4,a5,a6,c,VV,phi
     !
-    c=sos(t)
+    c=sos(t,sp)
     var1=1.d0/sqrt(ddi(1)*ddi(1)+ddi(2)*ddi(2)+ddi(3)*ddi(3))
     nx=ddi(1)*var1
     ny=ddi(2)*var1

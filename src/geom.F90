@@ -100,7 +100,8 @@ module geom
     use commvar,   only : ia,ja,ka,hm,npdci,npdcj,npdck,               &
                           xmax,xmin,ymax,ymin,zmax,zmin,voldom,difschm,&
                           dxyzmax,dxyzmin
-    use commarray, only : x,jacob,dxi,cell,dgrid,dis2wall
+    use commarray, only : x,jacob,dxi,cell,dgrid,dis2wall,bnorm_i0,    &
+                          bnorm_im,bnorm_j0,bnorm_jm,bnorm_k0,bnorm_km
     use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
     use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
     use tecio
@@ -115,7 +116,7 @@ module geom
     real(8), allocatable :: dx(:,:,:,:,:)
     real(8),allocatable :: phi(:),can(:,:,:,:)
     real(8) :: can1av,can2av,can3av,can1var,can2var,can3var
-    real(8) :: var1,var2,var3
+    real(8) :: var1,var2,var3,vec1(3)
     !
     allocate( dx(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3,1:3) )
     !
@@ -712,6 +713,151 @@ module geom
     ymin=pmin(ymin)
     zmin=pmin(zmin)
     !
+    ! get the boundary normal vector for implementation of bc.
+    if(npdci==1 .or. npdci==4) then
+      !
+      allocate(bnorm_i0(0:jm,0:km,1:3))
+      !
+      i=0
+      do j=0,jm
+      do k=0,km
+        var1=sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
+        bnorm_i0(j,k,:)=dxi(i,j,k,1,:)/var1
+      enddo
+      enddo
+      !
+      j=jm/2
+      k=km/2
+      vec1(:)=x(i+1,j,k,:)-x(i,j,k,:)
+      ! vec1 is the vector pointing to the inner domain
+      !
+      if(dot_product(vec1,bnorm_i0(j,k,:))<0.d0) then
+        bnorm_i0=-1.d0*bnorm_i0
+        ! reverse the vector is the vector is not pointing to the inner domain
+      endif
+      !
+    endif
+    !
+    if(npdci==2 .or. npdci==4) then
+      !
+      allocate(bnorm_im(0:jm,0:km,1:3))
+      !
+      i=im
+      do j=0,jm
+      do k=0,km
+        var1=sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
+        bnorm_im(j,k,:)=dxi(i,j,k,1,:)/var1
+      enddo
+      enddo
+      !
+      j=jm/2
+      k=km/2
+      vec1(:)=x(i-1,j,k,:)-x(i,j,k,:)
+      ! vec1 is the vector pointing to the inner domain
+      !
+      if(dot_product(vec1,bnorm_im(j,k,:))<0.d0) then
+        bnorm_im=-1.d0*bnorm_im
+        ! reverse the vector is the vector is not pointing to the inner domain
+      endif
+      !
+    endif
+    !
+    if(npdcj==1 .or. npdcj==4) then
+      !
+      allocate(bnorm_j0(0:im,0:km,1:3))
+      !
+      j=0
+      do i=0,im
+      do k=0,km
+        var1=sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
+        bnorm_j0(i,k,:)=dxi(i,j,k,2,:)/var1
+      enddo
+      enddo
+      !
+      i=im/2
+      k=km/2
+      vec1(:)=x(i,j+1,k,:)-x(i,j,k,:)
+      ! vec1 is the vector pointing to the inner domain
+      !
+      if(dot_product(vec1,bnorm_j0(i,k,:))<0.d0) then
+        bnorm_j0=-1.d0*bnorm_j0
+        ! reverse the vector is the vector is not pointing to the inner domain
+      endif
+      !
+    endif
+    !
+    if(npdcj==2 .or. npdcj==4) then
+      !
+      allocate(bnorm_jm(0:im,0:km,1:3))
+      !
+      j=0
+      do i=0,im
+      do k=0,km
+        var1=sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
+        bnorm_jm(i,k,:)=dxi(i,j,k,2,:)/var1
+      enddo
+      enddo
+      !
+      i=im/2
+      k=km/2
+      vec1(:)=x(i,j-1,k,:)-x(i,j,k,:)
+      ! vec1 is the vector pointing to the inner domain
+      !
+      if(dot_product(vec1,bnorm_jm(i,k,:))<0.d0) then
+        bnorm_jm=-1.d0*bnorm_jm
+        ! reverse the vector is the vector is not pointing to the inner domain
+      endif
+      !
+    endif
+    !
+    if(npdck==1 .or. npdck==4) then
+      !
+      allocate(bnorm_k0(0:im,0:jm,1:3))
+      !
+      k=0
+      do i=0,im
+      do j=0,jm
+        var1=sqrt(dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+dxi(i,j,k,3,3)**2)
+        bnorm_k0(i,j,:)=dxi(i,j,k,3,:)/var1
+      enddo
+      enddo
+      !
+      i=im/2
+      j=jm/2
+      vec1(:)=x(i,j,k+1,:)-x(i,j,k,:)
+      ! vec1 is the vector pointing to the inner domain
+      !
+      if(dot_product(vec1,bnorm_k0(i,j,:))<0.d0) then
+        bnorm_k0=-1.d0*bnorm_k0
+        ! reverse the vector is the vector is not pointing to the inner domain
+      endif
+      !
+    endif
+    !
+    if(npdck==2 .or. npdck==4) then
+      !
+      allocate(bnorm_km(0:im,0:jm,1:3))
+      !
+      k=km
+      do i=0,im
+      do j=0,jm
+        var1=sqrt(dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+dxi(i,j,k,3,3)**2)
+        bnorm_km(i,j,:)=dxi(i,j,k,3,:)/var1
+      enddo
+      enddo
+      !
+      i=im/2
+      j=jm/2
+      vec1(:)=x(i,j,k-1,:)-x(i,j,k,:)
+      ! vec1 is the vector pointing to the inner domain
+      !
+      if(dot_product(vec1,bnorm_km(i,j,:))<0.d0) then
+        bnorm_km=-1.d0*bnorm_km
+        ! reverse the vector is the vector is not pointing to the inner domain
+      endif
+      !
+    endif
+    !
     allocate(dis2wall(0:im,0:jm,0:km) )
     !
     do k=0,km
@@ -767,6 +913,9 @@ module geom
     !                                 dxi(0:im,0:jm,0:km,2,2),'dydj',    &
     !                                 dxi(0:im,0:jm,0:km,3,3),'dzdk')
     ! ! ! 
+    !
+
+    !
     deallocate(dx,can)
     !
     !

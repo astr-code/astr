@@ -371,6 +371,8 @@ module readwrite
           write(*,'(38X,I0,2(A))')bctype(n),'  extrapolation at: ',bcdir(n)
         elseif(bctype(n)==52) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
+        elseif(bctype(n)==60) then
+          write(*,'(38X,I0,2(A))')bctype(n),'    symmetrical at: ',bcdir(n)
         elseif(bctype(n)==11) then
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
           write(*,'(18X,(A))',advance='no')'inflow turbulence : '
