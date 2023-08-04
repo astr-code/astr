@@ -3,10 +3,10 @@
 ########################################################################
 
 # flowtype                                              : The type of flow problem
-1dflame
+hitflame
 
 # im,jm,km                                              : The size of grid.
-500,50,0
+768,64,0
 
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 f,t,t
@@ -36,7 +36,7 @@ f
 none,h
 
 # bctype                                                : Boundary condition definition 
-50
+11,free
 21
 1 
 1
@@ -53,7 +53,7 @@ none,h
 grid.h5
 
 # chemfile
-datin/ES80_H2-8-16.yaml
+datin/Burke12.yaml
 
 
  ########################################################################
