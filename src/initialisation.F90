@@ -1901,7 +1901,8 @@ module initialisation
     ! specr(spcindex('n2'))=1.d0-sum(specr)
     !
     !products
-    tmpp=1.417d+03
+    tmpp=1.7d+03
+    ! tmpp=1.417d+03
     specp(:)=0.d0
     ! specp(spcindex('CO2'))=1.51376d-1
     ! specp(spcindex('H2O'))=1.23853d-1
@@ -2267,7 +2268,7 @@ module initialisation
     specr(spcindex('O2'))=0.2289
     specr(spcindex('N2'))=1.d0-sum(specr)
     !
-    pinf=5.d0*pinf
+    ! pinf=5.d0*pinf
     uinf=2.d0
     vinf=0.d0
     winf=0.d0

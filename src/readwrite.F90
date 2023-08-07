@@ -1770,6 +1770,9 @@ module readwrite
     use statistic,only : nsamples,liosta,massflux,massflux_target
     use bc,       only : ninflowslice
     use hdf5io
+#ifdef COMB
+    use thermchem,only : heatrate
+#endif
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -1780,7 +1783,7 @@ module readwrite
     character(len=64) :: outfilename,outauxiname
     character(len=64),save :: savfilenmae='first'
     character(len=3) :: spname
-    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
+    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:),hrr(:)
     !
     real(8) :: ypos
     logical :: lwprofile
@@ -1926,17 +1929,25 @@ module readwrite
       if(x(0,j-1,0,2)<ypos .and. x(0,j,0,2)>=ypos) then
         !
         lwprofile=.true.
-        
+        !
         exit
         !
       endif
     enddo
     !
+#ifdef COMB
+    allocate(hrr(0:im))
+    do i=0,im
+      hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
+    enddo
+#endif
+    !
     call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
                                var1=rho(0:im,j,0),  var1name='rho', &
                                var2=vel(0:im,j,0,1),var2name='u',   &
                                var3=tmp(0:im,j,0),  var3name='T',   &
-                               var4=prs(0:im,j,0),  var4name='P',truewrite=lwprofile)
+                               var4=prs(0:im,j,0),  var4name='P',   &
+                               var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
     !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ

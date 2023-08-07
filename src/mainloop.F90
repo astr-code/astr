@@ -391,7 +391,9 @@ module mainloop
       !
       ctime(14)=ctime(14)+ptime()-time_beg_2
       !
-      if(lfilter) call filterq(timerept=ltimrpt)
+      if(lfilter) then
+        call filterq(timerept=ltimrpt)
+      endif
       !
       if(flowtype(1:2)/='0d') call spongefilter
       !

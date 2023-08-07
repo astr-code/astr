@@ -569,7 +569,8 @@ module statistic
         k=km/2
         do i=1,im
           !
-          if(tmp(i-1,j,k)<=1000.d0 .and. tmp(i,j,k)>=1000.d0) then
+          if((tmp(i-1,j,k)<=1000.d0 .and. tmp(i,j,k)>=1000.d0) .or. &
+             (tmp(i-1,j,k)>=1000.d0 .and. tmp(i,j,k)<=1000.d0)) then
             var1=interlinear(tmp(i-1,j,k),tmp(i,j,k),                 &
                              x(i-1,j,k,1),x(i,j,k,1),1000.d0)
             exit
