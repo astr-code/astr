@@ -23,7 +23,7 @@ module statistic
   logical :: liosta=.false.
   real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
-             wallheatflux,dissipation,nominal_thickness
+             wallheatflux,dissipation,nominal_thickness,xflame,vflame
   real(8) :: maxT,overall_qdot,v_H2O,v_HO2
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8) :: umax,rhomax,tmpmax,qdotmax
@@ -441,7 +441,8 @@ module statistic
   subroutine statcal(timerept)
     !
     use commvar,  only : flowtype,voldom
-    use commarray,only : vel,prs,rho,tmp,spc,cell
+    use commarray,only : vel,prs,rho,tmp,spc,cell,x
+    use interp,   only : interlinear
 #ifdef COMB
     use thermchem,only : heatrate,spcindex
 #endif
@@ -451,7 +452,7 @@ module statistic
     !
     ! local data
     integer :: i,j,k
-    real(8) :: time_beg,qdot
+    real(8) :: time_beg,qdot,var1
     real(8),save :: subtime=0.d0
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
@@ -558,6 +559,32 @@ module statistic
         enddo 
       enddo  
       qdotmax=pmax(qdotmax)
+      !
+      ! calculate the flame location
+      var1=0.d0
+      ! do k=0,km
+      ! do j=0,jm
+        !
+        j=jm/2
+        k=km/2
+        do i=1,im
+          !
+          if(tmp(i-1,j,k)<=1000.d0 .and. tmp(i,j,k)>=1000.d0) then
+            var1=interlinear(tmp(i-1,j,k),tmp(i,j,k),                 &
+                             x(i-1,j,k,1),x(i,j,k,1),1000.d0)
+            exit
+          endif
+          !
+        enddo
+        !
+      ! enddo
+      ! enddo
+      !
+      var1=pmax(var1)
+      vflame=(var1-xflame)/deltat
+      !
+      xflame=var1
+      !
 #endif
       !
     endif
@@ -688,8 +715,8 @@ module statistic
                                  'massflux','fbcx','blthickness','wrms'
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
               .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame'.or.flowtype=='hitflame') then
-            write(hand_fs,"(2(A10,1X),5(A12,1X))") &
-              'nstep','clock','time','maxT','maxU','enstophy','maxHRR'
+            write(hand_fs,"(2(A10,1X),6(A12,1X))") &
+              'nstep','clock','time','maxT','maxU','maxHRR','xflame','vflame'
           else
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -716,7 +743,7 @@ module statistic
       elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic' &
             .or.flowtype=='hitflame') then
         walltime=int(ptime()-time_verybegin)
-        write(hand_fs,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
+        write(hand_fs,'(2(I10,1X),6(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame,vflame
       else
         ! general flowstate
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
@@ -740,7 +767,7 @@ module statistic
           elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                   .or.flowtype=='h2supersonic'.or.flowtype=='hitflame') then
             write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
-              'maxU','enstophy','maxHRR'
+              'maxU','maxHRR','xflame'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
           endif
@@ -762,7 +789,7 @@ module statistic
           write(*,"(2X,I7,1X,4(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                 .or.flowtype=='h2supersonic'.or. flowtype=='hitflame') then
-          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
+          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame
         else
           write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif

@@ -1368,7 +1368,7 @@ module bc
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
 #ifdef COMB
-    use thermchem, only : aceval
+    use thermchem, only : aceval,gammarmix
 #endif
     !
     ! arguments
@@ -1376,7 +1376,7 @@ module bc
     !
     ! local data
     integer :: i,j,k,l,jspc
-    real(8) :: css,csse,ub,pe,roe,ue,pwave_out,pwave_in,malo
+    real(8) :: css,csse,ub,pe,roe,ue,pwave_out,pwave_in,malo,rho_ref,cs_ref
     !
     logical,save :: lfirstcal=.true.
     !
@@ -1415,15 +1415,8 @@ module bc
         !
         ! css=sos(tmp(i,j,k))
         ! ub =vel_in(j,k,1)
-        if(nondimen) then 
-          css=sos(tmp_prof(j))
-        else
-          !
-#ifdef COMB    
-          call aceval(tmp_prof(j),spc_prof(j,:),css)
-#endif
-          !
-        endif
+        css=sos(tmp_prof(j),spc_prof(j,:))
+        !
         ub=vel_prof(j,1)
         ! ub =vel(i,j,k,1)
         !
@@ -1446,12 +1439,28 @@ module bc
           roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),  dv=0.d0)
           ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
           !
-          vel(i,j,k,1)=vel_in(j,k,1)
-          vel(i,j,k,2)=vel_in(j,k,2)
-          vel(i,j,k,3)=vel_in(j,k,3)
-          tmp(i,j,k)  =tmp_in(j,k)
+          do jspc=1,num_species
+            spc(i,j,k,jspc)=spc_in(j,k,jspc) 
+          enddo
           !
-          pwave_out  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
+          ! ! farfield kind of inflow
+          ! rho_ref = rho(i+1,j,k)
+          ! cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
+          ! !
+          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho_ref*cs_ref*(vel_in(j,k,1)-ue)
+          ! rho(i,j,k)  =rho_in(j,k)+(prs(i,j,k)-prs_in(j,k))/cs_ref/cs_ref
+          ! !
+          ! vel(i,j,k,1)=vel_in(j,k,1)+(prs_in(j,k)-prs(i,j,k))/rho_ref/cs_ref
+          ! !
+          ! vel(i,j,k,2)=vel_in(j,k,2)
+          ! vel(i,j,k,3)=vel_in(j,k,3)
+          !
+          ! fixed temperature, pressure, and velocity
+          vel(i,j,k,:) = vel_in(j,k,:)
+          prs(i,j,k)   = pe
+          tmp(i,j,k)   = tmp_in(j,k)
+          !
+          ! pwave_out  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
           ! ! Rudy & Strikwerda, 1980
           ! pwave_out  = pe
           ! !
@@ -1460,17 +1469,19 @@ module bc
           ! malo=(ub/css)
           ! !
           ! prs(i,j,k)=malo*pwave_in+(1.d0-malo)*pwave_out
-          prs(i,j,k) = pwave_out
           ! prs(i,j,k) = pwave_out
+          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
           !
-          do jspc=1,num_species
-            spc(i,j,k,jspc)=spc_in(j,k,jspc) 
-          enddo
+          ! rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gammarmix(tmp_in(j,k),spc_in(j,k,:)))
+          ! prs(i,j,k) = pwave_out
           !
           if(nondimen) then 
             rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           else
+            ! prs(i,j,k)   = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
             rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
           endif
           !
           ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)

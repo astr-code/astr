@@ -40,10 +40,12 @@ module initialisation
     !      
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn') then
-    !
+      !
       call blprofile
-    !
+      !
     endif
+    !
+    call setflowinf
     !
     call readcont
     !
@@ -2216,7 +2218,6 @@ module initialisation
     !products
     tmpp=1808.28d0
     !
-    pinf=5.d0*pinf
     !
     do k=0,km
     do j=0,jm
@@ -2235,7 +2236,7 @@ module initialisation
       !
       spc(i,j,k,:)=specr(:)
       !
-      vel(i,j,k,:)=0.d0
+      vel(i,j,k,:)=uinf
       !
       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
       !
@@ -2247,19 +2248,35 @@ module initialisation
     enddo
     enddo
     !
-    uinf=5.d0
-    vinf=0.d0
-    winf=0.d0
-    tinf=tmpr
-    spcinf(:)=specr(:)
-    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
     !
 #endif
   end subroutine hitflameini
-
-
+  
+  subroutine setflowinf
+    !
+    use fludyna,  only: thermal
+    use thermchem,only : tranco,spcindex,mixture,convertxiyi
+    use cantera 
+    !
+    real(8) :: specr(num_species)
+    ! 
+    specr(:)=0.d0
+    specr(spcindex('H2'))=0.0173
+    specr(spcindex('O2'))=0.2289
+    specr(spcindex('N2'))=1.d0-sum(specr)
+    !
+    pinf=5.d0*pinf
+    uinf=2.d0
+    vinf=0.d0
+    winf=0.d0
+    tinf=300.d0
+    spcinf(:)=specr(:)
+    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
+    !
+  end subroutine setflowinf
+  !
   function return_30k(x) result(y)
   
     integer ( kind = 4 ), intent(in) :: x
