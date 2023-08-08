@@ -2208,8 +2208,8 @@ module initialisation
     real(8) :: pthick
     !
     tmpr=300.d0
-    xloc=xmax/2.d0
-    xwid=xmax/(12.d0*5.3d0)
+    xloc=3.d0*xmax/4.d0
+    xwid=xmax/(12.d0*5.3d0*2.d0)
     !
     !reactants
     specr(:)=0.d0
@@ -2218,9 +2218,9 @@ module initialisation
     specr(spcindex('N2'))=1.d0-sum(specr)
     !
     !products
-    tmpp=1808.28d0
+    tmpp=1814.32d0
     !
-    pthick=1.d-4
+    ! pthick=1.d-4
     !
     do k=0,km
     do j=0,jm
@@ -2237,11 +2237,13 @@ module initialisation
       !   prgvar=1.d0
       ! endif
       !
-      prgvar=1.d0*exp(-0.5d0*((xc-xloc)/pthick)**2)
+      prgvar=1.d0*exp(-0.5d0*((xc-xloc)/xwid)**2)
       !
       spc(i,j,k,:)=specr(:)
       !
-      vel(i,j,k,:)=uinf
+      vel(i,j,k,1)=uinf
+      vel(i,j,k,2)=vinf
+      vel(i,j,k,3)=winf
       !
       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
       !
