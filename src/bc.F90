@@ -349,10 +349,6 @@ module bc
         call farfield_nscbc(n)
       endif
       !
-    enddo
-    !
-    do n=1,6
-      !
       if(bctype(n)==41) then
         call noslip(n,twall(n))
       endif
@@ -1444,21 +1440,21 @@ module bc
           enddo
           !
           ! ! farfield kind of inflow
-          ! rho_ref = rho(i+1,j,k)
-          ! cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
-          ! !
-          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho_ref*cs_ref*(vel_in(j,k,1)-ue)
-          ! rho(i,j,k)  =rho_in(j,k)+(prs(i,j,k)-prs_in(j,k))/cs_ref/cs_ref
-          ! !
-          ! vel(i,j,k,1)=vel_in(j,k,1)+(prs_in(j,k)-prs(i,j,k))/rho_ref/cs_ref
-          ! !
-          ! vel(i,j,k,2)=vel_in(j,k,2)
-          ! vel(i,j,k,3)=vel_in(j,k,3)
+          rho_ref = rho(i+1,j,k)
+          cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
+          !
+          prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho_ref*cs_ref*(vel_in(j,k,1)-ue)
+          rho(i,j,k)  =rho_in(j,k)+(prs(i,j,k)-prs_in(j,k))/cs_ref/cs_ref
+          !
+          vel(i,j,k,1)=vel_in(j,k,1)+(prs_in(j,k)-prs(i,j,k))/rho_ref/cs_ref
+          !
+          vel(i,j,k,2)=vel_in(j,k,2)
+          vel(i,j,k,3)=vel_in(j,k,3)
           !
           ! fixed temperature, pressure, and velocity
-          vel(i,j,k,:) = vel_in(j,k,:)
-          prs(i,j,k)   = pe
-          tmp(i,j,k)   = tmp_in(j,k)
+          ! vel(i,j,k,:) = vel_in(j,k,:)
+          ! prs(i,j,k)   = pe
+          ! tmp(i,j,k)   = tmp_in(j,k)
           !
           ! pwave_out  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
           ! ! Rudy & Strikwerda, 1980
@@ -1476,12 +1472,12 @@ module bc
           ! prs(i,j,k) = pwave_out
           !
           if(nondimen) then 
-            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+            ! rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           else
             ! prs(i,j,k)   = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
+            ! rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
           endif
           !
           ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
@@ -3507,8 +3503,8 @@ module bc
         !
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
-        ! if(.true.) then
-        if(ub>=css) then
+        if(.false.) then
+        ! if(ub>=css) then
           ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
@@ -3529,17 +3525,20 @@ module bc
           !
           ! pwave_in = (prs(i,j,k)+alpha*deltat*pinf+rho(i,j,k)*css*(ue-vel(i,j,k,1)))/(1.d0+alpha*deltat)
           ! RUDY & STRIKWERDA, 1981
-          pwave_in = pinf
-          pwave_out=pe
+          ! pwave_in = pinf
+          ! pwave_out=pe
+          ! !
+          ! var1=ub/css
+          ! prs(i,j,k)=var1*pwave_out+(1.d0-var1)*pwave_in
           !
-          var1=ub/css
-          prs(i,j,k)=var1*pwave_out+(1.d0-var1)*pwave_in
-          !
+          prs(i,j,k)  =pinf
           vel(i,j,k,1)=ue 
           vel(i,j,k,2)=ve 
           vel(i,j,k,3)=we
           !
           rho(i,j,k)  =roe
+          !
+          spc(i,j,k,:)=spce(:)
           !
         ! else
         !   stop ' !! velocity at outflow error !! @ outflow'
@@ -4799,8 +4798,8 @@ module bc
         !   !
         ! kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
         kinout=0.125d0*(1.d0-gmachmax2)*css/(xmax-xmin)
-        LODi(5)=kinout*(prs(i,j,k)-pinf)
-        ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+        ! LODi(5)=kinout*(prs(i,j,k)-pinf)
+        LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
         ! else
         !   ! back flow
         !   var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &

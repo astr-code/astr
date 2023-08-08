@@ -9,7 +9,7 @@
 module initialisation
   !
   use constdef
-  use parallel,only: lio,mpistop,mpirank,mpirankname,bcast
+  use parallel,only: lio,mpistop,mpirank,mpirankname,bcast,jrk
   use commvar, only: im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims,    &
                      num_species,xmin,xmax,ymin,ymax,zmin,zmax,spcinf
   use tecio
@@ -2205,6 +2205,7 @@ module initialisation
     integer :: i,j,k
     real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
       specp(num_species),arg,prgvar,masflx,specx(num_species)
+    real(8) :: pthick
     !
     tmpr=300.d0
     xloc=xmax/2.d0
@@ -2219,6 +2220,7 @@ module initialisation
     !products
     tmpp=1808.28d0
     !
+    pthick=1.d-4
     !
     do k=0,km
     do j=0,jm
@@ -2227,13 +2229,15 @@ module initialisation
       xc=x(i,j,k,1)
       !
       !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
-      if(xc-xloc<xwid*0.5d0*1.2d0) then 
-        prgvar=0.d0
-        if(xc-xloc>xwid*0.5d0) &
-        prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
-      else
-        prgvar=1.d0
-      endif
+      ! if(xc-xloc<xwid*0.5d0*1.2d0) then 
+      !   prgvar=0.d0
+      !   if(xc-xloc>xwid*0.5d0) &
+      !   prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
+      ! else
+      !   prgvar=1.d0
+      ! endif
+      !
+      prgvar=1.d0*exp(-0.5d0*((xc-xloc)/pthick)**2)
       !
       spc(i,j,k,:)=specr(:)
       !
@@ -2253,6 +2257,7 @@ module initialisation
     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
     !
 #endif
+    !
   end subroutine hitflameini
   
   subroutine setflowinf
