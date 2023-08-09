@@ -804,7 +804,7 @@ module statistic
           elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                   .or.flowtype=='h2supersonic'.or.flowtype=='hitflame') then
             write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
-              'maxU','maxHRR','xflame'
+              'maxU','maxHRR','xflame','vflame'
           else
             write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
           endif
@@ -826,7 +826,7 @@ module statistic
           write(*,"(2X,I7,1X,4(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                 .or.flowtype=='h2supersonic'.or. flowtype=='hitflame') then
-          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame
+          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame,vflame
         else
           write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
