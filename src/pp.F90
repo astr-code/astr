@@ -1940,14 +1940,20 @@ module pp
     character(len=*),intent(in) :: flowfile,outputfile,viewmode,inputfile
     !
     ! local data
-    integer :: im,jm,km
+    integer :: im,jm,km,num_species,jsp,i
     logical :: lihomo,ljhomo,lkhomo
     real(8) :: ref_t,reynolds,mach
     character(len=32) :: gridfile
     !
+    real(8),allocatable,dimension(:) :: x_1d,y_1d,z_1d,ro_1d,u_1d,   &
+                                        v_1d,w_1d,p_1d,t_1d
+    real(8),allocatable,dimension(:,:) :: spc_1d
     real(8),allocatable,dimension(:,:) :: x_2d,y_2d,z_2d,ro_2d,u_2d,   &
                                           v_2d,w_2d,p_2d,t_2d
     real(8),allocatable,dimension(:,:,:) :: x,y,z,ro,u,v,w,p,t
+    real(8),allocatable :: var1d(:)
+    !
+    character(len=3) :: spname
     !
     print*,' ==========================readinput=========================='
     !
@@ -1958,7 +1964,10 @@ module pp
     read(11,*)lihomo,ljhomo,lkhomo
     read(11,'(//////////)')
     read(11,*)ref_t,reynolds,mach
-    read(11,'(///////////////////////////)')
+    read(11,'(///////)')
+    read(11,*)num_species
+    print*,' ** num_species: ',num_species
+    read(11,'(//////////////////)')
     read(11,'(A)')gridfile
     close(11)
     print*,' >> ',inputfile
@@ -1986,6 +1995,41 @@ module pp
        !                                   v_2d,'v',p_2d,'p',t_2d,'t')
     elseif(viewmode=='3d') then
       allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+    elseif(viewmode=='1d') then
+      !
+      allocate(x_1d(0:im),ro_1d(0:im),u_1d(0:im),p_1d(0:im),t_1d(0:im))
+      !
+      call H5ReadSubset( x_1d,im,jm,km, 'x',gridfile,jslice=jm/2-1,kslice=-1)
+      !
+      call H5ReadSubset(ro_1d,im,jm,km,'ro',flowfile,jslice=jm/2-1,kslice=-1)
+      call H5ReadSubset( u_1d,im,jm,km,'u1',flowfile,jslice=jm/2-1,kslice=-1)
+      call H5ReadSubset( p_1d,im,jm,km, 'p',flowfile,jslice=jm/2-1,kslice=-1)
+      call H5ReadSubset( t_1d,im,jm,km, 't',flowfile,jslice=jm/2-1,kslice=-1)
+      !
+      allocate(spc_1d(0:im,1:num_species))
+      allocate(var1d(0:im))
+      do jsp=1,num_species
+        write(spname,'(i3.3)')jsp
+        call H5ReadSubset(var1d,im,jm,km,'sp'//spname,flowfile,jslice=jm/2-1,kslice=-1)
+        spc_1d(:,jsp)=var1d
+      enddo
+      !
+      open(18,file=outputfile)
+      write(18,"(8(1X,A15))")'x','ro','u','p','t','Y1','Y2','Y3'
+      write(18,"(8(1X,E15.7E3))")(x_1d(i),ro_1d(i),u_1d(i),p_1d(i), &
+                  t_1d(i),spc_1d(i,3),spc_1d(i,2),spc_1d(i,3),i=0,im)
+      close(18)
+      print*,' << ',outputfile
+      !
+      call h5srite(var=ro_1d,varname='ro',filename='flowini1d.h5',explicit=.true.,newfile=.true.)
+      call h5srite(var= u_1d,varname='u1',filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var=t_1d, varname= 't',filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var=p_1d, varname= 'p',filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      !
+      do jsp=1,num_species
+        write(spname,'(i3.3)')jsp
+        call h5srite(var=spc_1d(:,jsp),varname='sp'//spname,filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      enddo
     else
       print*,viewmode
       stop ' !! mode is not defined @ fieldview'

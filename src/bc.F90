@@ -1404,6 +1404,8 @@ module bc
         call inflowintp
       elseif(turbinf=='intx')  then
         call inflowintx
+      elseif(turbinf=='udef')  then
+        call inflowudef
       endif
       !
       do k=0,km
@@ -1439,7 +1441,7 @@ module bc
             spc(i,j,k,jspc)=spc_in(j,k,jspc) 
           enddo
           !
-          ! ! farfield kind of inflow
+          ! farfield kind of inflow
           rho_ref = rho(i+1,j,k)
           cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
           !
@@ -1451,7 +1453,7 @@ module bc
           vel(i,j,k,2)=vel_in(j,k,2)
           vel(i,j,k,3)=vel_in(j,k,3)
           !
-          ! fixed temperature, pressure, and velocity
+          ! ! fixed temperature, pressure, and velocity
           ! vel(i,j,k,:) = vel_in(j,k,:)
           ! prs(i,j,k)   = pe
           ! tmp(i,j,k)   = tmp_in(j,k)
@@ -1472,12 +1474,12 @@ module bc
           ! prs(i,j,k) = pwave_out
           !
           if(nondimen) then 
-            ! rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-            tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
           else
             ! prs(i,j,k)   = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            ! rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
+            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
           endif
           !
           ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
@@ -1592,6 +1594,42 @@ module bc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine inflow.                                 |
   !+-------------------------------------------------------------------+
+  !
+  subroutine inflowudef
+    !
+    use commvar, only : time,uinf,im,jm,km,ymax
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    !
+    real(8) :: pulse_strength,pulse_width,tvor,radi2,xp,rvor,yc,var1
+    integer :: i,j,k
+    !
+    pulse_width=1.d-4
+    tvor=1.d-5
+    rvor=pulse_width
+    yc=0.5d0*ymax
+    !
+    pulse_strength=0.1d0
+    !
+    i=0
+    ! pulsevar=1.d0*exp(-0.5d0*((time-0.008d0)/pulse_width)**2)
+    do k=0,km
+    do j=0,jm
+      !
+      xp=uinf*(time-tvor)
+      !
+      radi2=(xp**2+(x(i,j,k,2)-yc)**2)/rvor/rvor
+      var1=pulse_strength*exp(-0.5d0*radi2)
+      !
+      vel_in(j,k,1)=uinf-var1*(x(i,j,k,2)-yc)
+      vel_in(j,k,2)=     var1*(xp)
+      vel_in(j,k,3)=0.d0
+      !
+      ! print*,var1,vel_in(j,k,1:2)
+      !
+    enddo
+    enddo
+    !
+  end subroutine inflowudef
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to interpolate the inflow turbulence under the |
@@ -4797,9 +4835,10 @@ module bc
         !   ! endif
         !   !
         ! kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
-        kinout=0.125d0*(1.d0-gmachmax2)*css/(xmax-xmin)
+        kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
         ! LODi(5)=kinout*(prs(i,j,k)-pinf)
-        LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+        ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
+        LODi(5)=kinout*(prs(i,j,k)-pinf) !/rho(i,j,k)/css
         ! else
         !   ! back flow
         !   var1=1.d0/sqrt( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+         &

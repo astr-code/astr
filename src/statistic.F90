@@ -12,7 +12,7 @@ module statistic
                        zmin,zmax,nstep,deltat,force,numq,num_species,  &
                        lreport,ltimrpt
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
-                       irk,jrk,jrkm,ptime
+                       irk,jrk,irkm,jrkm,ptime
   use stlaio,  only: get_unit
   use utility, only: timereporter
   !
@@ -23,7 +23,8 @@ module statistic
   logical :: liosta=.false.
   real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
-             wallheatflux,dissipation,nominal_thickness,xflame,vflame
+             wallheatflux,dissipation,nominal_thickness,xflame,vflame, &
+             poutrt
   real(8) :: maxT,overall_qdot,v_H2O,v_HO2
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8) :: umax,rhomax,tmpmax,qdotmax
@@ -549,44 +550,79 @@ module statistic
       !
       enstophy=enstophycal()
       !
+      var1=0.d0
+      !
       qdotmax=-1.d30
+      xflame =-1.d30
       do i=0,im
         do j=0,jm
           do k=0,km
+            !
             qdot=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
-            if(qdot>qdotmax)qdotmax=qdot
+            if(qdot>qdotmax) then
+              qdotmax=qdot
+              xflame=x(i,j,k,1)
+            endif
+            !
           enddo 
         enddo 
       enddo  
       qdotmax=pmax(qdotmax)
+      xflame =pmax(xflame)
       !
-      ! calculate the flame location
-      var1=0.d0
-      ! do k=0,km
-      ! do j=0,jm
-        !
-        j=jm/2
-        k=km/2
-        do i=1,im
-          !
-          if((tmp(i-1,j,k)<=1000.d0 .and. tmp(i,j,k)>=1000.d0) .or. &
-             (tmp(i-1,j,k)>=1000.d0 .and. tmp(i,j,k)<=1000.d0)) then
-            var1=interlinear(tmp(i-1,j,k),tmp(i,j,k),                 &
-                             x(i-1,j,k,1),x(i,j,k,1),1000.d0)
-            exit
-          endif
-          !
-        enddo
-        !
-      ! enddo
-      ! enddo
+      if(abs(var1)<1.d-16) then
+        vflame=0.d0
+      else
+        vflame=(xflame-var1)/deltat
+      endif
       !
-      var1=pmax(var1)
-      vflame=(var1-xflame)/deltat
-      !
-      xflame=var1
+      var1=xflame
+      ! !
+      ! ! calculate the flame location
+      ! var1=0.d0
+      ! vflame=0.d0
+      ! ! do k=0,km
+      ! ! do j=0,jm
+      !   !
+      !   j=jm/2
+      !   k=km/2
+      !   do i=1,im
+      !     !
+      !     if((tmp(i-1,j,k)<=400.d0 .and. tmp(i,j,k)>=400.d0) .or. &
+      !        (tmp(i-1,j,k)>=400.d0 .and. tmp(i,j,k)<=400.d0)) then
+      !       var1=interlinear(tmp(i-1,j,k),tmp(i,j,k),                 &
+      !                        x(i-1,j,k,1),x(i,j,k,1),400.d0)
+      !       exit
+      !     endif
+      !     !
+      !   enddo
+      !   !
+      ! ! enddo
+      ! ! enddo
+      ! !
+      ! var1=pmax(var1)
+      ! !
+      ! if(abs(xflame)<1.d-16) then
+      !   vflame=0.d0
+      ! else
+      !   vflame=(var1-xflame)/deltat
+      ! endif
+      ! !
+      ! xflame=var1
       !
 #endif
+      !
+      i=im
+      k=0
+      poutrt=0.d0
+      !
+      if(irk==irkm) then
+        do j=1,jm
+          poutrt=poutrt+prs(i,j,k)
+        enddo
+      endif
+      !
+      poutrt=psum(poutrt)/dble(ja)
       !
     endif
     !
@@ -716,8 +752,8 @@ module statistic
                                  'massflux','fbcx','blthickness','wrms'
           elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
               .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame'.or.flowtype=='hitflame') then
-            write(hand_fs,"(2(A10,1X),6(A12,1X))") &
-              'nstep','clock','time','maxT','maxU','maxHRR','xflame','vflame'
+            write(hand_fs,"(1(A10,1X),7(A20,1X))") &
+              'nstep','time','maxT','maxU','maxHRR','xflame','vflame','pout'
           else
             write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
                                  'q1max','q2max','q3max','q4max','q5max'
@@ -744,7 +780,7 @@ module statistic
       elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic' &
             .or.flowtype=='hitflame') then
         walltime=int(ptime()-time_verybegin)
-        write(hand_fs,'(2(I10,1X),6(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame,vflame
+        write(hand_fs,'(1(I10,1X),7(E20.14E2,1X))') nstep,time,tmpmax,umax,qdotmax,xflame,vflame,poutrt
       else
         ! general flowstate
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)

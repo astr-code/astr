@@ -385,6 +385,8 @@ module readwrite
             write(*,'(A)')' interpolation of database in x space'
           elseif(turbinf=='free') then
             write(*,'(A)')' free stream incoming flow'
+          elseif(turbinf=='udef') then
+            write(*,'(A)')' self-defined incoming flow'
           else
             print*,' !! turbinf: ',turbinf
             stop ' !! ERROR in defining turbinf @ bc 11 !!'
@@ -1417,6 +1419,69 @@ module readwrite
   end subroutine readflowini2d
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of subroutine readflowini2d.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine read2 a 1-D profile to initialize flow filed.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 9-Aug-2023  | Created by J. Fang @ Daresbury                      |
+  !+-------------------------------------------------------------------+
+  subroutine readflowini1d
+    !
+    use commvar,   only : im,jm,km,num_species,nondimen,spcinf
+    use commarray, only : rho,vel,prs,tmp,spc
+    use fludyna,   only : thermal
+    use hdf5io
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
+    !
+    ! local data
+    !
+    integer :: jsp,i,j,k
+    real(8) :: time_ini,nstep_ini
+    character(len=3) :: spname
+    !
+    call h5io_init(filename='datin/flowini1d.h5',mode='read')
+    !
+    call h5read(varname='ro', var=rho(0:im,0,0),  dir='i')
+    call h5read(varname='u1', var=vel(0:im,0,0,1),dir='i')
+    ! call h5read(varname='u2', var=vel(0:im,0,0,2),dir='i')
+    call h5read(varname='t',  var=tmp(0:im,0,0),  dir='i')
+    !
+    do jsp=1,num_species
+      write(spname,'(i3.3)')jsp
+      call h5read(varname='sp'//spname,var=spc(0:im,0,0,jsp),dir='i')
+    enddo
+    !
+    call h5io_end
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  =rho(i,0,0)
+      vel(i,j,k,1)=vel(i,0,0,1)
+      vel(i,j,k,2)=0.d0
+      vel(i,j,k,3)=0.d0
+      tmp(i,j,k)  =tmp(i,0,0)
+      !
+      do jsp=1,num_species
+        spc(i,j,k,jsp)=spc(i,0,0,jsp)
+      enddo
+      !
+      prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:)) 
+
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine readflowini1d
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of subroutine readflowini1d.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+

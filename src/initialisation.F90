@@ -32,7 +32,7 @@ module initialisation
     use commvar,  only: flowtype,nstep,time,filenumb,fnumslic,ninit,   &
                         lrestart,lavg,turbmode
     use commarray,only: vel,rho,prs,spc,q,tke,omg
-    use readwrite,only: readcont,readflowini3d,readflowini2d,          &
+    use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d,          &
                         readcheckpoint,readmeanflow,readmonc,writeflfed
     use fludyna,  only: updateq
     use statistic,only: nsamples
@@ -72,6 +72,10 @@ module initialisation
       elseif(ninit==2) then
         !
         call readflowini2d
+        !
+      elseif(ninit==1) then
+        !
+        call readflowini1d
         !
       else
         !
@@ -2241,7 +2245,9 @@ module initialisation
       !
       spc(i,j,k,:)=specr(:)
       !
-      vel(i,j,k,:)=uinf
+      vel(i,j,k,1)=uinf
+      vel(i,j,k,2)=0.d0
+      vel(i,j,k,3)=0.d0
       !
       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
       !
@@ -2274,7 +2280,7 @@ module initialisation
     specr(spcindex('N2'))=1.d0-sum(specr)
     !
     ! pinf=5.d0*pinf
-    uinf=2.d0
+    uinf=0.97d0
     vinf=0.d0
     winf=0.d0
     tinf=300.d0
