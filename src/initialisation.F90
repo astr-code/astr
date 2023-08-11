@@ -30,7 +30,7 @@ module initialisation
   subroutine flowinit
     !
     use commvar,  only: flowtype,nstep,time,filenumb,fnumslic,ninit,   &
-                        lrestart,lavg,turbmode
+                        lrestart,lavg,turbmode,ymax
     use commarray,only: vel,rho,prs,spc,q,tke,omg
     use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d,          &
                         readcheckpoint,readmeanflow,readmonc,writeflfed
@@ -77,6 +77,8 @@ module initialisation
         !
         call readflowini1d
         !
+        call addvortex(xc=0.015d0,yc=0.5d0*ymax, &
+                       radius=0.05d0*ymax,amp=0.1d0)
       else
         !
         select case(trim(flowtype))
@@ -2289,6 +2291,38 @@ module initialisation
     roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
   end subroutine setflowinf
+  !
+  subroutine addvortex(xc,yc,radius,amp)
+    !
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    !
+    ! local data
+    real(8),intent(in) :: xc,yc,radius,amp
+    !
+    integer :: i,j,k
+    real(8) :: var1,radi2,cvor
+    !
+    cvor=amp*uinf*radius
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      radi2=((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2)/radius/radius
+      var1=cvor/radius/radius*exp(-0.5d0*radi2)
+      !
+      vel(i,j,k,1)=vel(i,j,k,1)-var1*(x(i,j,k,2)-yc)
+      if(ndims>=2) vel(i,j,k,2)=vel(i,j,k,2)+var1*(x(i,j,k,1)-xc)
+      if(ndims==3) vel(i,j,k,3)=0.d0
+      prs(i,j,k)  =prs(i,j,k)-0.5d0*roinf*cvor*cvor/radi2/radi2*exp(-radi2)
+      !
+      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
+      !
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine addvortex
   !
   function return_30k(x) result(y)
   

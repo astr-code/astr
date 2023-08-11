@@ -453,7 +453,7 @@ module statistic
     !
     ! local data
     integer :: i,j,k
-    real(8) :: time_beg,qdot,var1
+    real(8) :: time_beg,qdot,var1,var2
     real(8),save :: subtime=0.d0
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
@@ -551,9 +551,10 @@ module statistic
       enstophy=enstophycal()
       !
       var1=0.d0
+      var2=0.d0
       !
       qdotmax=-1.d30
-      xflame =-1.d30
+      !
       do i=0,im
         do j=0,jm
           do k=0,km
@@ -561,54 +562,45 @@ module statistic
             qdot=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
             if(qdot>qdotmax) then
               qdotmax=qdot
-              xflame=x(i,j,k,1)
             endif
             !
           enddo 
         enddo 
       enddo  
       qdotmax=pmax(qdotmax)
-      xflame =pmax(xflame)
       !
-      if(abs(var1)<1.d-16) then
+      ! calculate the flame location
+      var1=0.d0
+      vflame=0.d0
+      ! do k=0,km
+      ! do j=0,jm
+        !
+        ! j=jm/2
+        k=km/2
+      do j=1,jm
+        do i=1,im
+          !
+          if((tmp(i-1,j,k)<=400.d0 .and. tmp(i,j,k)>=400.d0) .or. &
+             (tmp(i-1,j,k)>=400.d0 .and. tmp(i,j,k)<=400.d0)) then
+            var1=var1+interlinear(tmp(i-1,j,k),tmp(i,j,k),        &
+                             x(i-1,j,k,1),x(i,j,k,1),400.d0)
+            exit
+          endif
+          !
+        enddo
+        !
+      enddo
+      ! enddo
+      !
+      var1=psum(var1)/ja
+      !
+      if(abs(xflame)<1.d-16) then
         vflame=0.d0
       else
-        vflame=(xflame-var1)/deltat
+        vflame=(var1-xflame)/deltat
       endif
       !
-      var1=xflame
-      ! !
-      ! ! calculate the flame location
-      ! var1=0.d0
-      ! vflame=0.d0
-      ! ! do k=0,km
-      ! ! do j=0,jm
-      !   !
-      !   j=jm/2
-      !   k=km/2
-      !   do i=1,im
-      !     !
-      !     if((tmp(i-1,j,k)<=400.d0 .and. tmp(i,j,k)>=400.d0) .or. &
-      !        (tmp(i-1,j,k)>=400.d0 .and. tmp(i,j,k)<=400.d0)) then
-      !       var1=interlinear(tmp(i-1,j,k),tmp(i,j,k),                 &
-      !                        x(i-1,j,k,1),x(i,j,k,1),400.d0)
-      !       exit
-      !     endif
-      !     !
-      !   enddo
-      !   !
-      ! ! enddo
-      ! ! enddo
-      ! !
-      ! var1=pmax(var1)
-      ! !
-      ! if(abs(xflame)<1.d-16) then
-      !   vflame=0.d0
-      ! else
-      !   vflame=(var1-xflame)/deltat
-      ! endif
-      ! !
-      ! xflame=var1
+      xflame=var1
       !
 #endif
       !
@@ -780,7 +772,7 @@ module statistic
       elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic' &
             .or.flowtype=='hitflame') then
         walltime=int(ptime()-time_verybegin)
-        write(hand_fs,'(1(I10,1X),7(E20.14E2,1X))') nstep,time,tmpmax,umax,qdotmax,xflame,vflame,poutrt
+        write(hand_fs,'(1(I10,1X),7(E20.13E2,1X))') nstep,time,tmpmax,umax,qdotmax,xflame,vflame,poutrt
       else
         ! general flowstate
         write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
@@ -826,7 +818,7 @@ module statistic
           write(*,"(2X,I7,1X,4(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
                 .or.flowtype=='h2supersonic'.or. flowtype=='hitflame') then
-          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame,vflame
+          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,qdotmax,xflame
         else
           write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         endif
