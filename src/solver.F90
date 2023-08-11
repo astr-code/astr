@@ -638,9 +638,7 @@ module solver
     use commfunc, only: recons_exp
     use riemann,  only: flux_steger_warming
     use fludyna,  only: sos
-#ifdef COMB
     use thermchem,only: gammarmix
-#endif
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -2054,8 +2052,9 @@ module solver
                         tmp_r,ro_r,p_r,E_r,vel_r,spc_r,ddi_r,REV,LEV,debug)
     !
     use commvar, only: gamma,num_species
+    use fludyna,  only: sos
 #ifdef COMB
-    use thermchem,only:aceval,temperature_calc,gammarmix
+    use thermchem,only:temperature_calc,gammarmix
 #endif
     !
     real(8),intent(in) :: tmp_l,ro_l,p_l,E_l,vel_l(3),ddi_l(3),       &
@@ -2097,23 +2096,22 @@ module solver
       HR=(E_r+p_r)/ro_r
       HRoe=WRoe*HL+WRoe1*HR
       !
-      CssRoe=sqrt((gamma-1.d0)*(HRoe-KRoe))
     else
 #ifdef COMB
       gamL = gammarmix(tmp_l,spc_l(:))
       gamR = gammarmix(tmp_r,spc_r(:))
       gamavg=0.5d0*(gamL+gamR)
-      !
-      call aceval(tmp_l,spc_l(:),CssL)
-      call aceval(tmp_R,spc_R(:),CssR)
 #endif
+      CssL=sos(tmp_l,spc_l(:))
+      CssR=sos(tmp_R,spc_R(:))
+      !
       HL=CssL*CssL/(gamL-1.d0)+KL
       HR=CssR*CssR/(gamR-1.d0)+KR
       HRoe=WRoe*HL+WRoe1*HR
       !
-      CssRoe=sqrt((gamavg-1.d0)*(HRoe-KRoe))
-      !
     endif
+    !
+    CssRoe=sqrt((gamavg-1.d0)*(HRoe-KRoe))
     rcs=1.d0/CssRoe
     !
     ! print*,' ** CssRoe:',CssRoe
