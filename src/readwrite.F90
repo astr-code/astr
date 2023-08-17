@@ -1300,13 +1300,14 @@ module readwrite
     use commvar,   only : im,jm,km,num_species,time,roinf,tinf,pinf
     use commarray, only : rho,vel,prs,tmp,spc
     use hdf5io
+    use fludyna,   only : thermal
 #ifdef COMB
     use thermchem, only: spcindex
 #endif
     !
     ! local data
     !
-    integer :: jsp
+    integer :: i,j,k,jsp
     character(len=3) :: spname
     ! real(8) :: time_initial
     !can be used to start premixed case, but not ready yet
@@ -1325,11 +1326,22 @@ module readwrite
     ! prs=pinf
     ! tmp=tinf
     do jsp=1,num_species
-       write(spname,'(i2.2)')jsp
+      write(spname,'(i3.3)')jsp
       call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode='h')
     enddo
     !
     call h5io_end
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:)) 
+
+    enddo
+    enddo
+    enddo
     !
     ! initialize species
 ! #ifdef COMB

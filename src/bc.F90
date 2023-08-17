@@ -1363,7 +1363,9 @@ module bc
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
-    use thermchem, only : gammarmix
+#ifdef COMB
+    use thermchem, only : aceval,gammarmix
+#endif
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -3458,6 +3460,9 @@ module bc
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
+#ifdef COMB
+    use thermchem, only : aceval
+#endif
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -3500,8 +3505,15 @@ module bc
       do k=0,km
       do j=0,jm
         !
-        css=sos(tmp(i,j,k))
-        !
+        if(nondimen) then 
+          css=sos(tmp(i,j,k))
+        else
+          !
+#ifdef COMB
+          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+#endif
+          !
+        endif
         ub =vel(i,j,k,1)*bvec_im(j,k,1)+vel(i,j,k,2)*bvec_im(j,k,2)+   &
             vel(i,j,k,3)*bvec_im(j,k,3)
         !
@@ -3510,9 +3522,17 @@ module bc
         we  =extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
         pe  =extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
         roe =extrapolate(rho(i-1,j,k),  rho(i-2,j,k),dv=0.d0)
-
-        csse=extrapolate(sos(tmp(i-1,j,k),spc(i-1,j,k,:)), &
-                         sos(tmp(i-2,j,k),spc(i-2,j,k,:)),dv=0.d0)
+        if(nondimen) then 
+          csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
+        else
+          !
+#ifdef COMB
+          call aceval(tmp(i-1,j,k),spc(i-1,j,k,:),css1)
+          call aceval(tmp(i-2,j,k),spc(i-2,j,k,:),css2)
+          csse=extrapolate(css1,css2,dv=0.d0)
+#endif
+          !
+        endif
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i-1,j,k,jspec),                  &
@@ -4632,6 +4652,9 @@ module bc
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : deriv,ddfc,spafilter6exp
     use parallel,  only : psum,mpi_imax
+#ifdef COMB
+    use thermchem, only : aceval
+#endif
     !
     ! arguments
     integer,intent(in) :: ndir
