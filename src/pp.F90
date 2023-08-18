@@ -2070,6 +2070,8 @@ module pp
     integer :: i,j,k
     character(len=4) :: genmethod
     !
+    print*,' ** cmd to generate a box turbulence: astr pp hitgen <input> . gen/read'
+    !
     im=ka ! ensure a cubic box
     !
     jm=ka
@@ -2298,16 +2300,22 @@ module pp
       !
       machrms=urms/sqrt(tav)*mach
       !
-      print*,' **            urms:',urms
-      print*,' **         machrms:',machrms
-      print*,' **         kenergy:',kenergy
-      print*,' ** max fluctuation:',ufmx
-      print*,' **       Enstrophy:',Enstrophy
-      print*,' **   kolmlength, η:',kolmlength
-      print*,' **             η/Δ:',kolmlength/x(1,0,0,1)
-      print*,' **           ukolm:',ukolm
-      print*,' **    taylorlength:',taylorlength
-      print*,' **        Retaylor:',retaylor
+      print*,' ---------------------------------------------------------------'
+      print*,'              statistics according to actual field              '
+      print*,' --------------------------+------------------------------------'
+      print*,'                      urms |',urms
+      print*,'                   machrms |',machrms
+      print*,'                   kenergy |',kenergy
+      print*,'           max fluctuation |',ufmx
+      print*,'                 enstrophy |',Enstrophy
+      print*,'             Kolmlength, η |',kolmlength
+      print*,'                       η/Δ |',kolmlength/(x(1,0,0,1)-x(0,0,0,1))
+      print*,'                     ukolm |',ukolm
+      print*,'                     tkolm |',kolmlength/ukolm
+      print*,'              Taylorlength |',taylorlength
+      print*,'                  Retaylor |',retaylor
+      print*,' --------------------------+------------------------------------'
+      !
       !
   end subroutine hitsta
   !+-------------------------------------------------------------------+
@@ -2375,6 +2383,7 @@ module pp
   subroutine div_free_gen(idim,jdim,kdim,u1,u2,u3)
     !
     use singleton
+    use commvar,only : Reynolds
     !
     integer,intent(in) :: idim,jdim,kdim
     real(8),intent(out),dimension(0:idim,0:jdim,0:kdim) :: u1,u2,u3
@@ -2421,7 +2430,7 @@ module pp
     integer :: k1,k2,k3,k0,i,j,k
     real(8) :: ran1,ran2,ran3,rn1,rn2,rn3,var1,var2,var3,ISEA
     complex(8) :: vac1,vac2,vac3,vac4,crn1,crn2
-    real(8) :: dudi,lambda,ke0,en0,lint,tau
+    real(8) :: dudi,lambda,ke0,en0,lint,tau,eta0
     !
     kmi=idim/2
     kmj=jdim/2
@@ -2599,14 +2608,16 @@ module pp
     en0=15.d0*ISEA/256.d0*sqrt(2.d0*pi)*dble(k0**7)
     lint=sqrt(2.d0*pi)/ke0
     tau =sqrt(32.d0/ISEA*sqrt(2.d0*pi))/sqrt(dble(k0**7))
+    eta0=1.d0/sqrt(sqrt(2.d0*en0*Reynolds**2))
     !
     print*,' ---------------------------------------------------------------'
-    print*,'         statisics according to the initial energy spectrum      '
+    print*,'        statistics according to the initial energy spectrum     '
     print*,' --------------------------+------------------------------------'
     print*,'                   kenergy |',ke0
     print*,'                 enstrophy |',en0
     print*,'           integral length |',lint
     print*,'  large-eddy-turnover time |',tau
+    print*,'         kolmogorov length |',eta0
     print*,' --------------------------+------------------------------------'
     ! !
     ! call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
