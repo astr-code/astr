@@ -2118,6 +2118,10 @@ module pp
       enddo
       enddo
       !
+      call div_test(vel,dvel)
+      !
+      call hitsta
+      !
     elseif(trim(genmethod)=='read') then
       !
       call h5sread(vel(0:im,0:jm,0:km,1),'u1',im,jm,km,'outdat/flowfield.h5')
@@ -2125,6 +2129,8 @@ module pp
       call h5sread(vel(0:im,0:jm,0:km,3),'u3',im,jm,km,'outdat/flowfield.h5')
       call h5sread(rho(0:im,0:jm,0:km),  'ro',im,jm,km,'outdat/flowfield.h5')
       call h5sread(tmp(0:im,0:jm,0:km),  't', im,jm,km,'outdat/flowfield.h5')
+      !
+      call div_test(vel,dvel)
       !
       call hitsta
       !
@@ -2176,8 +2182,6 @@ module pp
       print*,genmethod
       stop ' !! genmethod error '
     endif
-    !
-    call div_test(vel,dvel)
     !
     call h5srite(var=x(0:im,0,0,1),        varname='x', filename='flowin.h5',explicit=.true.,newfile=.true.) 
     call h5srite(var=rho,                  varname='ro',filename='flowin.h5',explicit=.true.)
@@ -2417,7 +2421,7 @@ module pp
     integer :: k1,k2,k3,k0,i,j,k
     real(8) :: ran1,ran2,ran3,rn1,rn2,rn3,var1,var2,var3,ISEA
     complex(8) :: vac1,vac2,vac3,vac4,crn1,crn2
-    real(8) :: dudi,lambda
+    real(8) :: dudi,lambda,ke0,en0,lint,tau
     !
     kmi=idim/2
     kmj=jdim/2
@@ -2570,20 +2574,20 @@ module pp
     u2(0:idim,0:jdim,0)=u2(0:idim,0:jdim,kdim)
     u3(0:idim,0:jdim,0)=u3(0:idim,0:jdim,kdim)
     !
-    urms=0.d0
-    ! ufmx=0.d0
-    ! Kenergy=0.d0
-    do k=1,kdim
-    do j=1,jdim
-    do i=1,idim
-      Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
-      urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
-      ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
-    end do
-    end do
-    end do
-    urms=sqrt(urms/real(idim*jdim*kdim,8))
-    Kenergy=Kenergy/real(idim*jdim*kdim,8)
+    ! urms=0.d0
+    ! ! ufmx=0.d0
+    ! ! Kenergy=0.d0
+    ! do k=1,kdim
+    ! do j=1,jdim
+    ! do i=1,idim
+    !   Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
+    !   urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
+    !   ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
+    ! end do
+    ! end do
+    ! end do
+    ! urms=sqrt(urms/real(idim*jdim*kdim,8))
+    ! Kenergy=Kenergy/real(idim*jdim*kdim,8)
     ! !
     ! u1=u1/urms
     ! u2=u2/urms
@@ -2591,7 +2595,19 @@ module pp
     ! Kenergy=Kenergy/urms/urms
     ! urms=urms/urms
     ! !
-    print*,'Kenergy',Kenergy,'urms',urms
+    ke0=3.d0*ISEA/64.d0*sqrt(2.d0*pi)*dble(k0**5)
+    en0=15.d0*ISEA/256.d0*sqrt(2.d0*pi)*dble(k0**7)
+    lint=sqrt(2.d0*pi)/ke0
+    tau =sqrt(32.d0/ISEA*sqrt(2.d0*pi))/sqrt(dble(k0**7))
+    !
+    print*,' ---------------------------------------------------------------'
+    print*,'         statisics according to the initial energy spectrum      '
+    print*,' --------------------------+------------------------------------'
+    print*,'                   kenergy |',ke0
+    print*,'                 enstrophy |',en0
+    print*,'           integral length |',lint
+    print*,'  large-eddy-turnover time |',tau
+    print*,' --------------------------+------------------------------------'
     ! !
     ! call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
     ! call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
