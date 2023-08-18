@@ -2088,8 +2088,8 @@ module pp
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
     !
-    call gridhitflame(mode='cubic')
-    !call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+    ! call gridhitflame(mode='cubic')
+    call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
     ! call readgrid(trim(gridfile))
     !
     call geomcal
@@ -2097,18 +2097,19 @@ module pp
     call readkeyboad(genmethod)
     !
     if(trim(genmethod)=='gen') then
+      !
       call div_free_gen(im,jm,km,vel(0:im,0:jm,0:km,1),   &
                                  vel(0:im,0:jm,0:km,2),   &
                                  vel(0:im,0:jm,0:km,3) )
       !
-      urms=5.d0*0.5d0 
+      urms=1.d0 !5.d0*0.5d0 
       do k=0,km
       do j=0,jm
       do i=0,im
         !
-        rho(i,j,k)  = 0.d0 !roinf
-        tmp(i,j,k)  = 0.d0 !tinf 
-        prs(i,j,k)  = 0.d0 !thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        rho(i,j,k)  = roinf
+        tmp(i,j,k)  = tinf 
+        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         vel(i,j,k,1)= urms*vel(i,j,k,1)
         vel(i,j,k,2)= urms*vel(i,j,k,2)
         vel(i,j,k,3)= urms*vel(i,j,k,3)
@@ -2124,6 +2125,8 @@ module pp
       call h5sread(vel(0:im,0:jm,0:km,3),'u3',im,jm,km,'outdat/flowfield.h5')
       call h5sread(rho(0:im,0:jm,0:km),  'ro',im,jm,km,'outdat/flowfield.h5')
       call h5sread(tmp(0:im,0:jm,0:km),  't', im,jm,km,'outdat/flowfield.h5')
+      !
+      call hitsta
       !
       roav=0.d0
       uav=0.d0
@@ -2145,6 +2148,7 @@ module pp
         wav=wav+vel(i,j,k,3)
         tav=tav+tmp(i,j,k)
         pav=pav+prs(i,j,k)
+        !
       enddo
       enddo
       enddo
@@ -2175,15 +2179,13 @@ module pp
     !
     call div_test(vel,dvel)
     !
-    call hitsta
-    !
     call h5srite(var=x(0:im,0,0,1),        varname='x', filename='flowin.h5',explicit=.true.,newfile=.true.) 
     call h5srite(var=rho,                  varname='ro',filename='flowin.h5',explicit=.true.)
     call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowin.h5',explicit=.true.)
     call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowin.h5',explicit=.true.)
     call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=tmp,                  varname='p', filename='flowin.h5',explicit=.true.)
-    call h5srite(var=prs,                  varname='t', filename='flowin.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='flowin.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='flowin.h5',explicit=.true.)
     
     ! call tecbin('techit.plt',x(0:im,0:jm,0:km,1),'x', &
     !                          x(0:im,0:jm,0:km,2),'y', &
@@ -2568,20 +2570,20 @@ module pp
     u2(0:idim,0:jdim,0)=u2(0:idim,0:jdim,kdim)
     u3(0:idim,0:jdim,0)=u3(0:idim,0:jdim,kdim)
     !
-    ! urms=0.d0
+    urms=0.d0
     ! ufmx=0.d0
     ! Kenergy=0.d0
-    ! do k=1,kdim
-    ! do j=1,jdim
-    ! do i=1,idim
-    !   Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
-    !   urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
-    !   ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
-    ! end do
-    ! end do
-    ! end do
-    ! urms=sqrt(urms/real(idim*jdim*kdim,8))
-    ! Kenergy=Kenergy/real(idim*jdim*kdim,8)
+    do k=1,kdim
+    do j=1,jdim
+    do i=1,idim
+      Kenergy=Kenergy+0.5d0*(u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2)
+      urms=urms+u1(i,j,k)**2+u2(i,j,k)**2+u3(i,j,k)**2
+      ufmx=max(ufmx,dabs(u1(i,j,k)),dabs(u2(i,j,k)),dabs(u3(i,j,k)))
+    end do
+    end do
+    end do
+    urms=sqrt(urms/real(idim*jdim*kdim,8))
+    Kenergy=Kenergy/real(idim*jdim*kdim,8)
     ! !
     ! u1=u1/urms
     ! u2=u2/urms
@@ -2589,7 +2591,7 @@ module pp
     ! Kenergy=Kenergy/urms/urms
     ! urms=urms/urms
     ! !
-    ! print*,'Kenergy',Kenergy,'urms',urms,'Mat=',urms*Mach
+    print*,'Kenergy',Kenergy,'urms',urms
     ! !
     ! call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
     ! call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
@@ -2616,7 +2618,7 @@ module pp
     real(8) :: k0,Ac,var1,wnb,IniEnergDis
     !
     var1=-2.d0*(wnb/k0)**2
-    IniEnergDis=Ac*wnb**4*dexp(var1)
+    IniEnergDis=Ac*wnb**4*exp(var1)
     !IniEnergDis=Ac*wnb**(-5.d0/3.d0)
     !
     return

@@ -2000,6 +2000,7 @@ module readwrite
       !
     endif
     !
+#ifdef COMB
     lwprofile=.false.
     ypos=0.5d0*(ymax-ymin)+ymin
     do j=1,jm
@@ -2012,12 +2013,10 @@ module readwrite
       endif
     enddo
     !
-#ifdef COMB
     allocate(hrr(0:im))
     do i=0,im
       hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
     enddo
-#endif
     !
     call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
                                var1=rho(0:im,j,0),  var1name='rho', &
@@ -2025,6 +2024,7 @@ module readwrite
                                var3=tmp(0:im,j,0),  var3name='T',   &
                                var4=prs(0:im,j,0),  var4name='P',   &
                                var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
+#endif
     !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ

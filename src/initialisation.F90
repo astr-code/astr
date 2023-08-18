@@ -151,7 +151,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    call writeflfed
+    ! call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -2272,6 +2272,7 @@ module initialisation
   subroutine setflowinf
     !
     use fludyna,  only: thermal
+#ifdef COMB
     use thermchem,only : tranco,spcindex,mixture,convertxiyi
     use cantera 
     !
@@ -2289,6 +2290,7 @@ module initialisation
     tinf=300.d0
     spcinf(:)=specr(:)
     roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
+#endif
     !
   end subroutine setflowinf
   !
