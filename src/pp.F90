@@ -2174,11 +2174,11 @@ module pp
     enddo
     !
     roav=roav/dble(im*jm*km)
-    uav=uav/dble(im*jm*km)
-    vav=vav/dble(im*jm*km)
-    wav=wav/dble(im*jm*km)
-    tav=tav/dble(im*jm*km)
-    pav=pav/dble(im*jm*km)
+    uav = uav/dble(im*jm*km)
+    vav = vav/dble(im*jm*km)
+    wav = wav/dble(im*jm*km)
+    tav = tav/dble(im*jm*km)
+    pav = pav/dble(im*jm*km)
     !
     print*, '** mean density    :',roav
     print*, '** mean velocity   :',uav,vav,wav
