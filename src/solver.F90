@@ -39,6 +39,7 @@ module solver
                         num_modequ,turbmode,spcinf,nondimen
     use thermchem, only: spcindex
     use fludyna,   only: thermal
+    use userdefine,only: udf_setflowenv
     use parallel,  only: mpisize
     !
     ! local data
@@ -123,6 +124,8 @@ module solver
       roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
       !
     endif 
+    !
+    call udf_setflowenv
     !
     if(lio) then
       write(mpimaxname,'(i8.8)')mpisize
@@ -226,6 +229,7 @@ module solver
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
                           recon_schem,limmbou,lchardecomp
     use commcal,   only : ShockSolid,ducrossensor
+    use userdefine,only : udf_src
     use tecio
     !
     ! arguments
@@ -289,6 +293,8 @@ module solver
       call src_tbl
     endif
     !
+    call udf_src
+    !
 #ifdef COMB
     call srccomb(timerept=ltimrpt)
 #endif
@@ -318,53 +324,6 @@ module solver
   end subroutine rhscal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rhscal.                                 |
-  !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine add a source term to the rsd of the equation to   |
-  !| hit flame.                                                        |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 13-06-2023: Created by Yifan Xu @ Peking University               |
-  !+-------------------------------------------------------------------+
-  subroutine src_hitflame
-    !
-    use commvar,  only : force,im,jm,km
-    use parallel, only : psum 
-    use commarray,only : q,qrhs,x,jacob
-    !
-    ! local data
-    integer :: i,j,k,k1,k2
-    !
-    real(8) :: dy,u1,u2,u3
-    !
-    if(ndims==2) then
-      k1=0
-      k2=0
-    elseif(ndims==3) then
-      k1=1
-      k2=km
-    else
-      print*,' !! ndims=',ndims
-      stop ' !! error @ massfluxchan !!'
-    endif
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      qrhs(i,j,k,2)=qrhs(i,j,k,2)+force(1)*jacob(i,j,k)
-      qrhs(i,j,k,3)=qrhs(i,j,k,3)+force(2)*jacob(i,j,k)
-      qrhs(i,j,k,4)=qrhs(i,j,k,4)+force(3)*jacob(i,j,k)
-      qrhs(i,j,k,5)=qrhs(i,j,k,5)+( force(1)*u1+force(2)*u2+   &
-                                    force(3)*u3 )*jacob(i,j,k)
-    end do
-    end do
-    end do
-    !
-  end subroutine src_hitflame
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine src_hitflame.                                 |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

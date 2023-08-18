@@ -651,7 +651,7 @@ module statistic
       rho_incom=psum(rho_incom)
       !
     elseif(flowtype=='tgvflame'.or. flowtype=='1dflame'.or.flowtype=='0dreactor' &
-        .or.flowtype=='h2supersonic' .or. flowtype=='hitflame') then
+        .or.flowtype=='h2supersonic') then
       
 #ifdef COMB
       tmpmax=maxval(tmp(0:im,0:jm,0:km))
@@ -682,52 +682,7 @@ module statistic
       enddo  
       qdotmax=pmax(qdotmax)
       !
-      ! calculate the flame location
-      var1=0.d0
-      vflame=0.d0
-      ! do k=0,km
-      ! do j=0,jm
-        !
-        ! j=jm/2
-        k=km/2
-      do j=1,jm
-        do i=1,im
-          !
-          if((tmp(i-1,j,k)<=400.d0 .and. tmp(i,j,k)>=400.d0) .or. &
-             (tmp(i-1,j,k)>=400.d0 .and. tmp(i,j,k)<=400.d0)) then
-            var1=var1+interlinear(tmp(i-1,j,k),tmp(i,j,k),        &
-                             x(i-1,j,k,1),x(i,j,k,1),400.d0)
-            exit
-          endif
-          !
-        enddo
-        !
-      enddo
-      ! enddo
-      !
-      var1=psum(var1)/ja
-      !
-      if(abs(xflame)<1.d-16) then
-        vflame=0.d0
-      else
-        vflame=(var1-xflame)/deltat
-      endif
-      !
-      xflame=var1
-      !
 #endif
-      !
-      i=im
-      k=0
-      poutrt=0.d0
-      !
-      if(irk==irkm) then
-        do j=1,jm
-          poutrt=poutrt+prs(i,j,k)
-        enddo
-      endif
-      !
-      poutrt=psum(poutrt)/dble(ja)
       !
     endif
     !
@@ -828,10 +783,8 @@ module statistic
         elseif(trim(flowtype)=='tbl') then
           fstitle='nstep time massflux fbcx blthickness wrms'
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. &
-               flowtype=='h2supersonic' .or. flowtype=='hitflame') then
+               flowtype=='h2supersonic') then
           fstitle='nstep time maxT maxU maxHRR xflame vflame pout'
-        else
-          fstitle='nstep time q1max q2max q3max q4max q5max'
         endif
         !
         call listinit(filename='flowstate.dat',handle=hand_fs, &
@@ -850,7 +803,7 @@ module statistic
       elseif(trim(flowtype)=='cylinder') then
         call listwrite(hand_fs,vel_incom,prs_incom,rho_incom)
       elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. &
-             flowtype=='h2supersonic' .or. flowtype=='hitflame') then
+             flowtype=='h2supersonic') then
         call listwrite(hand_fs,tmpmax,umax,qdotmax,xflame,vflame,poutrt)
       else
         ! general flowstate

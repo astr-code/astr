@@ -376,25 +376,26 @@ module utility
     use commvar, only: nstep,time
     !
     integer,intent(in) :: handle
-    real(8),intent(in),optional :: var1,var2,var3,var4,var5,var6,var7,var8
+    real(8),intent(in),optional :: var1,var2,var3,var4,var5,var6,      &
+                                   var7,var8
     !
     if(present(var8)) then
-      write(handle,"(1X,I20,9(1X,E20.13E2))")nstep,time,var1,var2,    &
+      write(handle,"(1X,I20,9(1X,E20.13E2))")nstep,time,var1,var2,     &
                                            var3,var4,var5,var6,var7,var8
     elseif(present(var7)) then
-      write(handle,"(1X,I20,8(1X,E20.13E2))")nstep,time,var1,var2,    &
+      write(handle,"(1X,I20,8(1X,E20.13E2))")nstep,time,var1,var2,     &
                                                var3,var4,var5,var6,var7
     elseif(present(var6)) then
-      write(handle,"(1X,I20,7(1X,E20.13E2))")nstep,time,var1,var2,    &
+      write(handle,"(1X,I20,7(1X,E20.13E2))")nstep,time,var1,var2,     &
                                                var3,var4,var5,var6
     elseif(present(var5)) then
-      write(handle,"(1X,I20,6(1X,E20.13E2))")nstep,time,var1,var2,    &
+      write(handle,"(1X,I20,6(1X,E20.13E2))")nstep,time,var1,var2,     &
                                                var3,var4,var5
     elseif(present(var4)) then
-      write(handle,"(1X,I20,5(1X,E20.13E2))")nstep,time,var1,var2,    &
+      write(handle,"(1X,I20,5(1X,E20.13E2))")nstep,time,var1,var2,     &
                                                var3,var4
     elseif(present(var3)) then
-      write(handle,"(1X,I20,4(1X,E20.13E2))")nstep,time,var1,var2,    &
+      write(handle,"(1X,I20,4(1X,E20.13E2))")nstep,time,var1,var2,     &
                                                var3
     elseif(present(var2)) then
       write(handle,"(1X,I20,3(1X,E20.13E2))")nstep,time,var1,var2

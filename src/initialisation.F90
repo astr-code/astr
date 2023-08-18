@@ -37,6 +37,7 @@ module initialisation
     use fludyna,  only: updateq
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
+    use userdefine,only: udf_flowinit
     !      
     if(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. &
       trim(flowtype)=='tbl' .or. trim(flowtype)=='windtunn') then
@@ -44,8 +45,6 @@ module initialisation
       call blprofile
       !
     endif
-    !
-    call setflowinf
     !
     call readcont
     !
@@ -77,10 +76,9 @@ module initialisation
         !
         call readflowini1d
         !
-        call addvortex(xc=0.015d0,yc=0.5d0*ymax, &
-                       radius=0.05d0*ymax,amp=0.1d0)
       else
         !
+        ! pre-defined flow initilisation
         select case(trim(flowtype))
         case('2dvort')
           call vortini
@@ -118,15 +116,16 @@ module initialisation
           call tgvflameini
         case('rti')
           call rtini
-        case('hitflame')
-          call hitflameini
-        case default
-          print*,trim(flowtype)
-          stop ' !! flowtype not defined @ flowinit'
+        ! case('hitflame')
+        !   call hitflameini
+        ! case default
+        !   print*,trim(flowtype)
+        !   stop ' !! flowtype not defined @ flowinit'
         end select
         !
       endif
-
+      !
+      call udf_flowinit
       !
       call updateq
       !
@@ -2187,144 +2186,6 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| The end of the subroutine tgvflameini.                           |
   !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine is used to generate an initial field for the      |
-  !| simulation of HIT flame                                           |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 25-May-2023: Created by Yifan Xu @ Peking University              |
-  !+-------------------------------------------------------------------+
-  subroutine hitflameini
-    !
-    use commvar,  only: nondimen,xmax,pinf,ia,num_species
-    use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal
-    !
-#ifdef COMB
-    !
-    use thermchem,only : tranco,spcindex,mixture,convertxiyi
-    use cantera 
-    !
-    ! local data
-    integer :: i,j,k
-    real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
-      specp(num_species),arg,prgvar,masflx,specx(num_species)
-    real(8) :: pthick
-    !
-    tmpr=300.d0
-    xloc=3.d0*xmax/4.d0
-    xwid=xmax/(12.d0*5.3d0*2.d0)
-    !
-    !reactants
-    specr(:)=0.d0
-    specr(spcindex('H2'))=0.0173
-    specr(spcindex('O2'))=0.2289
-    specr(spcindex('N2'))=1.d0-sum(specr)
-    !
-    !products
-    tmpp=1814.32d0
-    !
-    ! pthick=1.d-4
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      xc=x(i,j,k,1)
-      !
-      !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
-      ! if(xc-xloc<xwid*0.5d0*1.2d0) then 
-      !   prgvar=0.d0
-      !   if(xc-xloc>xwid*0.5d0) &
-      !   prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
-      ! else
-      !   prgvar=1.d0
-      ! endif
-      !
-      prgvar=1.d0*exp(-0.5d0*((xc-xloc)/xwid)**2)
-      !
-      spc(i,j,k,:)=specr(:)
-      !
-      vel(i,j,k,1)=uinf
-      !
-      vel(i,j,k,2)=0.d0
-      vel(i,j,k,3)=0.d0
-      !
-      tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
-      !
-      prs(i,j,k)=pinf
-      !
-      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
-                          species=spc(i,j,k,:))
-    enddo
-    enddo
-    enddo
-    !
-    !
-    if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
-    !
-#endif
-    !
-  end subroutine hitflameini
-  
-  subroutine setflowinf
-    !
-    use fludyna,  only: thermal
-#ifdef COMB
-    use thermchem,only : tranco,spcindex,mixture,convertxiyi
-    use cantera 
-    !
-    real(8) :: specr(num_species)
-    ! 
-    specr(:)=0.d0
-    specr(spcindex('H2'))=0.0173
-    specr(spcindex('O2'))=0.2289
-    specr(spcindex('N2'))=1.d0-sum(specr)
-    !
-    ! pinf=5.d0*pinf
-    uinf=0.97d0
-    vinf=0.d0
-    winf=0.d0
-    tinf=300.d0
-    spcinf(:)=specr(:)
-    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
-#endif
-    !
-  end subroutine setflowinf
-  !
-  subroutine addvortex(xc,yc,radius,amp)
-    !
-    use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal
-    !
-    ! local data
-    real(8),intent(in) :: xc,yc,radius,amp
-    !
-    integer :: i,j,k
-    real(8) :: var1,radi2,cvor
-    !
-    cvor=amp*uinf*radius
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      radi2=((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2)/radius/radius
-      var1=cvor/radius/radius*exp(-0.5d0*radi2)
-      !
-      vel(i,j,k,1)=vel(i,j,k,1)-var1*(x(i,j,k,2)-yc)
-      if(ndims>=2) vel(i,j,k,2)=vel(i,j,k,2)+var1*(x(i,j,k,1)-xc)
-      if(ndims==3) vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =prs(i,j,k)-0.5d0*roinf*cvor*cvor/radi2/radi2*exp(-radi2)
-      !
-      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
-      !
-    enddo
-    enddo
-    enddo
-    !
-  end subroutine addvortex
   !
   function return_30k(x) result(y)
   

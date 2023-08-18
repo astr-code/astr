@@ -182,11 +182,11 @@ module readwrite
         typedefine='                 Taylor-Green Vortex flame'
       case('rti')
         typedefine='               Rayleigh–Taylor instability'
-      case('hitflame')
-        typedefine='    homogeneous isotropic turbulence flame'
+      ! case('hitflame')
+      !   typedefine='    homogeneous isotropic turbulence flame'
       case default
         print*,trim(flowtype)
-        stop ' !! flowtype not defined @ infodisp'
+        print*,' !! flowtype not defined, will go to default setup !!'
       end select
       !
       write(*,'(2X,62A)')('-',i=1,62)
@@ -2000,31 +2000,6 @@ module readwrite
       !
     endif
     !
-#ifdef COMB
-    lwprofile=.false.
-    ypos=0.5d0*(ymax-ymin)+ymin
-    do j=1,jm
-      if(x(0,j-1,0,2)<ypos .and. x(0,j,0,2)>=ypos) then
-        !
-        lwprofile=.true.
-        !
-        exit
-        !
-      endif
-    enddo
-    !
-    allocate(hrr(0:im))
-    do i=0,im
-      hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
-    enddo
-    !
-    call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
-                               var1=rho(0:im,j,0),  var1name='rho', &
-                               var2=vel(0:im,j,0,1),var2name='u',   &
-                               var3=tmp(0:im,j,0),  var3name='T',   &
-                               var4=prs(0:im,j,0),  var4name='P',   &
-                               var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
-#endif
     !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ
