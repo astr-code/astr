@@ -2237,6 +2237,8 @@ module pp
     integer :: i,j,k
     character(len=4) :: genmethod
     !
+    print*,' ** cmd to generate a box turbulence: astr pp hitgen <input> . gen/read'
+    !
     im=ka ! ensure a cubic box
     !
     jm=ka
@@ -2255,8 +2257,8 @@ module pp
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
     !
-    call gridhitflame(mode='cubic')
-    !call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+    ! call gridhitflame(mode='cubic')
+    call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
     ! call readgrid(trim(gridfile))
     !
     call geomcal
@@ -2264,6 +2266,7 @@ module pp
     call readkeyboad(genmethod)
     !
     if(trim(genmethod)=='gen') then
+      !
       call div_free_gen(im,jm,km,vel(0:im,0:jm,0:km,1),   &
                                  vel(0:im,0:jm,0:km,2),   &
                                  vel(0:im,0:jm,0:km,3) )
@@ -2273,9 +2276,9 @@ module pp
       do j=0,jm
       do i=0,im
         !
-        rho(i,j,k)  = 0.d0 !roinf
-        tmp(i,j,k)  = 0.d0 !tinf 
-        prs(i,j,k)  = 0.d0 !thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        rho(i,j,k)  = roinf
+        tmp(i,j,k)  = tinf 
+        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         vel(i,j,k,1)= urms*vel(i,j,k,1)
         vel(i,j,k,2)= urms*vel(i,j,k,2)
         vel(i,j,k,3)= urms*vel(i,j,k,3)
@@ -2283,6 +2286,10 @@ module pp
       enddo
       enddo
       enddo
+      !
+      call div_test(vel,dvel)
+      !
+      call hitsta
       !
     elseif(trim(genmethod)=='read') then
       !
@@ -2292,65 +2299,73 @@ module pp
       call h5sread(rho(0:im,0:jm,0:km),  'ro',im,jm,km,'outdat/flowfield.h5')
       call h5sread(tmp(0:im,0:jm,0:km),  't', im,jm,km,'outdat/flowfield.h5')
       !
-      roav=0.d0
-      uav=0.d0
-      vav=0.d0
-      wav=0.d0
-      tav=0.d0
-      pav=0.d0
+      call div_test(vel,dvel)
       !
-      do k=0,km
-      do j=0,jm
-      do i=0,im 
-        prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-        !
-        if(i==0 .or. j==0 .or. k==0) cycle
-        !
-        roav=roav+rho(i,j,k)
-        uav=uav+vel(i,j,k,1)
-        vav=vav+vel(i,j,k,2)
-        wav=wav+vel(i,j,k,3)
-        tav=tav+tmp(i,j,k)
-        pav=pav+prs(i,j,k)
-      enddo
-      enddo
-      enddo
-      !
-      roav=roav/dble(im*jm*km)
-      uav=uav/dble(im*jm*km)
-      vav=vav/dble(im*jm*km)
-      wav=wav/dble(im*jm*km)
-      tav=tav/dble(im*jm*km)
-      pav=pav/dble(im*jm*km)
-      !
-      print*, '** mean density    :',roav
-      print*, '** mean velocity   :',uav,vav,wav
-      print*, '** mean temperature:',tav
-      print*, '** mean pressure   :',pav
-      !
-      rho(:,:,:)   = rho(:,:,:)  -roav
-      vel(:,:,:,1) = vel(:,:,:,1)-uav
-      vel(:,:,:,2) = vel(:,:,:,2)-vav
-      vel(:,:,:,3) = vel(:,:,:,3)-wav
-      tmp(:,:,:)   = tmp(:,:,:)  -tav
-      prs(:,:,:)   = prs(:,:,:)  -pav
+      call hitsta
       !
     else
       print*,genmethod
       stop ' !! genmethod error '
     endif
+    ! 
+    call h5srite(var=rho,                  varname='ro',filename='flowini3d.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='flowini3d.h5',explicit=.true.)
     !
-    call div_test(vel,dvel)
+    roav=0.d0
+    uav=0.d0
+    vav=0.d0
+    wav=0.d0
+    tav=0.d0
+    pav=0.d0
     !
-    call hitsta
+    do k=0,km
+    do j=0,jm
+    do i=0,im 
+      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(i==0 .or. j==0 .or. k==0) cycle
+      !
+      roav=roav+rho(i,j,k)
+      uav=uav+vel(i,j,k,1)
+      vav=vav+vel(i,j,k,2)
+      wav=wav+vel(i,j,k,3)
+      tav=tav+tmp(i,j,k)
+      pav=pav+prs(i,j,k)
+      !
+    enddo
+    enddo
+    enddo
     !
-    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='inflow/flowin.h5',explicit=.true.,newfile=.true.) 
-    call h5srite(var=rho,                  varname='ro',filename='inflow/flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='inflow/flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='inflow/flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='inflow/flowin.h5',explicit=.true.)
-    call h5srite(var=tmp,                  varname='p', filename='inflow/flowin.h5',explicit=.true.)
-    call h5srite(var=prs,                  varname='t', filename='inflow/flowin.h5',explicit=.true.)
+    roav=roav/dble(im*jm*km)
+    uav=uav/dble(im*jm*km)
+    vav=vav/dble(im*jm*km)
+    wav=wav/dble(im*jm*km)
+    tav=tav/dble(im*jm*km)
+    pav=pav/dble(im*jm*km)
+    !
+    print*, '** mean density    :',roav
+    print*, '** mean velocity   :',uav,vav,wav
+    print*, '** mean temperature:',tav
+    print*, '** mean pressure   :',pav
+    !
+    rho(:,:,:)   = rho(:,:,:)  -roav
+    vel(:,:,:,1) = vel(:,:,:,1)-uav
+    vel(:,:,:,2) = vel(:,:,:,2)-vav
+    vel(:,:,:,3) = vel(:,:,:,3)-wav
+    tmp(:,:,:)   = tmp(:,:,:)  -tav
+    prs(:,:,:)   = prs(:,:,:)  -pav
+    !
+    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='datin/flowin.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=rho,                  varname='ro',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='datin/flowin.h5',explicit=.true.)
     
     ! call tecbin('techit.plt',x(0:im,0:jm,0:km,1),'x', &
     !                          x(0:im,0:jm,0:km,2),'y', &
@@ -2459,16 +2474,22 @@ module pp
       !
       machrms=urms/sqrt(tav)*mach
       !
-      print*,' **            urms:',urms
-      print*,' **         machrms:',machrms
-      print*,' **         kenergy:',kenergy
-      print*,' ** max fluctuation:',ufmx
-      print*,' **       Enstrophy:',Enstrophy
-      print*,' **   kolmlength, η:',kolmlength
-      print*,' **             η/Δ:',kolmlength/x(1,0,0,1)
-      print*,' **           ukolm:',ukolm
-      print*,' **    taylorlength:',taylorlength
-      print*,' **        Retaylor:',retaylor
+      print*,' ---------------------------------------------------------------'
+      print*,'              statistics according to actual field              '
+      print*,' --------------------------+------------------------------------'
+      print*,'                      urms |',urms
+      print*,'                   machrms |',machrms
+      print*,'                   kenergy |',kenergy
+      print*,'           max fluctuation |',ufmx
+      print*,'                 enstrophy |',Enstrophy
+      print*,'             Kolmlength, η |',kolmlength
+      print*,'                       η/Δ |',kolmlength/(x(1,0,0,1)-x(0,0,0,1))
+      print*,'                     ukolm |',ukolm
+      print*,'                     tkolm |',kolmlength/ukolm
+      print*,'              Taylorlength |',taylorlength
+      print*,'                  Retaylor |',retaylor
+      print*,' --------------------------+------------------------------------'
+      !
       !
   end subroutine hitsta
   !+-------------------------------------------------------------------+
@@ -2536,6 +2557,7 @@ module pp
   subroutine div_free_gen(idim,jdim,kdim,u1,u2,u3)
     !
     use singleton
+    use commvar,only : Reynolds
     !
     integer,intent(in) :: idim,jdim,kdim
     real(8),intent(out),dimension(0:idim,0:jdim,0:kdim) :: u1,u2,u3
@@ -2582,7 +2604,7 @@ module pp
     integer :: k1,k2,k3,k0,i,j,k
     real(8) :: ran1,ran2,ran3,rn1,rn2,rn3,var1,var2,var3,ISEA
     complex(8) :: vac1,vac2,vac3,vac4,crn1,crn2
-    real(8) :: dudi,lambda
+    real(8) :: dudi,lambda,ke0,en0,lint,tau,eta0
     !
     kmi=idim/2
     kmj=jdim/2
@@ -2736,8 +2758,8 @@ module pp
     u3(0:idim,0:jdim,0)=u3(0:idim,0:jdim,kdim)
     !
     ! urms=0.d0
-    ! ufmx=0.d0
-    ! Kenergy=0.d0
+    ! ! ufmx=0.d0
+    ! ! Kenergy=0.d0
     ! do k=1,kdim
     ! do j=1,jdim
     ! do i=1,idim
@@ -2756,7 +2778,21 @@ module pp
     ! Kenergy=Kenergy/urms/urms
     ! urms=urms/urms
     ! !
-    ! print*,'Kenergy',Kenergy,'urms',urms,'Mat=',urms*Mach
+    ke0=3.d0*ISEA/64.d0*sqrt(2.d0*pi)*dble(k0**5)
+    en0=15.d0*ISEA/256.d0*sqrt(2.d0*pi)*dble(k0**7)
+    lint=sqrt(2.d0*pi)/ke0
+    tau =sqrt(32.d0/ISEA*sqrt(2.d0*pi))/sqrt(dble(k0**7))
+    eta0=1.d0/sqrt(sqrt(2.d0*en0*Reynolds**2))
+    !
+    print*,' ---------------------------------------------------------------'
+    print*,'        statistics according to the initial energy spectrum     '
+    print*,' --------------------------+------------------------------------'
+    print*,'                   kenergy |',ke0
+    print*,'                 enstrophy |',en0
+    print*,'           integral length |',lint
+    print*,'  large-eddy-turnover time |',tau
+    print*,'         kolmogorov length |',eta0
+    print*,' --------------------------+------------------------------------'
     ! !
     ! call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
     ! call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
@@ -2783,7 +2819,7 @@ module pp
     real(8) :: k0,Ac,var1,wnb,IniEnergDis
     !
     var1=-2.d0*(wnb/k0)**2
-    IniEnergDis=Ac*wnb**4*dexp(var1)
+    IniEnergDis=Ac*wnb**4*exp(var1)
     !IniEnergDis=Ac*wnb**(-5.d0/3.d0)
     !
     return

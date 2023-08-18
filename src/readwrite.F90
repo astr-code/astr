@@ -182,11 +182,11 @@ module readwrite
         typedefine='                 Taylor-Green Vortex flame'
       case('rti')
         typedefine='               Rayleigh–Taylor instability'
-      case('hitflame')
-        typedefine='    homogeneous isotropic turbulence flame'
+      ! case('hitflame')
+      !   typedefine='    homogeneous isotropic turbulence flame'
       case default
         print*,trim(flowtype)
-        stop ' !! flowtype not defined @ infodisp'
+        print*,' !! flowtype not defined, will go to default setup !!'
       end select
       !
       write(*,'(2X,62A)')('-',i=1,62)
@@ -1300,13 +1300,14 @@ module readwrite
     use commvar,   only : im,jm,km,num_species,time,roinf,tinf,pinf
     use commarray, only : rho,vel,prs,tmp,spc
     use hdf5io
+    use fludyna,   only : thermal
 #ifdef COMB
     use thermchem, only: spcindex
 #endif
     !
     ! local data
     !
-    integer :: jsp
+    integer :: i,j,k,jsp
     character(len=3) :: spname
     ! real(8) :: time_initial
     !can be used to start premixed case, but not ready yet
@@ -1325,11 +1326,22 @@ module readwrite
     ! prs=pinf
     ! tmp=tinf
     do jsp=1,num_species
-       write(spname,'(i3.3)')jsp
+      write(spname,'(i3.3)')jsp
       call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode='h')
     enddo
     !
     call h5io_end
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:)) 
+
+    enddo
+    enddo
+    enddo
     !
     ! initialize species
 ! #ifdef COMB
@@ -1988,31 +2000,6 @@ module readwrite
       !
     endif
     !
-    lwprofile=.false.
-    ypos=0.5d0*(ymax-ymin)+ymin
-    do j=1,jm
-      if(x(0,j-1,0,2)<ypos .and. x(0,j,0,2)>=ypos) then
-        !
-        lwprofile=.true.
-        !
-        exit
-        !
-      endif
-    enddo
-    !
-#ifdef COMB
-    allocate(hrr(0:im))
-    do i=0,im
-      hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
-    enddo
-#endif
-    !
-    call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
-                               var1=rho(0:im,j,0),  var1name='rho', &
-                               var2=vel(0:im,j,0,1),var2name='u',   &
-                               var3=tmp(0:im,j,0),  var3name='T',   &
-                               var4=prs(0:im,j,0),  var4name='P',   &
-                               var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
     !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ

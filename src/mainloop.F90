@@ -669,6 +669,7 @@ module mainloop
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
     use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
                          nxtchkpt,nxtwsequ
+    use userdefine,only: udf_stalist,udf_write
     !
     ! local data
     integer,save :: nxtavg
@@ -682,6 +683,8 @@ module mainloop
     call statcal(timerept=ltimrpt)
     !
     call statout(time_start)
+    !
+    call udf_stalist
     !
     if(nstep==0 .or. loop_counter.ne.0) then
       ! the first step after reading ehecking out doesn't need to do this
@@ -717,6 +720,8 @@ module mainloop
         !
         ! the checkpoint and flowfield may be writen in the same time
         call writechkpt(nxtwsequ,timerept=ltimrpt)
+        !
+        call udf_write
         !
       endif
       !

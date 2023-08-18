@@ -299,7 +299,118 @@ module utility
   !| The end of the subroutine timerept.                               |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to init a text file, either create a new file  |
+  !| to resume an old file.                                            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-Aug-2023: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine listinit(filename,handle,firstline)
+    !
+    use commvar,   only: lrestart,nstep
+    use strings,   only: split
+    !
+    character(len=*),intent(in) :: filename
+    integer,intent(out) :: handle
+    character(len=*),intent(in),optional :: firstline
+    !
+    character(len=16),allocatable :: args(:)
+    logical :: fex
+    integer :: nargs,ns,ferr,n
+    character(len=120) :: txtformat
+    !
+    inquire(file=filename,exist=fex)
+    handle=get_unit()
+    !
+    open(handle,file=filename)
+    !
+    if(lrestart .and. fex) then
+      ! resume a file
+      ns=0
+      read(handle,*)
+      ! first line is alway a text 
+      !
+      do while(ns<nstep)
+        !
+        read(handle,*,iostat=ferr)ns
+        !
+        if(ferr< 0) then
+          print*,' ** ns,nstep=',ns,nstep
+          print*,' ** end of file is reached.'
+          exit
+        endif
+        !
+      enddo
+      !
+      backspace(handle)
+      write(*,'(A,I0)')'   ** resume'//filename//'at step: ',ns
+      !
+    else
+      ! create a file
+      call split(firstline,args,' ')
+      !
+      nargs=size(args)
+      !
+      write(txtformat,'(A,I0,A)')'(',nargs,'(1X,A20))'
+
+      write(handle,txtformat)(trim(args(n)),n=1,nargs)
+      !
+    endif
+    !
+  end subroutine listinit
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine listinit.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to write listing data.                         |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-Aug-2023: Created by J. Fang @ Appleton                        |
+  !+-------------------------------------------------------------------+
+  subroutine listwrite(handle,var1,var2,var3,var4,var5,var6,var7,var8)
+    !
+    use commvar, only: nstep,time
+    !
+    integer,intent(in) :: handle
+    real(8),intent(in),optional :: var1,var2,var3,var4,var5,var6,      &
+                                   var7,var8
+    !
+    if(present(var8)) then
+      write(handle,"(1X,I20,9(1X,E20.13E2))")nstep,time,var1,var2,     &
+                                           var3,var4,var5,var6,var7,var8
+    elseif(present(var7)) then
+      write(handle,"(1X,I20,8(1X,E20.13E2))")nstep,time,var1,var2,     &
+                                               var3,var4,var5,var6,var7
+    elseif(present(var6)) then
+      write(handle,"(1X,I20,7(1X,E20.13E2))")nstep,time,var1,var2,     &
+                                               var3,var4,var5,var6
+    elseif(present(var5)) then
+      write(handle,"(1X,I20,6(1X,E20.13E2))")nstep,time,var1,var2,     &
+                                               var3,var4,var5
+    elseif(present(var4)) then
+      write(handle,"(1X,I20,5(1X,E20.13E2))")nstep,time,var1,var2,     &
+                                               var3,var4
+    elseif(present(var3)) then
+      write(handle,"(1X,I20,4(1X,E20.13E2))")nstep,time,var1,var2,     &
+                                               var3
+    elseif(present(var2)) then
+      write(handle,"(1X,I20,3(1X,E20.13E2))")nstep,time,var1,var2
+    elseif(present(var1)) then
+      write(handle,"(1X,I20,2(1X,E20.13E2))")nstep,time,var1
+    else
+      stop ' !! error @ listwrite'
+    endif
+    !
+  end subroutine listwrite
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine listwrite.                              |
+  !+-------------------------------------------------------------------+
+  !
 end module utility
 !+---------------------------------------------------------------------+
-!| The end of the module utility.                                      |
+!| The end of the module utility                                       |
 !+---------------------------------------------------------------------+
