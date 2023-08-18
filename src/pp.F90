@@ -2054,7 +2054,7 @@ module pp
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 11-Aug-2021: Created by Yifan Xu @ Peking University                        |
+  !| 11-Aug-2021: Created by Yifan Xu @ Peking University              |
   !+-------------------------------------------------------------------+
   subroutine flamegen(flowfile,viewmode,inputfile)
     !
@@ -2271,7 +2271,7 @@ module pp
                                  vel(0:im,0:jm,0:km,2),   &
                                  vel(0:im,0:jm,0:km,3) )
       !
-      urms=0.1d0 
+      urms=1.d0 
       do k=0,km
       do j=0,jm
       do i=0,im
