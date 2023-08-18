@@ -1434,7 +1434,7 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
-  !| This subroutine read2 a 1-D profile to initialize flow filed.     |
+  !| This subroutine reads a 1-D profile to initialize flow filed.     |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |

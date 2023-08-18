@@ -79,6 +79,14 @@ module pp
       !
       call fieldview(trim(flowfieldfile),trim(outputfile),trim(viewmode),trim(inputfile))
       !
+    elseif(trim(cmd)=='flamegen') then
+        !
+      call readkeyboad(flowfieldfile)
+      call readkeyboad(viewmode)
+      call readkeyboad(inputfile)
+        !
+      call flamegen(trim(flowfieldfile),trim(viewmode),trim(inputfile))
+        !
     else
       stop ' !! pp command not defined. @ ppentrance'
     endif
@@ -2017,7 +2025,7 @@ module pp
       open(18,file=outputfile)
       write(18,"(8(1X,A15))")'x','ro','u','p','t','Y1','Y2','Y3'
       write(18,"(8(1X,E15.7E3))")(x_1d(i),ro_1d(i),u_1d(i),p_1d(i), &
-                  t_1d(i),spc_1d(i,3),spc_1d(i,2),spc_1d(i,3),i=0,im)
+                  t_1d(i),spc_1d(i,1),spc_1d(i,2),spc_1d(i,3),i=0,im)
       close(18)
       print*,' << ',outputfile
       !
@@ -2038,6 +2046,165 @@ module pp
   end subroutine fieldview
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowfieldview.                          |
+  !+-------------------------------------------------------------------+
+  !+-------------------------------------------------------------------+
+  !| This function is to generate specific flame with postprocess data.|
+  !+-------------------------------------------------------------------+
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 11-Aug-2021: Created by Yifan Xu @ Peking University                        |
+  !+-------------------------------------------------------------------+
+  subroutine flamegen(flowfile,viewmode,inputfile)
+    !
+    use hdf5io
+    use tecio
+    use WriteVTK
+    !
+    ! arguments
+    character(len=*),intent(in) :: flowfile,viewmode,inputfile
+    !
+    ! local data
+    integer :: im,jm,km,num_species,jsp,i
+    integer :: iflame_in,iflame_out
+    logical :: lihomo,ljhomo,lkhomo
+    real(8) :: ref_t,reynolds,mach
+    character(len=32) :: gridfile
+    !
+    real(8),allocatable,dimension(:) :: x_1d,y_1d,z_1d,ro_1d,u_1d,   &
+                                        v_1d,w_1d,p_1d,t_1d
+    real(8),allocatable,dimension(:,:) :: spc_1d
+    real(8),allocatable,dimension(:,:) :: x_2d,y_2d,z_2d,ro_2d,u_2d,   &
+                                          v_2d,w_2d,p_2d,t_2d
+    real(8),allocatable,dimension(:,:,:) :: spc_2d
+    real(8),allocatable,dimension(:,:,:) :: x,y,z,ro,u,v,w,p,t
+    real(8),allocatable,dimension(:,:,:,:) :: spc
+    real(8),allocatable :: var1d(:)
+    !
+    character(len=3) :: spname
+    !
+    print*,' ==========================readinput=========================='
+    !
+    open(11,file=inputfile,form='formatted',status='old')
+    read(11,'(///////)')
+    read(11,*)im,jm,km
+    read(11,"(/)")
+    read(11,*)lihomo,ljhomo,lkhomo
+    read(11,'(//////////)')
+    read(11,*)ref_t,reynolds,mach
+    read(11,'(///////)')
+    read(11,*)num_species
+    print*,' ** num_species: ',num_species
+    read(11,'(//////////////////)')
+    read(11,'(A)')gridfile
+    close(11)
+    print*,' >> ',inputfile
+    !
+    print*,' ** grid file: ',trim(gridfile)
+    !
+    iflame_out=im/4
+    !
+    ! if(viewmode=='3d') then
+    !   allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+    ! elseif(viewmode=='1d') then
+    !   !
+    allocate(x_1d(0:im),ro_1d(0:im),u_1d(0:im),p_1d(0:im),t_1d(0:im))
+    !
+    call H5ReadSubset( x_1d,im,jm,km, 'x',gridfile,jslice=jm/2-1,kslice=-1)
+    !
+    call H5ReadSubset(ro_1d,im,jm,km,'ro',flowfile,jslice=jm/2-1,kslice=-1)
+    call H5ReadSubset( u_1d,im,jm,km,'u1',flowfile,jslice=jm/2-1,kslice=-1)
+    call H5ReadSubset( p_1d,im,jm,km, 'p',flowfile,jslice=jm/2-1,kslice=-1)
+    call H5ReadSubset( t_1d,im,jm,km, 't',flowfile,jslice=jm/2-1,kslice=-1)
+    !
+    allocate(spc_1d(0:im,1:num_species))
+    allocate(var1d(0:im))
+    do jsp=1,num_species
+      write(spname,'(i3.3)')jsp
+      call H5ReadSubset(var1d,im,jm,km,'sp'//spname,flowfile,jslice=jm/2-1,kslice=-1)
+      spc_1d(:,jsp)=var1d
+    enddo
+
+    if(viewmode=='3d') then
+      !
+      allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km),ro(0:im,0:jm,0:km),u(0:im,0:jm,0:km), &
+               v(0:im,0:jm,0:km),w(0:im,0:jm,0:km),p(0:im,0:jm,0:km),t(0:im,0:jm,0:km))
+      allocate(spc(0:im,0:jm,0:km,1:num_species))
+      !
+      call H5io_init(filename=gridfile,mode='read')
+      call H5Read(varname='x',var=x(0:im,0:jm,0:km),mode='h')
+      call H5Read(varname='y',var=y(0:im,0:jm,0:km),mode='h')
+      call H5Read(varname='z',var=z(0:im,0:jm,0:km),mode='h')
+      !
+      do i=1,im
+        !
+        if((t_1d(i-1)<=400.d0 .and. t_1d(i)>=400.d0) .or. &
+            (t_1d(i-1)>=400.d0 .and. t_1d(i)<=400.d0)) then
+          iflame_in=i
+          exit
+        endif
+      enddo
+
+      do i=-im/8,im/8
+        ro(i+iflame_out,:,:)=ro_1d(i+iflame_in)
+        u(i+iflame_out,:,:) =u_1d(i+iflame_in)
+        v(i+iflame_out,:,:) =0.d0
+        w(i+iflame_out,:,:) =0.d0
+        p(i+iflame_out,:,:) =p_1d(i+iflame_in)
+        t(i+iflame_out,:,:) =t_1d(i+iflame_in)
+        do jsp=1,num_species
+          spc(i+iflame_out,:,:,jsp)=spc_1d(i+iflame_in,jsp)
+        enddo
+      enddo
+
+      do i=0,iflame_out-im/8-1
+        ro(i,:,:)=ro(iflame_out-im/8,:,:)
+        u(i,:,:) =u(iflame_out-im/8,:,:)
+        v(i,:,:) =v(iflame_out-im/8,:,:)
+        w(i,:,:) =w(iflame_out-im/8,:,:)
+        p(i,:,:) =p(iflame_out-im/8,:,:)
+        t(i,:,:) =t(iflame_out-im/8,:,:)
+        do jsp=1,num_species
+          spc(i,:,:,jsp)=spc(iflame_out-im/8,:,:,jsp)
+        enddo
+      enddo
+
+      do i=iflame_out+im/8+1,im
+        ro(i,:,:)=ro(iflame_out+im/8,:,:)
+        u(i,:,:) =u(iflame_out+im/8,:,:)
+        v(i,:,:) =v(iflame_out+im/8,:,:)
+        w(i,:,:) =w(iflame_out+im/8,:,:)
+        p(i,:,:) =p(iflame_out+im/8,:,:)
+        t(i,:,:) =t(iflame_out+im/8,:,:)
+        do jsp=1,num_species
+          spc(i,:,:,jsp)=spc(iflame_out+im/8,:,:,jsp)
+        enddo
+      enddo
+    !
+      call h5srite(var= x,varname= 'x',filename='datin/flowini3d.h5',explicit=.true.,newfile=.true.)
+      call h5srite(var= y,varname= 'y',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= z,varname= 'z',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var=ro,varname='ro',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= u,varname='u1',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= v,varname='u2',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= w,varname='u3',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= t,varname= 't',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= p,varname= 'p',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+    !
+      do jsp=1,num_species
+        write(spname,'(i3.3)')jsp
+        call h5srite(var=spc(:,:,:,jsp),varname='sp'//spname,filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      enddo
+    !  
+    else
+      print*,viewmode
+      stop ' !! mode is not defined @ fieldview'
+    endif
+    !
+  end subroutine flamegen
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine flamegen.                          |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -2104,7 +2271,7 @@ module pp
                                  vel(0:im,0:jm,0:km,2),   &
                                  vel(0:im,0:jm,0:km,3) )
       !
-      urms=1.d0 !5.d0*0.5d0 
+      urms=0.1d0 
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -2192,13 +2359,13 @@ module pp
     tmp(:,:,:)   = tmp(:,:,:)  -tav
     prs(:,:,:)   = prs(:,:,:)  -pav
     !
-    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='flowin.h5',explicit=.true.,newfile=.true.) 
-    call h5srite(var=rho,                  varname='ro',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=prs,                  varname='p', filename='flowin.h5',explicit=.true.)
-    call h5srite(var=tmp,                  varname='t', filename='flowin.h5',explicit=.true.)
+    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='datin/flowin.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=rho,                  varname='ro',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='datin/flowin.h5',explicit=.true.)
     
     ! call tecbin('techit.plt',x(0:im,0:jm,0:km,1),'x', &
     !                          x(0:im,0:jm,0:km,2),'y', &
