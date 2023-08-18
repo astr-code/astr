@@ -2136,54 +2136,61 @@ module pp
       !
       call hitsta
       !
-      roav=0.d0
-      uav=0.d0
-      vav=0.d0
-      wav=0.d0
-      tav=0.d0
-      pav=0.d0
-      !
-      do k=0,km
-      do j=0,jm
-      do i=0,im 
-        prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-        !
-        if(i==0 .or. j==0 .or. k==0) cycle
-        !
-        roav=roav+rho(i,j,k)
-        uav=uav+vel(i,j,k,1)
-        vav=vav+vel(i,j,k,2)
-        wav=wav+vel(i,j,k,3)
-        tav=tav+tmp(i,j,k)
-        pav=pav+prs(i,j,k)
-        !
-      enddo
-      enddo
-      enddo
-      !
-      roav=roav/dble(im*jm*km)
-      uav=uav/dble(im*jm*km)
-      vav=vav/dble(im*jm*km)
-      wav=wav/dble(im*jm*km)
-      tav=tav/dble(im*jm*km)
-      pav=pav/dble(im*jm*km)
-      !
-      print*, '** mean density    :',roav
-      print*, '** mean velocity   :',uav,vav,wav
-      print*, '** mean temperature:',tav
-      print*, '** mean pressure   :',pav
-      !
-      rho(:,:,:)   = rho(:,:,:)  -roav
-      vel(:,:,:,1) = vel(:,:,:,1)-uav
-      vel(:,:,:,2) = vel(:,:,:,2)-vav
-      vel(:,:,:,3) = vel(:,:,:,3)-wav
-      tmp(:,:,:)   = tmp(:,:,:)  -tav
-      prs(:,:,:)   = prs(:,:,:)  -pav
-      !
     else
       print*,genmethod
       stop ' !! genmethod error '
     endif
+    ! 
+    call h5srite(var=rho,                  varname='ro',filename='flowini3d.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='flowini3d.h5',explicit=.true.)
+    !
+    roav=0.d0
+    uav=0.d0
+    vav=0.d0
+    wav=0.d0
+    tav=0.d0
+    pav=0.d0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im 
+      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      if(i==0 .or. j==0 .or. k==0) cycle
+      !
+      roav=roav+rho(i,j,k)
+      uav=uav+vel(i,j,k,1)
+      vav=vav+vel(i,j,k,2)
+      wav=wav+vel(i,j,k,3)
+      tav=tav+tmp(i,j,k)
+      pav=pav+prs(i,j,k)
+      !
+    enddo
+    enddo
+    enddo
+    !
+    roav=roav/dble(im*jm*km)
+    uav=uav/dble(im*jm*km)
+    vav=vav/dble(im*jm*km)
+    wav=wav/dble(im*jm*km)
+    tav=tav/dble(im*jm*km)
+    pav=pav/dble(im*jm*km)
+    !
+    print*, '** mean density    :',roav
+    print*, '** mean velocity   :',uav,vav,wav
+    print*, '** mean temperature:',tav
+    print*, '** mean pressure   :',pav
+    !
+    rho(:,:,:)   = rho(:,:,:)  -roav
+    vel(:,:,:,1) = vel(:,:,:,1)-uav
+    vel(:,:,:,2) = vel(:,:,:,2)-vav
+    vel(:,:,:,3) = vel(:,:,:,3)-wav
+    tmp(:,:,:)   = tmp(:,:,:)  -tav
+    prs(:,:,:)   = prs(:,:,:)  -pav
     !
     call h5srite(var=x(0:im,0,0,1),        varname='x', filename='flowin.h5',explicit=.true.,newfile=.true.) 
     call h5srite(var=rho,                  varname='ro',filename='flowin.h5',explicit=.true.)
