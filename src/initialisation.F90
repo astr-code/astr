@@ -124,7 +124,6 @@ module initialisation
         end select
         !
       endif
-
       !
       call updateq
       !
@@ -2212,7 +2211,7 @@ module initialisation
     real(8) :: pthick
     !
     tmpr=300.d0
-    xloc=3.d0*xmax/4.d0
+    xloc=2.d0*xmax/4.d0
     xwid=xmax/(12.d0*5.3d0*2.d0)
     !
     !reactants
@@ -2281,7 +2280,7 @@ module initialisation
     specr(spcindex('N2'))=1.d0-sum(specr)
     !
     ! pinf=5.d0*pinf
-    uinf=0.97d0
+    uinf=2.d0
     vinf=0.d0
     winf=0.d0
     tinf=300.d0

@@ -1325,7 +1325,7 @@ module readwrite
     ! prs=pinf
     ! tmp=tinf
     do jsp=1,num_species
-       write(spname,'(i2.2)')jsp
+       write(spname,'(i3.3)')jsp
       call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode='h')
     enddo
     !
@@ -1422,7 +1422,7 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
-  !| This subroutine read2 a 1-D profile to initialize flow filed.     |
+  !| This subroutine reads a 1-D profile to initialize flow filed.     |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |

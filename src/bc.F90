@@ -1738,8 +1738,8 @@ module bc
       !
     enddo
     !
-    umax=-10.d0
-    umin=10.d0
+    umax=-2.d0
+    umin=2.d0
     do k=0,km
     do j=0,jm
       !
