@@ -123,9 +123,9 @@ module initialisation
         !   stop ' !! flowtype not defined @ flowinit'
         end select
         !
+        call udf_flowinit
+        !
       endif
-      !
-      call udf_flowinit
       !
       call updateq
       !
