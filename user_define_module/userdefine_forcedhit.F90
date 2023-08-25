@@ -324,12 +324,12 @@ module userdefine
     use constdef
     use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka
     use parallel, only : psum 
-    use commarray,only : vel,qrhs,x,jacob
+    use commarray,only : rho,tmp,vel,qrhs,x,jacob
     ! !
     ! ! local data
     integer :: i,j,k,k1,k2
     real(8) :: A(3,3),B(3,3),force(3)
-    real(8) :: FC,FR,var1,var2
+    real(8) :: FC,FR,var1,var2,tavg,at
     !
     FR=1.d0/16.d0
     FC=0.d0
@@ -360,6 +360,7 @@ module userdefine
     end do
     !
     hsource=0.d0
+    tavg=0.d0
     !
     do k=0,km
     do j=0,jm
@@ -376,27 +377,31 @@ module userdefine
                A(3,3)*sin(x(i,j,k,3))+B(3,1)*cos(x(i,j,k,1))+      &
                B(3,2)*cos(x(i,j,k,2))+B(3,3)*cos(x(i,j,k,3))
       !
-      qrhs(i,j,k,2)=qrhs(i,j,k,2)+force(1)*jacob(i,j,k)
-      qrhs(i,j,k,3)=qrhs(i,j,k,3)+force(2)*jacob(i,j,k)
-      qrhs(i,j,k,4)=qrhs(i,j,k,4)+force(3)*jacob(i,j,k)
+      qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
+      qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
+      qrhs(i,j,k,4)=qrhs(i,j,k,4)+rho(i,j,k)*force(3)*jacob(i,j,k)
       !
-      qrhs(i,j,k,5)=qrhs(i,j,k,5)+( force(1)*vel(i,j,k,1)+force(2)*vel(i,j,k,2)+   &
-                                    force(3)*vel(i,j,k,3) )*jacob(i,j,k)
+      qrhs(i,j,k,5)=qrhs(i,j,k,5)+rho(i,j,k)*( force(1)*vel(i,j,k,1) + &
+                                               force(2)*vel(i,j,k,2) + &
+                                               force(3)*vel(i,j,k,3) )*jacob(i,j,k)
       !
       if(i.ne.0 .and. j.ne.0 .and. k.ne.0) then
-        hsource=hsource+force(1)*vel(i,j,k,1)+force(2)*vel(i,j,k,2)+force(3)*vel(i,j,k,3)
+        hsource=hsource+rho(i,j,k)*(force(1)*vel(i,j,k,1) + &
+                                    force(2)*vel(i,j,k,2) + &
+                                    force(3)*vel(i,j,k,3))
+        tavg=tavg+tmp(i,j,k)
       endif
       !
     end do
     end do
     end do
     !
-    hsource=psum(hsource)/dble(ia*ja*ka)
+    at=psum(hsource)/psum(tavg)
     !
     do k=0,km
     do j=0,jm
     do i=0,im
-      qrhs(i,j,k,5)=qrhs(i,j,k,5)-hsource*jacob(i,j,k)
+      qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
     end do
     end do
     end do
