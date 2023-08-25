@@ -9,6 +9,8 @@ module userdefine
   !
   implicit none
   !
+  real(8) :: flamethickness
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -21,15 +23,26 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_setflowenv
     !
-    use commvar,  only: roinf,uinf,vinf,winf,pinf,tinf,spcinf,num_species
-    use fludyna,  only: thermal
+    use commvar,  only: ymax,roinf,uinf,vinf,winf,pinf,tinf,spcinf,num_species
+    use fludyna,  only: thermal,sos
+    use parallel, only: lio,bcast
     !
 #ifdef COMB
     use thermchem,only : tranco,spcindex,mixture,convertxiyi
     use cantera 
     !
-    real(8) :: specr(num_species)
+    real(8) :: cpe,miu,kama,cs,lref
+    real(8) :: specr(num_species),dispec(num_species)
     ! 
+    if(lio) then
+      open(12,file='datin/userinput.txt')
+      read(12,*)flamethickness
+      close(12)
+      print*, ' ** flamethickness =',flamethickness
+    endif
+    !
+    call bcast(flamethickness)
+    !
     specr(:)=0.d0
     specr(spcindex('H2'))=0.0173
     specr(spcindex('O2'))=0.2289
@@ -42,6 +55,31 @@ module userdefine
     tinf=300.d0
     spcinf(:)=specr(:)
     roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
+    !
+    cs=sos(tinf,spcinf)
+    !
+    lref=flamethickness
+    !
+    call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama, &
+                spc=specr,rhodi=dispec)
+
+    if(lio) then
+
+      print*,' ---------------------------------------------------------------'
+      print*,'                      free stream quatities                     '
+      print*,' --------------------------+------------------------------------'
+      print*,'                        u∞ | ',uinf,'m/s'
+      print*,'                        T∞ | ',tinf,'K'
+      print*,'                      rho∞ | ',roinf,'kg/m**3'
+      print*,'                        p∞ | ',pinf,'Pa'
+      print*,'          reference length | ',lref,'m'
+      print*,'                 viscosity | ',miu,'kg/(ms)'
+      print*,'                       Re∞ | ',roinf*uinf*lref/miu
+      print*,'            speed of sound | ',cs,'m/s'
+      print*,'                       Ma∞ | ',uinf/cs
+      print*,' --------------------------+------------------------------------'
+
+    endif
     !
 #endif
     !
@@ -134,6 +172,65 @@ module userdefine
   end subroutine udf_flowinit
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_flowinit.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate grid.                              | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 23-Aug-2023: created by Jian Fang @ Daresbury                     |
+  !+-------------------------------------------------------------------+
+  subroutine udf_grid(mode)
+    !
+    use commvar,  only : im,jm,km,gridfile,ia,ja,ka
+    use parallel, only : ig0,jg0,kg0,lio,bcast
+    use commarray,only : x
+    use hdf5io
+    !
+    ! arguments
+    character(len=*),intent(in) :: mode
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: lx,ly,lz
+    !
+    if(mode=='cuboid') then
+      lx=12.d0*5.3d0*flamethickness
+      ly=5.3d0*flamethickness
+      lz=5.3d0*flamethickness
+    elseif(mode=='cubic') then
+      lx=5.3d0*flamethickness
+      ly=5.3d0*flamethickness
+      lz=5.3d0*flamethickness
+    else
+      stop ' !! error1 @ gridhitflame'
+    endif
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1)=lx/real(ia,8)*real(i+ig0,8)
+      if(ja==0) then
+        x(i,j,k,2)=ly
+      else
+        x(i,j,k,2)=ly/real(ja,8)*real(j+jg0,8)
+      endif
+      if(ka==0) then
+        x(i,j,k,3)=0.d0
+      else
+        x(i,j,k,3)=lz/real(ka,8)*real(k+kg0,8)
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio) print*,' ** cubic grid generated'
+    !
+  end subroutine udf_grid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_grid.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
