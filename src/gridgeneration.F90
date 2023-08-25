@@ -25,6 +25,7 @@ module gridgeneration
     use parallel, only : mpirank
     use commvar,  only : flowtype,lreadgrid,nondimen,gridfile
     use readwrite,only : readgrid,writegrid,xdmfwriter
+    use userdefine,only: udf_grid
     !
     if(lreadgrid) then
       call readgrid(trim(gridfile))
@@ -62,6 +63,7 @@ module gridgeneration
       elseif(trim(flowtype)=='rti') then
         call gridcube(0.25d0,1.d0,0.d0)
       else
+        call udf_grid
         print*,trim(flowtype),' is not defined @ gridgen'
         stop ' !! error at gridgen' 
       endif

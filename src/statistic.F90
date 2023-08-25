@@ -21,6 +21,7 @@ module statistic
   type :: tsta
     real(8) :: urms,machrms,macht,kolmoglength,kolmogvelocity,        &
                kolmogtime,taylorlength,retaylor
+    real(8) :: rhoe
   end type tsta
   !
   integer :: nsamples,nstep_sbeg
@@ -451,14 +452,14 @@ module statistic
   subroutine turbstats
     !
     use commvar,  only : reynolds,lrestart,mach
-    use commarray,only : vel,rho,tmp,dvel
+    use commarray,only : vel,rho,tmp,dvel,q
     use fludyna,  only : miucal,sos
     use utility,  only : listinit,listwrite
     !
     type(tsta) :: stas
     !
     integer :: i,j,k,ns
-    real(8) :: s11,s12,s13,s22,s23,s33,div
+    real(8) :: s11,s12,s13,s22,s23,s33,div,miu,dissa
     real(8) :: rsamples,miudrho,dudx2,csavg,v2,cs,ufluc
     !
     logical :: fex
@@ -469,7 +470,7 @@ module statistic
       !
       if(lio) then
         call listinit(filename='turbstats.dat',handle=hand_fs, &
-                          firstline='nstep time urms taylorlength kolmoglength Retaylor machrms macht')
+                          firstline='nstep time urms taylorlength kolmoglength Retaylor machrms macht roE')
       endif
       !
       linit=.false.
@@ -484,9 +485,12 @@ module statistic
     miudrho=0.d0
     dudx2=0.d0
     csavg=0.d0
+    dissa=0.d0
     do k=1,km
     do j=1,jm
     do i=1,im
+      !
+      miu=miucal(tmp(i,j,k))/Reynolds
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -505,11 +509,15 @@ module statistic
       !
       dudx2=dudx2+s11**2+s22**2+s33**2
       !
-      miudrho=miudrho+miucal(tmp(i,j,k))/rho(i,j,k)/reynolds
+      miudrho=miudrho+miu/rho(i,j,k)
       !
       csavg=csavg+cs
       !
       stas%machrms=stas%machrms+v2/(cs*cs)
+      !
+      stas%rhoe=stas%rhoe+q(i,j,k,5)
+      !
+      dissa=dissa+2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)-num1d3*div**2)
       !
     enddo
     enddo
@@ -518,20 +526,23 @@ module statistic
     dudx2      = num1d3*psum(dudx2)/rsamples
     miudrho    = psum(miudrho)/rsamples
     csavg      = psum(csavg)/rsamples
+    dissa      = psum(dissa)/rsamples
     !
     stas%machrms=sqrt(psum(stas%machrms)/rsamples)
+    !
+    stas%rhoe=psum(stas%rhoe)/rsamples
     !
     ufluc=stas%urms/sqrt(3.d0)
     !
     stas%macht         = stas%urms/csavg
     stas%taylorlength  = ufluc/sqrt(dudx2)
     stas%retaylor      = ufluc*stas%taylorlength/miudrho
-    stas%kolmoglength  = sqrt(sqrt(miudrho**3/dissipation))
+    stas%kolmoglength  = sqrt(sqrt(miudrho**3/dissa))
     ! stas%kolmogvelocity= sqrt(sqrt(dissipation*miudrho))
     ! stas%kolmogtime    = sqrt(miudrho/dissipation)
     !
     if(lio) call listwrite(hand_fs,stas%urms,stas%taylorlength,       &
-                stas%kolmoglength,stas%Retaylor,stas%machrms,stas%macht)
+                stas%kolmoglength,stas%Retaylor,stas%machrms,stas%macht,stas%rhoe)
     !
   end subroutine turbstats
   !+-------------------------------------------------------------------+
