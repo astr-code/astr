@@ -2221,10 +2221,10 @@ module pp
     !
     use cmdefne,   only : readkeyboad
     use commvar,   only : gridfile,im,jm,km,ia,ja,ka,hm,Mach,Reynolds, &
-                          tinf,roinf
+                          tinf,roinf,spcinf,num_species,nondimen
     use bc,        only : twall
     use readwrite, only : readgrid
-    use commarray, only : x,vel,rho,tmp,prs,dvel
+    use commarray, only : x,vel,rho,tmp,prs,dvel,spc
     use solver,    only : refcal
     use parallel,  only : mpisizedis,parapp,parallelini
     use geom,      only : geomcal
@@ -2256,6 +2256,9 @@ module pp
     allocate(   x(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
+#ifdef COMB
+    allocate(spc(0:im,0:jm,0:km,1:num_species))
+#endif
     !
     ! call gridhitflame(mode='cubic')
     call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
@@ -2278,7 +2281,12 @@ module pp
         !
         rho(i,j,k)  = roinf
         tmp(i,j,k)  = tinf 
-        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        if(nondimen) then
+            prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        else
+            spc(i,j,k,:)= spcinf(:)
+            prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        endif
         vel(i,j,k,1)= urms*vel(i,j,k,1)
         vel(i,j,k,2)= urms*vel(i,j,k,2)
         vel(i,j,k,3)= urms*vel(i,j,k,3)
@@ -2325,7 +2333,12 @@ module pp
     do k=0,km
     do j=0,jm
     do i=0,im 
-      prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      if(nondimen) then
+        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      else
+        spc(i,j,k,:)= spcinf(:)
+        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+      endif
       !
       if(i==0 .or. j==0 .or. k==0) cycle
       !
