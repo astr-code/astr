@@ -322,42 +322,60 @@ module userdefine
   subroutine udf_src
     !
     use constdef
-    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka
-    use parallel, only : psum 
+    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,ymax,zmax
+    use parallel, only : mpirank,psum,bcast
     use commarray,only : rho,tmp,vel,qrhs,x,jacob
     ! !
     ! ! local data
     integer :: i,j,k,k1,k2
-    real(8) :: A(3,3),B(3,3),force(3)
-    real(8) :: FC,FR,var1,var2,tavg,at
+    real(8) :: force(3)
+    real(8),save :: A(3,3),B(3,3)
+    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz
     !
-    FR=1.d0/16.d0
-    FC=0.d0
-    !
-    var1=sqrt(num2d3*FC/deltat)
-    var2=sqrt(num1d3*FR/deltat)
-    !
-    do j=1,3
-    do i=1,3
-      call random_number(A(i,j))
-      call random_number(B(i,j))
-    end do
-    end do
-    !
-    A=sqrt(3.d0)*(2.d0*A-1.d0)
-    B=sqrt(3.d0)*(2.d0*B-1.d0)
-    !
-    do j=1,3
-    do i=1,3
-      if(i==j) then
-        A(i,j)=var1*A(i,j)
-        B(i,j)=var1*B(i,j)
-      else
-        A(i,j)=var2*A(i,j)
-        B(i,j)=var2*B(i,j)
+    if(rkstep==1) then
+      !
+      if(mpirank==0) then
+        !
+        FR=1.d0/16.d0
+        FC=0.d0
+        !
+        var1=sqrt(num2d3*FC/deltat)
+        var2=sqrt(num1d3*FR/deltat)
+        !
+        do j=1,3
+        do i=1,3
+          call random_number(A(i,j))
+          call random_number(B(i,j))
+        end do
+        end do
+        !
+        A=sqrt(3.d0)*(2.d0*A-1.d0)
+        B=sqrt(3.d0)*(2.d0*B-1.d0)
+        !
+        do j=1,3
+        do i=1,3
+          if(i==j) then
+            A(i,j)=var1*A(i,j)
+            B(i,j)=var1*B(i,j)
+          else
+            A(i,j)=var2*A(i,j)
+            B(i,j)=var2*B(i,j)
+          endif
+        end do
+        end do
+        !
       endif
-    end do
-    end do
+      !
+      call bcast(A)
+      call bcast(B)
+      !
+      A=10.d0*A
+      B=10.d0*B
+      !
+    endif
+    !
+    xs=1.d0
+    xe=10.d0
     !
     hsource=0.d0
     tavg=0.d0
@@ -365,31 +383,40 @@ module userdefine
     do k=0,km
     do j=0,jm
     do i=0,im
-      force(1)=A(1,1)*sin(x(i,j,k,1))+A(1,2)*sin(x(i,j,k,2))+      &
-               A(1,3)*sin(x(i,j,k,3))+B(1,1)*cos(x(i,j,k,1))+      &
-               B(1,2)*cos(x(i,j,k,2))+B(1,3)*cos(x(i,j,k,3))
       !
-      force(2)=A(2,1)*sin(x(i,j,k,1))+A(2,2)*sin(x(i,j,k,2))+      &
-               A(2,3)*sin(x(i,j,k,3))+B(2,1)*cos(x(i,j,k,1))+      &
-               B(2,2)*cos(x(i,j,k,2))+B(2,3)*cos(x(i,j,k,3))
-      !                                                          
-      force(3)=A(3,1)*sin(x(i,j,k,1))+A(3,2)*sin(x(i,j,k,2))+      &
-               A(3,3)*sin(x(i,j,k,3))+B(3,1)*cos(x(i,j,k,1))+      &
-               B(3,2)*cos(x(i,j,k,2))+B(3,3)*cos(x(i,j,k,3))
-      !
-      qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
-      qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
-      qrhs(i,j,k,4)=qrhs(i,j,k,4)+rho(i,j,k)*force(3)*jacob(i,j,k)
-      !
-      qrhs(i,j,k,5)=qrhs(i,j,k,5)+rho(i,j,k)*( force(1)*vel(i,j,k,1) + &
-                                               force(2)*vel(i,j,k,2) + &
-                                               force(3)*vel(i,j,k,3) )*jacob(i,j,k)
-      !
-      if(i.ne.0 .and. j.ne.0 .and. k.ne.0) then
-        hsource=hsource+rho(i,j,k)*(force(1)*vel(i,j,k,1) + &
-                                    force(2)*vel(i,j,k,2) + &
-                                    force(3)*vel(i,j,k,3))
-        tavg=tavg+tmp(i,j,k)
+      if(x(i,j,k,1)>xs .and. x(i,j,k,1)<xe) then
+        !
+        xx=2.d0*pi*(x(i,j,k,1)-xs)/(xe-xs)
+        yy=2.d0*pi*x(i,j,k,2)/ymax
+        zz=2.d0*pi*x(i,j,k,3)/zmax
+        !
+        force(1)=A(1,1)*sin(xx)+B(1,1)*cos(xx) + &
+                 A(1,2)*sin(yy)+B(1,2)*cos(yy) + &
+                 A(1,3)*sin(zz)+B(1,3)*cos(zz)
+        !
+        force(2)=A(2,1)*sin(xx)+B(2,1)*cos(xx) + &
+                 A(2,2)*sin(yy)+B(2,2)*cos(yy) + &
+                 A(2,3)*sin(zz)+B(2,3)*cos(zz)
+        !                                                          
+        force(3)=A(3,1)*sin(xx)+B(3,1)*cos(xx) + &
+                 A(3,2)*sin(yy)+B(3,2)*cos(yy) + &
+                 A(3,3)*sin(zz)+B(3,3)*cos(zz)
+        !
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+rho(i,j,k)*force(3)*jacob(i,j,k)
+        !
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+rho(i,j,k)*( force(1)*vel(i,j,k,1) + &
+                                                 force(2)*vel(i,j,k,2) + &
+                                                 force(3)*vel(i,j,k,3) )*jacob(i,j,k)
+        !
+        if(i.ne.0 .and. j.ne.0 .and. k.ne.0) then
+          hsource=hsource+rho(i,j,k)*(force(1)*vel(i,j,k,1) + &
+                                      force(2)*vel(i,j,k,2) + &
+                                      force(3)*vel(i,j,k,3))
+          tavg=tavg+tmp(i,j,k)
+        endif
+        !
       endif
       !
     end do
@@ -401,35 +428,14 @@ module userdefine
     do k=0,km
     do j=0,jm
     do i=0,im
-      qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
+      !
+      if(x(i,j,k,1)>xs .and. x(i,j,k,1)<xe) then
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
+      endif
+      !
     end do
     end do
     end do
-    !
-    ! real(8) :: dy,u1,u2,u3
-    ! !
-    ! if(ndims==2) then
-    !   k1=0
-    !   k2=0
-    ! elseif(ndims==3) then
-    !   k1=1
-    !   k2=km
-    ! else
-    !   print*,' !! ndims=',ndims
-    !   stop ' !! error @ massfluxchan !!'
-    ! endif
-    ! !
-    ! do k=0,km
-    ! do j=0,jm
-    ! do i=0,im
-    !   qrhs(i,j,k,2)=qrhs(i,j,k,2)+force(1)*jacob(i,j,k)
-    !   qrhs(i,j,k,3)=qrhs(i,j,k,3)+force(2)*jacob(i,j,k)
-    !   qrhs(i,j,k,4)=qrhs(i,j,k,4)+force(3)*jacob(i,j,k)
-    !   qrhs(i,j,k,5)=qrhs(i,j,k,5)+( force(1)*u1+force(2)*u2+   &
-    !                                 force(3)*u3 )*jacob(i,j,k)
-    ! end do
-    ! end do
-    ! end do
     !
   end subroutine udf_src
   !+-------------------------------------------------------------------+
