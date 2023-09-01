@@ -7045,7 +7045,7 @@ module bc
     enddo
     enddo
     !
-    allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
+    if(.not.allocated(rho_prof)) allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
     do j=0,jm

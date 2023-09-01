@@ -11,7 +11,7 @@ module mainloop
   use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
                       ptime,irk,jrk,irkm,jrkm
   use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep,lcracon,lreport,   &
-                      ltimrpt
+                      ltimrpt,rkstep
   use commarray,only: crinod
   use tecio
   use stlaio,   only: get_unit
@@ -287,7 +287,7 @@ module mainloop
     ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    integer :: nrk,i,j,k,m,n
+    integer :: i,j,k,m,n
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
@@ -328,9 +328,9 @@ module mainloop
       !
     endif
     !
-    do nrk=1,3
+    do rkstep=1,3
       !
-      if( (loop_counter==feqchkpt .or. loop_counter==0) .and. nrk==1 ) then
+      if( (loop_counter==feqchkpt .or. loop_counter==0) .and. rkstep==1 ) then
         lreport=.true.
       else
         lreport=.false.
@@ -355,7 +355,7 @@ module mainloop
       !   !
       !   do n=1,numq
       !     if(isnan(qrhs(i,j,k,n))) then
-      !       print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',nrk
+      !       print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',rkstep
       !       stop
       !     endif
       !   enddo
@@ -368,7 +368,7 @@ module mainloop
       !
       time_beg_2=ptime()
       !
-      if(nrk==1) then
+      if(rkstep==1) then
         !
         do m=1,numq
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
@@ -380,10 +380,10 @@ module mainloop
       !
       do m=1,numq
         !
-        q(0:im,0:jm,0:km,m)=rkcoe(1,nrk)*qsave(0:im,0:jm,0:km,m)+      &
-                            rkcoe(2,nrk)*q(0:im,0:jm,0:km,m)*          &
+        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+      &
+                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)*          &
                                      jacob(0:im,0:jm,0:km)+            &
-                            rkcoe(3,nrk)*qrhs(0:im,0:jm,0:km,m)*deltat
+                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
         !
         q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
         !
@@ -408,7 +408,7 @@ module mainloop
       !   !
       !   do n=1,num_species
       !     if(isnan(spc(i,j,k,n))) then
-      !       print*,'!! have NaN in spc !! is ',n,'in rk = ',nrk
+      !       print*,'!! have NaN in spc !! is ',n,'in rk = ',rkstep
       !       stop
       !     endif
       !   enddo
@@ -422,7 +422,7 @@ module mainloop
       if(lcracon) call crashfix(ctime(16))
       !
 #ifdef COMB
-      if(nrk==3) then
+      if(rkstep==3) then
         !
         time_beg_2=ptime()
         !
@@ -561,7 +561,7 @@ module mainloop
     ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(2,4)
-    integer :: nrk,i,j,k,m
+    integer :: i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable :: qsave(:,:,:,:),rhsav(:,:,:,:)
     !
@@ -585,7 +585,7 @@ module mainloop
     !
     allocate(qsave(0:im,0:jm,0:km,1:numq),rhsav(0:im,0:jm,0:km,1:numq))
     !
-    do nrk=1,4
+    do rkstep=1,4
       !
       qrhs=0.d0
       !
@@ -599,7 +599,7 @@ module mainloop
       !
       call rhscal(timerept=ltimrpt)
       !
-      if(nrk==1) then
+      if(rkstep==1) then
         !
         do m=1,numq
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
@@ -610,20 +610,20 @@ module mainloop
         !
       endif
       !
-      if(nrk<=3) then
+      if(rkstep<=3) then
         do m=1,numq
           q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
-                              rkcoe(1,nrk)*deltat*qrhs(0:im,0:jm,0:km,m)
+                              rkcoe(1,rkstep)*deltat*qrhs(0:im,0:jm,0:km,m)
           !
           q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
           !
           rhsav(0:im,0:jm,0:km,m)=rhsav(0:im,0:jm,0:km,m)+             &
-                                  rkcoe(2,nrk)*qrhs(0:im,0:jm,0:km,m)
+                                  rkcoe(2,rkstep)*qrhs(0:im,0:jm,0:km,m)
         enddo
       else
         do m=1,numq
           q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
-                                  rkcoe(1,nrk)*deltat*(                &
+                                  rkcoe(1,rkstep)*deltat*(                &
                                  qrhs(0:im,0:jm,0:km,m)+               &
                                  rhsav(0:im,0:jm,0:km,m) )
           !
