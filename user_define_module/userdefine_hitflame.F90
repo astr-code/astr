@@ -399,17 +399,22 @@ module userdefine
   subroutine udf_src
     !
     use constdef
-    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,ymax,zmax
+    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,xmax,ymax,zmax
     use parallel, only : mpirank,psum,bcast
     use commarray,only : rho,tmp,vel,qrhs,x,jacob
     ! !
     ! ! local data
-    integer :: i,j,k,k1,k2
-    real(8) :: force(3)
-    real(8),save :: A(3,3),B(3,3)
-    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz
+    integer,parameter :: nfan=5 !the number of fans
     !
-    if(rkstep==1) then
+    integer :: i,j,k,k1,k2,n
+    real(8) :: force(3)
+    logical,save :: linit=.true.
+    real(8),save :: A(3,3,nfan),B(3,3,nfan)
+    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave
+    real(8) :: xs1,xs2,xs3,xs4,xs5
+    integer,allocatable :: seed(:)
+    !
+    if(linit) then
       !
       if(mpirank==0) then
         !
@@ -419,10 +424,18 @@ module userdefine
         var1=sqrt(num2d3*FC/deltat)
         var2=sqrt(num1d3*FR/deltat)
         !
+        call random_seed(size=n)
+        allocate(seed(n))
+        seed = 1    ! putting arbitrary seed to all elements
+        call random_seed(put=seed)
+        deallocate(seed)
+        !
+        do n=1,nfan
         do j=1,3
         do i=1,3
-          call random_number(A(i,j))
-          call random_number(B(i,j))
+          call random_number(A(i,j,n))
+          call random_number(B(i,j,n))
+        end do
         end do
         end do
         !
@@ -432,11 +445,11 @@ module userdefine
         do j=1,3
         do i=1,3
           if(i==j) then
-            A(i,j)=var1*A(i,j)
-            B(i,j)=var1*B(i,j)
+            A(i,j,:)=var1*A(i,j,:)
+            B(i,j,:)=var1*B(i,j,:)
           else
-            A(i,j)=var2*A(i,j)
-            B(i,j)=var2*B(i,j)
+            A(i,j,:)=var2*A(i,j,:)
+            B(i,j,:)=var2*B(i,j,:)
           endif
         end do
         end do
@@ -446,13 +459,17 @@ module userdefine
       call bcast(A)
       call bcast(B)
       !
-      A=10.d0*A
-      B=10.d0*B
+      A=0.9594d0*A
+      B=0.9594d0*B
       !
+      linit=.false.
+      !  
     endif
     !
-    xs=0.0089d0
-    xe=0.02d0
+    lwave=ymax
+    !
+    xs=1.1065d-2
+    xe=xs+4.d0*lwave
     !
     hsource=0.d0
     tavg=0.d0
@@ -461,23 +478,25 @@ module userdefine
     do j=0,jm
     do i=0,im
       !
-      if(x(i,j,k,1)>xs .and. x(i,j,k,1)<xe) then
+      if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
         !
-        xx=2.d0*pi*(x(i,j,k,1)-xs)/(xe-xs)
-        yy=2.d0*pi*x(i,j,k,2)/ymax
-        zz=2.d0*pi*x(i,j,k,3)/zmax
+        n=int((x(i,j,k,1)-xs)/lwave)+1
         !
-        force(1)=A(1,1)*sin(xx)+B(1,1)*cos(xx) + &
-                 A(1,2)*sin(yy)+B(1,2)*cos(yy) + &
-                 A(1,3)*sin(zz)+B(1,3)*cos(zz)
+        xx=(x(i,j,k,1)-xs)/lwave*2.d0*pi
+        yy=x(i,j,k,2)/lwave*2.d0*pi
+        zz=x(i,j,k,3)/lwave*2.d0*pi
         !
-        force(2)=A(2,1)*sin(xx)+B(2,1)*cos(xx) + &
-                 A(2,2)*sin(yy)+B(2,2)*cos(yy) + &
-                 A(2,3)*sin(zz)+B(2,3)*cos(zz)
+        force(1)=A(1,1,n)*sin(xx)+B(1,1,n)*cos(xx) + &
+                 A(1,2,n)*sin(yy)+B(1,2,n)*cos(yy) + &
+                 A(1,3,n)*sin(zz)+B(1,3,n)*cos(zz)
+        !
+        force(2)=A(2,1,n)*sin(xx)+B(2,1,n)*cos(xx) + &
+                 A(2,2,n)*sin(yy)+B(2,2,n)*cos(yy) + &
+                 A(2,3,n)*sin(zz)+B(2,3,n)*cos(zz)
         !                                                          
-        force(3)=A(3,1)*sin(xx)+B(3,1)*cos(xx) + &
-                 A(3,2)*sin(yy)+B(3,2)*cos(yy) + &
-                 A(3,3)*sin(zz)+B(3,3)*cos(zz)
+        force(3)=A(3,1,n)*sin(xx)+B(3,1,n)*cos(xx) + &
+                 A(3,2,n)*sin(yy)+B(3,2,n)*cos(yy) + &
+                 A(3,3,n)*sin(zz)+B(3,3,n)*cos(zz)
         !
         qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
         qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
@@ -506,7 +525,7 @@ module userdefine
     do j=0,jm
     do i=0,im
       !
-      if(x(i,j,k,1)>xs .and. x(i,j,k,1)<xe) then
+      if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
         qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
       endif
       !

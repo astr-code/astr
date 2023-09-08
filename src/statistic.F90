@@ -829,7 +829,7 @@ module statistic
           write(*,'(2X,92A)')('-',i=1,91)
         endif
         !
-        write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
+        write(*,"(2X,I7,1X,E13.6E2,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         !
       endif
       !

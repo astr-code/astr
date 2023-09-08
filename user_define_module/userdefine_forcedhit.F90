@@ -321,6 +321,7 @@ module userdefine
   !+-------------------------------------------------------------------+
   !| This subroutine add a source term to the rsd of the equation to   |
   !| hit flame.                                                        |
+  !| a random force acting like fans to input energy at largest scale  |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -334,11 +335,14 @@ module userdefine
     use commarray,only : rho,tmp,vel,qrhs,x,jacob
     ! !
     ! ! local data
+    integer,parameter :: nfan=5 !the number of fans
+    !
     integer :: i,j,k,k1,k2,n
     real(8) :: force(3)
     logical,save :: linit=.true.
-    real(8),save :: A(3,3,3),B(3,3,3)
-    real(8) :: FC,FR,var1,var2,tavg,at,xs,xs1,xs2,xe,xx,yy,zz,lwave
+    real(8),save :: A(3,3,nfan),B(3,3,nfan)
+    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave
+    real(8) :: xs1,xs2,xs3,xs4,xs5
     integer,allocatable :: seed(:)
     !
     if(linit) then
@@ -357,7 +361,7 @@ module userdefine
         call random_seed(put=seed)
         deallocate(seed)
         !
-        do n=1,3
+        do n=1,nfan
         do j=1,3
         do i=1,3
           call random_number(A(i,j,n))
@@ -390,15 +394,13 @@ module userdefine
       B=1.d0*B
       !
       linit=.false.
-      !sca  
+      !  
     endif
     !
-    lwave=2.d0*pi/ymax
+    lwave=ymax
     !
-    xs=10.d0
-    xs1=10.d0+2.d0*pi
-    xs2=10.d0+4.d0*pi
-    xe =10.d0+6.d0*pi
+    xs=5.d0
+    xe=xs+4.d0*lwave
     !
     hsource=0.d0
     tavg=0.d0
@@ -409,17 +411,11 @@ module userdefine
       !
       if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
         !
-        if(x(i,j,k,1)<=xs1) then
-          n=1
-        elseif(x(i,j,k,1)<=xs2) then
-          n=2
-        else
-          n=3
-        endif
+        n=int((x(i,j,k,1)-xs)/lwave)+1
         !
-        xx=(x(i,j,k,1)-xs)/lwave
-        yy=x(i,j,k,2)/lwave
-        zz=x(i,j,k,3)/lwave
+        xx=(x(i,j,k,1)-xs)/lwave*2.d0*pi
+        yy=x(i,j,k,2)/lwave*2.d0*pi
+        zz=x(i,j,k,3)/lwave*2.d0*pi
         !
         force(1)=A(1,1,n)*sin(xx)+B(1,1,n)*cos(xx) + &
                  A(1,2,n)*sin(yy)+B(1,2,n)*cos(yy) + &
