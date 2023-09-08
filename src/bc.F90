@@ -1690,6 +1690,8 @@ module bc
       !
       call h5io_end
       !
+      xi=xi
+      !
       x0=xi(0)
       xm=xi(idim)
       !
@@ -1743,7 +1745,7 @@ module bc
     do k=0,km
     do j=0,jm
       !
-      rho_in(j,k)  =  rho_prof(j) + roinf
+      rho_in(j,k)  =  rho_in(j,k) + roinf
       !
       ! to enforce no back flow
       if(vel_in(j,k,1)+uinf<0.d0) then
