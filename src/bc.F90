@@ -1690,7 +1690,7 @@ module bc
       !
       call h5io_end
       !
-      xi=xi/(2.d0*pi)*5.3d0*3.76d-4
+      xi=xi
       !
       x0=xi(0)
       xm=xi(idim)
