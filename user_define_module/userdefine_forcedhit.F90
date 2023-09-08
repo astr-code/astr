@@ -170,7 +170,7 @@ module userdefine
     integer :: i,j,k,ns
     real(8) :: s11,s12,s13,s22,s23,s33,div,miu,dissa
     real(8) :: rsamples,miudrho,dudx2,csavg,v2,cs,ufluc,ens,omegax,omegay,omegaz
-    real(8) :: urms,taylorlength,kolmoglength,Retaylor,machrms,macht,rhoe
+    real(8) :: urms,taylorlength,kolmoglength,Retaylor,machrms,macht,rhoe,skewness,du2,du3
     !
     logical :: fex
     logical,save :: linit=.true.
@@ -180,7 +180,7 @@ module userdefine
       !
       if(lio) then
         call listinit(filename='fturbstats.dat',handle=hand_fs, &
-                      firstline='nstep time urms enstrophy taylorlength kolmoglength Retaylor machrms macht Tavg hsource')
+                      firstline='nstep time urms enstrophy taylorlength kolmoglength Retaylor machrms macht Tavg hsource skewness')
       endif
       !
       linit=.false.
@@ -197,6 +197,8 @@ module userdefine
     csavg=0.d0
     dissa=0.d0
     ens=0.d0
+    du3=0.d0
+    du2=0.d0
     do k=1,km
     do j=1,jm
     do i=1,im
@@ -236,6 +238,8 @@ module userdefine
       !
       ens=ens+(omegax*omegax+omegay*omegay+omegaz*omegaz)
       !
+      du3=du3+(s11*s11*s11+s22*s22*s22+s33*s33*s33)
+      du2=du2+(s11*s11+s22*s22+s33*s33)
     enddo
     enddo
     enddo
@@ -257,10 +261,13 @@ module userdefine
     taylorlength  = ufluc/sqrt(dudx2)
     retaylor      = ufluc*taylorlength/miudrho
     kolmoglength  = sqrt(sqrt(miudrho**3/dissa))
+
+    skewness      = psum(du3)/(3.d0*rsamples)/sqrt((psum(du2)/(3.d0*rsamples))**3)
     ! kolmogvelocity= sqrt(sqrt(dissipation*miudrho))
     ! kolmogtime    = sqrt(miudrho/dissipation)
     !
-    if(lio) call listwrite(hand_fs,urms,ens,taylorlength,kolmoglength,Retaylor,machrms,macht,rhoe,hsource)
+    if(lio) call listwrite(hand_fs,urms,ens,taylorlength,kolmoglength, &
+                           Retaylor,machrms,macht,rhoe,hsource,skewness)
     !
   end subroutine udf_stalist
   !+-------------------------------------------------------------------+
@@ -322,17 +329,19 @@ module userdefine
   subroutine udf_src
     !
     use constdef
-    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,ymax,zmax
+    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,xmax,ymax,zmax
     use parallel, only : mpirank,psum,bcast
     use commarray,only : rho,tmp,vel,qrhs,x,jacob
     ! !
     ! ! local data
-    integer :: i,j,k,k1,k2
+    integer :: i,j,k,k1,k2,n
     real(8) :: force(3)
-    real(8),save :: A(3,3),B(3,3)
-    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz
+    logical,save :: linit=.true.
+    real(8),save :: A(3,3,3),B(3,3,3)
+    real(8) :: FC,FR,var1,var2,tavg,at,xs,xs1,xs2,xe,xx,yy,zz,lwave
+    integer,allocatable :: seed(:)
     !
-    if(rkstep==1) then
+    if(linit) then
       !
       if(mpirank==0) then
         !
@@ -342,10 +351,18 @@ module userdefine
         var1=sqrt(num2d3*FC/deltat)
         var2=sqrt(num1d3*FR/deltat)
         !
+        call random_seed(size=n)
+        allocate(seed(n))
+        seed = 1    ! putting arbitrary seed to all elements
+        call random_seed(put=seed)
+        deallocate(seed)
+        !
+        do n=1,3
         do j=1,3
         do i=1,3
-          call random_number(A(i,j))
-          call random_number(B(i,j))
+          call random_number(A(i,j,n))
+          call random_number(B(i,j,n))
+        end do
         end do
         end do
         !
@@ -355,11 +372,11 @@ module userdefine
         do j=1,3
         do i=1,3
           if(i==j) then
-            A(i,j)=var1*A(i,j)
-            B(i,j)=var1*B(i,j)
+            A(i,j,:)=var1*A(i,j,:)
+            B(i,j,:)=var1*B(i,j,:)
           else
-            A(i,j)=var2*A(i,j)
-            B(i,j)=var2*B(i,j)
+            A(i,j,:)=var2*A(i,j,:)
+            B(i,j,:)=var2*B(i,j,:)
           endif
         end do
         end do
@@ -369,13 +386,19 @@ module userdefine
       call bcast(A)
       call bcast(B)
       !
-      A=10.d0*A
-      B=10.d0*B
+      A=1.d0*A
+      B=1.d0*B
       !
+      linit=.false.
+      !sca  
     endif
     !
-    xs=1.d0
-    xe=10.d0
+    lwave=2.d0*pi/ymax
+    !
+    xs=10.d0
+    xs1=10.d0+2.d0*pi
+    xs2=10.d0+4.d0*pi
+    xe =10.d0+6.d0*pi
     !
     hsource=0.d0
     tavg=0.d0
@@ -384,23 +407,31 @@ module userdefine
     do j=0,jm
     do i=0,im
       !
-      if(x(i,j,k,1)>xs .and. x(i,j,k,1)<xe) then
+      if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
         !
-        xx=2.d0*pi*(x(i,j,k,1)-xs)/(xe-xs)
-        yy=2.d0*pi*x(i,j,k,2)/ymax
-        zz=2.d0*pi*x(i,j,k,3)/zmax
+        if(x(i,j,k,1)<=xs1) then
+          n=1
+        elseif(x(i,j,k,1)<=xs2) then
+          n=2
+        else
+          n=3
+        endif
         !
-        force(1)=A(1,1)*sin(xx)+B(1,1)*cos(xx) + &
-                 A(1,2)*sin(yy)+B(1,2)*cos(yy) + &
-                 A(1,3)*sin(zz)+B(1,3)*cos(zz)
+        xx=(x(i,j,k,1)-xs)/lwave
+        yy=x(i,j,k,2)/lwave
+        zz=x(i,j,k,3)/lwave
         !
-        force(2)=A(2,1)*sin(xx)+B(2,1)*cos(xx) + &
-                 A(2,2)*sin(yy)+B(2,2)*cos(yy) + &
-                 A(2,3)*sin(zz)+B(2,3)*cos(zz)
+        force(1)=A(1,1,n)*sin(xx)+B(1,1,n)*cos(xx) + &
+                 A(1,2,n)*sin(yy)+B(1,2,n)*cos(yy) + &
+                 A(1,3,n)*sin(zz)+B(1,3,n)*cos(zz)
+        !
+        force(2)=A(2,1,n)*sin(xx)+B(2,1,n)*cos(xx) + &
+                 A(2,2,n)*sin(yy)+B(2,2,n)*cos(yy) + &
+                 A(2,3,n)*sin(zz)+B(2,3,n)*cos(zz)
         !                                                          
-        force(3)=A(3,1)*sin(xx)+B(3,1)*cos(xx) + &
-                 A(3,2)*sin(yy)+B(3,2)*cos(yy) + &
-                 A(3,3)*sin(zz)+B(3,3)*cos(zz)
+        force(3)=A(3,1,n)*sin(xx)+B(3,1,n)*cos(xx) + &
+                 A(3,2,n)*sin(yy)+B(3,2,n)*cos(yy) + &
+                 A(3,3,n)*sin(zz)+B(3,3,n)*cos(zz)
         !
         qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
         qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
@@ -429,7 +460,7 @@ module userdefine
     do j=0,jm
     do i=0,im
       !
-      if(x(i,j,k,1)>xs .and. x(i,j,k,1)<xe) then
+      if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
         qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
       endif
       !
