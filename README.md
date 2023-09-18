@@ -23,7 +23,7 @@ By default ASTR solves equations under non-dimensional form, unless the chemstry
 create a case folder, e.g.
 mkdir test_case
 cd test_case
-cmake path_to_the_source
+cmake -DCHEMISTRY=FALSE path_to_the_source
 make
 make install
 ctest -L nondim
@@ -39,7 +39,7 @@ python scons/scripts/scons.py install
 
 you may need to make and test ASTR with chemstry with following cmake commands:
 export CANTERA_DIR=<the directory of centera to install>
-cmake
+cmake -DCHEMISTRY=TRUE path_to_the_source
 make 
 make install
 ctest -L combustion
