@@ -1,6 +1,6 @@
 install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples)
 add_subdirectory(Taylor_Green_Vortex)
-add_subdirectory(Taylor_Green_Vortex_with_Flame)
+add_subdirectory(Taylor_Green_Vortex_2D)
 add_subdirectory(Channel)
 add_subdirectory(Rayleigh–Taylor-Instability)
 add_subdirectory(Shuosher)

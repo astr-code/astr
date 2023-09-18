@@ -6,7 +6,7 @@
 tgv
 
 # im,jm,km                                              : The size of grid.
-128,128,0
+128,128,128
 
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 t,t,t
