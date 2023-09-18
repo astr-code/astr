@@ -55,7 +55,7 @@ module gridgeneration
       elseif(trim(flowtype)=='channel') then
         call grichan(2.d0*pi,pi)
       elseif(trim(flowtype)=='0dreactor') then
-        call gridcube(1.d0,1.d0,1.d0)
+        call gridhitflame(mode='cuboid')
       elseif(trim(flowtype)=='1dflame') then
         call gridcube(1.d-2,1.d-3,0.d0)
       elseif(trim(flowtype)=='h2supersonic') then

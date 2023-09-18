@@ -1868,66 +1868,98 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine onedflameini
     !
-    use commvar,  only: pinf,ia,num_species
+    use commvar,  only: im,jm,km,ndims,roinf,uinf,nondimen,xmax,  &
+                        ia,num_species,ymax,vinf,winf,pinf,tinf,spcinf
     use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use fludyna,  only: thermal
+    use parallel, only: lio
+    use fludyna,  only: thermal,sos
+    !
+    use parallel, only: lio,bcast
     !
 #ifdef COMB
-    use thermchem,only: convertxiyi,spcindex
+    !
+    use thermchem,only : tranco,spcindex,mixture,convertxiyi
+    use cantera 
     !
     ! local data
     integer :: i,j,k
-    real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
-      specp(num_species),arg,prgvar,masflx,specx(num_species),yloc
+    real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specp(num_species),arg,prgvar,masflx,specx(num_species)
+    real(8) :: pthick,flamethickness
+    real(8) :: cpe,miu,kama,cs,lref
+    real(8) :: specr(num_species),dispec(num_species)
+    ! 
     !
-    tmpr=650.d0
-    xloc=0.d0
-    xwid=1.d-3
+    if(lio) then
+      open(12,file='datin/userinput.txt')
+      read(12,*)flamethickness
+      close(12)
+      print*, ' ** flamethickness =',flamethickness
+    endif
+    !
+    call bcast(flamethickness)
     !
     !reactants
     specr(:)=0.d0
-    specr(spcindex('H2'))=0.031274  
-    specr(spcindex('O2'))=0.22563  
+    specr(spcindex('H2'))=0.0173
+    specr(spcindex('O2'))=0.2289
     specr(spcindex('N2'))=1.d0-sum(specr)
     !
-    ! specx(:)=0.d0
-    ! specx(spcindex('H2'))=0.2957746478873239d0
-    ! specx(spcindex('O2'))=0.14788732394366194d0
-    ! specx(spcindex('N2'))=1.d0-sum(specx)
+    ! pinf=5.d0*pinf
+    uinf=0.97d0
+    vinf=0.d0
+    winf=0.d0
+    tinf=300.d0
+    spcinf(:)=specr(:)
+    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
-    ! specr(spcindex('CH4'))=5.5045872d-2
-    ! specr(spcindex('O2'))=2.20183486d-1
-    ! call convertxiyi(specx(:),specr(:),'X2Y')
+    cs=sos(tinf,spcinf)
     !
-    ! specr(spcindex('nc7h16'))=0.06218387d0
-    ! specr(spcindex('o2'))=0.21843332
-    ! specr(spcindex('n2'))=1.d0-sum(specr)
+    lref=flamethickness
+    !
+    call tranco(den=roinf,tmp=tinf,cp=cpe,mu=miu,lam=kama, &
+                spc=specr,rhodi=dispec)
+
+    if(lio) then
+
+      print*,' ---------------------------------------------------------------'
+      print*,'                      free stream quatities                     '
+      print*,' --------------------------+------------------------------------'
+      print*,'                        u∞ | ',uinf,'m/s'
+      print*,'                        T∞ | ',tinf,'K'
+      print*,'                      rho∞ | ',roinf,'kg/m**3'
+      print*,'                        p∞ | ',pinf,'Pa'
+      print*,'          reference length | ',lref,'m'
+      print*,'                 viscosity | ',miu,'kg/(ms)'
+      print*,'                       Re∞ | ',roinf*uinf*lref/miu
+      print*,'            speed of sound | ',cs,'m/s'
+      print*,'                       Ma∞ | ',uinf/cs
+      print*,' --------------------------+------------------------------------'
+
+    endif
+    !
+    tmpr=300.d0
+    xloc=3.d0*xmax/4.d0
+    xwid=xmax/(12.d0*5.3d0*2.d0)
     !
     !products
-    tmpp=1.7d+03
-    ! tmpp=1.417d+03
-    specp(:)=0.d0
-    ! specp(spcindex('CO2'))=1.51376d-1
-    ! specp(spcindex('H2O'))=1.23853d-1
-    ! specp(spcindex('N2'))=1.d0-sum(specp)
+    tmpp=1814.32d0
+    !
+    ! pthick=1.d-4
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       !
       xc=x(i,j,k,1)
-      yc=x(i,j,k,2)
       !
-      if(ndims==3) stop '!!Error - 3D case not configured!!'
-      if(abs(xc-xloc)<xwid*0.5d0*1.2d0) then 
-        prgvar=1.d0
-        if(abs(xc-xloc)>xwid*0.5d0) &
-        prgvar=1.d0-(abs(xc-xloc)-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
-      else
-        prgvar=0.d0
-      endif 
+      prgvar=1.d0*exp(-0.5d0*((xc-xloc)/xwid)**2)
       !
-      spc(i,j,k,:)=specr(:)!+prgvar*(specp(js)-specr(js))
+      spc(i,j,k,:)=specr(:)
+      !
+      vel(i,j,k,1)=uinf
+      !
+      vel(i,j,k,2)=0.d0
+      vel(i,j,k,3)=0.d0
       !
       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
       !
@@ -1935,21 +1967,12 @@ module initialisation
       !
       rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
                           species=spc(i,j,k,:))
-      !
-      vel(i,j,k,:)=0.d0
-      !
-      ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
     enddo
     enddo
     enddo
-    uinf=0.d0
-    vinf=0.d0
-    winf=0.d0
-    tinf=tmpp
-    spcinf(:)=specr(:)
-    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
-    if(lio)  write(*,'(A,I1,A)')'  ** 1D flame initialised.'
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** onedflame initialised.'
     !
 #endif
     !

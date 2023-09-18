@@ -44,13 +44,13 @@ none,h
 1
 
 # ninit                                                 : Initial method
-1
+0
 
 # spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax : Sponge layer range
 0, 0, 0, 0, 0, 0
 
 # gridfile
-''
+datin/grid.h5
 
 # chemfile
 datin/ES80_H2-7-16.yaml

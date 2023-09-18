@@ -228,8 +228,10 @@ module readwrite
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                      *** Flow Parameters ***'
       if(nondimen) then
-         write(*,'(4X,3(A20))')'ref_t','Reynolds','Mach'
-         write(*,"(4X,3(F20.6))")ref_t,reynolds,mach
+        write(*,'(4X,3(A20))')'ref_t','Reynolds','Mach'
+        write(*,"(4X,3(F20.6))")ref_t,reynolds,mach
+      else
+        write(*,'(35X,A)')' everything is under SI units'
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                          *** sceheme ***'
