@@ -18,13 +18,15 @@ make
 in the directory containing src folder, and the executable will be found as ./bin/astr 
 
 The cmake gives a more complete and safe way of compiling and installing the code.
+By default ASTR solves equations under non-dimensional form, unless the chemstry is included.
+
 create a case folder, e.g.
 mkdir test_case
 cd test_case
 cmake path_to_the_source
 make
 make install
-make test
+ctest -L nondim
 
 The code will be installed in test_case and excutable can be found at test_case/bin/astr
 
@@ -34,6 +36,13 @@ python scons/scripts/scons.py build python_package=none FORTRAN=<your fortran co
 python scons/scripts/scons.py test
 
 python scons/scripts/scons.py install
+
+you may need to make and test ASTR with chemstry with following cmake commands:
+export CANTERA_DIR=<the directory of centera to install>
+cmake
+make 
+make install
+ctest -L combustion
 
 
 ## Run the solver:
