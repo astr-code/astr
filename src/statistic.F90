@@ -12,18 +12,25 @@ module statistic
                        zmin,zmax,nstep,deltat,force,numq,num_species,  &
                        lreport,ltimrpt
   use parallel, only : mpirank,lio,psum,pmax,pmin,bcast,mpistop,       &
-                       irk,jrk,jrkm,ptime
+                       irk,jrk,irkm,jrkm,ptime
   use stlaio,  only: get_unit
   use utility, only: timereporter
   !
   implicit none
+  !
+  type :: tsta
+    real(8) :: urms,machrms,macht,kolmoglength,kolmogvelocity,        &
+               kolmogtime,taylorlength,retaylor
+    real(8) :: rhoe
+  end type tsta
   !
   integer :: nsamples,nstep_sbeg
   logical :: lmeanallocated=.false.
   logical :: liosta=.false.
   real(8) :: time_sbeg
   real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
-             wallheatflux,dissipation,nominal_thickness
+             wallheatflux,dissipation,nominal_thickness,xflame,vflame, &
+             poutrt
   real(8) :: maxT,overall_qdot,v_H2O,v_HO2
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8) :: umax,rhomax,tmpmax,qdotmax
@@ -42,6 +49,8 @@ module statistic
                                           sgmam12,sgmam13,sgmam23,     &
                                           disspa,predil,               &
                                           visdif1,visdif2,visdif3
+  !
+  type(tsta) :: hitsta
   !
   contains
   !
@@ -432,6 +441,115 @@ module statistic
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to calculate turbulence statistics.            |
+  !+-------------------------------------------------------------------+
+  !| ref: Samtaney, et al., Physics of Fluids, 2001,13,1415-1430.      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-08-2023  | Created by J. Fang STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine turbstats
+    !
+    use commvar,  only : reynolds,lrestart,mach
+    use commarray,only : vel,rho,tmp,dvel,q
+    use fludyna,  only : miucal,sos
+    use utility,  only : listinit,listwrite
+    !
+    type(tsta) :: stas
+    !
+    integer :: i,j,k,ns
+    real(8) :: s11,s12,s13,s22,s23,s33,div,miu,dissa
+    real(8) :: rsamples,miudrho,dudx2,csavg,v2,cs,ufluc
+    !
+    logical :: fex
+    logical,save :: linit=.true.
+    integer,save :: hand_fs
+    !
+    if(linit) then
+      !
+      if(lio) then
+        call listinit(filename='turbstats.dat',handle=hand_fs, &
+                          firstline='nstep time urms taylorlength kolmoglength Retaylor machrms macht roE')
+      endif
+      !
+      linit=.false.
+      !
+    endif
+    !
+    rsamples=dble(ia*ja*ka)
+    !
+    stas%urms=0.d0
+    stas%machrms=0.d0
+    !
+    miudrho=0.d0
+    dudx2=0.d0
+    csavg=0.d0
+    dissa=0.d0
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      !
+      miu=miucal(tmp(i,j,k))/Reynolds
+      !
+      s11=dvel(i,j,k,1,1)
+      s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
+      s13=0.5d0*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
+      s22=dvel(i,j,k,2,2)
+      s23=0.5d0*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
+      s33=dvel(i,j,k,3,3)
+      !
+      ! div=s11+s22+s33
+      !
+      v2=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
+      !
+      cs=sos(tmp(i,j,k))
+      !
+      stas%urms=stas%urms+v2
+      !
+      dudx2=dudx2+s11**2+s22**2+s33**2
+      !
+      miudrho=miudrho+miu/rho(i,j,k)
+      !
+      csavg=csavg+cs
+      !
+      stas%machrms=stas%machrms+v2/(cs*cs)
+      !
+      stas%rhoe=stas%rhoe+q(i,j,k,5)
+      !
+      dissa=dissa+2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)-num1d3*div**2)
+      !
+    enddo
+    enddo
+    enddo
+    stas%urms  = sqrt(psum(stas%urms)/rsamples)
+    dudx2      = num1d3*psum(dudx2)/rsamples
+    miudrho    = psum(miudrho)/rsamples
+    csavg      = psum(csavg)/rsamples
+    dissa      = psum(dissa)/rsamples
+    !
+    stas%machrms=sqrt(psum(stas%machrms)/rsamples)
+    !
+    stas%rhoe=psum(stas%rhoe)/rsamples
+    !
+    ufluc=stas%urms/sqrt(3.d0)
+    !
+    stas%macht         = stas%urms/csavg
+    stas%taylorlength  = ufluc/sqrt(dudx2)
+    stas%retaylor      = ufluc*stas%taylorlength/miudrho
+    stas%kolmoglength  = sqrt(sqrt(miudrho**3/dissa))
+    ! stas%kolmogvelocity= sqrt(sqrt(dissipation*miudrho))
+    ! stas%kolmogtime    = sqrt(miudrho/dissipation)
+    !
+    if(lio) call listwrite(hand_fs,stas%urms,stas%taylorlength,       &
+                stas%kolmoglength,stas%Retaylor,stas%machrms,stas%macht,stas%rhoe)
+    !
+  end subroutine turbstats
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine turbstats.                              |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to calculate and output instantous status.|
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -441,7 +559,8 @@ module statistic
   subroutine statcal(timerept)
     !
     use commvar,  only : flowtype,voldom
-    use commarray,only : vel,prs,rho,tmp,spc,cell
+    use commarray,only : vel,prs,rho,tmp,spc,cell,x
+    use interp,   only : interlinear
 #ifdef COMB
     use thermchem,only : heatrate,spcindex
 #endif
@@ -451,7 +570,7 @@ module statistic
     !
     ! local data
     integer :: i,j,k
-    real(8) :: time_beg,qdot
+    real(8) :: time_beg,qdot,var1,var2
     real(8),save :: subtime=0.d0
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
@@ -460,6 +579,13 @@ module statistic
       enstophy=enstophycal()
       kenergy =kenergycal()
       dissipation=diss_rate_cal()
+      !
+      if(trim(flowtype)=='hit') then
+        !
+        call turbstats
+        !
+      endif
+      !
     elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
       fbcx=fbcxbl()
       massflux=massfluxcal()
@@ -548,16 +674,25 @@ module statistic
       !
       enstophy=enstophycal()
       !
+      var1=0.d0
+      var2=0.d0
+      !
       qdotmax=-1.d30
+      !
       do i=0,im
         do j=0,jm
           do k=0,km
+            !
             qdot=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
-            if(qdot>qdotmax)qdotmax=qdot
+            if(qdot>qdotmax) then
+              qdotmax=qdot
+            endif
+            !
           enddo 
         enddo 
       enddo  
       qdotmax=pmax(qdotmax)
+      !
 #endif
       !
     endif
@@ -629,6 +764,7 @@ module statistic
     !
     use commvar, only : flowtype,nstep,time,maxstep,lrestart,feqlist,uinf
     use parallel,only : ptime
+    use utility,  only : listinit,listwrite
     !
     ! arguments
     real(8),intent(in),optional :: time_verybegin
@@ -640,131 +776,60 @@ module statistic
     integer :: i,ferr,ns,walltime
     integer,save :: hand_fs
     real(8) :: l_0
+    character(len=1024) :: fstitle
     ! 
     if(lio) then
       !
       if(linit) then
         !
-        inquire(file='flowstate.dat',exist=fex)
-        hand_fs=get_unit()
-        open(hand_fs,file='flowstate.dat')
-        !
-        if(lrestart .and. fex) then
-          ! resume flowstate.dat
-          ns=0
-          read(hand_fs,*)
-          do while(ns<nstep)
-            !
-            read(hand_fs,*,iostat=ferr)ns
-            !
-            if(ferr< 0) then
-              print*,' ** nstep=',ns,nstep
-              print*,' ** end of flowstate.dat is reached.'
-              exit
-            endif
-            !
-          enddo
-          !
-          backspace(hand_fs)
-          write(*,'(A,I0)')'   ** resume flowstate.dat at step: ',ns
-          !
-        else
-          ! a new flowstat file
-          !
-          if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-            write(hand_fs,"(A7,1X,A13,3(1X,A20))")'nstep','time',      &
-                                      'kenergy','enstophy','dissipation'
-          elseif(trim(flowtype)=='channel') then
-            write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
-                                       'massflux','fbcx','forcex','wrms'
-          elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
-            write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
-                                 'massflux','fbcx','wallheatflux','wrms'
-            !can be used for reacting case
-            ! write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
-            !                  'maxT','overall-qdot','H2O_aver','HO2_aver'
-          elseif(trim(flowtype)=='tbl') then
-            write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep','time',      &
-                                 'massflux','fbcx','blthickness','wrms'
-          elseif(flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-              .or.flowtype=='h2supersonic'.or.flowtype=='tgvflame') then
-            write(hand_fs,"(2(A10,1X),5(A12,1X))") &
-              'nstep','clock','time','maxT','maxU','enstophy','maxHRR'
-          else
-            write(hand_fs,"(A7,1X,A13,5(1X,A20))")'nstep','time',      &
-                                 'q1max','q2max','q3max','q4max','q5max'
-          endif
-          write(*,'(A)')'  ** create new flowstate.dat'
-          !
+        if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
+          fstitle='nstep time kenergy enstophy dissipation'
+        elseif(trim(flowtype)=='channel') then
+          fstitle='nstep time massflux fbcx forcex wrms'
+        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
+          fstitle='nstep time massflux fbcx wallheatflux wrms'
+          !can be used for reacting case
+          ! write(hand_fs,"(A7,1X,A13,4(1X,A20))")'nstep time',      &
+          !                  'maxT overall-qdot H2O_aver HO2_aver'
+        elseif(trim(flowtype)=='tbl') then
+          fstitle='nstep time massflux fbcx blthickness wrms'
+        elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. &
+               flowtype=='h2supersonic') then
+          fstitle='nstep time maxT maxU maxHRR xflame vflame pout'
         endif
         !
+        call listinit(filename='flowstate.dat',handle=hand_fs, &
+                      firstline=trim(fstitle))
+        !
         linit=.false.
+        !
       endif
       !
       if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,kenergy,enstophy,dissipation
+        call listwrite(hand_fs,kenergy,enstophy,dissipation)
       elseif(trim(flowtype)=='channel') then
-        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,force(1),wrms
-      elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
-        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
-        ! can be used for reacting case
-        ! write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,maxT,overall_qdot,v_H2O,v_HO2
-      elseif(trim(flowtype)=='tbl') then
-        write(hand_fs,"(I7,1X,E13.6E2,4(1X,E20.13E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
+        call listwrite(hand_fs,massflux,fbcx,force(1),wrms)
+      elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='tbl' .or. trim(flowtype)=='swbli') then
+        call listwrite(hand_fs,massflux,fbcx,wallheatflux,wrms)
       elseif(trim(flowtype)=='cylinder') then
-        write(hand_fs,"(I7,1X,E13.6E2,3(1X,E20.13E2))")nstep,time,vel_incom,prs_incom,rho_incom
-      elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. flowtype=='h2supersonic') then
-        walltime=int(ptime()-time_verybegin)
-        write(hand_fs,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
+        call listwrite(hand_fs,vel_incom,prs_incom,rho_incom)
+      elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. &
+             flowtype=='h2supersonic') then
+        call listwrite(hand_fs,tmpmax,umax,qdotmax,xflame,vflame,poutrt)
       else
         ! general flowstate
-        write(hand_fs,"(I7,1X,E13.6E2,5(1X,E20.13E2))")nstep,time,(max_q(i),i=1,5)
+        call listwrite(hand_fs,max_q(1),max_q(2),max_q(3),max_q(4),max_q(5))
       endif
       !
       if(mod(nstep,feqlist)==0) then
         !
         if(mod(nstep,nprthead*feqlist)==0) then
-          if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-            write(*,"(2X,A7,3(1X,A13))")'nstep','time','enstophy','kenergy'
-          elseif(trim(flowtype)=='channel') then
-            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','forcex','wrms'
-          elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
-            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','wallheatflux','wrms'
-            ! can be used for reacting case
-            ! write(*,"(2X,A7,5(1X,A13))")'nstep','time','maxT','overall-qdot','H2O_aver','HO2_aver'
-          elseif(trim(flowtype)=='tbl') then
-            write(*,"(2X,A7,5(1X,A13))")'nstep','time','massflux','fbcx','δ','wrms'
-          elseif(trim(flowtype)=='cylinder') then
-            write(*,"(2X,A7,4(1X,A13))")'nstep','time','u_inf','p_inf','ro_inf'
-          elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-                  .or.flowtype=='h2supersonic') then
-            write(*,"(2(A10,1X),5(A12,1X))") 'nstep','clock','time','maxT', &
-              'maxU','enstophy','maxHRR'
-          else
-            write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
-          endif
-          write(*,'(2X,78A)')('-',i=1,77)
+          write(*,"(2X,A7,6(1X,A13))")'nstep','time','q1max','q2max','q3max','q4max','q5max'
+          !
+          write(*,'(2X,92A)')('-',i=1,91)
         endif
         !
-        if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-          l_0=xmax/(2.d0*pi)
-          write(*,"(2X,I7,1X,3(1X,E13.6E2))")nstep,time/(l_0/uinf),enstophy,kenergy
-        elseif(trim(flowtype)=='channel') then
-          write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,massflux,fbcx,force(1),wrms
-        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
-          write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,massflux,fbcx,wallheatflux,wrms
-          ! can be used for reacting case
-          ! write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,maxT,overall_qdot,v_H2O,v_HO2
-        elseif(trim(flowtype)=='tbl') then
-          write(*,"(2X,I7,1X,5(1X,E13.6E2))")nstep,time,massflux,fbcx,nominal_thickness,wrms
-        elseif(trim(flowtype)=='cylinder') then
-          write(*,"(2X,I7,1X,4(1X,E13.6E2))")nstep,time,vel_incom,prs_incom,rho_incom
-        elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor'  &
-                .or.flowtype=='h2supersonic') then
-          write(*,'(2(I10,1X),5(E12.5E2,1X))') nstep,walltime,time,tmpmax,umax,enstophy,qdotmax
-        else
-          write(*,"(2X,I7,1X,F13.7,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
-        endif
+        write(*,"(2X,I7,1X,E13.6E2,5(1X,E13.6E2))")nstep,time,(max_q(i),i=1,5)
         !
       endif
       !

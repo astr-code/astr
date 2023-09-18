@@ -9,7 +9,7 @@
 module initialisation
   !
   use constdef
-  use parallel,only: lio,mpistop,mpirank,mpirankname,bcast
+  use parallel,only: lio,mpistop,mpirank,mpirankname,bcast,jrk
   use commvar, only: im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims,    &
                      num_species,xmin,xmax,ymin,ymax,zmin,zmax,spcinf
   use tecio
@@ -30,13 +30,14 @@ module initialisation
   subroutine flowinit
     !
     use commvar,  only: flowtype,nstep,time,filenumb,fnumslic,ninit,   &
-                        lrestart,lavg,turbmode
+                        lrestart,lavg,turbmode,ymax
     use commarray,only: vel,rho,prs,spc,q,tke,omg
-    use readwrite,only: readcont,readflowini3d,readflowini2d,          &
+    use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d,          &
                         readcheckpoint,readmeanflow,readmonc,writeflfed
     use fludyna,  only: updateq
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
+    use userdefine,only: udf_flowinit
     !
     call inletprofile
     !
@@ -66,8 +67,13 @@ module initialisation
         !
         call readflowini2d
         !
+      elseif(ninit==1) then
+        !
+        call readflowini1d
+        !
       else
         !
+        ! pre-defined flow initilisation
         select case(trim(flowtype))
         case('2dvort')
           call vortini
@@ -105,10 +111,14 @@ module initialisation
           call tgvflameini
         case('rti')
           call rtini
-        case default
-          print*,trim(flowtype)
-          stop ' !! flowtype not defined @ flowinit'
+        ! case('hitflame')
+        !   call hitflameini
+        ! case default
+        !   print*,trim(flowtype)
+        !   stop ' !! flowtype not defined @ flowinit'
         end select
+        !
+        call udf_flowinit
         !
       endif
       !
@@ -135,7 +145,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
+    call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -1603,13 +1613,19 @@ module initialisation
         ! spc_prof(:,spcindex('O2'))=0.22887d0
         ! spc_prof(:,spcindex('H2'))=0.01730d0
         ! spc_prof(:,spcindex('N2'))=0.75383d0
-#endif
+        ! phi = 0.6
+        ! spc_prof(:,:)=0.d0
+        ! spc_prof(:,spcindex('H2'))=0.031274d0  
+        ! spc_prof(:,spcindex('O2'))=0.225630d0 
+        ! spc_prof(:,spcindex('N2'))=0.743096d0 
+        ! spc_prof(:,spcindex('N2'))=1.d0-sum(spc_prof) 
         ! non-reacting
         do i=1,num_species
           spc_prof(:,i) = spcinf(i)
         enddo
         !
         prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
+#endif        
       endif
       !
     else
@@ -1865,9 +1881,8 @@ module initialisation
       specp(num_species),arg,prgvar,masflx,specx(num_species),yloc
     !
     tmpr=650.d0
-    xloc=0.25d-2
-    yloc=xloc
-    xwid=0.5d-3
+    xloc=0.d0
+    xwid=1.d-3
     !
     !reactants
     specr(:)=0.d0
@@ -1889,7 +1904,8 @@ module initialisation
     ! specr(spcindex('n2'))=1.d0-sum(specr)
     !
     !products
-    tmpp=1700.d0
+    tmpp=1.7d+03
+    ! tmpp=1.417d+03
     specp(:)=0.d0
     ! specp(spcindex('CO2'))=1.51376d-1
     ! specp(spcindex('H2O'))=1.23853d-1
@@ -1913,8 +1929,6 @@ module initialisation
       !
       spc(i,j,k,:)=specr(:)!+prgvar*(specp(js)-specr(js))
       !
-      vel(i,j,k,:)=0.d0
-      !
       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
       !
       prs(i,j,k)=pinf
@@ -1922,10 +1936,18 @@ module initialisation
       rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
                           species=spc(i,j,k,:))
       !
+      vel(i,j,k,:)=0.d0
+      !
       ! print*,tmp(i,j,k),prs(i,j,k),rho(i,j,k),spc(i,j,k,:)
     enddo
     enddo
     enddo
+    uinf=0.d0
+    vinf=0.d0
+    winf=0.d0
+    tinf=tmpp
+    spcinf(:)=specr(:)
+    roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
     if(lio)  write(*,'(A,I1,A)')'  ** 1D flame initialised.'
     !

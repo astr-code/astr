@@ -789,13 +789,26 @@ module fludyna
   !| -------------                                                     |
   !| 24-Feb-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  pure real(8) function sos(tmp)
+  real(8) function sos(tmp,spc)
     !
-    use commvar, only: mach
+    use commvar,   only: nondimen,mach,num_species
+    use thermchem, only: aceval
     !
     real(8),intent(in) :: tmp
+    real(8),intent(in),optional :: spc(:)
     !
-    sos=sqrt(tmp)/mach
+    ! local data
+    real(8) :: cpcmix,gamrgc
+    !
+    if(nondimen) then
+      sos=sqrt(tmp)/mach
+    else
+      if(.not. present(spc)) then
+        stop ' !! error, species needed to calculate speed of sound @ function sos'
+      else
+        call aceval(tmp,spc,sos)
+      endif
+    endif
     !
     return
     !

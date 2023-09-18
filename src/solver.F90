@@ -39,6 +39,7 @@ module solver
                         num_modequ,turbmode,spcinf,nondimen
     use thermchem, only: spcindex
     use fludyna,   only: thermal
+    use userdefine,only: udf_setflowenv
     use parallel,  only: mpisize
     !
     ! local data
@@ -123,6 +124,8 @@ module solver
       roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
       !
     endif 
+    !
+    call udf_setflowenv
     !
     if(lio) then
       write(mpimaxname,'(i8.8)')mpisize
@@ -226,6 +229,7 @@ module solver
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
                           recon_schem,limmbou,lchardecomp
     use commcal,   only : ShockSolid,ducrossensor
+    use userdefine,only : udf_src
     use tecio
     !
     ! arguments
@@ -288,6 +292,8 @@ module solver
     elseif(trim(flowtype)=='tbl') then 
       call src_tbl
     endif
+    !
+    call udf_src
     !
 #ifdef COMB
     call srccomb(timerept=ltimrpt)

@@ -79,6 +79,14 @@ module pp
       !
       call fieldview(trim(flowfieldfile),trim(outputfile),trim(viewmode),trim(inputfile))
       !
+    elseif(trim(cmd)=='flamegen') then
+        !
+      call readkeyboad(flowfieldfile)
+      call readkeyboad(viewmode)
+      call readkeyboad(inputfile)
+        !
+      call flamegen(trim(flowfieldfile),trim(viewmode),trim(inputfile))
+        !
     else
       stop ' !! pp command not defined. @ ppentrance'
     endif
@@ -1940,14 +1948,20 @@ module pp
     character(len=*),intent(in) :: flowfile,outputfile,viewmode,inputfile
     !
     ! local data
-    integer :: im,jm,km
+    integer :: im,jm,km,num_species,jsp,i
     logical :: lihomo,ljhomo,lkhomo
     real(8) :: ref_t,reynolds,mach
     character(len=32) :: gridfile
     !
+    real(8),allocatable,dimension(:) :: x_1d,y_1d,z_1d,ro_1d,u_1d,   &
+                                        v_1d,w_1d,p_1d,t_1d
+    real(8),allocatable,dimension(:,:) :: spc_1d
     real(8),allocatable,dimension(:,:) :: x_2d,y_2d,z_2d,ro_2d,u_2d,   &
                                           v_2d,w_2d,p_2d,t_2d
     real(8),allocatable,dimension(:,:,:) :: x,y,z,ro,u,v,w,p,t
+    real(8),allocatable :: var1d(:)
+    !
+    character(len=3) :: spname
     !
     print*,' ==========================readinput=========================='
     !
@@ -1958,7 +1972,10 @@ module pp
     read(11,*)lihomo,ljhomo,lkhomo
     read(11,'(//////////)')
     read(11,*)ref_t,reynolds,mach
-    read(11,'(///////////////////////////)')
+    read(11,'(///////)')
+    read(11,*)num_species
+    print*,' ** num_species: ',num_species
+    read(11,'(//////////////////)')
     read(11,'(A)')gridfile
     close(11)
     print*,' >> ',inputfile
@@ -1986,6 +2003,41 @@ module pp
        !                                   v_2d,'v',p_2d,'p',t_2d,'t')
     elseif(viewmode=='3d') then
       allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+    elseif(viewmode=='1d') then
+      !
+      allocate(x_1d(0:im),ro_1d(0:im),u_1d(0:im),p_1d(0:im),t_1d(0:im))
+      !
+      call H5ReadSubset( x_1d,im,jm,km, 'x',gridfile,jslice=jm/2-1,kslice=-1)
+      !
+      call H5ReadSubset(ro_1d,im,jm,km,'ro',flowfile,jslice=jm/2-1,kslice=-1)
+      call H5ReadSubset( u_1d,im,jm,km,'u1',flowfile,jslice=jm/2-1,kslice=-1)
+      call H5ReadSubset( p_1d,im,jm,km, 'p',flowfile,jslice=jm/2-1,kslice=-1)
+      call H5ReadSubset( t_1d,im,jm,km, 't',flowfile,jslice=jm/2-1,kslice=-1)
+      !
+      allocate(spc_1d(0:im,1:num_species))
+      allocate(var1d(0:im))
+      do jsp=1,num_species
+        write(spname,'(i3.3)')jsp
+        call H5ReadSubset(var1d,im,jm,km,'sp'//spname,flowfile,jslice=jm/2-1,kslice=-1)
+        spc_1d(:,jsp)=var1d
+      enddo
+      !
+      open(18,file=outputfile)
+      write(18,"(8(1X,A15))")'x','ro','u','p','t','Y1','Y2','Y3'
+      write(18,"(8(1X,E15.7E3))")(x_1d(i),ro_1d(i),u_1d(i),p_1d(i), &
+                  t_1d(i),spc_1d(i,1),spc_1d(i,2),spc_1d(i,3),i=0,im)
+      close(18)
+      print*,' << ',outputfile
+      !
+      call h5srite(var=ro_1d,varname='ro',filename='flowini1d.h5',explicit=.true.,newfile=.true.)
+      call h5srite(var= u_1d,varname='u1',filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var=t_1d, varname= 't',filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var=p_1d, varname= 'p',filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      !
+      do jsp=1,num_species
+        write(spname,'(i3.3)')jsp
+        call h5srite(var=spc_1d(:,jsp),varname='sp'//spname,filename='flowini1d.h5',explicit=.true.,newfile=.false.)
+      enddo
     else
       print*,viewmode
       stop ' !! mode is not defined @ fieldview'
@@ -1994,6 +2046,165 @@ module pp
   end subroutine fieldview
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowfieldview.                          |
+  !+-------------------------------------------------------------------+
+  !+-------------------------------------------------------------------+
+  !| This function is to generate specific flame with postprocess data.|
+  !+-------------------------------------------------------------------+
+  !| ref: https://en.wikipedia.org/wiki/NACA_airfoil                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 11-Aug-2021: Created by Yifan Xu @ Peking University              |
+  !+-------------------------------------------------------------------+
+  subroutine flamegen(flowfile,viewmode,inputfile)
+    !
+    use hdf5io
+    use tecio
+    use WriteVTK
+    !
+    ! arguments
+    character(len=*),intent(in) :: flowfile,viewmode,inputfile
+    !
+    ! local data
+    integer :: im,jm,km,num_species,jsp,i
+    integer :: iflame_in,iflame_out
+    logical :: lihomo,ljhomo,lkhomo
+    real(8) :: ref_t,reynolds,mach
+    character(len=32) :: gridfile
+    !
+    real(8),allocatable,dimension(:) :: x_1d,y_1d,z_1d,ro_1d,u_1d,   &
+                                        v_1d,w_1d,p_1d,t_1d
+    real(8),allocatable,dimension(:,:) :: spc_1d
+    real(8),allocatable,dimension(:,:) :: x_2d,y_2d,z_2d,ro_2d,u_2d,   &
+                                          v_2d,w_2d,p_2d,t_2d
+    real(8),allocatable,dimension(:,:,:) :: spc_2d
+    real(8),allocatable,dimension(:,:,:) :: x,y,z,ro,u,v,w,p,t
+    real(8),allocatable,dimension(:,:,:,:) :: spc
+    real(8),allocatable :: var1d(:)
+    !
+    character(len=3) :: spname
+    !
+    print*,' ==========================readinput=========================='
+    !
+    open(11,file=inputfile,form='formatted',status='old')
+    read(11,'(///////)')
+    read(11,*)im,jm,km
+    read(11,"(/)")
+    read(11,*)lihomo,ljhomo,lkhomo
+    read(11,'(//////////)')
+    read(11,*)ref_t,reynolds,mach
+    read(11,'(///////)')
+    read(11,*)num_species
+    print*,' ** num_species: ',num_species
+    read(11,'(//////////////////)')
+    read(11,'(A)')gridfile
+    close(11)
+    print*,' >> ',inputfile
+    !
+    print*,' ** grid file: ',trim(gridfile)
+    !
+    iflame_out=im/4
+    !
+    ! if(viewmode=='3d') then
+    !   allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+    ! elseif(viewmode=='1d') then
+    !   !
+    allocate(x_1d(0:im),ro_1d(0:im),u_1d(0:im),p_1d(0:im),t_1d(0:im))
+    !
+    call H5ReadSubset( x_1d,im,jm,km, 'x',gridfile,jslice=jm/2-1,kslice=-1)
+    !
+    call H5ReadSubset(ro_1d,im,jm,km,'ro',flowfile,jslice=jm/2-1,kslice=-1)
+    call H5ReadSubset( u_1d,im,jm,km,'u1',flowfile,jslice=jm/2-1,kslice=-1)
+    call H5ReadSubset( p_1d,im,jm,km, 'p',flowfile,jslice=jm/2-1,kslice=-1)
+    call H5ReadSubset( t_1d,im,jm,km, 't',flowfile,jslice=jm/2-1,kslice=-1)
+    !
+    allocate(spc_1d(0:im,1:num_species))
+    allocate(var1d(0:im))
+    do jsp=1,num_species
+      write(spname,'(i3.3)')jsp
+      call H5ReadSubset(var1d,im,jm,km,'sp'//spname,flowfile,jslice=jm/2-1,kslice=-1)
+      spc_1d(:,jsp)=var1d
+    enddo
+
+    if(viewmode=='3d') then
+      !
+      allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km),ro(0:im,0:jm,0:km),u(0:im,0:jm,0:km), &
+               v(0:im,0:jm,0:km),w(0:im,0:jm,0:km),p(0:im,0:jm,0:km),t(0:im,0:jm,0:km))
+      allocate(spc(0:im,0:jm,0:km,1:num_species))
+      !
+      call H5io_init(filename=gridfile,mode='read')
+      call H5Read(varname='x',var=x(0:im,0:jm,0:km),mode='h')
+      call H5Read(varname='y',var=y(0:im,0:jm,0:km),mode='h')
+      call H5Read(varname='z',var=z(0:im,0:jm,0:km),mode='h')
+      !
+      do i=1,im
+        !
+        if((t_1d(i-1)<=400.d0 .and. t_1d(i)>=400.d0) .or. &
+            (t_1d(i-1)>=400.d0 .and. t_1d(i)<=400.d0)) then
+          iflame_in=i
+          exit
+        endif
+      enddo
+
+      do i=-im/8,im/8
+        ro(i+iflame_out,:,:)=ro_1d(i+iflame_in)
+        u(i+iflame_out,:,:) =u_1d(i+iflame_in)
+        v(i+iflame_out,:,:) =0.d0
+        w(i+iflame_out,:,:) =0.d0
+        p(i+iflame_out,:,:) =p_1d(i+iflame_in)
+        t(i+iflame_out,:,:) =t_1d(i+iflame_in)
+        do jsp=1,num_species
+          spc(i+iflame_out,:,:,jsp)=spc_1d(i+iflame_in,jsp)
+        enddo
+      enddo
+
+      do i=0,iflame_out-im/8-1
+        ro(i,:,:)=ro(iflame_out-im/8,:,:)
+        u(i,:,:) =u(iflame_out-im/8,:,:)
+        v(i,:,:) =v(iflame_out-im/8,:,:)
+        w(i,:,:) =w(iflame_out-im/8,:,:)
+        p(i,:,:) =p(iflame_out-im/8,:,:)
+        t(i,:,:) =t(iflame_out-im/8,:,:)
+        do jsp=1,num_species
+          spc(i,:,:,jsp)=spc(iflame_out-im/8,:,:,jsp)
+        enddo
+      enddo
+
+      do i=iflame_out+im/8+1,im
+        ro(i,:,:)=ro(iflame_out+im/8,:,:)
+        u(i,:,:) =u(iflame_out+im/8,:,:)
+        v(i,:,:) =v(iflame_out+im/8,:,:)
+        w(i,:,:) =w(iflame_out+im/8,:,:)
+        p(i,:,:) =p(iflame_out+im/8,:,:)
+        t(i,:,:) =t(iflame_out+im/8,:,:)
+        do jsp=1,num_species
+          spc(i,:,:,jsp)=spc(iflame_out+im/8,:,:,jsp)
+        enddo
+      enddo
+    !
+      call h5srite(var= x,varname= 'x',filename='datin/flowini3d.h5',explicit=.true.,newfile=.true.)
+      call h5srite(var= y,varname= 'y',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= z,varname= 'z',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var=ro,varname='ro',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= u,varname='u1',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= v,varname='u2',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= w,varname='u3',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= t,varname= 't',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      call h5srite(var= p,varname= 'p',filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+    !
+      do jsp=1,num_species
+        write(spname,'(i3.3)')jsp
+        call h5srite(var=spc(:,:,:,jsp),varname='sp'//spname,filename='datin/flowini3d.h5',explicit=.true.,newfile=.false.)
+      enddo
+    !  
+    else
+      print*,viewmode
+      stop ' !! mode is not defined @ fieldview'
+    endif
+    !
+  end subroutine flamegen
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine flamegen.                          |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -2010,10 +2221,10 @@ module pp
     !
     use cmdefne,   only : readkeyboad
     use commvar,   only : gridfile,im,jm,km,ia,ja,ka,hm,Mach,Reynolds, &
-                          tinf,roinf
+                          tinf,roinf,spcinf,num_species,nondimen
     use bc,        only : twall
     use readwrite, only : readgrid
-    use commarray, only : x,vel,rho,tmp,prs,dvel
+    use commarray, only : x,vel,rho,tmp,prs,dvel,spc
     use solver,    only : refcal
     use parallel,  only : mpisizedis,parapp,parallelini
     use geom,      only : geomcal
@@ -2026,8 +2237,12 @@ module pp
     integer :: i,j,k
     character(len=4) :: genmethod
     !
-    im=ia
-    jm=ja
+    print*,' ** cmd to generate a box turbulence: astr pp hitgen <input> . gen/read'
+    !
+    im=ka ! ensure a cubic box
+    !
+    jm=ka
+    !
     km=ka
     !
     call mpisizedis
@@ -2041,7 +2256,11 @@ module pp
     allocate(   x(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     allocate(rho(0:im,0:jm,0:km),tmp(0:im,0:jm,0:km),prs(0:im,0:jm,0:km))
+#ifdef COMB
+    allocate(spc(0:im,0:jm,0:km,1:num_species))
+#endif
     !
+    ! call gridhitflame(mode='cubic')
     call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
     ! call readgrid(trim(gridfile))
     !
@@ -2050,21 +2269,35 @@ module pp
     call readkeyboad(genmethod)
     !
     if(trim(genmethod)=='gen') then
+      !
       call div_free_gen(im,jm,km,vel(0:im,0:jm,0:km,1),   &
                                  vel(0:im,0:jm,0:km,2),   &
                                  vel(0:im,0:jm,0:km,3) )
       !
+      urms=1.d0 
       do k=0,km
       do j=0,jm
       do i=0,im
         !
-        rho(i,j,k)  = 0.d0 !roinf
-        tmp(i,j,k)  = 0.d0 !tinf 
-        prs(i,j,k)  = 0.d0 !thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        rho(i,j,k)  = roinf
+        tmp(i,j,k)  = tinf 
+        if(nondimen) then
+            prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+        else
+            spc(i,j,k,:)= spcinf(:)
+            prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        endif
+        vel(i,j,k,1)= urms*vel(i,j,k,1)
+        vel(i,j,k,2)= urms*vel(i,j,k,2)
+        vel(i,j,k,3)= urms*vel(i,j,k,3)
         !
       enddo
       enddo
       enddo
+      !
+      call div_test(vel,dvel)
+      !
+      call hitsta
       !
     elseif(trim(genmethod)=='read') then
       !
@@ -2074,65 +2307,78 @@ module pp
       call h5sread(rho(0:im,0:jm,0:km),  'ro',im,jm,km,'outdat/flowfield.h5')
       call h5sread(tmp(0:im,0:jm,0:km),  't', im,jm,km,'outdat/flowfield.h5')
       !
-      roav=0.d0
-      uav=0.d0
-      vav=0.d0
-      wav=0.d0
-      tav=0.d0
-      pav=0.d0
+      call div_test(vel,dvel)
       !
-      do k=0,km
-      do j=0,jm
-      do i=0,im 
-        prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-        !
-        if(i==0 .or. j==0 .or. k==0) cycle
-        !
-        roav=roav+rho(i,j,k)
-        uav=uav+vel(i,j,k,1)
-        vav=vav+vel(i,j,k,2)
-        wav=wav+vel(i,j,k,3)
-        tav=tav+tmp(i,j,k)
-        pav=pav+prs(i,j,k)
-      enddo
-      enddo
-      enddo
-      !
-      roav=roav/dble(im*jm*km)
-      uav=uav/dble(im*jm*km)
-      vav=vav/dble(im*jm*km)
-      wav=wav/dble(im*jm*km)
-      tav=tav/dble(im*jm*km)
-      pav=pav/dble(im*jm*km)
-      !
-      print*, '** mean density    :',roav
-      print*, '** mean velocity   :',uav,vav,wav
-      print*, '** mean temperature:',tav
-      print*, '** mean pressure   :',pav
-      !
-      rho(:,:,:)   = rho(:,:,:)  -roav
-      vel(:,:,:,1) = vel(:,:,:,1)-uav
-      vel(:,:,:,2) = vel(:,:,:,2)-vav
-      vel(:,:,:,3) = vel(:,:,:,3)-wav
-      tmp(:,:,:)   = tmp(:,:,:)  -tav
-      prs(:,:,:)   = prs(:,:,:)  -pav
+      call hitsta
       !
     else
       print*,genmethod
       stop ' !! genmethod error '
     endif
+    ! 
+    call h5srite(var=rho,                  varname='ro',filename='flowini3d.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='flowini3d.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='flowini3d.h5',explicit=.true.)
     !
-    call div_test(vel,dvel)
+    roav=0.d0
+    uav=0.d0
+    vav=0.d0
+    wav=0.d0
+    tav=0.d0
+    pav=0.d0
     !
-    call hitsta
+    do k=0,km
+    do j=0,jm
+    do i=0,im 
+      if(nondimen) then
+        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      else
+        spc(i,j,k,:)= spcinf(:)
+        prs(i,j,k)  = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+      endif
+      !
+      if(i==0 .or. j==0 .or. k==0) cycle
+      !
+      roav=roav+rho(i,j,k)
+      uav=uav+vel(i,j,k,1)
+      vav=vav+vel(i,j,k,2)
+      wav=wav+vel(i,j,k,3)
+      tav=tav+tmp(i,j,k)
+      pav=pav+prs(i,j,k)
+      !
+    enddo
+    enddo
+    enddo
     !
-    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='flowin.h5',explicit=.true.,newfile=.true.) 
-    call h5srite(var=rho,                  varname='ro',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='flowin.h5',explicit=.true.)
-    call h5srite(var=tmp,                  varname='p', filename='flowin.h5',explicit=.true.)
-    call h5srite(var=prs,                  varname='t', filename='flowin.h5',explicit=.true.)
+    roav=roav/dble(im*jm*km)
+    uav = uav/dble(im*jm*km)
+    vav = vav/dble(im*jm*km)
+    wav = wav/dble(im*jm*km)
+    tav = tav/dble(im*jm*km)
+    pav = pav/dble(im*jm*km)
+    !
+    print*, '** mean density    :',roav
+    print*, '** mean velocity   :',uav,vav,wav
+    print*, '** mean temperature:',tav
+    print*, '** mean pressure   :',pav
+    !
+    rho(:,:,:)   = rho(:,:,:)  -roav
+    vel(:,:,:,1) = vel(:,:,:,1)-uav
+    vel(:,:,:,2) = vel(:,:,:,2)-vav
+    vel(:,:,:,3) = vel(:,:,:,3)-wav
+    tmp(:,:,:)   = tmp(:,:,:)  -tav
+    prs(:,:,:)   = prs(:,:,:)  -pav
+    !
+    call h5srite(var=x(0:im,0,0,1),        varname='x', filename='datin/flowin.h5',explicit=.true.,newfile=.true.) 
+    call h5srite(var=rho,                  varname='ro',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,1),varname='u1',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,2),varname='u2',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=vel(0:im,0:jm,0:km,3),varname='u3',filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=prs,                  varname='p', filename='datin/flowin.h5',explicit=.true.)
+    call h5srite(var=tmp,                  varname='t', filename='datin/flowin.h5',explicit=.true.)
     
     ! call tecbin('techit.plt',x(0:im,0:jm,0:km,1),'x', &
     !                          x(0:im,0:jm,0:km,2),'y', &
@@ -2241,16 +2487,22 @@ module pp
       !
       machrms=urms/sqrt(tav)*mach
       !
-      print*,' **            urms:',urms
-      print*,' **         machrms:',machrms
-      print*,' **         kenergy:',kenergy
-      print*,' ** max fluctuation:',ufmx
-      print*,' **       Enstrophy:',Enstrophy
-      print*,' **   kolmlength, η:',kolmlength
-      print*,' **             η/Δ:',kolmlength/x(1,0,0,1)
-      print*,' **           ukolm:',ukolm
-      print*,' **    taylorlength:',taylorlength
-      print*,' **        Retaylor:',retaylor
+      print*,' ---------------------------------------------------------------'
+      print*,'              statistics according to actual field              '
+      print*,' --------------------------+------------------------------------'
+      print*,'                      urms |',urms
+      print*,'                   machrms |',machrms
+      print*,'                   kenergy |',kenergy
+      print*,'           max fluctuation |',ufmx
+      print*,'                 enstrophy |',Enstrophy
+      print*,'             Kolmlength, η |',kolmlength
+      print*,'                       η/Δ |',kolmlength/(x(1,0,0,1)-x(0,0,0,1))
+      print*,'                     ukolm |',ukolm
+      print*,'                     tkolm |',kolmlength/ukolm
+      print*,'              Taylorlength |',taylorlength
+      print*,'                  Retaylor |',retaylor
+      print*,' --------------------------+------------------------------------'
+      !
       !
   end subroutine hitsta
   !+-------------------------------------------------------------------+
@@ -2318,6 +2570,7 @@ module pp
   subroutine div_free_gen(idim,jdim,kdim,u1,u2,u3)
     !
     use singleton
+    use commvar,only : Reynolds
     !
     integer,intent(in) :: idim,jdim,kdim
     real(8),intent(out),dimension(0:idim,0:jdim,0:kdim) :: u1,u2,u3
@@ -2364,7 +2617,7 @@ module pp
     integer :: k1,k2,k3,k0,i,j,k
     real(8) :: ran1,ran2,ran3,rn1,rn2,rn3,var1,var2,var3,ISEA
     complex(8) :: vac1,vac2,vac3,vac4,crn1,crn2
-    real(8) :: dudi,lambda
+    real(8) :: dudi,lambda,ke0,en0,lint,tau,eta0
     !
     kmi=idim/2
     kmj=jdim/2
@@ -2518,8 +2771,8 @@ module pp
     u3(0:idim,0:jdim,0)=u3(0:idim,0:jdim,kdim)
     !
     ! urms=0.d0
-    ! ufmx=0.d0
-    ! Kenergy=0.d0
+    ! ! ufmx=0.d0
+    ! ! Kenergy=0.d0
     ! do k=1,kdim
     ! do j=1,jdim
     ! do i=1,idim
@@ -2538,7 +2791,21 @@ module pp
     ! Kenergy=Kenergy/urms/urms
     ! urms=urms/urms
     ! !
-    ! print*,'Kenergy',Kenergy,'urms',urms,'Mat=',urms*Mach
+    ke0=3.d0*ISEA/64.d0*sqrt(2.d0*pi)*dble(k0**5)
+    en0=15.d0*ISEA/256.d0*sqrt(2.d0*pi)*dble(k0**7)
+    lint=sqrt(2.d0*pi)/ke0
+    tau =sqrt(32.d0/ISEA*sqrt(2.d0*pi))/sqrt(dble(k0**7))
+    eta0=1.d0/sqrt(sqrt(2.d0*en0*Reynolds**2))
+    !
+    print*,' ---------------------------------------------------------------'
+    print*,'        statistics according to the initial energy spectrum     '
+    print*,' --------------------------+------------------------------------'
+    print*,'                   kenergy |',ke0
+    print*,'                 enstrophy |',en0
+    print*,'           integral length |',lint
+    print*,'  large-eddy-turnover time |',tau
+    print*,'         kolmogorov length |',eta0
+    print*,' --------------------------+------------------------------------'
     ! !
     ! call h5srite(var=u1,varname='u1',filename='velocity.h5',explicit=.true.,newfile=.true.)
     ! call h5srite(var=u2,varname='u2',filename='velocity.h5',explicit=.true.)
@@ -2565,7 +2832,7 @@ module pp
     real(8) :: k0,Ac,var1,wnb,IniEnergDis
     !
     var1=-2.d0*(wnb/k0)**2
-    IniEnergDis=Ac*wnb**4*dexp(var1)
+    IniEnergDis=Ac*wnb**4*exp(var1)
     !IniEnergDis=Ac*wnb**(-5.d0/3.d0)
     !
     return

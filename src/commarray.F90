@@ -15,6 +15,8 @@ module commarray
                                             dgrid,vor
   real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
+  real(8),allocatable,dimension(:,:,:) :: bnorm_i0,bnorm_im,bnorm_j0,  &
+                                          bnorm_jm,bnorm_k0,bnorm_km
   real(8),allocatable,dimension(:,:,:) :: dis2wall
   real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
                                         lspg_jmin,lspg_jmax,           &
@@ -39,6 +41,8 @@ module commarray
   !|                 spc | species.                                    |
   !|              lspg_* | length of sponge layer                      |
   !|            nodestat | node status: fluid or solid                 |
+  !|             bnorm_* | the vector of boundary normal direction,    |
+  !|                     | towards the inside of the domain            |
   !+---------------------+---------------------------------------------+
   real(8),allocatable :: acctest_ref(:)
   !

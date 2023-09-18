@@ -19,7 +19,8 @@ module hdf5io
   !
   Interface h5read
     !
-    module procedure h5ra2d_r8
+    module procedure h5ra2d_r8 
+    module procedure h5ra1d_r8
     module procedure h5ra3d_r8
     module procedure h5ra3d_i4
     module procedure h5r_int4
@@ -547,6 +548,75 @@ module hdf5io
 #endif
     !
   end subroutine h5ra2d_r8
+
+  subroutine h5ra1d_r8(varname,var,dir,display)
+    !
+    ! arguments
+    character(LEN=*),intent(in) :: varname
+    real(8),intent(inout) :: var(:)
+    character(len=1),intent(in) :: dir
+    logical,intent(in),optional :: display
+    !
+#ifdef HDF5
+    ! local data
+    integer :: jrk
+    integer :: dim(1)
+    integer(hsize_t) :: offset(1)
+    integer :: h5error
+    logical :: lexplicit
+    !
+    integer(hid_t) :: dset_id,filespace,memspace,plist_id
+    integer(hsize_t) :: dimt(1)
+    !
+    if (present(display)) then
+       lexplicit = display
+    else
+       lexplicit = .true.
+    end if
+    !
+    dim(1)=size(var)
+    !
+    dimt=dim
+    !
+    if(dir=='i') then
+      offset=(/ig0/)
+    elseif(dir=='j') then
+      offset=(/jg0/)
+    elseif(dir=='k') then
+      offset=(/kg0/)
+    else
+      stop ' !! error in dir @ h5wa2d_r8'
+    endif
+    !
+    ! read the data
+    !
+    call h5dopen_f(h5file_id,varname,dset_id,h5error)
+    call h5screate_simple_f(1,dimt,memspace,h5error)
+    call h5dget_space_f(dset_id,filespace,h5error)
+    call h5sselect_hyperslab_f(filespace,h5s_select_set_f,offset,      &
+                                                           dimt,h5error)
+    ! Create property list for collective dataset read
+    call h5pcreate_f(h5p_dataset_xfer_f,plist_id,h5error)
+    call h5pset_dxpl_mpio_f(plist_id,h5fd_mpio_collective_f,h5error)
+    !
+    ! Read 2D array
+    call h5dread_f(dset_id,h5t_native_double,var,dimt,h5error,         &
+                   mem_space_id=memspace,file_space_id=filespace,      &
+                                                      xfer_prp=plist_id)
+    !Close dataspace
+    call h5sclose_f(filespace,h5error)
+    !
+    call h5sclose_f(memspace,h5error)
+    !
+    call h5dclose_f(dset_id,h5error)
+    !
+    call h5pclose_f(plist_id,h5error)
+    !
+    if(lio .and. lexplicit) print*,' >> ',varname
+    !
+#endif
+    !
+  end subroutine h5ra1d_r8
 
   subroutine h5read_istrip_r8(varname,var)
     !

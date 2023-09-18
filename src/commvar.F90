@@ -85,7 +85,7 @@ module commvar
   !|              voldom | total volume of the domain.                 |
   !|     dxyzmax,dxyzmin | characteristic grid spacing.                |
   !+---------------------+---------------------------------------------+
-  integer :: nstep,nsrpt,maxstep,filenumb,nmonitor,fnumslic
+  integer :: nstep,nsrpt,maxstep,filenumb,nmonitor,fnumslic,rkstep
   integer :: islice,jslice,kslice
   integer,allocatable :: imon(:,:)
   real(8) :: time,deltat

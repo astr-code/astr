@@ -182,9 +182,11 @@ module readwrite
         typedefine='                 Taylor-Green Vortex flame'
       case('rti')
         typedefine='               Rayleigh–Taylor instability'
+      ! case('hitflame')
+      !   typedefine='    homogeneous isotropic turbulence flame'
       case default
         print*,trim(flowtype)
-        stop ' !! flowtype not defined @ infodisp'
+        print*,' !! flowtype not defined, will go to default setup !!'
       end select
       !
       write(*,'(2X,62A)')('-',i=1,62)
@@ -369,6 +371,8 @@ module readwrite
           write(*,'(38X,I0,2(A))')bctype(n),'  extrapolation at: ',bcdir(n)
         elseif(bctype(n)==52) then
           write(*,'(38X,I0,2(A))')bctype(n),' nscbc farfield at: ',bcdir(n)
+        elseif(bctype(n)==60) then
+          write(*,'(38X,I0,2(A))')bctype(n),'    symmetrical at: ',bcdir(n)
         elseif(bctype(n)==11) then
           write(*,'(45X,I0,2(A))')bctype(n),' inflow  at: ',bcdir(n)
           write(*,'(18X,(A))',advance='no')'inflow turbulence : '
@@ -381,6 +385,8 @@ module readwrite
             write(*,'(A)')' interpolation of database in x space'
           elseif(turbinf=='free') then
             write(*,'(A)')' free stream incoming flow'
+          elseif(turbinf=='udef') then
+            write(*,'(A)')' self-defined incoming flow'
           else
             print*,' !! turbinf: ',turbinf
             stop ' !! ERROR in defining turbinf @ bc 11 !!'
@@ -1294,13 +1300,14 @@ module readwrite
     use commvar,   only : im,jm,km,num_species,time,roinf,tinf,pinf
     use commarray, only : rho,vel,prs,tmp,spc
     use hdf5io
+    use fludyna,   only : thermal
 #ifdef COMB
     use thermchem, only: spcindex
 #endif
     !
     ! local data
     !
-    integer :: jsp
+    integer :: i,j,k,jsp
     character(len=3) :: spname
     ! real(8) :: time_initial
     !can be used to start premixed case, but not ready yet
@@ -1319,11 +1326,22 @@ module readwrite
     ! prs=pinf
     ! tmp=tinf
     do jsp=1,num_species
-       write(spname,'(i2.2)')jsp
+      write(spname,'(i3.3)')jsp
       call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode='h')
     enddo
     !
     call h5io_end
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:)) 
+
+    enddo
+    enddo
+    enddo
     !
     ! initialize species
 ! #ifdef COMB
@@ -1413,6 +1431,69 @@ module readwrite
   end subroutine readflowini2d
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of subroutine readflowini2d.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine reads a 1-D profile to initialize flow filed.     |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 9-Aug-2023  | Created by J. Fang @ Daresbury                      |
+  !+-------------------------------------------------------------------+
+  subroutine readflowini1d
+    !
+    use commvar,   only : im,jm,km,num_species,nondimen,spcinf
+    use commarray, only : rho,vel,prs,tmp,spc
+    use fludyna,   only : thermal
+    use hdf5io
+#ifdef COMB
+    use thermchem, only: spcindex
+#endif
+    !
+    ! local data
+    !
+    integer :: jsp,i,j,k
+    real(8) :: time_ini,nstep_ini
+    character(len=3) :: spname
+    !
+    call h5io_init(filename='datin/flowini1d.h5',mode='read')
+    !
+    call h5read(varname='ro', var=rho(0:im,0,0),  dir='i')
+    call h5read(varname='u1', var=vel(0:im,0,0,1),dir='i')
+    ! call h5read(varname='u2', var=vel(0:im,0,0,2),dir='i')
+    call h5read(varname='t',  var=tmp(0:im,0,0),  dir='i')
+    !
+    do jsp=1,num_species
+      write(spname,'(i3.3)')jsp
+      call h5read(varname='sp'//spname,var=spc(0:im,0,0,jsp),dir='i')
+    enddo
+    !
+    call h5io_end
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)  =rho(i,0,0)
+      vel(i,j,k,1)=vel(i,0,0,1)
+      vel(i,j,k,2)=0.d0
+      vel(i,j,k,3)=0.d0
+      tmp(i,j,k)  =tmp(i,0,0)
+      !
+      do jsp=1,num_species
+        spc(i,j,k,jsp)=spc(i,0,0,jsp)
+      enddo
+      !
+      prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:)) 
+
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine readflowini1d
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of subroutine readflowini1d.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !+-------------------------------------------------------------------+
@@ -1760,12 +1841,15 @@ module readwrite
   subroutine writeflfed(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ,force
+                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
     use bc,       only : ninflowslice
     use hdf5io
+#ifdef COMB
+    use thermchem,only : heatrate
+#endif
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -1776,8 +1860,10 @@ module readwrite
     character(len=64) :: outfilename,outauxiname
     character(len=64),save :: savfilenmae='first'
     character(len=3) :: spname
-    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:)
+    real(8),allocatable :: rshock(:,:,:),rcrinod(:,:,:),hrr(:)
     !
+    real(8) :: ypos
+    logical :: lwprofile
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
     !
@@ -1914,6 +2000,7 @@ module readwrite
       !
     endif
     !
+    !
     savfilenmae=outfilename
     nxtwsequ=nstep+feqwsequ
     !
@@ -1929,6 +2016,115 @@ module readwrite
     !
   end subroutine writeflfed
   !
+  subroutine writexprofile(profilename,var1,var1name, &
+                                       var2,var2name, &
+                                       var3,var3name, &
+                                       var4,var4name, &
+                                       var5,var5name,truewrite)
+    !
+    use parallel,  only : pgather
+    use commarray, only : x
+    !
+    character(len=*),intent(in) :: profilename
+    !
+    real(8),intent(in),optional :: var1(:),var2(:),var3(:),var4(:),var5(:)
+    character(len=*),intent(in),optional :: var1name,var2name,var3name,var4name,var5name
+    logical,intent(in) :: truewrite
+    !
+    integer :: nvar,i
+    real(8),allocatable :: vdum(:)
+    real(8),allocatable :: vout1(:),vout2(:),vout3(:),vout4(:),vout5(:)
+    real(8),allocatable,save :: xx(:)
+    logical,save :: firstcall=.true.
+    !
+    if(firstcall) then
+      if(truewrite) then
+        allocate(vdum(0:im))
+        vdum=x(0:im,0,0,1)
+      endif
+      call pgather(vdum,xx)
+      if(truewrite) deallocate(vdum)
+      !
+      firstcall=.false.
+    endif
+    !
+    nvar=0
+    !
+    if(truewrite) allocate(vdum(1:size(var1)))
+    !
+    if(present(var1)) then
+      nvar=1
+      !
+      if(truewrite) then
+        vdum=var1
+      endif
+      call pgather(vdum,vout1)
+      !
+    endif
+    !
+    if(present(var2)) then
+      nvar=2
+      if(truewrite) then
+        vdum=var2
+      endif
+      call pgather(vdum,vout2)
+      !
+    endif
+    !
+    if(present(var3)) then
+      nvar=3
+      if(truewrite) then
+        vdum=var3
+      endif
+      call pgather(vdum,vout3)
+      !
+    endif
+    !
+    if(present(var4)) then
+      nvar=4
+      if(truewrite) then
+        vdum=var4
+      endif
+      call pgather(vdum,vout4)
+      !
+    endif
+    !
+    if(present(var5)) then
+      nvar=5
+      if(truewrite) then
+        vdum=var5
+      endif
+      call pgather(vdum,vout5)
+      !
+    endif
+    !
+    if(nvar==0) return
+    !
+    if(mpirank==0) then
+      open(18,file=profilename)
+      if(nvar==1) then
+        write(18,"(2(1X,A15))")'x',var1name
+        write(18,"(2(1X,E15.7E3))")(xx(i),vout1(i),i=1,size(xx))
+      elseif(nvar==2) then
+        write(18,"(3(1X,A15))")'x',var1name,var2name
+        write(18,"(3(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),i=1,size(xx))
+      elseif(nvar==3) then
+        write(18,"(4(1X,A15))")'x',var1name,var2name,var3name
+        write(18,"(4(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),i=1,size(xx))
+      elseif(nvar==4) then
+        write(18,"(5(1X,A15))")'x',var1name,var2name,var3name,var4name
+        write(18,"(5(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),vout4(i),i=1,size(xx))
+      elseif(nvar==5) then
+        write(18,"(6(1X,A15))")'x',var1name,var2name,var3name,var4name,var5name
+        write(18,"(6(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),vout4(i),vout5(i),i=1,size(xx))
+      else
+        stop ' !! error1 @ writexprofile'
+      endif
+      close(18)
+      print*,' << ',profilename
+    endif
+    !
+  end subroutine writexprofile
   !
   subroutine writeflfed_2d(timerept)
     !

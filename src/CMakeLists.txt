@@ -6,7 +6,6 @@ add_executable(astr
                     fdnn.F90
                     astr.F90
                     bc.F90
-                    test.F90
                     CMakeLists.txt
                     cmdefne.F90
                     commarray.F90
