@@ -17,26 +17,6 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 
-if (CHEMISTRY)
-  if(DEFINED ENV{CANTERA_DIR})
-  	MESSAGE(STATUS "cantera directory " $ENV{CANTERA_DIR})
-    set(CTRDIR $ENV{CANTERA_DIR})
-    include_directories(${CTRDIR}/include/cantera)
-    link_libraries(${CTRDIR}/lib/libcantera_fortran_shared.so ${CTRDIR}/lib/libcantera_shared.so)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    add_definitions(-DCOMB)
-  else()
-    message(FATAL_ERROR "CANTERA is not included")
-  endif(DEFINED ENV{CANTERA_DIR})
-else(CHEMISTRY)
-  message("chemistry is not activated")
-endif (CHEMISTRY)
-
-set(ASTR_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-message(STATUS "ASTR directory: ${ASTR_ROOT}")
-set(CMAKE_INSTALL_PREFIX ${ASTR_ROOT})
-
-
 # Add support for CMAKE_DEPENDENT_OPTION
 INCLUDE(CMakeDependentOption)
 INCLUDE(CMakeParseArguments)
@@ -157,6 +137,28 @@ else (HDF5_FOUND)
     message(STATUS "Using a CMake vers > 3.10 should solve the problem")
     message(STATUS "Alternatively use ccmake to manually set the include if available")
 endif (HDF5_FOUND)
+
+# set chemistry library
+option(CHEMISTRY "Build ASTR with chemistry" OFF)
+if (CHEMISTRY)
+  IF(EXISTS ${CANTERA_DIR})
+    MESSAGE(STATUS "CANTERA directory " ${CANTERA_DIR})
+    set(CTRDIR ${CANTERA_DIR})
+    include_directories(${CTRDIR}/include/cantera)
+    link_directories(${CTRDIR}/lib)
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    add_definitions(-DCOMB)
+  else()
+    message(FATAL_ERROR " !! CANTERA path not found: " ${CANTERA_DIR})
+  endif(EXISTS ${CANTERA_DIR})
+else(CHEMISTRY)
+  message("chemistry is not activated")
+endif (CHEMISTRY)
+
+set(ASTR_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+message(STATUS "ASTR directory: ${ASTR_ROOT}")
+set(CMAKE_INSTALL_PREFIX ${ASTR_ROOT})
+
 
 # Create the ASTR executable
 add_subdirectory(src)

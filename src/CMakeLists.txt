@@ -38,11 +38,14 @@ add_executable(astr
                     userdefine.F90
                     utility.F90
                     vtkio.F90)
-#add_executable(astr ${files_astr})
 target_link_libraries(astr)
 if (MPI_FOUND)
   target_link_libraries(astr PRIVATE MPI::MPI_Fortran)
 endif (MPI_FOUND)
+if (CHEMISTRY)
+  message(STATUS "CANTERA library: ${CTRDIR}/lib")
+  target_link_libraries(astr PRIVATE -L${CTRDIR}/lib -lcantera_fortran -lcantera -lstdc++ -pthread)
+endif (CHEMISTRY)
 
 install(TARGETS astr
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
