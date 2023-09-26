@@ -145,7 +145,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    call writeflfed
+    ! call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -645,7 +645,7 @@ module initialisation
     use commvar,  only: ia,ja,ka
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dvel
     use fludyna,  only: thermal
-    use solver,   only: grad
+    use comsolver,only: grad
     use parallel, only: psum,pmax,pmin
     use hdf5io
     !

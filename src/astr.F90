@@ -18,6 +18,7 @@ program astr
   use geom
   use ibmethod
   use test
+  use comsolver
   !
   implicit none
   !

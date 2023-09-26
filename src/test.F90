@@ -65,7 +65,7 @@ module test
 
     use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf,hm,is,ie,js,je,ks,ke
     use commarray, only : x,vel,dvel,rho
-    use solver,    only : gradcal
+    use comsolver, only : gradcal
     use statistic, only : enstophycal
     use parallel,  only : qswap,psum,irk,jrk,krk,mpirank
 
@@ -114,7 +114,67 @@ module test
     !
   end subroutine enstest
   !
-  subroutine gradtest
+  subroutine accuracytest
+    !
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
+                          alfa_filter,numq,is,ie,ia
+    use commarray, only : x,q,dxi
+    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use bc,        only : boucon
+    use parallel,  only : dataswap,mpirankname,psum,pmax
+    use comsolver, only : alfa_con,cci,ccj,cck
+    !
+    ! local data
+    integer :: i,j,k,n
+    real(8) :: dx,error1,error2,errorinf
+    real(8),allocatable :: vtest(:,:,:)
+    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
+    !
+    ! print*,x(:,0,0,1)
+    !
+    ! testing ddx
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(4.d0*x(i,j,k,1))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    allocate(dqref(0:im))
+    do i=0,im
+      dqref(i)=4.d0*cos(4.d0*x(i,0,0,1))
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:im))
+    !
+    dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(:,0,0,1,1)
+    !
+    error1=0.d0
+    error2=0.d0
+    errorinf=0.d0
+    do i=1,im
+      error1=error1+abs(dq(i)-dqref(i))
+      error2=error2+(dq(i)-dqref(i))**2
+      errorinf=max(errorinf,abs(dq(i)-dqref(i)))
+    enddo
+    !
+    error1=psum(error1)/dble(ia)
+    error2=sqrt(psum(error1)/dble(ia))
+    errorinf=pmax(errorinf)
+    !
+    print*,' ** total number of nodes:',ia
+    print*,' **   L1 error:',error1
+    print*,' **   L2 error:',error2
+    print*,' ** Linf error:',errorinf
+    !
+  end subroutine accuracytest
+  !
+  subroutine filtertest
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie
@@ -122,7 +182,104 @@ module test
     use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname
-    use solver,    only : alfa_con,cci,ccj,cck
+    use comsolver, only : alfa_con,fci,fcj,fck
+    !
+    ! local data
+    integer :: i,j,k,n
+    real(8) :: dx
+    real(8),allocatable :: vtest(:,:,:)
+    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
+    !
+    ! print*,x(:,0,0,1)
+    !
+    ! testing ddx
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(10.d0*x(i,j,k,1))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:im))
+    !
+    dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
+    !
+    open(18,file='testout/filterx.dat')
+    write(18,'(3(1X,A15))')'x','q','q~'
+    write(18,'(3(1X,E15.7E3))')(x(i,0,0,1),q(i,0,0,1),dq(i),i=0,im)
+    close(18)
+    print*,' << testout/filterx.dat'
+    !
+    deallocate(dq)
+    !
+    ! testing ddy
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))+0.1d0*sin((dble(j)+0.5d0)*pi)
+      !
+    enddo
+    enddo
+    enddo
+    q(:, 0,:,1)=0.d0
+    q(:,jm,:,1)=0.d0
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:jm))
+    !
+    dq(:)=spafilter10(q(0,:,0,1),npdcj,jm,alfa_filter,fcj)
+    !
+    open(18,file='testout/filtery.dat')
+    write(18,'(3(1X,A15))')'y','q','q~'
+    write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
+    close(18)
+    print*,' << testout/filtery.dat'
+    !
+    deallocate(dq)
+    !
+    ! testing ddz
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      q(i,j,k,1)=sin(6.d0*x(i,j,k,3))
+      !
+    enddo
+    enddo
+    enddo
+    !
+    call dataswap(q)
+    !
+    allocate(dq(0:km))
+    !
+    dq(:)=spafilter10(q(0,0,:,1),npdck,km,alfa_filter,fck)
+    !
+    open(18,file='testout/filterz.dat')
+    write(18,'(3(1X,A15))')'y','q','q~'
+    write(18,'(3(1X,E15.7E3))')(x(0,0,k,3),q(0,0,k,1),dq(k),k=0,km)
+    close(18)
+    print*,' << testout/filterz.dat'
+    !
+    deallocate(dq)
+    !
+  end subroutine filtertest
+  !
+  subroutine gradtest
+    !
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
+                          alfa_filter,numq,is,ie
+    use commarray, only : x,q,dxi
+    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use comsolver, only : alfa_con,cci,ccj,cck
+    use bc,        only : boucon
+    use parallel,  only : dataswap,mpirankname
     !
     ! local data
     integer :: i,j,k,n
@@ -269,163 +426,6 @@ module test
     ! deallocate(dq)
     !
   end subroutine gradtest
-  !
-  subroutine accuracytest
-    !
-    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie,ia
-    use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
-    use bc,        only : boucon
-    use parallel,  only : dataswap,mpirankname,psum,pmax
-    use solver,    only : alfa_con,cci,ccj,cck
-    !
-    ! local data
-    integer :: i,j,k,n
-    real(8) :: dx,error1,error2,errorinf
-    real(8),allocatable :: vtest(:,:,:)
-    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
-    !
-    ! print*,x(:,0,0,1)
-    !
-    ! testing ddx
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      q(i,j,k,1)=sin(4.d0*x(i,j,k,1))
-      !
-    enddo
-    enddo
-    enddo
-    !
-    allocate(dqref(0:im))
-    do i=0,im
-      dqref(i)=4.d0*cos(4.d0*x(i,0,0,1))
-    enddo
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:im))
-    !
-    dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(:,0,0,1,1)
-    !
-    error1=0.d0
-    error2=0.d0
-    errorinf=0.d0
-    do i=1,im
-      error1=error1+abs(dq(i)-dqref(i))
-      error2=error2+(dq(i)-dqref(i))**2
-      errorinf=max(errorinf,abs(dq(i)-dqref(i)))
-    enddo
-    !
-    error1=psum(error1)/dble(ia)
-    error2=sqrt(psum(error1)/dble(ia))
-    errorinf=pmax(errorinf)
-    !
-    print*,' ** total number of nodes:',ia
-    print*,' **   L1 error:',error1
-    print*,' **   L2 error:',error2
-    print*,' ** Linf error:',errorinf
-    !
-  end subroutine accuracytest
-  !
-  subroutine filtertest
-    !
-    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie
-    use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
-    use bc,        only : boucon
-    use parallel,  only : dataswap,mpirankname
-    use solver,    only : alfa_con,fci,fcj,fck
-    !
-    ! local data
-    integer :: i,j,k,n
-    real(8) :: dx
-    real(8),allocatable :: vtest(:,:,:)
-    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
-    !
-    ! print*,x(:,0,0,1)
-    !
-    ! testing ddx
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      q(i,j,k,1)=sin(10.d0*x(i,j,k,1))
-      !
-    enddo
-    enddo
-    enddo
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:im))
-    !
-    dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
-    !
-    open(18,file='testout/filterx.dat')
-    write(18,'(3(1X,A15))')'x','q','q~'
-    write(18,'(3(1X,E15.7E3))')(x(i,0,0,1),q(i,0,0,1),dq(i),i=0,im)
-    close(18)
-    print*,' << testout/filterx.dat'
-    !
-    deallocate(dq)
-    !
-    ! testing ddy
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))+0.1d0*sin((dble(j)+0.5d0)*pi)
-      !
-    enddo
-    enddo
-    enddo
-    q(:, 0,:,1)=0.d0
-    q(:,jm,:,1)=0.d0
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:jm))
-    !
-    dq(:)=spafilter10(q(0,:,0,1),npdcj,jm,alfa_filter,fcj)
-    !
-    open(18,file='testout/filtery.dat')
-    write(18,'(3(1X,A15))')'y','q','q~'
-    write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
-    close(18)
-    print*,' << testout/filtery.dat'
-    !
-    deallocate(dq)
-    !
-    ! testing ddz
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      q(i,j,k,1)=sin(6.d0*x(i,j,k,3))
-      !
-    enddo
-    enddo
-    enddo
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:km))
-    !
-    dq(:)=spafilter10(q(0,0,:,1),npdck,km,alfa_filter,fck)
-    !
-    open(18,file='testout/filterz.dat')
-    write(18,'(3(1X,A15))')'y','q','q~'
-    write(18,'(3(1X,E15.7E3))')(x(0,0,k,3),q(0,0,k,1),dq(k),k=0,km)
-    close(18)
-    print*,' << testout/filterz.dat'
-    !
-    deallocate(dq)
-    !
-  end subroutine filtertest
   !
     !
 end module test

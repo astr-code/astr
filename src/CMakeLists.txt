@@ -8,6 +8,7 @@ add_executable(astr
                     CMakeLists.txt
                     cmdefne.F90
                     commarray.F90
+                    commsolver.F90
                     commcal.F90
                     commfunc.F90
                     commtype.F90
