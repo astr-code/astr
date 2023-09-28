@@ -532,6 +532,7 @@ module readwrite
       inputfile='datin/input.dat'
       !
       call readkeyboad(inputfile)
+      !
       call readkeyboad(testmode)
       !
       fh=get_unit()

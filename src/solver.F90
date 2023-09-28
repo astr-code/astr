@@ -2603,40 +2603,40 @@ module solver
     !
     ncolm=5+num_species+num_modequ
     !
-    allocate(ff(0:jm,0:km,-hm:im+hm,2:ncolm),df(0:jm,0:km,0:im,2:ncolm))
+    allocate(ff(0:jm,0:km,2:ncolm,-hm:im+hm),df(0:jm,0:km,2:ncolm,0:im))
     do k=0,km
     do j=0,jm
       !
-      ff(j,k,:,2)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                        &
-                sigma(:,j,k,2)*dxi(:,j,k,1,2) +                        &
-                sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(j,k,:,3)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                        &
-                sigma(:,j,k,4)*dxi(:,j,k,1,2) +                        &
-                sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(j,k,:,4)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                        &
-                sigma(:,j,k,5)*dxi(:,j,k,1,2) +                        &
-                sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(j,k,:,5)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                        &
-                qflux(:,j,k,2)*dxi(:,j,k,1,2) +                        &
-                qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(j,k,2,:)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                        &
+                    sigma(:,j,k,2)*dxi(:,j,k,1,2) +                        &
+                    sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(j,k,3,:)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                        &
+                    sigma(:,j,k,4)*dxi(:,j,k,1,2) +                        &
+                    sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(j,k,4,:)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                        &
+                    sigma(:,j,k,5)*dxi(:,j,k,1,2) +                        &
+                    sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(j,k,5,:)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                        &
+                    qflux(:,j,k,2)*dxi(:,j,k,1,2) +                        &
+                    qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       !
       if(num_species>0) then
         do jspc=1,num_species
-          ff(j,k,:,5+jspc)=( yflux(:,j,k,jspc,1)*dxi(:,j,k,1,1) +               &
-                         yflux(:,j,k,jspc,2)*dxi(:,j,k,1,2) +               &
-                         yflux(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+          ff(j,k,5+jspc,:)=( yflux(:,j,k,jspc,1)*dxi(:,j,k,1,1) +          &
+                             yflux(:,j,k,jspc,2)*dxi(:,j,k,1,2) +          &
+                             yflux(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
         enddo
       endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
         !
-        ff(j,k,:,1+n)=( dkflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
-                    dkflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
-                    dkflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-        ff(j,k,:,2+n)=( doflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
-                    doflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
-                    doflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+        ff(j,k,1+n,:)=( dkflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
+                        dkflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
+                        dkflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+        ff(j,k,2+n,:)=( doflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
+                        doflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
+                        doflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       endif
       !
     enddo
@@ -2645,9 +2645,7 @@ module solver
     !+------------------------------+
     !|    calculate derivative      |
     !+------------------------------+
-    do n=2,ncolm
-      df(:,:,:,n)=ddfc(ff(:,:,:,n),difschm,npdci,alfa_dif,dci)
-    enddo
+    df=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
     !
     do k=0,km
     do j=0,jm
@@ -2655,24 +2653,24 @@ module solver
       !| end of calculate derivative  |
       !+------------------------------+
       !
-      qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(j,k,is:ie,2)
-      qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(j,k,is:ie,3)
-      qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(j,k,is:ie,4)
-      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(j,k,is:ie,5)
+      qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(j,k,2,is:ie)
+      qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(j,k,3,is:ie)
+      qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(j,k,4,is:ie)
+      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(j,k,5,is:ie)
       ! freeze energy flux for startup
       ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(is:ie,j,k,5)=0.d0
       
       if(num_species>0) then
         do jspc=6,5+num_species
-          qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(j,k,is:ie,jspc)
+          qrhs(is:ie,j,k,jspc)=qrhs(is:ie,j,k,jspc)+df(j,k,jspc,is:ie)
         enddo
       endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
         !
-        qrhs(is:ie,j,k,1+n)=qrhs(is:ie,j,k,1+n)+df(j,k,is:ie,1+n)
-        qrhs(is:ie,j,k,2+n)=qrhs(is:ie,j,k,2+n)+df(j,k,is:ie,2+n)
+        qrhs(is:ie,j,k,1+n)=qrhs(is:ie,j,k,1+n)+df(j,k,1+n,is:ie)
+        qrhs(is:ie,j,k,2+n)=qrhs(is:ie,j,k,2+n)+df(j,k,2+n,is:ie)
       endif
       !
     enddo
@@ -2685,39 +2683,39 @@ module solver
     !
     ! Calculating along j direction.
     !
-    allocate(ff(0:im,0:km,-hm:jm+hm,2:ncolm),df(0:im,0:km,0:jm,2:ncolm))
+    allocate(ff(0:im,0:km,2:ncolm,-hm:jm+hm),df(0:im,0:km,2:ncolm,0:jm))
     do k=0,km
     do i=0,im
       !
-      ff(i,k,:,2)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
-                sigma(i,:,k,2)*dxi(i,:,k,2,2) +                        &
-                sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-      ff(i,k,:,3)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                        &
-                sigma(i,:,k,4)*dxi(i,:,k,2,2) +                        &
-                sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-      ff(i,k,:,4)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                        &
-                sigma(i,:,k,5)*dxi(i,:,k,2,2) +                        &
-                sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-      ff(i,k,:,5)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                        &
-                qflux(i,:,k,2)*dxi(i,:,k,2,2) +                        &
-                qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(i,k,2,:)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
+                   sigma(i,:,k,2)*dxi(i,:,k,2,2) +                         &
+                   sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(i,k,3,:)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                        &
+                    sigma(i,:,k,4)*dxi(i,:,k,2,2) +                        &
+                    sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(i,k,4,:)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                        &
+                    sigma(i,:,k,5)*dxi(i,:,k,2,2) +                        &
+                    sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+      ff(i,k,5,:)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                        &
+                    qflux(i,:,k,2)*dxi(i,:,k,2,2) +                        &
+                    qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
       !
       if(num_species>0) then
         do jspc=1,num_species
-          ff(i,k,:,5+jspc)=( yflux(i,:,k,jspc,1)*dxi(i,:,k,2,1) +          &
-                         yflux(i,:,k,jspc,2)*dxi(i,:,k,2,2) +          &
-                         yflux(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+          ff(i,k,5+jspc,:)=( yflux(i,:,k,jspc,1)*dxi(i,:,k,2,1) +          &
+                            yflux(i,:,k,jspc,2)*dxi(i,:,k,2,2) +           &
+                            yflux(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
         enddo
       endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
-        ff(i,k,:,1+n)=( dkflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
-                    dkflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
-                    dkflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-        ff(i,k,:,2+n)=( doflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
-                    doflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
-                    doflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(i,k,1+n,:)=( dkflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
+                        dkflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
+                        dkflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(i,k,2+n,:)=( doflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
+                        doflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
+                        doflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
       endif
       !
     enddo
@@ -2726,33 +2724,31 @@ module solver
     !+------------------------------+
     !|    calculate derivative      |
     !+------------------------------+
-    do n=2,ncolm
-      df(:,:,:,n)=ddfc(ff(:,:,:,n),difschm,npdcj,alfa_dif,dcj)
-    enddo
+    df=ddfc(ff,difschm,npdcj,jm,alfa_dif,dcj)
     !+------------------------------+
     !| end of calculate derivative  |
     !+------------------------------+
     !
     do k=0,km
     do i=0,im
-      qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(i,k,js:je,2)
-      qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(i,k,js:je,3)
-      qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(i,k,js:je,4)
-      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(i,k,js:je,5)
+      qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(i,k,2,js:je)
+      qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(i,k,3,js:je)
+      qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(i,k,4,js:je)
+      qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(i,k,5,js:je)
       ! freeze energy flux for startup
       ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(i,js:je,k,5)=0.d0
       
       if(num_species>0) then
         do jspc=6,5+num_species
-          qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(i,k,js:je,jspc)
+          qrhs(i,js:je,k,jspc)=qrhs(i,js:je,k,jspc)+df(i,k,jspc,js:je)
         enddo
       endif
       !
       if(trim(turbmode)=='k-omega') then
         n=5+num_species
         !
-        qrhs(i,js:je,k,1+n)=qrhs(i,js:je,k,1+n)+df(i,k,js:je,1+n)
-        qrhs(i,js:je,k,2+n)=qrhs(i,js:je,k,2+n)+df(i,k,js:je,2+n)
+        qrhs(i,js:je,k,1+n)=qrhs(i,js:je,k,1+n)+df(i,k,1+n,js:je)
+        qrhs(i,js:je,k,2+n)=qrhs(i,js:je,k,2+n)+df(i,k,2+n,js:je)
       endif
       !
     enddo
@@ -2766,40 +2762,40 @@ module solver
     if(ndims==3) then
       ! Calculating along k direction.
       !
-      allocate(ff(0:im,0:jm,-hm:km+hm,2:ncolm),df(0:im,0:jm,0:km,2:ncolm))
+      allocate(ff(0:im,0:jm,2:ncolm,-hm:km+hm),df(0:im,0:jm,2:ncolm,0:km))
       do j=0,jm
       do i=0,im
         !
-        ff(i,j,:,2)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
-                  sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &
-                  sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(i,j,:,3)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                      &
-                  sigma(i,j,:,4)*dxi(i,j,:,3,2) +                      &
-                  sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(i,j,:,4)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                      &
-                  sigma(i,j,:,5)*dxi(i,j,:,3,2) +                      &
-                  sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(i,j,:,5)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                      &
-                  qflux(i,j,:,2)*dxi(i,j,:,3,2) +                      &
-                  qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,2,:)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
+                      sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+                      sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,3,:)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                      &
+                      sigma(i,j,:,4)*dxi(i,j,:,3,2) +                      &
+                      sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,4,:)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                      &
+                      sigma(i,j,:,5)*dxi(i,j,:,3,2) +                      &
+                      sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,5,:)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                      &
+                      qflux(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+                      qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
         if(num_species>0) then
           do jspc=1,num_species
-            ff(i,j,:,5+jspc)=( yflux(i,j,:,jspc,1)*dxi(i,j,:,3,1) +        &
-                           yflux(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
-                           yflux(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+            ff(i,j,5+jspc,:)=( yflux(i,j,:,jspc,1)*dxi(i,j,:,3,1) +        &
+                               yflux(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
+                               yflux(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
           enddo
         endif
         !
         if(trim(turbmode)=='k-omega') then
           n=5+num_species
           !
-          ff(i,j,:,1+n)=( dkflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
-                      dkflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
-                      dkflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-          ff(i,j,:,2+n)=( doflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
-                      doflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
-                      doflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+          ff(i,j,1+n,:)=( dkflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
+                          dkflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
+                          dkflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+          ff(i,j,2+n,:)=( doflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
+                          doflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
+                          doflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         endif
         !
       enddo
@@ -2807,9 +2803,7 @@ module solver
       !+------------------------------+
       !|    calculate derivative      |
       !+------------------------------+
-      do n=2,ncolm
-        df(:,:,:,n)=ddfc(ff(:,:,:,n),difschm,npdck,alfa_dif,dck)
-      enddo
+      df=ddfc(ff,difschm,npdck,km,alfa_dif,dck)
       !+------------------------------+
       !| end of calculate derivative  |
       !+------------------------------+
@@ -2817,24 +2811,24 @@ module solver
       do j=0,jm
       do i=0,im
         !
-        qrhs(i,j,ks:ke,2)=qrhs(i,j,ks:ke,2)+df(i,j,ks:ke,2)
-        qrhs(i,j,ks:ke,3)=qrhs(i,j,ks:ke,3)+df(i,j,ks:ke,3)
-        qrhs(i,j,ks:ke,4)=qrhs(i,j,ks:ke,4)+df(i,j,ks:ke,4)
-        qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(i,j,ks:ke,5)
+        qrhs(i,j,ks:ke,2)=qrhs(i,j,ks:ke,2)+df(i,j,2,ks:ke)
+        qrhs(i,j,ks:ke,3)=qrhs(i,j,ks:ke,3)+df(i,j,3,ks:ke)
+        qrhs(i,j,ks:ke,4)=qrhs(i,j,ks:ke,4)+df(i,j,4,ks:ke)
+        qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(i,j,5,ks:ke)
         ! freeze energy flux for startup
         ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(i,j,ks:ke,5)=0.d0
         !
         if(num_species>0) then
           do jspc=6,5+num_species
-            qrhs(i,j,ks:ke,jspc)=qrhs(i,j,ks:ke,jspc)+df(i,j,ks:ke,jspc)
+            qrhs(i,j,ks:ke,jspc)=qrhs(i,j,ks:ke,jspc)+df(i,j,jspc,ks:ke)
           enddo
         endif
         !
         if(trim(turbmode)=='k-omega') then
           n=5+num_species
           !
-          qrhs(i,j,ks:ke,1+n)=qrhs(i,j,ks:ke,1+n)+df(i,j,ks:ke,1+n)
-          qrhs(i,j,ks:ke,2+n)=qrhs(i,j,ks:ke,2+n)+df(i,j,ks:ke,2+n)
+          qrhs(i,j,ks:ke,1+n)=qrhs(i,j,ks:ke,1+n)+df(i,j,1+n,ks:ke)
+          qrhs(i,j,ks:ke,2+n)=qrhs(i,j,ks:ke,2+n)+df(i,j,2+n,ks:ke)
         endif
         !
       enddo
