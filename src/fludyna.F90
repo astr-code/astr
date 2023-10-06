@@ -901,6 +901,7 @@ module fludyna
     !
     ! local data
     real(8) :: uref,u1,u2,delta,mc,ustar
+    logical,save :: firstcall=.true.
     !+-----------------------------------+
     !| delta: inflow vorticity thickness |
     !+-----------------------------------+
@@ -920,11 +921,12 @@ module fludyna
     !
     ro=1.d0/t
     !
-    if(info) then
+    if(info .and. firstcall) then
       print*,' ** High-speed Mach number=',u1*mach
       print*,' **  Low-speed Mach number=',u2*mach
       print*,' ** Convective Mach number=',mc
       print*,' **  Shear-layer thickness=',delta
+      firstcall=.false.
     endif
     !
     return
