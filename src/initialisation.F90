@@ -1172,12 +1172,13 @@ module initialisation
     do j=0,jm
     do i=0,im
       !
-      rho(i,j,k)  = rho_prof(j)
+      call mixinglayervel(x(i,j,k,2),vel(i,j,k,:),tmp(i,j,k),rho(i,j,k),lio)
+      ! rho(i,j,k)  = rho_prof(j)
       !
       ! vel(i,j,k,:)= mixinglayervel(x(i,j,k,2))
-      vel(i,j,k,:) = vel_prof(j,:)
+      ! vel(i,j,k,:) = vel_prof(j,:)
       !
-      tmp(i,j,k)  = tmp_prof(j)
+      ! tmp(i,j,k)  = tmp_prof(j)
       !
       prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
       !
@@ -1549,11 +1550,15 @@ module initialisation
     !
     ! local data
     integer :: fh,i
+    logical :: lfex
     !
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
-    if(turbinf=='prof' .or. turbinf=='intp' .or. turbinf=='intx' .or. turbinf=='udef') then
+    if(lio) inquire(file='datin/inlet.prof',exist=lfex)
+    call bcast(lfex)
+    !
+    if(lfex) then
       !
       if(lio) then
         !
@@ -1629,6 +1634,7 @@ module initialisation
       endif
       !
     else
+      ! set uniform inlet profile
       !
       nomi_thick=0.d0
       disp_thick=0.d0

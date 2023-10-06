@@ -21,7 +21,7 @@ f
 0.49d0, 48
 
 # ref_t,reynolds,mach                                   : Reference variables
-273.15d0, 1500.d0, 0.5d0
+273.15d0, 1500.d0, 0.3d0
 
 # conschm,difschm,rkscheme                              : Numerical scheme
 642c, 642c, rk3 
@@ -37,14 +37,14 @@ none,h
 
 # bctype                                                : Boundary condition definition 
 11, prof
-21
+22
 52 
 52
 1
 1
 
 # ninit                                                 : Initial method
-1
+0
 
 # spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax : Sponge layer range
 0, 20, 0, 0, 0, 0

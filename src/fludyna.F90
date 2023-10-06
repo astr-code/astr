@@ -889,31 +889,47 @@ module fludyna
   !| -------------                                                     |
   !| 19-Mar-2021: Created by J. Fang @ STFC Daresbury Laboratory       |
   !+-------------------------------------------------------------------+
-  function mixinglayervel(y) result(u)
+  subroutine mixinglayervel(y,u,t,ro,info) 
     !
     use constdef
-    use commvar, only: uinf,ymin,ymax
+    use commvar, only: ymin,ymax,gamma,mach
     !
     ! arguments
-    real(8) :: u(3)
     real(8),intent(in) :: y
+    real(8),intent(out) :: u(3),t,ro
+    logical,intent(in) :: info
     !
     ! local data
-    real(8) :: u1,u2,delta
+    real(8) :: uref,u1,u2,delta,mc,ustar
     !+-----------------------------------+
     !| delta: inflow vorticity thickness |
     !+-----------------------------------+
-    u1=3.5d0
-    u2=1.5d0
-    delta=1.d0
+    u1=1.5d0
+    u2=0.5d0
+    uref = 0.5d0*(u1-u2)
     !
-    u(1)=0.5d0*((u1+u2)+(u1-u2)*tanh(2.d0*y/delta))
+    delta=1.d0
+    mc=(u1-u2)/2.d0*mach
+    !
+    u(1)=0.5d0*(u1+u2)+uref*tanh(2.d0*y/delta)
     u(2)=0.d0
     u(3)=0.d0
     !
+    ustar=u(1)-0.5d0*(u1+u2)
+    t=1.d0*(1.d0+mc**2*0.5d0*(gamma-1.d0)*(1.d0-(ustar/uref)**2))
+    !
+    ro=1.d0/t
+    !
+    if(info) then
+      print*,' ** High-speed Mach number=',u1*mach
+      print*,' **  Low-speed Mach number=',u2*mach
+      print*,' ** Convective Mach number=',mc
+      print*,' **  Shear-layer thickness=',delta
+    endif
+    !
     return
     !
-  end function mixinglayervel
+  end subroutine mixinglayervel
   !+-------------------------------------------------------------------+
   !| The end of the function mixinglayervel.                           |
   !+-------------------------------------------------------------------+
