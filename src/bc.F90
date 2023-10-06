@@ -1359,10 +1359,11 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine inflow(ndir)
     !
-    use commvar,   only : turbmode,nondimen,spcinf
+    use commvar,   only : turbmode,nondimen,spcinf,rkstep
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
+    use userdefine,only : udf_inflow_fluc
 #ifdef COMB
     use thermchem, only : aceval,gammarmix
 #endif
@@ -1400,12 +1401,16 @@ module bc
       !
       i=0
       !
-      if(turbinf=='intp')  then
-        call inflowintp
-      elseif(turbinf=='intx')  then
-        call inflowintx
-      elseif(turbinf=='udef')  then
-        call inflowudef
+      if(rkstep==1) then
+        !
+        if(turbinf=='intp')  then
+          call inflowintp
+        elseif(turbinf=='intx')  then
+          call inflowintx
+        elseif(turbinf=='udef')  then
+          call udf_inflow_fluc(vel_prof,vel_in)
+        endif
+        !
       endif
       !
       do k=0,km
@@ -1594,42 +1599,6 @@ module bc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine inflow.                                 |
   !+-------------------------------------------------------------------+
-  !
-  subroutine inflowudef
-    !
-    use commvar, only : time,uinf,im,jm,km,ymax
-    use commarray,only: x,vel,rho,prs,spc,tmp,q
-    !
-    real(8) :: pulse_strength,pulse_width,tvor,radi2,xp,rvor,yc,var1
-    integer :: i,j,k
-    !
-    pulse_width=1.d-4
-    tvor=1.d-5
-    rvor=pulse_width
-    yc=0.5d0*ymax
-    !
-    pulse_strength=0.1d0
-    !
-    i=0
-    ! pulsevar=1.d0*exp(-0.5d0*((time-0.008d0)/pulse_width)**2)
-    do k=0,km
-    do j=0,jm
-      !
-      xp=uinf*(time-tvor)
-      !
-      radi2=(xp**2+(x(i,j,k,2)-yc)**2)/rvor/rvor
-      var1=pulse_strength*exp(-0.5d0*radi2)
-      !
-      vel_in(j,k,1)=uinf-var1*(x(i,j,k,2)-yc)
-      vel_in(j,k,2)=     var1*(xp)
-      vel_in(j,k,3)=0.d0
-      !
-      ! print*,var1,vel_in(j,k,1:2)
-      !
-    enddo
-    enddo
-    !
-  end subroutine inflowudef
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to interpolate the inflow turbulence under the |
@@ -3543,8 +3512,8 @@ module bc
         !
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
-        if(.false.) then
-        ! if(ub>=css) then
+        ! if(.false.) then
+        if(ub>=css) then
           ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
@@ -3849,7 +3818,8 @@ module bc
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           ! LODi(4)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
-          LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          ! LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          LODi(4)=kinout*(prs(i,j,k)-pinf)
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
         !                   dxi(i,j,k,2,3)**2 )
@@ -4087,8 +4057,9 @@ module bc
         !    dxi(i,j,k,2,3)*vel(i,j,k,3)
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
-          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
           ! LODi(5)=kinout*(prs(i,j,k)-prs_prof(jm))/rho(i,j,k)/css
+          LODi(5)=kinout*(prs(i,j,k)-pinf)
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
         !                   dxi(i,j,k,2,3)**2 )

@@ -273,7 +273,8 @@ module mainloop
                          ndims,num_species,maxstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
-    use solver,   only : rhscal,filterq,spongefilter,filter2e
+    use comsolver,only : filterq,spongefilter,filter2e
+    use solver,   only : rhscal
     use bc,       only : boucon,immbody
 #ifdef COMB
     use thermchem,only : imp_euler_ode,heatrate
@@ -554,7 +555,8 @@ module mainloop
                          feqwsequ,lwslic
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
-    use solver,   only : rhscal,filterq,spongefilter
+    use comsolver,only : filterq,spongefilter
+    use solver,   only : rhscal
     use bc,       only : boucon,immbody
     !
     !

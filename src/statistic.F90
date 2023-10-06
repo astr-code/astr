@@ -796,6 +796,8 @@ module statistic
         elseif(flowtype=='tgvflame' .or. flowtype=='1dflame' .or. flowtype=='0dreactor' .or. &
                flowtype=='h2supersonic') then
           fstitle='nstep time maxT maxU maxHRR xflame vflame pout'
+        else
+          fstitle='nstep time maxq1 maxq2 maxq3 maxq4 maxq5'
         endif
         !
         call listinit(filename='flowstate.dat',handle=hand_fs, &

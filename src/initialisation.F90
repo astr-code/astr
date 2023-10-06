@@ -145,7 +145,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    call writeflfed
+    ! call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -645,7 +645,7 @@ module initialisation
     use commvar,  only: ia,ja,ka
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dvel
     use fludyna,  only: thermal
-    use solver,   only: grad
+    use comsolver,only: grad
     use parallel, only: psum,pmax,pmin
     use hdf5io
     !
@@ -859,7 +859,7 @@ module initialisation
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
     use fludyna,  only: thermal,miucal
     use commfunc, only: dis2point2
-    use readwrite,only: readprofile
+    use parallel, only: preadprofile
     !
     ! local data
     integer :: i,j,k,l,ii,jj
@@ -879,7 +879,7 @@ module initialisation
     !
     if(trim(turbmode)=='udf1') then
       !
-      call readprofile('Results/miut.dat',dir='j',                    &
+      call preadprofile('Results/miut.dat',dir='j',                    &
                                               var1=yh,var2=nth,var3=r12)
       ! do j=0,jm
       !   print*,mpirank,'|',yh(j),nth(j),r12(j)
@@ -1363,7 +1363,7 @@ module initialisation
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
     use fludyna,  only: thermal,miucal
     use commfunc, only: dis2point2
-    use readwrite,only: readprofile
+    use parallel, only: preadprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
     !
     ! local data
@@ -1539,7 +1539,7 @@ module initialisation
   subroutine inletprofile
     !
     use commvar,  only: flowtype,nondimen,spcinf,num_species
-    use readwrite,only: readprofile
+    use parallel, only: preadprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
     use stlaio,   only: get_unit
@@ -1553,7 +1553,7 @@ module initialisation
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
               vel_prof(0:jm,1:3),spc_prof(0:jm,1:num_species) )
     !
-    if(turbinf=='prof' .or. turbinf=='intp' .or. turbinf=='intx' ) then
+    if(turbinf=='prof' .or. turbinf=='intp' .or. turbinf=='intx' .or. turbinf=='udef') then
       !
       if(lio) then
         !
@@ -1576,7 +1576,7 @@ module initialisation
       call bcast(mome_thick)
       call bcast(fric_velocity)
       !
-      call readprofile('datin/inlet.prof',dir='j',                     &
+      call preadprofile('datin/inlet.prof',dir='j',                     &
                                 var1=rho_prof,     var2=vel_prof(:,1), &
                                 var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
       !

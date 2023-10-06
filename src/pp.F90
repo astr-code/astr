@@ -2516,7 +2516,7 @@ module pp
     !
     use commvar,   only : im,jm,km,hm
     use parallel,  only : dataswap
-    use solver,    only : solvrinit,grad
+    use comsolver, only : solvrinit,grad
     !
     real(8),intent(inout) :: u(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
     !

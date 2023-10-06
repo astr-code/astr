@@ -388,7 +388,7 @@ module readwrite
           elseif(turbinf=='free') then
             write(*,'(A)')' free stream incoming flow'
           elseif(turbinf=='udef') then
-            write(*,'(A)')' self-defined incoming flow'
+            write(*,'(A)')' user-defined incoming flow'
           else
             print*,' !! turbinf: ',turbinf
             stop ' !! ERROR in defining turbinf @ bc 11 !!'
@@ -532,6 +532,7 @@ module readwrite
       inputfile='datin/input.dat'
       !
       call readkeyboad(inputfile)
+      !
       call readkeyboad(testmode)
       !
       fh=get_unit()
@@ -842,6 +843,7 @@ module readwrite
     use commvar, only : nmonitor,imon,islice,jslice,kslice,ia,ja,ka
     use parallel,only : bcast
     use commcal, only : monitorsearch
+    use utility, only : isnum
     !
     ! local data
     character(len=64) :: inputfile
@@ -1179,120 +1181,6 @@ module readwrite
   !| The end of the subroutine readinput.                              |
   !+-------------------------------------------------------------------+
   !!
-  !+-------------------------------------------------------------------+
-  !| This subroutine is used to read a profile                         !
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 13-08-2021  | Created by J. Fang @ Warrington                     |
-  !+-------------------------------------------------------------------+
-  subroutine readprofile(filename,dir,var1,var2,var3,var4,var5,skipline)
-    !
-    use commvar,   only : im,jm,km,ia,ja,ka
-    use parallel,  only : ptabupd,pscatter
-    !
-    ! arguments
-    character(len=*),intent(in) :: filename,dir
-    integer,intent(in),optional :: skipline
-    real(8),optional,intent(out) ::  var1(0:),var2(0:),var3(0:),       &
-                                     var4(0:),var5(0:)
-    !
-    ! local data
-    integer :: fh,ios,i,j,n,offset,nsk,nvar
-    real(8),allocatable,dimension(:,:) :: data,scat
-    integer :: table(0:mpirankmax),displs(0:mpirankmax)
-    character(len=32) :: c1
-    !
-    if(present(skipline)) then
-      nsk=skipline
-    else
-      nsk=0
-    endif
-    !
-    fh=get_unit()
-    !
-    if( present(var5) ) then
-      nvar=5
-    elseif( present(var4)  ) then
-      nvar=4
-    elseif( present(var3) ) then
-      nvar=3
-    elseif( present(var2) ) then
-      nvar=2
-    elseif( present(var1) ) then
-      nvar=1
-    else
-      stop ' !! ERROR 1  define nvar @  readprofile '
-    endif
-    !
-    allocate(data(1:nvar,0:ja))
-    !
-    if(dir=='j') then
-      !
-      if(mpirank==0) then
-        !
-        open(fh,file=filename,action='read',form='formatted')
-        do n=1,nsk
-          read(fh,*)
-        enddo
-        !
-        ios=0
-        do while(ios==0)
-          !
-          read(fh,*,iostat=ios)c1
-          !
-          if(isnum(c1)==2 .or. isnum(c1)==3 .or. isnum(c1)==4) then
-            ! the first line with a real number
-            backspace(fh)
-            !
-            exit
-            !
-          endif
-          !
-        enddo
-        !
-        ! start from real number
-        do j=0,ja
-          read(fh,*)(data(i,j),i=1,nvar)
-        enddo
-        !
-        close(fh)
-        write(*,'(3A,I0)')'  >> ',filename,' using file handle : ',fh
-        !
-      endif
-      !
-      call ptabupd(var=jm+1,table=table)
-      !
-      call ptabupd(var=jg0*nvar,table=displs)
-      !
-      call pscatter(data,scat,table,offset=displs,rank=0)
-      !
-      ! print*,mpirank,'|',displs(mpirank)
-      ! do j=0,jm
-      !   print*,mpirank,'|',j+jg0,scat(1,j+1)
-      ! enddo
-      !
-      if( present(var5) )  var5(0:jm)=scat(5,1:1+jm)
-      if( present(var4) )  var4(0:jm)=scat(4,1:1+jm)
-      if( present(var3) )  var3(0:jm)=scat(3,1:1+jm)
-      if( present(var2) )  var2(0:jm)=scat(2,1:1+jm)
-      if( present(var1) )  var1(0:jm)=scat(1,1:1+jm)
-      !
-      deallocate(data,scat)
-      !
-    else
-      !
-      print*,' !! dir not set yet @ readprofile !!'
-      stop
-      !
-    endif
-    !
-    return
-    !
-  end subroutine readprofile
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine readprofile.                            |
-  !+-------------------------------------------------------------------+
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to read a initial flow filed.
@@ -3228,154 +3116,6 @@ module readwrite
   !| The end of the subroutine write_sboun.                            |
   !+-------------------------------------------------------------------+
   !!
-  !+-------------------------------------------------------------------+
-  !| This function Verifies that a character string represents a       |
-  !|  numerical value                                                  |
-  !+-------------------------------------------------------------------+
-  ! ref: http://fcode.cn/code_gen-115-1.html
-  !+-------------------------------------------------------------------+
-  Integer Function IsNum(zval)
-    ! 确定字符是否是数值类型：
-    ! 0-非数值的字符串
-    ! 1-整数(integer)
-    ! 2-小数(fixed point real)
-    ! 3-指数类型实数(exponent type real)
-    ! 4-双精度实数指数形式(exponent type double)
-    Character (Len=*), Intent (In) :: zval
-    !
-    Integer :: num, nmts, nexp, kmts, ifexp, ichr
-    !
-    Integer, Parameter :: kint = 1 ! integer
-    Integer, Parameter :: kfix = 2 ! fixed point real
-    Integer, Parameter :: kexp = 3 ! exponent type real
-    Integer, Parameter :: kdbl = 4 ! exponent type double
-    !
-    ! initialise
-    num = 0  ! 数字的格式，最后传递给ISNUM返回
-    nmts = 0 ! 整数或浮点数的数字个数
-    nexp = 0 ! 指数形式的数字个数
-    kmts = 0 ! 有+-号为1，否则为0
-    ifexp = 0! 似乎没用
-    ! loop over characters
-    ichr = 0
-    !
-    Do
-    
-      If (ichr>=len(zval)) Then
-    
-        ! last check
-    
-        If (nmts==0) Exit
-    
-        If (num>=kexp .And. nexp==0) Exit
-    
-        isnum = num
-    
-        Return
-    
-      End If
-    
-      ichr = ichr + 1
-    
-      Select Case (zval(ichr:ichr))
-    
-        ! process blanks
-    
-      Case (' ')
-    
-        Continue
-    
-        ! process digits
-    
-      Case ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
-    
-        If (num==0) num = kint
-    
-        If (num<kexp) Then
-    
-          nmts = nmts + 1
-    
-          ! 整数或浮点数+1
-    
-        Else
-    
-          nexp = nexp + 1
-    
-          ! 指数形式+1
-    
-        End If
-    
-        ! process signs
-    
-      Case ('+', '-')
-    
-        If (num==0) Then
-    
-          If (kmts>0) Exit
-    
-          ! 出现2个符号，非数字
-    
-          kmts = 1
-    
-          num = kint
-    
-        Else
-    
-          If (num<kexp) Exit
-    
-          If (ifexp>0) Exit
-    
-          ifexp = 1
-    
-        End If
-    
-        ! process decimal point
-    
-      Case ('.')
-    
-        If (num/=kint .And. ichr/=1) Exit
-    
-        ! 前面不是整数，小数点也不是第一个字符，则非数字
-    
-        num = kfix
-    
-        ! process exponent
-    
-      Case ('e', 'E')
-    
-        If (num>=kexp) Exit
-    
-        If (nmts==0) Exit
-    
-        num = kexp
-      Case ('d', 'D')
-    
-        If (num>=kexp) Exit
-    
-        If (nmts==0) Exit
-    
-        num = kdbl
-    
-        ! any other character means the string is non-numeric
-    
-      Case Default
-    
-        Exit
-    
-      End Select
-    
-    End Do
-    
-    ! if this point is reached, the string is non-numeric
-    
-    isnum = 0
-    
-    Return
-    
-  End Function IsNum
-  !+-------------------------------------------------------------------+
-  !| The end of the Function IsNum.                                    |
-  !+-------------------------------------------------------------------+
   !
 end module readwrite
 !+---------------------------------------------------------------------+

@@ -5352,6 +5352,122 @@ module parallel
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is used to read a profile                         !
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-08-2021  | Created by J. Fang @ Warrington                     |
+  !| 05-10-2023  | moved here by J. Fang @ Daresbury                   |
+  !+-------------------------------------------------------------------+
+  subroutine preadprofile(filename,dir,var1,var2,var3,var4,var5,skipline)
+    !
+    use commvar,   only : im,jm,km,ia,ja,ka
+    use utility,   only : isnum
+    !
+    ! arguments
+    character(len=*),intent(in) :: filename,dir
+    integer,intent(in),optional :: skipline
+    real(8),optional,intent(out) ::  var1(0:),var2(0:),var3(0:),       &
+                                     var4(0:),var5(0:)
+    !
+    ! local data
+    integer :: fh,ios,i,j,n,offset,nsk,nvar
+    real(8),allocatable,dimension(:,:) :: data,scat
+    integer :: table(0:mpirankmax),displs(0:mpirankmax)
+    character(len=32) :: c1
+    !
+    if(present(skipline)) then
+      nsk=skipline
+    else
+      nsk=0
+    endif
+    !
+    fh=get_unit()
+    !
+    if( present(var5) ) then
+      nvar=5
+    elseif( present(var4)  ) then
+      nvar=4
+    elseif( present(var3) ) then
+      nvar=3
+    elseif( present(var2) ) then
+      nvar=2
+    elseif( present(var1) ) then
+      nvar=1
+    else
+      stop ' !! ERROR 1  define nvar @  readprofile '
+    endif
+    !
+    allocate(data(1:nvar,0:ja))
+    !
+    if(dir=='j') then
+      !
+      if(mpirank==0) then
+        !
+        open(fh,file=filename,action='read',form='formatted')
+        do n=1,nsk
+          read(fh,*)
+        enddo
+        !
+        ios=0
+        do while(ios==0)
+          !
+          read(fh,*,iostat=ios)c1
+          !
+          if(isnum(c1)==2 .or. isnum(c1)==3 .or. isnum(c1)==4) then
+            ! the first line with a real number
+            backspace(fh)
+            !
+            exit
+            !
+          endif
+          !
+        enddo
+        !
+        ! start from real number
+        do j=0,ja
+          read(fh,*)(data(i,j),i=1,nvar)
+        enddo
+        !
+        close(fh)
+        write(*,'(3A,I0)')'  >> ',filename,' using file handle : ',fh
+        !
+      endif
+      !
+      call ptabupd(var=jm+1,table=table)
+      !
+      call ptabupd(var=jg0*nvar,table=displs)
+      !
+      call pscatter(data,scat,table,offset=displs,rank=0)
+      !
+      ! print*,mpirank,'|',displs(mpirank)
+      ! do j=0,jm
+      !   print*,mpirank,'|',j+jg0,scat(1,j+1)
+      ! enddo
+      !
+      if( present(var5) )  var5(0:jm)=scat(5,1:1+jm)
+      if( present(var4) )  var4(0:jm)=scat(4,1:1+jm)
+      if( present(var3) )  var3(0:jm)=scat(3,1:1+jm)
+      if( present(var2) )  var2(0:jm)=scat(2,1:1+jm)
+      if( present(var1) )  var1(0:jm)=scat(1,1:1+jm)
+      !
+      deallocate(data,scat)
+      !
+    else
+      !
+      print*,' !! dir not set yet @ readprofile !!'
+      stop
+      !
+    endif
+    !
+    return
+    !
+  end subroutine preadprofile
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine preadprofile.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to convert three integer4 number to one        |
   !|  integer4 number                                                  | 
   !+-------------------------------------------------------------------+
