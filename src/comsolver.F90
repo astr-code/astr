@@ -296,73 +296,77 @@ module comsolver
     !
     deallocate(ff,df)
     !
-    allocate(ff(-hm:jm+hm,ncolm),df(0:jm,ncolm))
-    do k=0,km
-    do i=0,im
+    if(ndims>=2) then
       !
-      ff(:,1)=vel(i,:,k,1)
-      ff(:,2)=vel(i,:,k,2)
-      ff(:,3)=vel(i,:,k,3)
-      ff(:,4)=tmp(i,:,k)
-      !
-      if(num_species>0) then
-        do n=1,num_species
-          ff(:,4+n)=spc(i,:,k,n)
-        enddo
-      endif
-      !
-      if(trim(turbmode)=='k-omega') then
-        n=4+num_species
+      allocate(ff(-hm:jm+hm,ncolm),df(0:jm,ncolm))
+      do k=0,km
+      do i=0,im
         !
-        ff(:,n+1)=tke(i,:,k)
-        ff(:,n+2)=omg(i,:,k)
-      endif
-      !
-      do n=1,ncolm
-        df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+        ff(:,1)=vel(i,:,k,1)
+        ff(:,2)=vel(i,:,k,2)
+        ff(:,3)=vel(i,:,k,3)
+        ff(:,4)=tmp(i,:,k)
+        !
+        if(num_species>0) then
+          do n=1,num_species
+            ff(:,4+n)=spc(i,:,k,n)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          ff(:,n+1)=tke(i,:,k)
+          ff(:,n+2)=omg(i,:,k)
+        endif
+        !
+        do n=1,ncolm
+          df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+        enddo
+        !
+        dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(:,1)*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,1,3)=dvel(i,:,k,1,3)+df(:,1)*dxi(i,0:jm,k,2,3)
+        !
+        dvel(i,:,k,2,1)=dvel(i,:,k,2,1)+df(:,2)*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,2,2)=dvel(i,:,k,2,2)+df(:,2)*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,2,3)=dvel(i,:,k,2,3)+df(:,2)*dxi(i,0:jm,k,2,3)
+        !
+        dvel(i,:,k,3,1)=dvel(i,:,k,3,1)+df(:,3)*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,3,2)=dvel(i,:,k,3,2)+df(:,3)*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,3,3)=dvel(i,:,k,3,3)+df(:,3)*dxi(i,0:jm,k,2,3)
+        !
+        dtmp(i,:,k,1)=dtmp(i,:,k,1)+df(:,4)*dxi(i,0:jm,k,2,1)
+        dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
+        dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
+        !
+        if(num_species>0) then
+          do n=1,num_species
+            dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
+            dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
+            dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df(:,4+n)*dxi(i,0:jm,k,2,3)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          dtke(i,:,k,1)=dtke(i,:,k,1)+df(:,1+n)*dxi(i,0:jm,k,2,1)
+          dtke(i,:,k,2)=dtke(i,:,k,2)+df(:,1+n)*dxi(i,0:jm,k,2,2)
+          dtke(i,:,k,3)=dtke(i,:,k,3)+df(:,1+n)*dxi(i,0:jm,k,2,3)
+          !
+          domg(i,:,k,1)=domg(i,:,k,1)+df(:,2+n)*dxi(i,0:jm,k,2,1)
+          domg(i,:,k,2)=domg(i,:,k,2)+df(:,2+n)*dxi(i,0:jm,k,2,2)
+          domg(i,:,k,3)=domg(i,:,k,3)+df(:,2+n)*dxi(i,0:jm,k,2,3)
+          !
+          !
+        endif
+        !
       enddo
+      enddo
+      deallocate(ff,df)
       !
-      dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
-      dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(:,1)*dxi(i,0:jm,k,2,2)
-      dvel(i,:,k,1,3)=dvel(i,:,k,1,3)+df(:,1)*dxi(i,0:jm,k,2,3)
-      !
-      dvel(i,:,k,2,1)=dvel(i,:,k,2,1)+df(:,2)*dxi(i,0:jm,k,2,1)
-      dvel(i,:,k,2,2)=dvel(i,:,k,2,2)+df(:,2)*dxi(i,0:jm,k,2,2)
-      dvel(i,:,k,2,3)=dvel(i,:,k,2,3)+df(:,2)*dxi(i,0:jm,k,2,3)
-      !
-      dvel(i,:,k,3,1)=dvel(i,:,k,3,1)+df(:,3)*dxi(i,0:jm,k,2,1)
-      dvel(i,:,k,3,2)=dvel(i,:,k,3,2)+df(:,3)*dxi(i,0:jm,k,2,2)
-      dvel(i,:,k,3,3)=dvel(i,:,k,3,3)+df(:,3)*dxi(i,0:jm,k,2,3)
-      !
-      dtmp(i,:,k,1)=dtmp(i,:,k,1)+df(:,4)*dxi(i,0:jm,k,2,1)
-      dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
-      dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
-      !
-      if(num_species>0) then
-        do n=1,num_species
-          dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
-          dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
-          dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df(:,4+n)*dxi(i,0:jm,k,2,3)
-        enddo
-      endif
-      !
-      if(trim(turbmode)=='k-omega') then
-        n=4+num_species
-        !
-        dtke(i,:,k,1)=dtke(i,:,k,1)+df(:,1+n)*dxi(i,0:jm,k,2,1)
-        dtke(i,:,k,2)=dtke(i,:,k,2)+df(:,1+n)*dxi(i,0:jm,k,2,2)
-        dtke(i,:,k,3)=dtke(i,:,k,3)+df(:,1+n)*dxi(i,0:jm,k,2,3)
-        !
-        domg(i,:,k,1)=domg(i,:,k,1)+df(:,2+n)*dxi(i,0:jm,k,2,1)
-        domg(i,:,k,2)=domg(i,:,k,2)+df(:,2+n)*dxi(i,0:jm,k,2,2)
-        domg(i,:,k,3)=domg(i,:,k,3)+df(:,2+n)*dxi(i,0:jm,k,2,3)
-        !
-        !
-      endif
-      !
-    enddo
-    enddo
-    deallocate(ff,df)
+    endif
     !
     if(ndims==3) then
       allocate(ff(-hm:km+hm,ncolm),df(0:km,ncolm))
@@ -513,36 +517,40 @@ module comsolver
     ! end filter in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    ! filtering in j direction
-    call dataswap(q,direction=2,timerept=ltimrpt)
-    !
-    allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
-    !
-    do k=0,km
-    do i=0,im
+    if(ndims>=2) then
       !
-      phi(:,:)=q(i,:,k,:)
+      ! filtering in j direction
+      call dataswap(q,direction=2,timerept=ltimrpt)
       !
-      do n=1,numq
-        fph(:,n)=spafilter10(phi(:,n),npdcj,jm,alfa_filter,fcj)
-        ! fph(:,n)=spafilter6exp(phi(:,n),npdcj,jm)
-      enddo
+      allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
       !
-      q(i,0:jm,k,:)=fph(0:jm,:)
+      do k=0,km
+      do i=0,im
+        !
+        phi(:,:)=q(i,:,k,:)
+        !
+        do n=1,numq
+          fph(:,n)=spafilter10(phi(:,n),npdcj,jm,alfa_filter,fcj)
+          ! fph(:,n)=spafilter6exp(phi(:,n),npdcj,jm)
+        enddo
+        !
+        q(i,0:jm,k,:)=fph(0:jm,:)
+        !
+        ! if(npdcj==1) then
+        !   q(i,2:jm,k,:)=fph(2:jm,:)
+        ! elseif(npdcj==2) then
+        !   q(i,0:jm-2,k,:)=fph(0:jm-2,:)
+        ! elseif(npdcj==3) then
+        !   q(i,0:jm,k,:)=fph(0:jm,:)
+        ! endif
+        !
+        !
+      end do
+      end do
       !
-      ! if(npdcj==1) then
-      !   q(i,2:jm,k,:)=fph(2:jm,:)
-      ! elseif(npdcj==2) then
-      !   q(i,0:jm-2,k,:)=fph(0:jm-2,:)
-      ! elseif(npdcj==3) then
-      !   q(i,0:jm,k,:)=fph(0:jm,:)
-      ! endif
+      deallocate(phi,fph)
       !
-      !
-    end do
-    end do
-    !
-    deallocate(phi,fph)
+    endif
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in j direction.

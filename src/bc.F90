@@ -3526,11 +3526,11 @@ module bc
         else !if(ub<css .and. ub>=0.d0) then
           ! subsonic outlet
           !
-          ! prs(i,j,k)= pinf
-          ! rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
-          ! vel(i,j,k,1)= ue+ (pe-prs(i,j,k))/roe/csse
-          ! vel(i,j,k,2)= ve
-          ! vel(i,j,k,3)= we
+          prs(i,j,k)= pinf
+          rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
+          vel(i,j,k,1)= ue+ (pe-prs(i,j,k))/roe/csse
+          vel(i,j,k,2)= ve
+          vel(i,j,k,3)= we
           !
           ! pwave_in = (prs(i,j,k)+alpha*deltat*pinf+rho(i,j,k)*css*(ue-vel(i,j,k,1)))/(1.d0+alpha*deltat)
           ! RUDY & STRIKWERDA, 1981
@@ -3540,14 +3540,14 @@ module bc
           ! var1=ub/css
           ! prs(i,j,k)=var1*pwave_out+(1.d0-var1)*pwave_in
           !
-          prs(i,j,k)  =pinf
-          vel(i,j,k,1)=ue 
-          vel(i,j,k,2)=ve 
-          vel(i,j,k,3)=we
-          !
-          rho(i,j,k)  =roe
-          !
-          spc(i,j,k,:)=spce(:)
+          ! prs(i,j,k)  =pinf
+          ! vel(i,j,k,1)=ue 
+          ! vel(i,j,k,2)=ve 
+          ! vel(i,j,k,3)=we
+          ! !
+          ! rho(i,j,k)  =roe
+          ! !
+          ! spc(i,j,k,:)=spce(:)
           !
         ! else
         !   stop ' !! velocity at outflow error !! @ outflow'
@@ -3682,43 +3682,43 @@ module bc
       !
       j=0
       !
-      allocate(qfilt(0:im,1:numq))
-      do k=0,km
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
-          q(0:im,j,k,jq)=qfilt(:,jq)
-        enddo
-        call q2fvar(      q=  q(0:im,j,k,:),                   &
-                    density=rho(0:im,j,k),                     &
-                   velocity=vel(0:im,j,k,:),                   &
-                   pressure=prs(0:im,j,k),                     &
-                temperature=tmp(0:im,j,k),                     &
-                    species=spc(0:im,j,k,:)                    )
-        !
-      enddo
-      deallocate(qfilt)
+      ! allocate(qfilt(0:im,1:numq))
+      ! do k=0,km
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
+      !     q(0:im,j,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   call q2fvar(      q=  q(0:im,j,k,:),                   &
+      !               density=rho(0:im,j,k),                     &
+      !              velocity=vel(0:im,j,k,:),                   &
+      !              pressure=prs(0:im,j,k),                     &
+      !           temperature=tmp(0:im,j,k),                     &
+      !               species=spc(0:im,j,k,:)                    )
+      !   !
+      ! enddo
+      ! deallocate(qfilt)
       !
-      if(ndims==3) then 
+      ! if(ndims==3) then 
         !
-        allocate(qfilt(0:km,1:numq))
-        do i=0,im
-          !
-          do jq=1,numq
-            qfilt(:,jq)=spafilter6exp(q(i,j,:,jq),npdck,km)
-            q(i,j,0:km,jq)=qfilt(:,jq)
-          enddo
-          call q2fvar(      q=  q(i,j,0:km,:),                 &
-                      density=rho(i,j,0:km),                   &
-                     velocity=vel(i,j,0:km,:),                 &
-                     pressure=prs(i,j,0:km),                   &
-                  temperature=tmp(i,j,0:km),                   &
-                      species=spc(i,j,0:km,:)                  )
-          !
-        enddo
-        deallocate(qfilt)
+        ! allocate(qfilt(0:km,1:numq))
+        ! do i=0,im
+        !   !
+        !   do jq=1,numq
+        !     qfilt(:,jq)=spafilter6exp(q(i,j,:,jq),npdck,km)
+        !     q(i,j,0:km,jq)=qfilt(:,jq)
+        !   enddo
+        !   call q2fvar(      q=  q(i,j,0:km,:),                 &
+        !               density=rho(i,j,0:km),                   &
+        !              velocity=vel(i,j,0:km,:),                 &
+        !              pressure=prs(i,j,0:km),                   &
+        !           temperature=tmp(i,j,0:km),                   &
+        !               species=spc(i,j,0:km,:)                  )
+        !   !
+        ! enddo
+        ! deallocate(qfilt)
         !
-      endif
+      ! endif
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
@@ -3917,43 +3917,43 @@ module bc
       !
       j=jm
       !
-      allocate(qfilt(0:im,1:numq))
-      do k=0,km
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
-          q(0:im,j,k,jq)=qfilt(:,jq)
-        enddo
-        call q2fvar(      q=  q(0:im,j,k,:),                   &
-                    density=rho(0:im,j,k),                     &
-                   velocity=vel(0:im,j,k,:),                   &
-                   pressure=prs(0:im,j,k),                     &
-                temperature=tmp(0:im,j,k),                     &
-                    species=spc(0:im,j,k,:)                    )
-        !
-      enddo
-      deallocate(qfilt)
+      ! allocate(qfilt(0:im,1:numq))
+      ! do k=0,km
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
+      !     q(0:im,j,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   call q2fvar(      q=  q(0:im,j,k,:),                   &
+      !               density=rho(0:im,j,k),                     &
+      !              velocity=vel(0:im,j,k,:),                   &
+      !              pressure=prs(0:im,j,k),                     &
+      !           temperature=tmp(0:im,j,k),                     &
+      !               species=spc(0:im,j,k,:)                    )
+      !   !
+      ! enddo
+      ! deallocate(qfilt)
       !
-      if(ndims==3) then 
+      ! if(ndims==3) then 
         !
-        allocate(qfilt(0:km,1:numq))
-        do i=0,im
-          !
-          do jq=1,numq
-            qfilt(:,jq)=spafilter6exp(q(i,j,:,jq),npdck,km)
-            q(i,j,0:km,jq)=qfilt(:,jq)
-          enddo
-          call q2fvar(      q=  q(i,j,0:km,:),                 &
-                      density=rho(i,j,0:km),                   &
-                     velocity=vel(i,j,0:km,:),                 &
-                     pressure=prs(i,j,0:km),                   &
-                  temperature=tmp(i,j,0:km),                   &
-                      species=spc(i,j,0:km,:)                  )
-          !
-        enddo
-        deallocate(qfilt)
+        ! allocate(qfilt(0:km,1:numq))
+        ! do i=0,im
+        !   !
+        !   do jq=1,numq
+        !     qfilt(:,jq)=spafilter6exp(q(i,j,:,jq),npdck,km)
+        !     q(i,j,0:km,jq)=qfilt(:,jq)
+        !   enddo
+        !   call q2fvar(      q=  q(i,j,0:km,:),                 &
+        !               density=rho(i,j,0:km),                   &
+        !              velocity=vel(i,j,0:km,:),                 &
+        !              pressure=prs(i,j,0:km),                   &
+        !           temperature=tmp(i,j,0:km),                   &
+        !               species=spc(i,j,0:km,:)                  )
+        !   !
+        ! enddo
+        ! deallocate(qfilt)
         !
-      endif
+      ! endif
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
@@ -4056,10 +4056,10 @@ module bc
         !    dxi(i,j,k,2,2)*vel(i,j,k,2) +                       &
         !    dxi(i,j,k,2,3)*vel(i,j,k,3)
         ! if(uu>=0.d0) then
-          kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
+        kinout=0.25d0*(1.d0-gmachmax2)*css/(ymax-ymin)
           ! LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
           ! LODi(5)=kinout*(prs(i,j,k)-prs_prof(jm))/rho(i,j,k)/css
-          LODi(5)=kinout*(prs(i,j,k)-pinf)
+        LODi(5)=kinout*(prs(i,j,k)-pinf)
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+         &
         !                   dxi(i,j,k,2,3)**2 )
@@ -4173,39 +4173,39 @@ module bc
       !
       k=0
       !
-      allocate(qfilt(0:im,1:numq))
-      do j=0,jm
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
-          q(0:im,j,k,jq)=qfilt(:,jq)
-        enddo
-        call q2fvar(      q=  q(0:im,j,k,:),                   &
-                    density=rho(0:im,j,k),                     &
-                   velocity=vel(0:im,j,k,:),                   &
-                   pressure=prs(0:im,j,k),                     &
-                temperature=tmp(0:im,j,k),                     &
-                    species=spc(0:im,j,k,:)                    )
-        !
-      enddo
-      deallocate(qfilt)
+      ! allocate(qfilt(0:im,1:numq))
+      ! do j=0,jm
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
+      !     q(0:im,j,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   call q2fvar(      q=  q(0:im,j,k,:),                   &
+      !               density=rho(0:im,j,k),                     &
+      !              velocity=vel(0:im,j,k,:),                   &
+      !              pressure=prs(0:im,j,k),                     &
+      !           temperature=tmp(0:im,j,k),                     &
+      !               species=spc(0:im,j,k,:)                    )
+      !   !
+      ! enddo
+      ! deallocate(qfilt)
       !
-      allocate(qfilt(0:jm,1:numq))
-      do i=0,im
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
-          q(i,0:jm,k,jq)=qfilt(:,jq)
-        enddo
-        call q2fvar(      q=  q(i,0:jm,k,:),                   &
-                    density=rho(i,0:jm,k),                     &
-                   velocity=vel(i,0:jm,k,:),                   &
-                   pressure=prs(i,0:jm,k),                     &
-                temperature=tmp(i,0:jm,k),                     &
-                    species=spc(i,0:jm,k,:)                    )
-        !
-      enddo
-      deallocate(qfilt)
+      ! allocate(qfilt(0:jm,1:numq))
+      ! do i=0,im
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+      !     q(i,0:jm,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   call q2fvar(      q=  q(i,0:jm,k,:),                   &
+      !               density=rho(i,0:jm,k),                     &
+      !              velocity=vel(i,0:jm,k,:),                   &
+      !              pressure=prs(i,0:jm,k),                     &
+      !           temperature=tmp(i,0:jm,k),                     &
+      !               species=spc(i,0:jm,k,:)                    )
+      !   !
+      ! enddo
+      ! deallocate(qfilt)
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       do j=0,jm
@@ -4296,7 +4296,7 @@ module bc
         !      dxi(i,j,k,3,3)*vel(i,j,k,3))
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(zmax-zmin)
-          LODi(4)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          LODi(4)=kinout*(prs(i,j,k)-pinf) !/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+         &
         !                   dxi(i,j,k,3,3)**2 )
@@ -4391,39 +4391,39 @@ module bc
       !
       k=km
       !
-      allocate(qfilt(0:im,1:numq))
-      do j=0,jm
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
-          q(0:im,j,k,jq)=qfilt(:,jq)
-        enddo
-        call q2fvar(      q=  q(0:im,j,k,:),                   &
-                    density=rho(0:im,j,k),                     &
-                   velocity=vel(0:im,j,k,:),                   &
-                   pressure=prs(0:im,j,k),                     &
-                temperature=tmp(0:im,j,k),                     &
-                    species=spc(0:im,j,k,:)                    )
-        !
-      enddo
-      deallocate(qfilt)
-      !
-      allocate(qfilt(0:jm,1:numq))
-      do i=0,im
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
-          q(i,0:jm,k,jq)=qfilt(:,jq)
-        enddo
-        call q2fvar(      q=  q(i,0:jm,k,:),                   &
-                    density=rho(i,0:jm,k),                     &
-                   velocity=vel(i,0:jm,k,:),                   &
-                   pressure=prs(i,0:jm,k),                     &
-                temperature=tmp(i,0:jm,k),                     &
-                    species=spc(i,0:jm,k,:)                    )
-        !
-      enddo
-      deallocate(qfilt)
+      ! allocate(qfilt(0:im,1:numq))
+      ! do j=0,jm
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(:,j,k,jq),npdci,im)
+      !     q(0:im,j,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   call q2fvar(      q=  q(0:im,j,k,:),                   &
+      !               density=rho(0:im,j,k),                     &
+      !              velocity=vel(0:im,j,k,:),                   &
+      !              pressure=prs(0:im,j,k),                     &
+      !           temperature=tmp(0:im,j,k),                     &
+      !               species=spc(0:im,j,k,:)                    )
+      !   !
+      ! enddo
+      ! deallocate(qfilt)
+      ! !
+      ! allocate(qfilt(0:jm,1:numq))
+      ! do i=0,im
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+      !     q(i,0:jm,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   call q2fvar(      q=  q(i,0:jm,k,:),                   &
+      !               density=rho(i,0:jm,k),                     &
+      !              velocity=vel(i,0:jm,k,:),                   &
+      !              pressure=prs(i,0:jm,k),                     &
+      !           temperature=tmp(i,0:jm,k),                     &
+      !               species=spc(i,0:jm,k,:)                    )
+      !   !
+      ! enddo
+      ! deallocate(qfilt)
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       do j=0,jm
@@ -4514,7 +4514,7 @@ module bc
         !      dxi(i,j,k,3,3)*vel(i,j,k,3))
         ! if(uu>=0.d0) then
           kinout=0.25d0*(1.d0-gmachmax2)*css/(zmax-zmin)
-          LODi(5)=kinout*(prs(i,j,k)-pinf)/rho(i,j,k)/css
+          LODi(5)=kinout*(prs(i,j,k)-pinf) !/rho(i,j,k)/css
         ! else
         !   var1=1.d0/sqrt( dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+         &
         !                   dxi(i,j,k,3,3)**2 )
@@ -4665,28 +4665,28 @@ module bc
       !
       i=im
       !
-      allocate(qfilt(0:jm,1:numq))
-      do k=0,km
-        !
-        do jq=1,numq
-          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
-          q(i,0:jm,k,jq)=qfilt(:,jq)
-        enddo
-        !
-        ! open(18,file='profileq'//mpirankname//'.dat')
-        ! write(18,"(3(1X,A15))")'y','q1','q1f'
-        ! write(18,"(3(1X,E15.7E3))")(x(i,j,k,2),q(i,j,k,1),qfilt(j,1),j=0,jm)
-        ! close(18)
-        ! print*,' << profileq',mpirankname,'.dat'
-        !
-        call q2fvar(      q=  q(i,0:jm,k,:),                   &
-                    density=rho(i,0:jm,k),                     &
-                   velocity=vel(i,0:jm,k,:),                   &
-                   pressure=prs(i,0:jm,k),                     &
-                temperature=tmp(i,0:jm,k),                     &
-                    species=spc(i,0:jm,k,:)                    )
-      enddo
-      deallocate(qfilt)
+      ! allocate(qfilt(0:jm,1:numq))
+      ! do k=0,km
+      !   !
+      !   do jq=1,numq
+      !     qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+      !     q(i,0:jm,k,jq)=qfilt(:,jq)
+      !   enddo
+      !   !
+      !   ! open(18,file='profileq'//mpirankname//'.dat')
+      !   ! write(18,"(3(1X,A15))")'y','q1','q1f'
+      !   ! write(18,"(3(1X,E15.7E3))")(x(i,j,k,2),q(i,j,k,1),qfilt(j,1),j=0,jm)
+      !   ! close(18)
+      !   ! print*,' << profileq',mpirankname,'.dat'
+      !   !
+      !   call q2fvar(      q=  q(i,0:jm,k,:),                   &
+      !               density=rho(i,0:jm,k),                     &
+      !              velocity=vel(i,0:jm,k,:),                   &
+      !              pressure=prs(i,0:jm,k),                     &
+      !           temperature=tmp(i,0:jm,k),                     &
+      !               species=spc(i,0:jm,k,:)                    )
+      ! enddo
+      ! deallocate(qfilt)
       !
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
       ! do k=ks,ke
@@ -4845,33 +4845,37 @@ module bc
       !
       deallocate(Ecs,dEcs)
       !
-      allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
-      do k=ks,ke
+      if(ndims>=2) then
         !
-        do j=-hm,jm+hm
+        allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
+        do k=ks,ke
           !
-          uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
-             dxi(i,j,k,2,3)*vel(i,j,k,3)
-          fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
-          fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
-          fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
-          fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
-          fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
-          do jspc=1,num_species
-            fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+          do j=-hm,jm+hm
+            !
+            uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
+               dxi(i,j,k,2,3)*vel(i,j,k,3)
+            fcs(j,1)=jacob(i,j,k)*  q(i,j,k,1)*uu
+            fcs(j,2)=jacob(i,j,k)*( q(i,j,k,2)*uu+dxi(i,j,k,2,1)*prs(i,j,k) )
+            fcs(j,3)=jacob(i,j,k)*( q(i,j,k,3)*uu+dxi(i,j,k,2,2)*prs(i,j,k) )
+            fcs(j,4)=jacob(i,j,k)*( q(i,j,k,4)*uu+dxi(i,j,k,2,3)*prs(i,j,k) )
+            fcs(j,5)=jacob(i,j,k)*( q(i,j,k,5)+prs(i,j,k) )*uu
+            do jspc=1,num_species
+              fcs(j,5+jspc)=jacob(i,j,k)*q(i,j,k,5+jspc)*uu
+            enddo
+            !
           enddo
           !
+          do n=1,numq
+            dfcs(:,n)=ddfc(fcs(:,n),'222e',npdcj,jm)
+          enddo
+          !
+          qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
+          !
         enddo
         !
-        do n=1,numq
-          dfcs(:,n)=ddfc(fcs(:,n),'222e',npdcj,jm)
-        enddo
+        deallocate(fcs,dfcs)
         !
-        qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
-        !
-      enddo
-      !
-      deallocate(fcs,dfcs)
+      endif
       !
       if(ndims==3) then
         !
@@ -6912,12 +6916,14 @@ module bc
     do k=0,km
     do j=0,jm
       !
+      call mixinglayervel(x(i,j,k,2),vel_in(j,k,:),tmp_in(j,k),rho_in(j,k),lio)
+      !
       ! rho_in(j,k)  =roinf
       ! vel_in(j,k,:)=mixinglayervel(x(i,j,k,2))
       ! tmp_in(j,k)  =tinf
-      rho_in(j,k)   = rho_prof(j)
-      vel_in(j,k,:) = vel_prof(j,:)
-      tmp_in(j,k)   = tmp_prof(j)
+      ! rho_in(j,k)   = rho_prof(j)
+      ! vel_in(j,k,:) = vel_prof(j,:)
+      ! tmp_in(j,k)   = tmp_prof(j)
       prs_in(j,k)   = thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
       !
       if(num_species>0) then

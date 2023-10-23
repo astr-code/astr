@@ -98,76 +98,76 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_flowinit
     !
-    use commvar,  only: im,jm,km,ndims,roinf,uinf,nondimen,xmax,pinf,  &
-                        ia,num_species
-    use commarray,only: x,vel,rho,prs,spc,tmp,q
-    use parallel, only: lio
-    use fludyna,  only: thermal
-    !
-#ifdef COMB
-    !
-    use thermchem,only : tranco,spcindex,mixture,convertxiyi
-    use cantera 
-    !
-    ! local data
-    integer :: i,j,k
-    real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
-      specp(num_species),arg,prgvar,masflx,specx(num_species)
-    real(8) :: pthick
-    !
-    tmpr=300.d0
-    xloc=3.d0*xmax/4.d0
-    xwid=xmax/(12.d0*5.3d0*2.d0)
-    !
-    !reactants
-    specr(:)=0.d0
-    specr(spcindex('H2'))=0.0173
-    specr(spcindex('O2'))=0.2289
-    specr(spcindex('N2'))=1.d0-sum(specr)
-    !
-    !products
-    tmpp=1814.32d0
-    !
-    ! pthick=1.d-4
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      xc=x(i,j,k,1)
-      !
-      !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
-      ! if(xc-xloc<xwid*0.5d0*1.2d0) then 
-      !   prgvar=0.d0
-      !   if(xc-xloc>xwid*0.5d0) &
-      !   prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
-      ! else
-      !   prgvar=1.d0
-      ! endif
-      !
-      prgvar=1.d0*exp(-0.5d0*((xc-xloc)/xwid)**2)
-      !
-      spc(i,j,k,:)=specr(:)
-      !
-      vel(i,j,k,1)=uinf
-      !
-      vel(i,j,k,2)=0.d0
-      vel(i,j,k,3)=0.d0
-      !
-      tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
-      !
-      prs(i,j,k)=pinf
-      !
-      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
-                          species=spc(i,j,k,:))
-    enddo
-    enddo
-    enddo
-    !
-    !
-    if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
-    !
-#endif
+!     use commvar,  only: im,jm,km,ndims,roinf,uinf,nondimen,xmax,pinf,  &
+!                         ia,num_species
+!     use commarray,only: x,vel,rho,prs,spc,tmp,q
+!     use parallel, only: lio
+!     use fludyna,  only: thermal
+!     !
+! #ifdef COMB
+!     !
+!     use thermchem,only : tranco,spcindex,mixture,convertxiyi
+!     use cantera 
+!     !
+!     ! local data
+!     integer :: i,j,k
+!     real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
+!       specp(num_species),arg,prgvar,masflx,specx(num_species)
+!     real(8) :: pthick
+!     !
+!     tmpr=300.d0
+!     xloc=3.d0*xmax/4.d0
+!     xwid=xmax/(12.d0*5.3d0*2.d0)
+!     !
+!     !reactants
+!     specr(:)=0.d0
+!     specr(spcindex('H2'))=0.0173
+!     specr(spcindex('O2'))=0.2289
+!     specr(spcindex('N2'))=1.d0-sum(specr)
+!     !
+!     !products
+!     tmpp=1814.32d0
+!     !
+!     ! pthick=1.d-4
+!     !
+!     do k=0,km
+!     do j=0,jm
+!     do i=0,im
+!       !
+!       xc=x(i,j,k,1)
+!       !
+!       !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
+!       ! if(xc-xloc<xwid*0.5d0*1.2d0) then 
+!       !   prgvar=0.d0
+!       !   if(xc-xloc>xwid*0.5d0) &
+!       !   prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
+!       ! else
+!       !   prgvar=1.d0
+!       ! endif
+!       !
+!       prgvar=1.d0*exp(-0.5d0*((xc-xloc)/xwid)**2)
+!       !
+!       spc(i,j,k,:)=specr(:)
+!       !
+!       vel(i,j,k,1)=uinf
+!       !
+!       vel(i,j,k,2)=0.d0
+!       vel(i,j,k,3)=0.d0
+!       !
+!       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
+!       !
+!       prs(i,j,k)=pinf
+!       !
+!       rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+!                           species=spc(i,j,k,:))
+!     enddo
+!     enddo
+!     enddo
+!     !
+!     !
+!     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
+!     !
+! #endif
     !
   end subroutine udf_flowinit
   !+-------------------------------------------------------------------+
@@ -231,6 +231,25 @@ module userdefine
   end subroutine udf_grid
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_grid.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate fluctuations for inflow            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-Oct-2023: Created by by Jian Fang @ Daresbury                  |
+  !+-------------------------------------------------------------------+
+  subroutine udf_inflow_fluc(umean,uinst)
+    !
+    use commvar, only : jm,km
+    !
+    real(8),intent(in) ::  umean(0:jm,1:3)  ! inflow mean velocity
+    real(8),intent(out) :: uinst(0:jm,0:km,1:3)  ! velocity with fluctuations
+    !
+  end subroutine udf_inflow_fluc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_inflow_fluc.                        |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -398,140 +417,140 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_src
     !
-    use constdef
-    use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,xmax,ymax,zmax
-    use parallel, only : mpirank,psum,bcast
-    use commarray,only : rho,tmp,vel,qrhs,x,jacob
+    ! use constdef
+    ! use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,xmax,ymax,zmax
+    ! use parallel, only : mpirank,psum,bcast
+    ! use commarray,only : rho,tmp,vel,qrhs,x,jacob
+    ! ! !
+    ! ! ! local data
+    ! integer,parameter :: nfan=5 !the number of fans
     ! !
-    ! ! local data
-    integer,parameter :: nfan=5 !the number of fans
-    !
-    integer :: i,j,k,k1,k2,n
-    real(8) :: force(3)
-    logical,save :: linit=.true.
-    real(8),save :: A(3,3,nfan),B(3,3,nfan)
-    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave
-    real(8) :: xs1,xs2,xs3,xs4,xs5
-    integer,allocatable :: seed(:)
-    !
-    if(linit) then
-      !
-      if(mpirank==0) then
-        !
-        FR=1.d0/16.d0
-        FC=0.d0
-        !
-        var1=sqrt(num2d3*FC/deltat)
-        var2=sqrt(num1d3*FR/deltat)
-        !
-        call random_seed(size=n)
-        allocate(seed(n))
-        seed = 1    ! putting arbitrary seed to all elements
-        call random_seed(put=seed)
-        deallocate(seed)
-        !
-        do n=1,nfan
-        do j=1,3
-        do i=1,3
-          call random_number(A(i,j,n))
-          call random_number(B(i,j,n))
-        end do
-        end do
-        end do
-        !
-        A=sqrt(3.d0)*(2.d0*A-1.d0)
-        B=sqrt(3.d0)*(2.d0*B-1.d0)
-        !
-        do j=1,3
-        do i=1,3
-          if(i==j) then
-            A(i,j,:)=var1*A(i,j,:)
-            B(i,j,:)=var1*B(i,j,:)
-          else
-            A(i,j,:)=var2*A(i,j,:)
-            B(i,j,:)=var2*B(i,j,:)
-          endif
-        end do
-        end do
-        !
-      endif
-      !
-      call bcast(A)
-      call bcast(B)
-      !
-      A=0.9594d0*A
-      B=0.9594d0*B
-      !
-      linit=.false.
-      !  
-    endif
-    !
-    lwave=ymax
-    !
-    xs=1.1065d-2
-    xe=xs+4.d0*lwave
-    !
-    hsource=0.d0
-    tavg=0.d0
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
-        !
-        n=int((x(i,j,k,1)-xs)/lwave)+1
-        !
-        xx=(x(i,j,k,1)-xs)/lwave*2.d0*pi
-        yy=x(i,j,k,2)/lwave*2.d0*pi
-        zz=x(i,j,k,3)/lwave*2.d0*pi
-        !
-        force(1)=A(1,1,n)*sin(xx)+B(1,1,n)*cos(xx) + &
-                 A(1,2,n)*sin(yy)+B(1,2,n)*cos(yy) + &
-                 A(1,3,n)*sin(zz)+B(1,3,n)*cos(zz)
-        !
-        force(2)=A(2,1,n)*sin(xx)+B(2,1,n)*cos(xx) + &
-                 A(2,2,n)*sin(yy)+B(2,2,n)*cos(yy) + &
-                 A(2,3,n)*sin(zz)+B(2,3,n)*cos(zz)
-        !                                                          
-        force(3)=A(3,1,n)*sin(xx)+B(3,1,n)*cos(xx) + &
-                 A(3,2,n)*sin(yy)+B(3,2,n)*cos(yy) + &
-                 A(3,3,n)*sin(zz)+B(3,3,n)*cos(zz)
-        !
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+rho(i,j,k)*force(3)*jacob(i,j,k)
-        !
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+rho(i,j,k)*( force(1)*vel(i,j,k,1) + &
-                                                 force(2)*vel(i,j,k,2) + &
-                                                 force(3)*vel(i,j,k,3) )*jacob(i,j,k)
-        !
-        if(i.ne.0 .and. j.ne.0 .and. k.ne.0) then
-          hsource=hsource+rho(i,j,k)*(force(1)*vel(i,j,k,1) + &
-                                      force(2)*vel(i,j,k,2) + &
-                                      force(3)*vel(i,j,k,3))
-          tavg=tavg+tmp(i,j,k)
-        endif
-        !
-      endif
-      !
-    end do
-    end do
-    end do
-    !
-    at=psum(hsource)/psum(tavg)
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
-      endif
-      !
-    end do
-    end do
-    end do
+    ! integer :: i,j,k,k1,k2,n
+    ! real(8) :: force(3)
+    ! logical,save :: linit=.true.
+    ! real(8),save :: A(3,3,nfan),B(3,3,nfan)
+    ! real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave
+    ! real(8) :: xs1,xs2,xs3,xs4,xs5
+    ! integer,allocatable :: seed(:)
+    ! !
+    ! if(linit) then
+    !   !
+    !   if(mpirank==0) then
+    !     !
+    !     FR=1.d0/16.d0
+    !     FC=0.d0
+    !     !
+    !     var1=sqrt(num2d3*FC/deltat)
+    !     var2=sqrt(num1d3*FR/deltat)
+    !     !
+    !     call random_seed(size=n)
+    !     allocate(seed(n))
+    !     seed = 1    ! putting arbitrary seed to all elements
+    !     call random_seed(put=seed)
+    !     deallocate(seed)
+    !     !
+    !     do n=1,nfan
+    !     do j=1,3
+    !     do i=1,3
+    !       call random_number(A(i,j,n))
+    !       call random_number(B(i,j,n))
+    !     end do
+    !     end do
+    !     end do
+    !     !
+    !     A=sqrt(3.d0)*(2.d0*A-1.d0)
+    !     B=sqrt(3.d0)*(2.d0*B-1.d0)
+    !     !
+    !     do j=1,3
+    !     do i=1,3
+    !       if(i==j) then
+    !         A(i,j,:)=var1*A(i,j,:)
+    !         B(i,j,:)=var1*B(i,j,:)
+    !       else
+    !         A(i,j,:)=var2*A(i,j,:)
+    !         B(i,j,:)=var2*B(i,j,:)
+    !       endif
+    !     end do
+    !     end do
+    !     !
+    !   endif
+    !   !
+    !   call bcast(A)
+    !   call bcast(B)
+    !   !
+    !   A=0.9594d0*A
+    !   B=0.9594d0*B
+    !   !
+    !   linit=.false.
+    !   !  
+    ! endif
+    ! !
+    ! lwave=ymax
+    ! !
+    ! xs=1.1065d-2
+    ! xe=xs+4.d0*lwave
+    ! !
+    ! hsource=0.d0
+    ! tavg=0.d0
+    ! !
+    ! do k=0,km
+    ! do j=0,jm
+    ! do i=0,im
+    !   !
+    !   if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
+    !     !
+    !     n=int((x(i,j,k,1)-xs)/lwave)+1
+    !     !
+    !     xx=(x(i,j,k,1)-xs)/lwave*2.d0*pi
+    !     yy=x(i,j,k,2)/lwave*2.d0*pi
+    !     zz=x(i,j,k,3)/lwave*2.d0*pi
+    !     !
+    !     force(1)=A(1,1,n)*sin(xx)+B(1,1,n)*cos(xx) + &
+    !              A(1,2,n)*sin(yy)+B(1,2,n)*cos(yy) + &
+    !              A(1,3,n)*sin(zz)+B(1,3,n)*cos(zz)
+    !     !
+    !     force(2)=A(2,1,n)*sin(xx)+B(2,1,n)*cos(xx) + &
+    !              A(2,2,n)*sin(yy)+B(2,2,n)*cos(yy) + &
+    !              A(2,3,n)*sin(zz)+B(2,3,n)*cos(zz)
+    !     !                                                          
+    !     force(3)=A(3,1,n)*sin(xx)+B(3,1,n)*cos(xx) + &
+    !              A(3,2,n)*sin(yy)+B(3,2,n)*cos(yy) + &
+    !              A(3,3,n)*sin(zz)+B(3,3,n)*cos(zz)
+    !     !
+    !     qrhs(i,j,k,2)=qrhs(i,j,k,2)+rho(i,j,k)*force(1)*jacob(i,j,k)
+    !     qrhs(i,j,k,3)=qrhs(i,j,k,3)+rho(i,j,k)*force(2)*jacob(i,j,k)
+    !     qrhs(i,j,k,4)=qrhs(i,j,k,4)+rho(i,j,k)*force(3)*jacob(i,j,k)
+    !     !
+    !     qrhs(i,j,k,5)=qrhs(i,j,k,5)+rho(i,j,k)*( force(1)*vel(i,j,k,1) + &
+    !                                              force(2)*vel(i,j,k,2) + &
+    !                                              force(3)*vel(i,j,k,3) )*jacob(i,j,k)
+    !     !
+    !     if(i.ne.0 .and. j.ne.0 .and. k.ne.0) then
+    !       hsource=hsource+rho(i,j,k)*(force(1)*vel(i,j,k,1) + &
+    !                                   force(2)*vel(i,j,k,2) + &
+    !                                   force(3)*vel(i,j,k,3))
+    !       tavg=tavg+tmp(i,j,k)
+    !     endif
+    !     !
+    !   endif
+    !   !
+    ! end do
+    ! end do
+    ! end do
+    ! !
+    ! at=psum(hsource)/psum(tavg)
+    ! !
+    ! do k=0,km
+    ! do j=0,jm
+    ! do i=0,im
+    !   !
+    !   if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
+    !     qrhs(i,j,k,5)=qrhs(i,j,k,5)-at*tmp(i,j,k)*jacob(i,j,k)
+    !   endif
+    !   !
+    ! end do
+    ! end do
+    ! end do
     !
   end subroutine udf_src
   !+-------------------------------------------------------------------+
@@ -547,52 +566,163 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_write
     !
-    use commvar,  only: ymin,ymax,im,jm,filenumb
-    use commarray,only: x,rho,vel,tmp,prs,spc
-    use readwrite,only: writexprofile
-    use parallel, only: mpistop
-    !
-#ifdef COMB
-    use thermchem,only : heatrate
-#endif
-    !
-    integer :: i,j
-    logical :: lwprofile
-    real(8) :: ypos
-    real(8),allocatable :: hrr(:)
-    character(len=4) :: stepname
-    !
-    lwprofile=.false.
-    ypos=0.5d0*(ymax-ymin)+ymin
-    do j=1,jm
-      if(x(0,j-1,0,2)<ypos .and. x(0,j,0,2)>=ypos) then
-        !
-        lwprofile=.true.
-        !
-        exit
-        !
-      endif
-    enddo
-    !
-#ifdef COMB
-    allocate(hrr(0:im))
-    do i=0,im
-      hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
-    enddo
-    !
-    write(stepname,'(i4.4)')filenumb
-    call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
-                               var1=rho(0:im,j,0),  var1name='rho', &
-                               var2=vel(0:im,j,0,1),var2name='u',   &
-                               var3=tmp(0:im,j,0),  var3name='T',   &
-                               var4=prs(0:im,j,0),  var4name='P',   &
-                               var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
-#endif
+!     use commvar,  only: ymin,ymax,im,jm,filenumb
+!     use commarray,only: x,rho,vel,tmp,prs,spc
+!     use parallel, only: mpistop
+!     !
+! #ifdef COMB
+!     use thermchem,only : heatrate
+! #endif
+!     !
+!     integer :: i,j
+!     logical :: lwprofile
+!     real(8) :: ypos
+!     real(8),allocatable :: hrr(:)
+!     character(len=4) :: stepname
+!     !
+!     lwprofile=.false.
+!     ypos=0.5d0*(ymax-ymin)+ymin
+!     do j=1,jm
+!       if(x(0,j-1,0,2)<ypos .and. x(0,j,0,2)>=ypos) then
+!         !
+!         lwprofile=.true.
+!         !
+!         exit
+!         !
+!       endif
+!     enddo
+!     !
+! #ifdef COMB
+!     allocate(hrr(0:im))
+!     do i=0,im
+!       hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
+!     enddo
+!     !
+!     write(stepname,'(i4.4)')filenumb
+!     !
+!     call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
+!                                var1=rho(0:im,j,0),  var1name='rho', &
+!                                var2=vel(0:im,j,0,1),var2name='u',   &
+!                                var3=tmp(0:im,j,0),  var3name='T',   &
+!                                var4=prs(0:im,j,0),  var4name='P',   &
+!                                var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
+! #endif
     !
   end subroutine udf_write
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_write.                              |
   !+-------------------------------------------------------------------+
+  !
+  subroutine writexprofile(profilename,var1,var1name, &
+                                       var2,var2name, &
+                                       var3,var3name, &
+                                       var4,var4name, &
+                                       var5,var5name,truewrite)
+    !
+    use commvar,   only : im 
+    use parallel,  only : pgather,mpirank
+    use commarray, only : x
+    !
+    character(len=*),intent(in) :: profilename
+    !
+    real(8),intent(in),optional :: var1(:),var2(:),var3(:),var4(:),var5(:)
+    character(len=*),intent(in),optional :: var1name,var2name,var3name,var4name,var5name
+    logical,intent(in) :: truewrite
+    !
+    integer :: nvar,i
+    real(8),allocatable :: vdum(:)
+    real(8),allocatable :: vout1(:),vout2(:),vout3(:),vout4(:),vout5(:)
+    real(8),allocatable,save :: xx(:)
+    logical,save :: firstcall=.true.
+    !
+    if(firstcall) then
+      if(truewrite) then
+        allocate(vdum(0:im))
+        vdum=x(0:im,0,0,1)
+      endif
+      call pgather(vdum,xx)
+      if(truewrite) deallocate(vdum)
+      !
+      firstcall=.false.
+    endif
+    !
+    nvar=0
+    !
+    if(truewrite) allocate(vdum(1:size(var1)))
+    !
+    if(present(var1)) then
+      nvar=1
+      !
+      if(truewrite) then
+        vdum=var1
+      endif
+      call pgather(vdum,vout1)
+      !
+    endif
+    !
+    if(present(var2)) then
+      nvar=2
+      if(truewrite) then
+        vdum=var2
+      endif
+      call pgather(vdum,vout2)
+      !
+    endif
+    !
+    if(present(var3)) then
+      nvar=3
+      if(truewrite) then
+        vdum=var3
+      endif
+      call pgather(vdum,vout3)
+      !
+    endif
+    !
+    if(present(var4)) then
+      nvar=4
+      if(truewrite) then
+        vdum=var4
+      endif
+      call pgather(vdum,vout4)
+      !
+    endif
+    !
+    if(present(var5)) then
+      nvar=5
+      if(truewrite) then
+        vdum=var5
+      endif
+      call pgather(vdum,vout5)
+      !
+    endif
+    !
+    if(nvar==0) return
+    !
+    if(mpirank==0) then
+      open(18,file=profilename)
+      if(nvar==1) then
+        write(18,"(2(1X,A15))")'x',var1name
+        write(18,"(2(1X,E15.7E3))")(xx(i),vout1(i),i=1,size(xx))
+      elseif(nvar==2) then
+        write(18,"(3(1X,A15))")'x',var1name,var2name
+        write(18,"(3(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),i=1,size(xx))
+      elseif(nvar==3) then
+        write(18,"(4(1X,A15))")'x',var1name,var2name,var3name
+        write(18,"(4(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),i=1,size(xx))
+      elseif(nvar==4) then
+        write(18,"(5(1X,A15))")'x',var1name,var2name,var3name,var4name
+        write(18,"(5(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),vout4(i),i=1,size(xx))
+      elseif(nvar==5) then
+        write(18,"(6(1X,A15))")'x',var1name,var2name,var3name,var4name,var5name
+        write(18,"(6(1X,E15.7E3))")(xx(i),vout1(i),vout2(i),vout3(i),vout4(i),vout5(i),i=1,size(xx))
+      else
+        stop ' !! error1 @ writexprofile'
+      endif
+      close(18)
+      print*,' << ',profilename
+    endif
+    !
+  end subroutine writexprofile
   !
 end module userdefine
 !+---------------------------------------------------------------------+
