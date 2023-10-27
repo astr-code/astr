@@ -42,8 +42,6 @@ module gridgeneration
         call gridjet
       elseif(trim(flowtype)=='hit') then
         call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
-      elseif(trim(flowtype)=='hitflame') then
-        call gridhitflame(mode='cuboid')
       elseif(trim(flowtype)=='2dvort') then
         call gridcube(20.d0,10.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then
@@ -64,8 +62,8 @@ module gridgeneration
         call gridcube(0.25d0,1.d0,0.d0)
       else
         call udf_grid
-        print*,trim(flowtype),' is not defined @ gridgen'
-        stop ' !! error at gridgen' 
+        ! print*,trim(flowtype),' is not defined @ gridgen'
+        ! stop ' !! error at gridgen' 
       endif
       !
       call writegrid(trim(gridfile))

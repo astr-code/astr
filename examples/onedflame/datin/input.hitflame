@@ -3,10 +3,10 @@
 ########################################################################
 
 # flowtype                                              : The type of flow problem
-1dflame
+hitflame
 
 # im,jm,km                                              : The size of grid.
-768,10,0
+768,0,0
 
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 f,t,t
@@ -30,14 +30,14 @@ f
 5, t, 0.3d0, 0.05d0
 
 # num_species                                           : number of species
-11
+0
 
 # turbmode,iomode                                       : turbulence model
 none,h
 
 # bctype                                                : Boundary condition definition 
 11,free
-22
+21
 1 
 1
 1
@@ -50,7 +50,7 @@ none,h
 0, 0, 0, 0, 0, 0
 
 # gridfile
-datin/grid.h5
+grid.h5
 
 # chemfile
 datin/Burke12.yaml

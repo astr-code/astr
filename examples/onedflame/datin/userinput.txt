@@ -1,2 +1,1 @@
-0.0003762791163253942  # flame thickness at 1atm
-# 7.87559d-5 flame thickness at 5 atm
+7.87559d-5
