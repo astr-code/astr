@@ -597,14 +597,11 @@ module solver
         ! end if
         !
         ! get value of gamma of this point
-        if(.not.nondimen) then 
-          !
+
 #ifdef COMB
-          gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+        gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
 #endif
-          !
-        endif
-        ! 
+        !
         lso=.false.
         !
         if(sson) then
@@ -817,13 +814,9 @@ module solver
         ! end if
         ! 
         ! get value of gamma of this point
-        if(.not.nondimen) then 
-          !
 #ifdef COMB
           gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
 #endif
-          !
-        endif
         !
         lso=.false.
         !
@@ -1028,13 +1021,10 @@ module solver
         ! end if
         !
         ! get value of gamma of this point
-        if(.not.nondimen) then 
-          !
+        
 #ifdef COMB
-          gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
+        gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
 #endif
-          !
-        endif
         ! 
         lso=.false.
         !
@@ -1972,29 +1962,26 @@ module solver
     KL=0.5d0*(vel_l(1)*vel_l(1)+vel_l(2)*vel_l(2)+vel_l(3)*vel_l(3))
     KR=0.5d0*(vel_r(1)*vel_r(1)+vel_r(2)*vel_r(2)+vel_r(3)*vel_r(3))
     !
-    if(nondimen) then
-      !
-      HL=(E_l+p_l)/ro_l
-      HR=(E_r+p_r)/ro_r
-      HRoe=WRoe*HL+WRoe1*HR
-      !
-      CssRoe=sqrt((gamma-1.d0)*(HRoe-KRoe))
-    else
 #ifdef COMB
-      gamL = gammarmix(tmp_l,spc_l(:))
-      gamR = gammarmix(tmp_r,spc_r(:))
-      gamavg=0.5d0*(gamL+gamR)
-      !
-      call aceval(tmp_l,spc_l(:),CssL)
-      call aceval(tmp_R,spc_R(:),CssR)
+    gamL = gammarmix(tmp_l,spc_l(:))
+    gamR = gammarmix(tmp_r,spc_r(:))
+    gamavg=0.5d0*(gamL+gamR)
+    !
+    call aceval(tmp_l,spc_l(:),CssL)
+    call aceval(tmp_R,spc_R(:),CssR)
+
+    HL=CssL*CssL/(gamL-1.d0)+KL
+    HR=CssR*CssR/(gamR-1.d0)+KR
+    HRoe=WRoe*HL+WRoe1*HR
+
+    CssRoe=sqrt((gamavg-1.d0)*(HRoe-KRoe))
+#else
+    HL=(E_l+p_l)/ro_l
+    HR=(E_r+p_r)/ro_r
+    HRoe=WRoe*HL+WRoe1*HR
+    CssRoe=sqrt((gamma-1.d0)*(HRoe-KRoe))
 #endif
-      HL=CssL*CssL/(gamL-1.d0)+KL
-      HR=CssR*CssR/(gamR-1.d0)+KR
-      HRoe=WRoe*HL+WRoe1*HR
-      !
-      CssRoe=sqrt((gamavg-1.d0)*(HRoe-KRoe))
-      !
-    endif
+    !
     rcs=1.d0/CssRoe
     !
     ! print*,' ** CssRoe:',CssRoe
