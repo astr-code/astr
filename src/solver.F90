@@ -76,10 +76,12 @@ module solver
       stop ' !! ndims error @ refcal'
     endif
     !
+    prandtl=0.72d0
+    rgas=287.1d0
+    !
     if(nondimen) then 
-      prandtl=0.72d0
+      !
       gamma=1.4d0
-      rgas=287.1d0
       !
       const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
       const2=gamma*mach**2
@@ -102,7 +104,6 @@ module solver
       !
     else 
       !
-      prandtl=0.72d0
       uinf=1.d0
       vinf=0.d0
       winf=0.d0

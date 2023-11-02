@@ -44,12 +44,26 @@ module fludyna
   !+-------------------------------------------------------------------+
   function thermal_scar(density,pressure,temperature,species) result(vout)
     !
-    use commvar,only : const2
+    use commvar,only : const2,rgas
     !
     ! arguments
     real(8) :: vout
     real(8),intent(in) ,optional :: density,pressure,temperature,species(:)
     !
+#ifdef COMB
+
+   if(present(density).and.present(temperature)) then
+     vout = density*temperature*rgcmix(species)
+   elseif(present(density).and.present(pressure)) then
+     vout = pressure/density/rgcmix(species)
+   elseif(present(temperature).and.present(pressure)) then
+     vout = pressure/temperature/rgcmix(species)
+   else
+     stop ' !! unable to use dimensional EoS @ thermal !!'
+   endif
+
+#else
+    
     if(nondimen) then
       !
       if(present(density) .and. present(temperature)) then
@@ -65,16 +79,18 @@ module fludyna
     else 
       !
       if(present(density).and.present(temperature)) then
-        vout = density*temperature*rgcmix(species)
+        vout = density*temperature*rgas
       elseif(present(density).and.present(pressure)) then
-        vout = pressure/density/rgcmix(species)
+        vout = pressure/(density*rgas)
       elseif(present(temperature).and.present(pressure)) then
-        vout = pressure/temperature/rgcmix(species)
+        vout = pressure/(temperature*rgas)
       else
         stop ' !! unable to use dimensional EoS @ thermal !!'
       endif
       !
     endif 
+    
+#endif
     !
   end function thermal_scar
   !
@@ -752,6 +768,7 @@ module fludyna
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! calculate dynamic viscosity coefficient at different temperature.
+  ! ref: https://www.cfd-online.com/Wiki/Sutherland%27s_law
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   real(8) function miucal(temper)
     !
@@ -763,16 +780,21 @@ module fludyna
     ! tempconst=110.4d0/ref_t
     ! tempconst1=1.d0+tempconst
     !
-    real(8) :: s,tmpers,tmper0,miu0
+    real(8) :: s,tmpers,tmper0,miu0,tnond
     !
     if(nondimen) then
       miucal=temper*sqrt(temper)*tempconst1/(temper+tempconst)
     else
-      tmpers=110.d0
-      tmper0=273.125d0
-      miu0=1.845d-5
-      miucal=miu0*(tmper0+tmpers)/(temper+tmpers) &
-             *((temper/tmper0)**1.5d0)
+      ! for air, kg/(m s)
+      tnond=temper/273.15d0
+      !
+      miucal=1.716d-5*tnond*sqrt(tnond)*(273.15d0+110.4d0)/(temper+110.4d0)
+      !
+      ! tmpers=110.d0
+      ! tmper0=273.125d0
+      ! miu0=1.845d-5
+      ! miucal=miu0*(tmper0+tmpers)/(temper+tmpers) &
+      !        *((temper/tmper0)**1.5d0)
     endif 
     !
     return

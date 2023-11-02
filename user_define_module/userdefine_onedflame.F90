@@ -9,8 +9,10 @@ module userdefine
   !
   implicit none
   !
-  real(8) :: flamethickness,hsource
+  real(8) :: flamethickness,hsource,equivalence_ratio=1.2d0
   real(8),allocatable :: specr(:)
+  !
+  logical :: reset_burner=.false.
   !
   contains
   !
@@ -34,7 +36,7 @@ module userdefine
     !
     real(8) :: cpe,miu,kama,cs,lref
     real(8) :: dispec(num_species)
-    real(8) :: airmass,o2frac,equivalence_ratio
+    real(8) :: airmass,o2frac
     real(8) :: molar_fraction_O2,molar_fraction_N2
     real(8) :: stoichiometric_H2_mol,stoichiometric_O2_mol,stoichiometric_N2_mol, &
                stoichiometric_H2_mas,stoichiometric_O2_mas,stoichiometric_N2_mas, &
@@ -81,11 +83,9 @@ module userdefine
     endif
     !
     !
-    allocate(specr(num_species))
+    if(.not. allocated(specr)) allocate(specr(num_species))
     !
     specr(:)=0.d0
-    !
-    equivalence_ratio=0.6d0
     !
     massratio_H2_air=equivalence_ratio*stoichiometric_H2_air_ratio
     !
@@ -93,7 +93,7 @@ module userdefine
     specr(spcindex('O2'))=1.d0/(massratio_H2_air+1.d0)*stoichiometric_O2_air_ratio
     specr(spcindex('N2'))=1.d0/(massratio_H2_air+1.d0)*stoichiometric_N2_air_ratio
     !
-    uinf=0.97d0
+    uinf=0.01d0
     vinf=0.d0
     winf=0.d0
     tinf=300.d0
@@ -147,10 +147,10 @@ module userdefine
   subroutine udf_flowinit
     !
     use commvar,  only: im,jm,km,ndims,roinf,uinf,nondimen,xmax,pinf,  &
-                        ia,num_species
+                        ia,num_species,nstep,time,filenumb
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use parallel, only: lio
-    use fludyna,  only: thermal
+    use fludyna,  only: thermal,updateq
     !
 #ifdef COMB
     !
@@ -213,6 +213,11 @@ module userdefine
     enddo
     enddo
     !
+    call updateq
+    !
+    nstep=0
+    time=0.d0
+    filenumb=0
     !
     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
     !
@@ -246,6 +251,7 @@ module userdefine
     !
     ! if(mode=='cuboid') then
       lx=12.d0*5.3d0*flamethickness
+      ! lx=24.d0*5.3d0*flamethickness
       ly=5.3d0*flamethickness
       lz=5.3d0*flamethickness
     ! elseif(mode=='cubic') then
@@ -310,28 +316,34 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_stalist
     !
-    use commvar,  only : im,jm,km,ia,ja,ka,deltat
+    use commvar,  only : im,jm,km,ia,ja,ka,deltat,time,uinf
     use commarray,only : vel,prs,rho,tmp,spc,cell,x
     use interp,   only : interlinear
     use parallel, only : pmax,psum,irk,irkm,lio
-    use utility,  only : listinit,listwrite
+    use utility,  only : listinit,listwrite,get_unit
     !
     use thermchem,only : heatrate
     !
     integer :: i,j,k
     real(8) :: tmpmax,rhomax,umax,qdotmax,poutrt
-    real(8) :: qdot,var1,var2
+    real(8) :: qdot,var1,var2,bvelo
     !
-    integer,save :: hand_fs
-    real(8),save :: xflame=0.d0,vflame=0.d0
-    logical,save :: linit=.true.
+    integer,save :: hand_fs,hand_fs2
+    real(8),save :: xflame=0.d0,vflame=0.d0,xflame1,xflame2,tflame1,tflame2
+    logical,save :: linit=.true.,monitor1=.true.
     !
     if(lio) then
       !
       if(linit) then
         call listinit(filename='flamesta.dat',handle=hand_fs, &
                       firstline='nstep time maxT maxU maxHRR xflame vflame pout')
+        !
+        hand_fs2=get_unit()
+        open(hand_fs2,file='laminar_burnning_speed.txt')
+        write(hand_fs2,'(8(1X,A20))')'equivalence_ratio','burning_velocity','xflame1','xflame2','tflame1','tflame2','maxT','maxHRR'
+        !
         linit=.false.
+        !
       endif
       !
     endif
@@ -390,6 +402,38 @@ module userdefine
     !
     xflame=var1
     !
+    if(xflame<=0.002d0 .and. xflame>1.d-8 .and. monitor1) then
+      !
+      xflame1=xflame
+      tflame1=time
+      !
+      monitor1=.false.
+      !
+    endif
+    !
+    if(xflame<=0.001d0 .and. xflame>1.d-8) then
+      !
+      xflame2=xflame
+      tflame2=time
+      !
+      if(lio) then
+        !
+        bvelo=(xflame1-xflame2)/(tflame2-tflame1)-uinf
+        !
+        write(hand_fs2,'(8(1X,E20.13E2))')equivalence_ratio,bvelo,xflame1,xflame2,tflame1,tflame2,tmpmax,qdotmax
+        !
+        print*,'burning velocity:',equivalence_ratio,bvelo
+        !
+      endif
+      !
+      monitor1=.true.
+      !
+      reset_burner=.true.
+      !
+      call udf_write
+      !
+    endif
+    !
     ! calculate mean pressure at outflow
     i=im
     k=0
@@ -410,6 +454,33 @@ module userdefine
   end subroutine udf_stalist
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_stalist.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to manipulate data solver as one likes at the  |
+  !| end of each loop.                                                 | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-Oct-2023: created by Jian Fang @ Daresbury                     |
+  !+-------------------------------------------------------------------+
+  subroutine udf_eom_set
+    !
+    if(reset_burner) then
+      !
+      equivalence_ratio=equivalence_ratio+0.2d0
+      !
+      call udf_setflowenv
+      !
+      call udf_flowinit
+      !
+      reset_burner=.false.
+      !
+    endif
+    !
+  end subroutine udf_eom_set
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_eom_set.                            |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -627,7 +698,9 @@ module userdefine
     logical :: lwprofile
     real(8) :: ypos
     real(8),allocatable :: hrr(:)
+    character(len=3) :: eqrname
     character(len=4) :: stepname
+    character(len=128) :: filename
     !
     lwprofile=.true.
     !
@@ -644,19 +717,29 @@ module userdefine
     ! enddo
     !
 #ifdef COMB
+    !
     allocate(hrr(0:im))
     do i=0,im
       hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
     enddo
     !
-    write(stepname,'(i4.4)')filenumb
+    if(reset_burner) then
+      write(eqrname,'(F3.1)')equivalence_ratio
+      filename='outdat/profile_equivalence_ratio'//eqrname//'.dat'
+    else
+      write(stepname,'(i4.4)')filenumb
+      filename='outdat/profile'//trim(stepname)//'.dat'
+    endif
     !
-    call writexprofile(profilename='outdat/profile'//trim(stepname)//'.dat',  &
+    call writexprofile(profilename=trim(filename),  &
                                var1=rho(0:im,j,0),  var1name='rho', &
                                var2=vel(0:im,j,0,1),var2name='u',   &
                                var3=tmp(0:im,j,0),  var3name='T',   &
                                var4=prs(0:im,j,0),  var4name='P',   &
                                var5=hrr(0:im),      var5name='HRR',truewrite=lwprofile)
+    !
+
+    !
 #endif
     !
   end subroutine udf_write

@@ -41,6 +41,7 @@ module mainloop
     use readwrite,only: readcont,timerept,nxtchkpt,nxtwsequ
     use commcal,  only: cflcal
     use ibmethod, only: ibforce
+    use userdefine,only: udf_eom_set
     !
     ! local data
     real(8) :: time_beg,time_next_step
@@ -171,6 +172,8 @@ module mainloop
         loop_counter=0
         !
       endif
+      !
+      call udf_eom_set
       !
       loop_counter=loop_counter+1
       nstep=nstep+1

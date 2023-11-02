@@ -549,6 +549,21 @@ module userdefine
   !| The end of the subroutine udf_write.                              |
   !+-------------------------------------------------------------------+
   !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to manipulate data solver as one likes at the  |
+  !| end of each loop.                                                 | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-Oct-2023: created by Jian Fang @ Daresbury                     |
+  !+-------------------------------------------------------------------+
+  subroutine udf_eom_set
+    !
+  end subroutine udf_eom_set
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_eom_set.                            |
+  !+-------------------------------------------------------------------+
+  !
 end module userdefine
 !+---------------------------------------------------------------------+
 !| The end of the module userdefine.                                   |
