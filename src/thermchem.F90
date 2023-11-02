@@ -1311,9 +1311,10 @@ module thermchem
     real(8),intent(in) :: spc(:,:,:,:)
     real(8) :: vout(dim(1),dim(2),dim(3))
     !
-#ifdef COMB
     !local
     integer :: i,j,k
+    !
+#ifdef COMB
     !
     do i=1,dim(1)
       do j=1,dim(2)
@@ -1322,6 +1323,7 @@ module thermchem
         enddo
       enddo 
     enddo 
+    !
 #endif
     !
   end function rgcmix_3d

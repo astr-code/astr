@@ -50,19 +50,8 @@ module fludyna
     real(8) :: vout
     real(8),intent(in) ,optional :: density,pressure,temperature,species(:)
     !
-#ifdef COMB
+    real(8) :: rloc
 
-   if(present(density).and.present(temperature)) then
-     vout = density*temperature*rgcmix(species)
-   elseif(present(density).and.present(pressure)) then
-     vout = pressure/density/rgcmix(species)
-   elseif(present(temperature).and.present(pressure)) then
-     vout = pressure/temperature/rgcmix(species)
-   else
-     stop ' !! unable to use dimensional EoS @ thermal !!'
-   endif
-
-#else
     
     if(nondimen) then
       !
@@ -78,25 +67,29 @@ module fludyna
       !
     else 
       !
+#ifdef COMB
+      rloc=rgcmix(species)
+#else
+      rloc=rgas
+#endif
+      !
       if(present(density).and.present(temperature)) then
-        vout = density*temperature*rgas
+        vout = density*temperature*rloc
       elseif(present(density).and.present(pressure)) then
-        vout = pressure/(density*rgas)
+        vout = pressure/density/rloc
       elseif(present(temperature).and.present(pressure)) then
-        vout = pressure/(temperature*rgas)
+        vout = pressure/temperature/rloc
       else
         stop ' !! unable to use dimensional EoS @ thermal !!'
       endif
       !
     endif 
     
-#endif
-    !
   end function thermal_scar
   !
   function thermal_1d(density,pressure,temperature,species,dim) result(vout)
     !
-    use commvar,only : const2
+    use commvar,only : const2,rgas
     !
     ! arguments
     integer,intent(in) :: dim
@@ -104,6 +97,8 @@ module fludyna
     real(8),intent(in),optional :: density(:),pressure(:),        &
                                    temperature(:),species(:,:)
     !
+    real(8) :: rloc(dim)
+    !
     if(nondimen) then
       !
       if(present(density) .and. present(temperature)) then
@@ -118,12 +113,18 @@ module fludyna
       !
     else 
       !
+#ifdef COMB
+      rloc=rgcmix(species,dim)
+#else
+      rloc=rgas
+#endif
+
       if(present(density).and.present(temperature)) then
-        vout = density*temperature*rgcmix(species,dim)
+        vout = density*temperature*rloc
       elseif(present(density).and.present(pressure)) then
-        vout = pressure/density/rgcmix(species,dim)
+        vout = pressure/density/rloc
       elseif(present(temperature).and.present(pressure)) then
-        vout = pressure/temperature/rgcmix(species,dim)
+        vout = pressure/temperature/rloc
       else
         stop ' !! unable to use dimensional EoS @ thermal !!'
       endif
@@ -134,13 +135,15 @@ module fludyna
   !
   function thermal_3d(density,pressure,temperature,species,dim) result(vout)
     !
-    use commvar,only : const2
+    use commvar,only : const2,rgas
     !
     ! arguments
     integer,intent(in) :: dim(3)
     real(8) :: vout(dim(1),dim(2),dim(3))
     real(8),intent(in),optional :: density(:,:,:),pressure(:,:,:),    &
                                    temperature(:,:,:),species(:,:,:,:)
+    !
+    real(8) :: rloc(dim(1),dim(2),dim(3))
     !
     if(nondimen) then
       !
@@ -151,19 +154,24 @@ module fludyna
       elseif(present(temperature) .and. present(pressure)) then
         vout=pressure/temperature*const2
       else
-        stop ' !! unable to get thermal variable  @ thermal !!'
+        stop ' !! unable to get thermal variable  @ thermal_3d !!'
       endif
       !
     else
       !
+#ifdef COMB
+      rloc=rgcmix(species,dim)
+#else
+      rloc=rgas
+#endif
       if(present(density).and.present(temperature)) then
-        vout = density*temperature*rgcmix(species,dim)
+        vout = density*temperature*rloc
       elseif(present(density).and.present(pressure)) then
-        vout = pressure/density/rgcmix(species,dim)
+        vout = pressure/density/rloc
       elseif(present(temperature).and.present(pressure)) then
-        vout = pressure/temperature/rgcmix(species,dim)
+        vout = pressure/temperature/rloc
       else
-        stop ' !! unable to use dimensional EoS @ thermal !!'
+        stop ' !! unable to use dimensional EoS @ thermal_3d !!'
       endif
       !
     endif
@@ -304,7 +312,7 @@ module fludyna
   subroutine fvar2q_sca(q,density,velocity,pressure,temperature,       &
                        species,tke,omega)
     !
-    use commvar, only: numq,ndims,num_species,const1,const6
+    use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
     real(8),intent(in) :: density,velocity(:)
     real(8),intent(in),optional :: pressure,temperature,species(:),tke,omega
@@ -312,43 +320,43 @@ module fludyna
     !
     ! local data
     integer :: jspec,j
-    real(8) :: var1,var2
+    real(8) :: var1,var2,cotem
     !
     q(1)=density
     q(2)=density*velocity(1)
     q(3)=density*velocity(2)
     q(4)=density*velocity(3)
     !
-    if(nondimen) then 
+#ifdef COMB
+    if(.not.present(species))  &
+      stop ' !! error @ fvar2q - species not set for energy calculation !!'
       !
-      if(present(temperature)) then
-        q(5)=density*( temperature*const1 + 0.5d0*(velocity(1)**2 +    &
-                                                  velocity(2)**2 +    &
-                                                  velocity(3)**2) )
-      elseif(present(pressure)) then
-          q(5)=pressure*const6+0.5d0*density*( velocity(1)**2 +          &
-                                              velocity(2)**2 +          &
-                                              velocity(3)**2 )
-      else
-        print*,' !! pressure or temperature required for energy calculation !!'
-        stop ' !! error @ fvar2q'
-      endif
-      !
+    if(present(temperature)) then
+      var1=0.5d0*sum(velocity(:)*velocity(:))
+      call cpeval(tmp=temperature,spc=species,ke=var1,eng=var2)
+      q(5)=var2*density
     else
-      !
-      if(.not.present(species))  &
-        stop ' !! error @ fvar2q - species not set for energy calculation !!'
-        !
-      if(present(temperature)) then
-        var1=0.5d0*sum(velocity(:)*velocity(:))
-        call cpeval(tmp=temperature,spc=species,ke=var1,eng=var2)
-        q(5)=var2*density
-      else
-        print*,' !! temperature required for energy calculation !!'
-        stop ' !! error @ fvar2q'
-      endif 
-      !
-    endif !nondimen
+      print*,' !! temperature required for energy calculation !!'
+      stop ' !! error @ fvar2q'
+    endif 
+    !
+#else
+    if(nondimen) then 
+      cotem=const1
+    else
+      cotem=cv
+    endif
+    !
+    var1=0.5d0*sum(velocity(:)*velocity(:))
+    if(present(temperature)) then
+      q(5)=density*(temperature*cotem+var1)
+    elseif(present(pressure)) then
+      q(5)=pressure*const6+density*var1
+    else
+      print*,' !! pressure or temperature required for energy calculation !!'
+      stop ' !! error @ fvar2q'
+    endif
+#endif
     !
     if(num_species>0) then
       !
@@ -369,7 +377,7 @@ module fludyna
   !
   subroutine fvar2q_1da(q,density,velocity,pressure,temperature,species)
     !
-    use commvar, only: numq,ndims,num_species,const1,const6
+    use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
     real(8),intent(in) :: density(:),velocity(:,:)
     real(8),intent(in),optional :: pressure(:),temperature(:), &
@@ -378,49 +386,55 @@ module fludyna
     !
     ! local data
     integer :: jspec,j
-    real(8) :: var1,var2
+    real(8) :: var1,var2,cotem
     !
     q(:,1)=density(:)
     q(:,2)=density(:)*velocity(:,1)
     q(:,3)=density(:)*velocity(:,2)
     q(:,4)=density(:)*velocity(:,3)
     !
-    if(nondimen) then 
+#ifdef COMB
+
+    if(.not.present(species))  &
+      stop ' !! error @ fvar2q - species not set for energy calculation !!'
+    !
+    if(present(temperature)) then
       !
-      if(present(temperature)) then
-        q(:,5)=density(:)*( temperature(:)*const1 +        &
-                            0.5d0*(velocity(:,1)**2 +             &
-                                    velocity(:,2)**2 +             &
-                                    velocity(:,3)**2) )
-      elseif(present(pressure)) then
-          q(:,5)=pressure(:)*const6+0.5d0*density(:)*(       &
-                                      velocity(:,1)**2 +             &
-                                      velocity(:,2)**2 +             &
-                                      velocity(:,3)**2 )
-      else
-        print*,' !! pressure or temperature required !!'
-        stop ' !! error @ fvar2q'
-      endif
+      do j=1,size(density)
+        var1=0.5d0*sum(velocity(j,:)*velocity(j,:))
+        call cpeval(tmp=temperature(j),spc=species(j,:),ke=var1,eng=var2)
+        q(j,5)=var2*density(j)
+      enddo   
       !
     else
-       !
-      if(.not.present(species))  &
-        stop ' !! error @ fvar2q - species not set for energy calculation !!'
-        !
-        if(present(temperature)) then
-          !
-          do j=1,size(density)
-            var1=0.5d0*sum(velocity(j,:)*velocity(j,:))
-            call cpeval(tmp=temperature(j),spc=species(j,:),ke=var1,eng=var2)
-            q(j,5)=var2*density(j)
-          enddo   
-          !
-        else
-          print*,' !! temperature required for energy calculation !!'
-          stop ' !! error @ fvar2q'
-        endif 
-      !
-    endif !nondimen
+      print*,' !! temperature required for energy calculation !!'
+      stop ' !! error @ fvar2q'
+    endif 
+
+#else
+    
+    if(nondimen) then 
+      cotem=const1
+    else
+      cotem=cv
+    endif
+    !
+    if(present(temperature)) then
+      q(:,5)=density(:)*( temperature(:)*cotem +         &
+                          0.5d0*(velocity(:,1)**2 +      &
+                                 velocity(:,2)**2 +      &
+                                 velocity(:,3)**2) )
+    elseif(present(pressure)) then
+      q(:,5)=pressure(:)*const6+0.5d0*density(:)*(       &
+                                    velocity(:,1)**2 +   &
+                                    velocity(:,2)**2 +   &
+                                    velocity(:,3)**2 )
+    else
+      print*,' !! pressure or temperature required for energy calculation !!'
+      stop ' !! error @ fvar2q'
+    endif
+
+#endif
     !
     if(num_species>0) then
       !
@@ -434,7 +448,7 @@ module fludyna
   !
   subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species,tke,omega)
     !
-    use commvar, only: numq,ndims,num_species,const1,const6
+    use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
     real(8),intent(in) :: density(:,:,:),velocity(:,:,:,:)
     real(8),intent(in),optional :: pressure(:,:,:),temperature(:,:,:), &
@@ -444,56 +458,62 @@ module fludyna
     !
     ! local data
     integer :: jspec,i,j,k
-    real(8) :: var1,var2
+    real(8) :: var1,var2,cotem
     !
     q(:,:,:,1)=density(:,:,:)
     q(:,:,:,2)=density(:,:,:)*velocity(:,:,:,1)
     q(:,:,:,3)=density(:,:,:)*velocity(:,:,:,2)
     q(:,:,:,4)=density(:,:,:)*velocity(:,:,:,3)
     !
-    if(nondimen) then 
+#ifdef COMB
+    
+    if(.not.present(species))  &
+      stop ' !! error @ fvar2q - species not set for energy calculation !!'
       !
-      if(present(temperature)) then
-        q(:,:,:,5)=density(:,:,:)*( temperature(:,:,:)*const1 +        &
-                            0.5d0*(velocity(:,:,:,1)**2 +             &
-                                    velocity(:,:,:,2)**2 +             &
-                                    velocity(:,:,:,3)**2) )
-      elseif(present(pressure)) then
-          q(:,:,:,5)=pressure(:,:,:)*const6+0.5d0*density(:,:,:)*(       &
-                                      velocity(:,:,:,1)**2 +             &
-                                      velocity(:,:,:,2)**2 +             &
-                                      velocity(:,:,:,3)**2 )
-      else
-        print*,' !! pressure or temperature required !!'
-        stop ' !! error @ fvar2q'
-      endif
+    if(present(temperature)) then
+      !
+      do i=1,size(density,1)
+        do j=1,size(density,2)
+          do k=1,size(density,3)
+            !
+            var1=0.5d0*sum(velocity(i,j,k,:)*velocity(i,j,k,:))
+            call cpeval(tmp=temperature(i,j,k),spc=species(i,j,k,:), &
+                        ke=var1,eng=var2)
+            q(i,j,k,5)=var2*density(i,j,k)
+            !
+          enddo   
+        enddo 
+      enddo 
       !
     else
-      !
-      if(.not.present(species))  &
-        stop ' !! error @ fvar2q - species not set for energy calculation !!'
-        !
-      if(present(temperature)) then
-        !
-        do i=1,size(density,1)
-          do j=1,size(density,2)
-            do k=1,size(density,3)
-              !
-              var1=0.5d0*sum(velocity(i,j,k,:)*velocity(i,j,k,:))
-              call cpeval(tmp=temperature(i,j,k),spc=species(i,j,k,:), &
-                          ke=var1,eng=var2)
-              q(i,j,k,5)=var2*density(i,j,k)
-              !
-            enddo   
-          enddo 
-        enddo 
-        !
-      else
-        print*,' !! temperature required for energy calculation !!'
-        stop ' !! error @ fvar2q'
+      print*,' !! temperature required for energy calculation !!'
+      stop ' !! error @ fvar2q'
       endif
-      !
-    endif !nondimen
+
+#else
+
+    if(nondimen) then 
+      cotem=const1
+    else
+      cotem=cv
+    endif
+    !
+    if(present(temperature)) then
+      q(:,:,:,5)=density(:,:,:)*( temperature(:,:,:)*cotem +     &
+                           0.5d0*(velocity(:,:,:,1)**2 +         &
+                                  velocity(:,:,:,2)**2 +         &
+                                  velocity(:,:,:,3)**2) )
+    elseif(present(pressure)) then
+        q(:,:,:,5)=pressure(:,:,:)*const6+0.5d0*density(:,:,:)*(       &
+                                    velocity(:,:,:,1)**2 +             &
+                                    velocity(:,:,:,2)**2 +             &
+                                    velocity(:,:,:,3)**2 )
+    else
+      print*,' !! pressure or temperature required !!'
+      stop ' !! error @ fvar2q'
+    endif
+
+#endif
     !
     if(num_species>0) then
       !
@@ -553,55 +573,56 @@ module fludyna
       !
     endif
     !
-    if(nondimen) then 
+#ifdef COMB
+
+    if(.not.present(species))  &
+      stop ' !! error @ q2fvar - species not set for T calculation !!'
       !
-      if(present(pressure) .or. present(temperature)) then
-        pressure(:,:,:)  =( q(:,:,:,5)-0.5d0*density(:,:,:)*(              &
-                                            velocity(:,:,:,1)**2+         &
-                                            velocity(:,:,:,2)**2+         &
-                                            velocity(:,:,:,3)**2) )/const6
-      endif
+    if(present(pressure) .or. present(temperature)) then
       !
-      if(present(temperature)) then
-        dim(1)=size(q,1)
-        dim(2)=size(q,2)
-        dim(3)=size(q,3)
-        !
-        temperature=thermal(pressure=pressure,density=density,dim=dim)
-      endif
+      do i=1,size(q,1)
+        do j=1,size(q,2)
+          do k=1,size(q,3)
+            !
+            var1=q(i,j,k,5)/density(i,j,k) &
+                 -0.5d0*sum(velocity(i,j,k,:)*velocity(i,j,k,:))
+            ! temperature(i,j,k)=tinf
+            call temperature_calc(tmp=temperature(i,j,k),den=density(i,j,k), &
+                                  spc=species(i,j,k,:),eint=var1)
+          enddo
+        enddo 
+      enddo          
       !
-    else
+    endif 
+    !
+    if(present(pressure)) then
+      dim(1)=size(q,1)
+      dim(2)=size(q,2)
+      dim(3)=size(q,3)
       !
-      if(.not.present(species))  &
-        stop ' !! error @ q2fvar - species not set for T calculation !!'
-        !
-      if(present(pressure) .or. present(temperature)) then
-        !
-        do i=1,size(q,1)
-          do j=1,size(q,2)
-            do k=1,size(q,3)
-              !
-              var1=q(i,j,k,5)/density(i,j,k) &
-                   -0.5d0*sum(velocity(i,j,k,:)*velocity(i,j,k,:))
-              ! temperature(i,j,k)=tinf
-              call temperature_calc(tmp=temperature(i,j,k),den=density(i,j,k), &
-                                    spc=species(i,j,k,:),eint=var1)
-            enddo
-          enddo 
-        enddo          
-        !
-      endif 
+      pressure=thermal(temperature=temperature,density=density,species=species,dim=dim)
+
+    endif
+    !  
+#else
+
+    if(present(pressure) .or. present(temperature)) then
+      pressure(:,:,:)  =( q(:,:,:,5)-0.5d0*density(:,:,:)*(              &
+                                          velocity(:,:,:,1)**2+         &
+                                          velocity(:,:,:,2)**2+         &
+                                          velocity(:,:,:,3)**2) )/const6
+    endif
+    !
+    if(present(temperature)) then
+      dim(1)=size(q,1)
+      dim(2)=size(q,2)
+      dim(3)=size(q,3)
       !
-      if(present(pressure)) then
-        dim(1)=size(q,1)
-        dim(2)=size(q,2)
-        dim(3)=size(q,3)
-        !
-        pressure=thermal(temperature=temperature,density=density, &
-                          species=species,dim=dim)
-      endif
-      !                                
-    endif !nondimen
+      temperature=thermal(pressure=pressure,density=density,dim=dim)
+    endif
+    !
+
+#endif
     !
     if(present(tke)) then
       tke(:,:,:)=q(:,:,:,5+num_species+1)/density
@@ -644,45 +665,45 @@ module fludyna
       !
     endif
     !
-    if(nondimen) then 
+#ifdef COMB
+
+    if(.not.present(species))  &
+      stop ' !! error @ q2fvar - species not set for T calculation !!'
       !
-      if(present(pressure) .or. present(temperature)) then
-        pressure(:)  =( q(:,5)-0.5d0*density(:)*(                   &
-                                            velocity(:,1)**2+      &
-                                            velocity(:,2)**2+      &
-                                            velocity(:,3)**2) )/const6
-      endif
+    if(present(pressure) .or. present(temperature)) then
       !
-      if(present(temperature)) then
-        dim=size(q,1)
+      do j=1,size(density)
         !
-        temperature=thermal(pressure=pressure,density=density,dim=dim)
-      endif
+        var1=q(j,5)/density(j)-0.5d0*sum(velocity(j,:)*velocity(j,:))
+        call temperature_calc(tmp=temperature(j),den=density(j), &
+                                  spc=species(j,:),eint=var1)
+      enddo          
       !
-    else
+    endif 
+    !
+    if(present(pressure)) then
+      dim=size(q,1)
       !
-      if(.not.present(species))  &
-        stop ' !! error @ q2fvar - species not set for T calculation !!'
-        !
-      if(present(pressure) .or. present(temperature)) then
-        !
-        do j=1,size(density)
-          !
-          var1=q(j,5)/density(j)-0.5d0*sum(velocity(j,:)*velocity(j,:))
-          call temperature_calc(tmp=temperature(j),den=density(j), &
-                                    spc=species(j,:),eint=var1)
-        enddo          
-        !
-      endif 
+      pressure=thermal(temperature=temperature,density=density, &
+                        species=species,dim=dim)
+    endif
+
+#else
+
+    if(present(pressure) .or. present(temperature)) then
+      pressure(:)  =( q(:,5)-0.5d0*density(:)*(                   &
+                                          velocity(:,1)**2+      &
+                                          velocity(:,2)**2+      &
+                                          velocity(:,3)**2) )/const6
+    endif
+    !
+    if(present(temperature)) then
+      dim=size(q,1)
       !
-      if(present(pressure)) then
-        dim=size(q,1)
-        !
-        pressure=thermal(temperature=temperature,density=density, &
-                          species=species,dim=dim)
-      endif
-      !
-    endif !nondimen
+      temperature=thermal(pressure=pressure,density=density,dim=dim)
+    endif
+
+#endif
     !
     if(present(tke)) then
       tke(:)=q(:,5+num_species+1)/density
@@ -723,35 +744,33 @@ module fludyna
       !
     endif
     !
-    if(nondimen) then 
+#ifdef COMB
+    if(.not.present(species))  &
+      stop ' !! error @ q2fvar - species not set for T calculation !!'
       !
-      if(present(pressure) .or. present(temperature)) then
-        pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+    &
-                                        velocity(3)**2) )/const6
-      endif
+    if(present(pressure) .or. present(temperature)) then
       !
-      if(present(temperature)) then
-        temperature=thermal(pressure=pressure,density=density)
-      endif
-      !
-    else
-      !
-      if(.not.present(species))  &
-        stop ' !! error @ q2fvar - species not set for T calculation !!'
-        !
-      if(present(pressure) .or. present(temperature)) then
-        !
-        var1=q(5)/density-0.5d0*sum(velocity(:)*velocity(:))
-        call temperature_calc(tmp=temperature,den=density, &
-                              spc=species(:),eint=var1)
-      endif 
-      !
-      if(present(pressure)) then
-        pressure=thermal(temperature=temperature,density=density, &
-                          species=species)
-      endif
-      !
+      var1=q(5)/density-0.5d0*sum(velocity(:)*velocity(:))
+      call temperature_calc(tmp=temperature,den=density, &
+                            spc=species(:),eint=var1)
     endif 
+    !
+    if(present(pressure)) then
+      pressure=thermal(temperature=temperature,density=density, &
+                        species=species)
+    endif
+#else
+
+    if(present(pressure) .or. present(temperature)) then
+      pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+    &
+                                       velocity(3)**2) )/const6
+    endif
+    !
+    if(present(temperature)) then
+      temperature=thermal(pressure=pressure,density=density)
+    endif
+
+#endif
     !
     if(present(tke)) then
       tke=q(5+num_species+1)/density
@@ -780,15 +799,15 @@ module fludyna
     ! tempconst=110.4d0/ref_t
     ! tempconst1=1.d0+tempconst
     !
-    real(8) :: s,tmpers,tmper0,miu0,tnond
+    real(8) :: s,tmpers,tmper0,miu0,tnondim
     !
     if(nondimen) then
       miucal=temper*sqrt(temper)*tempconst1/(temper+tempconst)
     else
       ! for air, kg/(m s)
-      tnond=temper/273.15d0
+      tnondim=temper/273.15d0
       !
-      miucal=1.716d-5*tnond*sqrt(tnond)*(273.15d0+110.4d0)/(temper+110.4d0)
+      miucal=1.716d-5*tnondim*sqrt(tnondim)*(273.15d0+110.4d0)/(temper+110.4d0)
       !
       ! tmpers=110.d0
       ! tmper0=273.125d0
@@ -813,7 +832,7 @@ module fludyna
   !+-------------------------------------------------------------------+
   real(8) function sos(tmp,spc)
     !
-    use commvar,   only: nondimen,mach,num_species
+    use commvar,   only: nondimen,mach,num_species,gamma,rgas
     use thermchem, only: aceval
     !
     real(8),intent(in) :: tmp
@@ -825,11 +844,15 @@ module fludyna
     if(nondimen) then
       sos=sqrt(tmp)/mach
     else
+#ifdef COMB
       if(.not. present(spc)) then
         stop ' !! error, species needed to calculate speed of sound @ function sos'
       else
         call aceval(tmp,spc,sos)
       endif
+#else
+      sos=sqrt(gamma*rgas*tmp)
+#endif
     endif
     !
     return

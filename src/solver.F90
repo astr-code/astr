@@ -27,7 +27,7 @@ module solver
   !+-------------------------------------------------------------------+
   subroutine refcal
     !
-    use commvar, only : numq,num_species,prandtl,gamma,rgas,ia,ja,ka,  &
+    use commvar, only : numq,num_species,prandtl,gamma,rgas,cp,cv,ia,ja,ka,  &
                         uinf,vinf,winf,roinf,pinf,tinf,const1,const2,  &
                         const3,const4,const5,const6,const7,tempconst,  &
                         tempconst1,reynolds,ref_t,mach,                &
@@ -77,7 +77,6 @@ module solver
     endif
     !
     prandtl=0.72d0
-    rgas=287.1d0
     !
     if(nondimen) then 
       !
@@ -104,6 +103,9 @@ module solver
       !
     else 
       !
+      rgas=287.1d0
+      cp  =gamma/(gamma-1.d0)*rgas
+      cv  = rgas/(gamma-1.d0)
       uinf=1.d0
       vinf=0.d0
       winf=0.d0
@@ -2329,7 +2331,8 @@ module solver
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
                           conschm,ndims,num_species,num_modequ,        &
                           reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode,nondimen,schmidt,nstep,deltat,flowtype
+                          turbmode,nondimen,schmidt,nstep,deltat,      &
+                          cp,flowtype
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
     use commfunc,  only : ddfc
@@ -2409,6 +2412,7 @@ module solver
       else
         !
 #ifdef COMB
+
         call enthpy(tmp(i,j,k),hispec(:))
         call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
         mw=sum(wmolar(:)*xi(:))
@@ -2424,6 +2428,8 @@ module solver
                       spc=spc(i,j,k,:),rhodi=dispec(:,1))
           ! print*,' ** miu=',miu,'cp=',cpe,'kamma=',kama,'rhodi=',dispec(:,1)
         end select
+#else
+       miu=miucal(tmp(i,j,k))
 #endif
         !
       endif 
@@ -2484,7 +2490,11 @@ module solver
         if(nondimen) then 
           hcc=(miu/prandtl)/const5
         else
+#ifdef COMB
           hcc=kama
+#else
+          hcc=cp*miu/prandtl
+#endif
         endif 
         !
         detk=0.d0
