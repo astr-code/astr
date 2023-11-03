@@ -12,7 +12,7 @@ tgv
 t,t,t
 
 # nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt,lcomb : Parameters
-t,t,t,f,f,f,t,f
+f,t,t,f,f,f,t,f
 
 # lrestar                                               : start mode
 f
@@ -20,8 +20,8 @@ f
 # alfa_filter, kcutoff                                  : Filter parameters
 0.49d0, 48
 
-# ref_t,reynolds,mach                                   : Reference variables
-273.15d0, 1600.d0, 0.1d0
+# ref_tem,ref_vel,ref_len,ref_den                               : Reference variables
+273.15d0, 33.1345d0, 6.40853d-4, 1.293d0
 
 # conschm,difschm,rkscheme,odetype                              : Numerical scheme
 642c, 642c, rk3, rk3 

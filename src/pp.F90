@@ -169,7 +169,7 @@ module pp
       write(fh,'(A)')'# alfa_filter, kcutoff                                  : Filter parameters'
       write(fh,'(A)')'0.49d0, 48'
       write(fh,*)
-      write(fh,'(A)')'# ref_t,reynolds,mach                                   : Reference variables'
+      write(fh,'(A)')'# ref_tem,reynolds,mach                                   : Reference variables'
       write(fh,'(A)')'273.15d0,  3000.d0,  0.5d0 '
       write(fh,*)
       write(fh,'(A)')'# conschm,difschm,rkscheme                              : Numerical scheme'
@@ -1950,7 +1950,7 @@ module pp
     ! local data
     integer :: im,jm,km,num_species,jsp,i
     logical :: lihomo,ljhomo,lkhomo
-    real(8) :: ref_t,reynolds,mach
+    real(8) :: ref_tem,reynolds,mach
     character(len=32) :: gridfile
     !
     real(8),allocatable,dimension(:) :: x_1d,y_1d,z_1d,ro_1d,u_1d,   &
@@ -1971,7 +1971,7 @@ module pp
     read(11,"(/)")
     read(11,*)lihomo,ljhomo,lkhomo
     read(11,'(//////////)')
-    read(11,*)ref_t,reynolds,mach
+    read(11,*)ref_tem,reynolds,mach
     read(11,'(///////)')
     read(11,*)num_species
     print*,' ** num_species: ',num_species
@@ -2069,7 +2069,7 @@ module pp
     integer :: im,jm,km,num_species,jsp,i
     integer :: iflame_in,iflame_out
     logical :: lihomo,ljhomo,lkhomo
-    real(8) :: ref_t,reynolds,mach
+    real(8) :: ref_tem,reynolds,mach
     character(len=32) :: gridfile
     !
     real(8),allocatable,dimension(:) :: x_1d,y_1d,z_1d,ro_1d,u_1d,   &
@@ -2092,7 +2092,7 @@ module pp
     read(11,"(/)")
     read(11,*)lihomo,ljhomo,lkhomo
     read(11,'(//////////)')
-    read(11,*)ref_t,reynolds,mach
+    read(11,*)ref_tem,reynolds,mach
     read(11,'(///////)')
     read(11,*)num_species
     print*,' ** num_species: ',num_species

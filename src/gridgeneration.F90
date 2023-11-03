@@ -23,7 +23,7 @@ module gridgeneration
   subroutine gridgen
     !
     use parallel, only : mpirank
-    use commvar,  only : flowtype,lreadgrid,nondimen,gridfile
+    use commvar,  only : flowtype,lreadgrid,nondimen,gridfile,ref_len
     use readwrite,only : readgrid,writegrid,xdmfwriter
     use userdefine,only: udf_grid
     !
@@ -31,13 +31,7 @@ module gridgeneration
       call readgrid(trim(gridfile))
     else
       if(flowtype(1:3)=='tgv') then
-        if(nondimen) then
-          call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
-        elseif(trim(flowtype)=='tgv') then
-          call gridcube(5.1530915662d-3,5.1530915662d-3,5.1530915662d-3)
-        else
-          call gridcube(6.283185307d-3,6.283185307d-3,6.283185307d-3)
-        endif 
+        call gridcube(ref_len*2.d0*pi,ref_len*2.d0*pi,ref_len*2.d0*pi)
       elseif(trim(flowtype)=='jet') then
         call gridjet
       elseif(trim(flowtype)=='hit') then
@@ -51,7 +45,7 @@ module gridgeneration
       elseif(trim(flowtype)=='windtunn') then
         call gridsandbox
       elseif(trim(flowtype)=='channel') then
-        call grichan(2.d0*pi,pi)
+        call grichan(2.d0*pi*ref_len,2.d0*ref_len,pi*ref_len)
       elseif(trim(flowtype)=='0dreactor') then
         call gridhitflame(mode='cuboid')
       elseif(trim(flowtype)=='1dflame') then
@@ -268,19 +262,19 @@ module gridgeneration
   !| The end of the subroutine gridcube.                               |
   !+-------------------------------------------------------------------+
   !
-  subroutine grichan(lx,lz)
+  subroutine grichan(lx,ly,lz)
     !
-    use commvar,  only : im,jm,km,gridfile,ia,ja,ka
+    use commvar,  only : im,jm,km,gridfile,ia,ja,ka,ref_vel,ref_len
     use parallel, only : ig0,jg0,kg0,lio,pmax,mpistop
     use commarray,only : x
     use commfunc, only : argtanh
     !
-    real(8),intent(in) :: lx,lz
+    real(8),intent(in) :: lx,ly,lz
     !
     integer :: n,i,j,k
     real(8) :: varc,var1,var2,Retau,dx,yy(0:jm),xmax,ymax,dymax,zmax
     !
-    Retau=185.d0
+    Retau=185.d0/ref_len
     !
     ! varc=1.02d0
     varc=1.07d0
@@ -289,7 +283,7 @@ module gridgeneration
       var1=argtanh(1.d0/varc)
       var2=2.d0*(j+jg0)/(ja)*1.d0-1.d0
       !
-      yy(j)=1.d0*(1.d0+varc*dtanh(var1*var2))
+      yy(j)=0.5d0*ly*(1.d0+varc*dtanh(var1*var2))
       !
     end do
     !

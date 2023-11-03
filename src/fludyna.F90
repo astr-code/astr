@@ -621,7 +621,6 @@ module fludyna
       temperature=thermal(pressure=pressure,density=density,dim=dim)
     endif
     !
-
 #endif
     !
     if(present(tke)) then
@@ -841,19 +840,19 @@ module fludyna
     ! local data
     real(8) :: cpcmix,gamrgc
     !
+#ifdef COMB
+    if(.not. present(spc)) then
+      stop ' !! error, species needed to calculate speed of sound @ function sos'
+    else
+      call aceval(tmp,spc,sos)
+    endif
+#else
     if(nondimen) then
       sos=sqrt(tmp)/mach
     else
-#ifdef COMB
-      if(.not. present(spc)) then
-        stop ' !! error, species needed to calculate speed of sound @ function sos'
-      else
-        call aceval(tmp,spc,sos)
-      endif
-#else
       sos=sqrt(gamma*rgas*tmp)
-#endif
     endif
+#endif
     !
     return
     !

@@ -9,7 +9,7 @@ module userdefine
   !
   implicit none
   !
-  real(8) :: flamethickness,hsource,equivalence_ratio=1.2d0
+  real(8) :: flamethickness,hsource,equivalence_ratio=0.8d0
   real(8),allocatable :: specr(:)
   !
   logical :: reset_burner=.false.
@@ -31,7 +31,7 @@ module userdefine
     use parallel, only: lio,bcast
     !
 #ifdef COMB
-    use thermchem,only : tranco,spcindex,mixture,convertxiyi,wmolar
+    use thermchem,only : tranco,spcindex,mixture,convertxiyi,wmolar,rgcmix,gammarmix
     use cantera 
     !
     real(8) :: cpe,miu,kama,cs,lref
@@ -83,6 +83,7 @@ module userdefine
     endif
     !
     !
+    if(.not. allocated(spcinf)) allocate(spcinf(num_species))
     if(.not. allocated(specr)) allocate(specr(num_species))
     !
     specr(:)=0.d0
@@ -97,6 +98,8 @@ module userdefine
     vinf=0.d0
     winf=0.d0
     tinf=300.d0
+    pinf=101325.d0
+    !
     spcinf(:)=specr(:)
     roinf=thermal(pressure=pinf,temperature=tinf,species=spcinf(:))
     !
@@ -125,6 +128,8 @@ module userdefine
       print*,'          H2 mass fraction | ',specr(spcindex('H2'))
       print*,'          O2 mass fraction | ',specr(spcindex('O2'))
       print*,'          N2 mass fraction | ',specr(spcindex('N2'))
+      print*,'           gas constant, R | ',rgcmix(specr),' J/(kg K)'
+      print*,'    heat capacity ratio, γ | ',gammarmix(tinf,specr)
       print*,' --------------------------+------------------------------------'
 
     endif
@@ -250,8 +255,8 @@ module userdefine
     real(8) :: lx,ly,lz
     !
     ! if(mode=='cuboid') then
-      lx=12.d0*5.3d0*flamethickness
-      ! lx=24.d0*5.3d0*flamethickness
+      ! lx=12.d0*5.3d0*flamethickness
+      lx=24.d0*5.3d0*flamethickness
       ly=5.3d0*flamethickness
       lz=5.3d0*flamethickness
     ! elseif(mode=='cubic') then
@@ -340,7 +345,7 @@ module userdefine
         !
         hand_fs2=get_unit()
         open(hand_fs2,file='laminar_burnning_speed.txt')
-        write(hand_fs2,'(8(1X,A20))')'equivalence_ratio','burning_velocity','xflame1','xflame2','tflame1','tflame2','maxT','maxHRR'
+        write(hand_fs2,'(4(1X,A20))')'equivalence_ratio','burning_velocity','maxT','maxHRR'
         !
         linit=.false.
         !
@@ -420,7 +425,7 @@ module userdefine
         !
         bvelo=(xflame1-xflame2)/(tflame2-tflame1)-uinf
         !
-        write(hand_fs2,'(8(1X,E20.13E2))')equivalence_ratio,bvelo,xflame1,xflame2,tflame1,tflame2,tmpmax,qdotmax
+        write(hand_fs2,'(4(1X,E20.13E2))')equivalence_ratio,bvelo,tmpmax,qdotmax
         !
         print*,'burning velocity:',equivalence_ratio,bvelo
         !
@@ -466,15 +471,19 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_eom_set
     !
+    use parallel, only: mpistop
+    !
     if(reset_burner) then
       !
-      equivalence_ratio=equivalence_ratio+0.2d0
+      ! equivalence_ratio=equivalence_ratio+0.2d0
+      ! !
+      ! call udf_setflowenv
+      ! !
+      ! call udf_flowinit
+      ! !
+      ! reset_burner=.false.
       !
-      call udf_setflowenv
-      !
-      call udf_flowinit
-      !
-      reset_burner=.false.
+      call mpistop
       !
     endif
     !
@@ -698,8 +707,7 @@ module userdefine
     logical :: lwprofile
     real(8) :: ypos
     real(8),allocatable :: hrr(:)
-    character(len=3) :: eqrname
-    character(len=4) :: stepname
+    character(len=4) :: stepname,eqrname
     character(len=128) :: filename
     !
     lwprofile=.true.
@@ -723,12 +731,14 @@ module userdefine
       hrr(i)=heatrate(rho(i,0,0),tmp(i,0,0),spc(i,0,0,:))
     enddo
     !
+    write(stepname,'(i4.4)')filenumb
+    write(eqrname,'(F4.2)')equivalence_ratio
+    !
+    !
     if(reset_burner) then
-      write(eqrname,'(F3.1)')equivalence_ratio
-      filename='outdat/profile_equivalence_ratio'//eqrname//'.dat'
+      filename='outdat/profile_equivalence_ratio_'//eqrname//'_end.dat'
     else
-      write(stepname,'(i4.4)')filenumb
-      filename='outdat/profile'//trim(stepname)//'.dat'
+      filename='outdat/profile_equivalence_ratio_'//eqrname//'_'//trim(stepname)//'.dat'
     endif
     !
     call writexprofile(profilename=trim(filename),  &

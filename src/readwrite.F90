@@ -122,7 +122,8 @@ module readwrite
     !
     use parallel,only : mpirank,isize,jsize,ksize,mpistop
     use commvar, only : ia,ja,ka,hm,numq,conschm,difschm,nondimen,     &
-                        diffterm,ref_t,reynolds,mach,num_species,      &
+                        diffterm,ref_tem,ref_vel,ref_len,ref_den,      &
+                        reynolds,mach,num_species,                     &
                         flowtype,ndims,lfilter,alfa_filter,            &
                         lfftk,kcutoff,ninit,rkscheme,                  &
                         spg_imin,spg_imax,spg_jmin,spg_jmax,           &
@@ -228,10 +229,15 @@ module readwrite
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                      *** Flow Parameters ***'
       if(nondimen) then
-        write(*,'(4X,3(A20))')'ref_t','Reynolds','Mach'
-        write(*,"(4X,3(F20.6))")ref_t,reynolds,mach
+        write(*,'(4X,3(A20))')'ref_tem','Reynolds','Mach'
+        write(*,"(4X,3(F20.6))")ref_tem,reynolds,mach
       else
         write(*,'(35X,A)')' everything is under SI units'
+        write(*,'(4(A16))')'ref_tem','ref_vel','ref_len','ref_den'
+        write(*,"(F14.6,A,E11.6E1,A,E13.6E1,A,E9.4E1,A)")ref_tem,' K ',ref_vel,' m/s ', &
+                                                     ref_len,' m ',ref_den,' kg/m^3'
+        write(*,'(24X,2(A20))')'Reynolds','Mach'
+        write(*,"(24X,2(F20.6))")reynolds,mach
       endif
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                          *** sceheme ***'
@@ -504,7 +510,8 @@ module readwrite
     use commvar
     use parallel,only : bcast,mpibar
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
-                        nondimen,diffterm,ref_t,reynolds,mach,         &
+                        nondimen,diffterm,ref_tem,ref_vel,ref_len,     &
+                        ref_den,reynolds,mach,                         &
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,kcutoff,              &
                         ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
@@ -559,14 +566,20 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)alfa_filter,kcutoff
       !
+#ifdef COMB
+      read(fh,'(//)')
+#else 
       if(nondimen) then
         read(fh,'(/)')
-        read(fh,*)ref_t,reynolds,mach
+        read(fh,*)ref_tem,reynolds,mach
       else
-        read(fh,'(//)')
+        read(fh,'(/)')
+        read(fh,*)ref_tem,ref_vel,ref_len,ref_den
       endif
+#endif
       !
       read(fh,'(/)')
+
 #ifdef COMB
       read(fh,*)conschm,difschm,rkscheme,odetype
 #else 
@@ -575,12 +588,16 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)recon_schem,lchardecomp,bfacmpld,shkcrt
       read(fh,'(/)')
+#ifdef COMB
+      read(fh,'()')
+#else 
       read(fh,*)num_species
-      if(num_species>0 .and. nondimen) then
+      if(num_species>0) then
         allocate(schmidt(num_species))
         backspace(fh)
         read(fh,*)num_species,(schmidt(i),i=1,num_species)
       endif
+#endif
       read(fh,'(/)')
       read(fh,*)turbmode,iomode
       read(fh,'(/)')
@@ -678,7 +695,11 @@ module readwrite
     call bcast(shkcrt)
     call bcast(kcutoff)
     !
-    call bcast(ref_t)
+    call bcast(ref_tem)
+    call bcast(ref_vel)
+    call bcast(ref_len)
+    call bcast(ref_den)
+    !
     call bcast(reynolds)
     call bcast(mach)
     !

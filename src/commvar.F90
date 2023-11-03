@@ -90,7 +90,8 @@ module commvar
   integer,allocatable :: imon(:,:)
   real(8) :: time,deltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
-  real(8) :: ref_t,reynolds,mach,rgas,cp,cv,gamma,prandtl
+  real(8) :: ref_tem,ref_vel,ref_len,ref_den,ref_miu,ref_tim
+  real(8) :: reynolds,mach,rgas,cp,cv,gamma,prandtl
   real(8),allocatable :: schmidt(:)
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1
@@ -105,7 +106,12 @@ module commvar
   !|            fnumslic | file number for slices                      |
   !|                time | total time of computation.                  |
   !|              deltat | time step.                                  |
-  !|               ref_t | reference temperature.                      |
+  !|             ref_tem | reference temperature.                      |
+  !|             ref_vel | reference velocity.                         |
+  !|             ref_len | reference length.                           |
+  !|             ref_den | reference density    .                      |
+  !|             ref_miu | reference viscosity    .                    |
+  !|             ref_tim | reference time length.                      |
   !|            reynolds | Reynolds number.                            |
   !|                mach | Mach number.                                |
   !|                rgas | gas constant, p=ro*rgas*T.                  |

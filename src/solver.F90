@@ -27,13 +27,14 @@ module solver
   !+-------------------------------------------------------------------+
   subroutine refcal
     !
-    use commvar, only : numq,num_species,prandtl,gamma,rgas,cp,cv,ia,ja,ka,  &
-                        uinf,vinf,winf,roinf,pinf,tinf,const1,const2,  &
-                        const3,const4,const5,const6,const7,tempconst,  &
-                        tempconst1,reynolds,ref_t,mach,                &
-                        num_modequ,turbmode,spcinf,nondimen
+    use commvar, only : numq,num_species,prandtl,gamma,rgas,cp,cv,     &
+                        ia,ja,ka,uinf,vinf,winf,roinf,pinf,tinf,const1,&
+                        const2,const3,const4,const5,const6,const7,     &
+                        tempconst,tempconst1,reynolds,mach,num_modequ, &
+                        turbmode,spcinf,nondimen,ref_tem,ref_vel,      &
+                        ref_len,ref_den,ref_miu,ref_tim
     use thermchem, only: spcindex
-    use fludyna,   only: thermal
+    use fludyna,   only: thermal,sos,miucal
     use userdefine,only: udf_setflowenv
     use parallel,  only: mpisize
     !
@@ -78,17 +79,11 @@ module solver
     !
     prandtl=0.72d0
     !
+#ifndef COMB
+    !
+    gamma=1.4d0
+    !
     if(nondimen) then 
-      !
-      gamma=1.4d0
-      !
-      const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
-      const2=gamma*mach**2
-      const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
-      const4=(gamma-1.d0)*mach**2*reynolds*prandtl
-      const5=(gamma-1.d0)*mach**2
-      const6=1.d0/(gamma-1.d0)
-      const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
       !
       uinf=1.d0
       vinf=0.d0
@@ -98,30 +93,48 @@ module solver
       !
       pinf=roinf*tinf/const2
       !
-      tempconst=110.3d0/ref_t
+      tempconst=110.3d0/ref_tem
       tempconst1=1.d0+tempconst
+      !
+      ref_vel=1.d0
+      ref_len=1.d0
+      ref_tim=ref_len/ref_vel
       !
     else 
       !
       rgas=287.1d0
       cp  =gamma/(gamma-1.d0)*rgas
       cv  = rgas/(gamma-1.d0)
-      uinf=1.d0
-      vinf=0.d0
-      winf=0.d0
-      pinf=1.01325d5
-      tinf=300.d0
-      allocate(spcinf(num_species))
-      if(num_species==1) then
-        spcinf(1)=1.d0
-      else
-        spcinf(:)=0.d0
-        spcinf(spcindex('O2'))=0.233d0
-        spcinf(spcindex('N2'))=1.d0-sum(spcinf(:))
+      !
+      uinf =ref_vel
+      vinf =0.d0
+      winf =0.d0
+      tinf =ref_tem
+      roinf=ref_den
+      pinf =thermal(temperature=tinf,density=roinf)
+      !
+      ref_miu=miucal(ref_tem)
+      ref_tim=ref_len/ref_vel
+      !
+      mach    =ref_vel/sos(ref_tem)
+      reynolds=ref_den*ref_vel*ref_len/ref_miu
+      !
+      if(num_species>1) then
+        allocate(spcinf(num_species))
+        spcinf=0.d0
       endif
-      roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
       !
     endif 
+    !
+    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+    const2=gamma*mach**2
+    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+    const5=(gamma-1.d0)*mach**2
+    const6=1.d0/(gamma-1.d0)
+    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+    !
+#endif
     !
     call udf_setflowenv
     !
@@ -2171,6 +2184,10 @@ module solver
       fcs(:,4)=jacob(:,j,k)*( q(:,j,k,4)*uu+dxi(:,j,k,1,3)*prs(:,j,k) )
       fcs(:,5)=jacob(:,j,k)*( q(:,j,k,5)+prs(:,j,k) )*uu
       !
+      ! do i=0,im
+      !   print*,prs(i,j,k)
+      ! enddo
+      !
       if(num_species>0) then
         n=5
         do jspc=1,num_species
@@ -2369,7 +2386,9 @@ module solver
         allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
       endif
       !
-      if(nondimen) allocate(dfu(1:num_species))
+#ifndef  COMB
+      allocate(dfu(1:num_species))
+#endif
       yflux=0.d0
       !
     endif
@@ -2394,32 +2413,31 @@ module solver
     do j=0,jm
     do i=0,im
       !
+#ifdef COMB
+
+     call enthpy(tmp(i,j,k),hispec(:))
+     call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
+     mw=sum(wmolar(:)*xi(:))
+     !
+     select case(tranmod)
+       case('multi')
+         if(.not.allocated(dispec))allocate(dispec(num_species,num_species))
+         call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                     spc=spc(i,j,k,:),rhodij=dispec(:,:))
+     case default
+       if(.not.allocated(dispec)) allocate(dispec(num_species,1))
+       call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                   spc=spc(i,j,k,:),rhodi=dispec(:,1))
+       ! print*,' ** miu=',miu,'cp=',cpe,'kamma=',kama,'rhodi=',dispec(:,1)
+     end select
+
+#else
       if(nondimen) then 
         miu=miucal(tmp(i,j,k))/reynolds
       else
-        !
-#ifdef COMB
-
-        call enthpy(tmp(i,j,k),hispec(:))
-        call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
-        mw=sum(wmolar(:)*xi(:))
-        !
-        select case(tranmod)
-          case('multi')
-            if(.not.allocated(dispec))allocate(dispec(num_species,num_species))
-            call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
-                        spc=spc(i,j,k,:),rhodij=dispec(:,:))
-        case default
-          if(.not.allocated(dispec)) allocate(dispec(num_species,1))
-          call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
-                      spc=spc(i,j,k,:),rhodi=dispec(:,1))
-          ! print*,' ** miu=',miu,'cp=',cpe,'kamma=',kama,'rhodi=',dispec(:,1)
-        end select
-#else
-       miu=miucal(tmp(i,j,k))
-#endif
-        !
+        miu=miucal(tmp(i,j,k))
       endif 
+#endif
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -2474,15 +2492,15 @@ module solver
       elseif(trim(turbmode)=='none') then
         miu2=2.d0*miu
         !
+#ifdef COMB
+        hcc=kama
+#else
         if(nondimen) then 
           hcc=(miu/prandtl)/const5
         else
-#ifdef COMB
-          hcc=kama
-#else
           hcc=cp*miu/prandtl
-#endif
         endif 
+#endif
         !
         detk=0.d0
         !
@@ -2507,56 +2525,54 @@ module solver
       !                                      
       if(num_species>0) then
         !
-        if(nondimen) then 
-          !
-          dfu(1:num_species)=miu/schmidt(1:num_species)
-          !
-          do idir=1,3
-            yflux(i,j,k,:,idir)=dfu(:)*dspc(i,j,k,:,idir)
-          enddo
-          !
-        else
-          !
 #ifdef COMB
+        !
+        do idir=1,3
           !
-          do idir=1,3
+          gradyi(:)=dspc(i,j,k,:,idir)
+          !
+          sum1=mw*sum(gradyi(:)/wmolar(:))
+          !
+          select case(tranmod)
             !
-            gradyi(:)=dspc(i,j,k,:,idir)
-            !
-            sum1=mw*sum(gradyi(:)/wmolar(:))
-            !
-            select case(tranmod)
+            case('multi')
               !
-              case('multi')
-                !
-                do jspc=1,num_species
-                  sum2=sum(dispec(jspc,:)*(gradyi(:)-spc(i,j,k,:)*sum1))
-                  !species diffusive flux
-                  yflux(i,j,k,jspc,idir)=-1.d0*wmolar(jspc)/mw*sum2
-                  !energy flux due to species diffusion
-                  qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
-                enddo
-                !
-              case default
-                !
-                sum2=sum(dispec(:,1)*(gradyi(:)-spc(i,j,k,:)*sum1))
-                !
-                do jspc=1,num_species
-                  !Corretion diffusion velocity for continuity
-                  corrdiff=sum2*spc(i,j,k,jspc)
-                  !species diffusive flux
-                  yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
-                                          -corrdiff
-                  !energy flux due to species diffusion
-                  qflux(i,j,k,idir)=qflux(i,j,k,idir)+yflux(i,j,k,jspc,idir)*hispec(jspc)
-                enddo
-                !
-            end select
-            !
-          enddo 
-#endif
+              do jspc=1,num_species
+                sum2=sum(dispec(jspc,:)*(gradyi(:)-spc(i,j,k,:)*sum1))
+                !species diffusive flux
+                yflux(i,j,k,jspc,idir)=-1.d0*wmolar(jspc)/mw*sum2
+                !energy flux due to species diffusion
+                qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+              enddo
+              !
+            case default
+              !
+              sum2=sum(dispec(:,1)*(gradyi(:)-spc(i,j,k,:)*sum1))
+              !
+              do jspc=1,num_species
+                !Corretion diffusion velocity for continuity
+                corrdiff=sum2*spc(i,j,k,jspc)
+                !species diffusive flux
+                yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
+                                        -corrdiff
+                !energy flux due to species diffusion
+                qflux(i,j,k,idir)=qflux(i,j,k,idir)+yflux(i,j,k,jspc,idir)*hispec(jspc)
+              enddo
+              !
+          end select
           !
-        endif !nondimen
+        enddo 
+#else
+        if(nondimen) then 
+          dfu(1:num_species)=miu/schmidt(1:num_species)
+        else
+          dfu(1:num_species)=schmidt(1:num_species)
+        endif
+        !
+        do idir=1,3
+          yflux(i,j,k,:,idir)=dfu(:)*dspc(i,j,k,:,idir)
+        enddo
+#endif
         !
       endif !num_species>0 
       !

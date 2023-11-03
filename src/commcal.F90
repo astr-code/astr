@@ -53,11 +53,11 @@ module commcal
       wbar=dxi(i,j,k,3,1)*vel(i,j,k,1)+dxi(i,j,k,3,2)*vel(i,j,k,2)+    &
            dxi(i,j,k,3,3)*vel(i,j,k,3)
       !
-      if(nondimen) then 
-        css=sos(tmp(i,j,k))
-      else
-        call aceval(tmp(i,j,k),spc(i,j,k,:),css)
-      endif 
+#ifdef COMB
+      call aceval(tmp(i,j,k),spc(i,j,k,:),css)
+#else
+      css=sos(tmp(i,j,k))
+#endif
       csi=css*sqrt(dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+dxi(i,j,k,1,3)**2)
       csj=css*sqrt(dxi(i,j,k,2,1)**2+dxi(i,j,k,2,2)**2+dxi(i,j,k,2,3)**2)
       csk=css*sqrt(dxi(i,j,k,3,1)**2+dxi(i,j,k,3,2)**2+dxi(i,j,k,3,3)**2)

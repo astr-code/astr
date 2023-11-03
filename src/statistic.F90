@@ -960,6 +960,7 @@ module statistic
       !
       vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
     endif
+    !
     vout=vout/(roinf*uinf*uinf)
     !
     return

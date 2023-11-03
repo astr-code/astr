@@ -405,17 +405,12 @@ module mainloop
       !
       call updatefvar
       !
-      !for debug
+      ! for debug
       ! do k=0,km
       ! do j=0,jm
       ! do i=0,im
       !   !
-      !   do n=1,num_species
-      !     if(isnan(spc(i,j,k,n))) then
-      !       print*,'!! have NaN in spc !! is ',n,'in rk = ',rkstep
-      !       stop
-      !     endif
-      !   enddo
+      !   print*,qrhs(i,j,k,:)
       !   !
       ! enddo
       ! enddo

@@ -4571,7 +4571,7 @@ module parallel
         else
           stop ' !! ERROR 1 turbmode @ qswap'
         endif
-        ! 
+        !
       end if
       !
       if(mpileft .ne. MPI_PROC_NULL) then

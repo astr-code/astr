@@ -717,7 +717,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine tgvini
     !
-    use commvar,  only: nondimen
+    use commvar,  only: nondimen,ref_len
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal
 #ifdef COMB
@@ -728,22 +728,17 @@ module initialisation
     integer :: i,j,k,jspc
     real(8) :: l_0,miu
     !
-    if(nondimen) then
-      roinf=1.d0
-      tinf=1.d0
-      pinf=thermal(temperature=tinf,density=roinf)
-      l_0=1.d0
-      uinf=1.d0
-    else
 #ifdef COMB
-      tinf=347.d0
-      roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
-      l_0=xmax/(2.d0*pi)
-      uinf=40.d0
-      !
-      ! call tranco(tmp=tinf,spc=spcinf,mu=miu,den=roinf)
-      ! if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+    tinf=347.d0
+    roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+    l_0=xmax/(2.d0*pi)
+    uinf=40.d0
 #endif
+
+    if(nondimen) then
+      l_0=1.d0
+    else
+      l_0=ref_len
     endif
     !
     do k=0,km
@@ -764,18 +759,13 @@ module initialisation
           spc(i,j,k,2)=1.d0-spc(i,j,k,1)
         endif
       else 
-        spc(i,j,k,:)=spcinf(:)
-        tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
+        if(num_species>1) then
+          spc(i,j,k,:)=spcinf(:)
+          tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
+        else
+          tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+        endif
       endif 
-      !
-      if(num_species>=1 .and. nondimen) then
-        !
-        spc(i,j,k,1)=sin(x(i,j,k,1))**2
-        do jspc=2,num_species
-          spc(i,j,k,jspc)=1.d0-spc(i,j,k,1)
-        enddo
-        !
-      endif
       !
     enddo
     enddo
@@ -855,7 +845,7 @@ module initialisation
   subroutine chanini
     !
     use commvar,  only: prandtl,mach,gamma,turbmode,                   &
-                        xmin,xmax,ymin,ymax,zmin,zmax,Reynolds
+                        xmin,xmax,ymin,ymax,zmin,zmax,Reynolds,ref_len
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
     use fludyna,  only: thermal,miucal
     use commfunc, only: dis2point2
@@ -895,16 +885,16 @@ module initialisation
       do j=0,jm
       do i=0,im
         rho(i,j,k)  =roinf
-        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)
+        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*uinf
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-        tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
-                                     1.5d0*(1.d0-((x(i,j,k,2)-1.d0)**4))
+        tmp(i,j,k)=tinf+tinf*(gamma-1.d0)*prandtl*mach**2/3.d0*             &
+                                     1.5d0*(1.d0-((x(i,j,k,2)/ref_len-1.d0)**4))
         !
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
         if(num_species>0) then
-          spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+          spc(i,j,k,1)=(tanh((x(i,j,k,2)/ref_len-1.d0)/theta)+1.d0)*0.5d0
         endif
         !
         if(trim(turbmode)=='k-omega') then
@@ -1026,11 +1016,11 @@ module initialisation
       do i=0,im
         !
         rho(i,j,k)  =roinf
-        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)
+        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*uinf
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-        tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
-                                     1.5d0*(1.d0-((x(i,j,k,2)-1.d0)**4))
+        tmp(i,j,k)  =tinf+tinf*(gamma-1.d0)*prandtl*mach**2/3.d0*             &
+                                     1.5d0*(1.d0-((x(i,j,k,2)/ref_len-1.d0)**4))
         !
         lsem = 0.15d0 ! For the moment we keep it constant
         upr = 0.d0
@@ -1038,9 +1028,9 @@ module initialisation
         wpr = 0.d0
         do jj=1,nsemini
           !
-          ddx = abs(x(i,j,k,1)-posvor(1,jj))
-          ddy = abs(x(i,j,k,2)-posvor(2,jj))
-          ddz = abs(x(i,j,k,3)-posvor(3,jj))
+          ddx = abs(x(i,j,k,1)/ref_len-posvor(1,jj))
+          ddy = abs(x(i,j,k,2)/ref_len-posvor(2,jj))
+          ddz = abs(x(i,j,k,3)/ref_len-posvor(3,jj))
           if (ddx < lsem .and. ddy < lsem .and. ddz < lsem) then
             ! coefficients for the intensity of the fluctuation
             ftent = (1.d0-ddx/lsem)*(1.d0-ddy/lsem)*(1.d0-ddz/lsem)
