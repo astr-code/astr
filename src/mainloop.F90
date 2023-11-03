@@ -416,6 +416,8 @@ module mainloop
       ! enddo
       ! enddo
       !
+      ! call mpistop
+      !
       ctime(15)=ctime(15)+ptime()-time_beg_2
       !
       if(lcracon) call crashfix(ctime(16))

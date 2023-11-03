@@ -38,8 +38,8 @@ none,h
 # bctype                                                : Boundary condition definition 
 1
 1
-41, 1.d0
-41, 1.d0
+41, 273.15d0
+41, 273.15d0
 1
 1
 
