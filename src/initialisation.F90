@@ -145,7 +145,7 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     !
-    ! call writeflfed
+    call writeflfed
     ! stop
     !
   end subroutine flowinit
@@ -845,7 +845,7 @@ module initialisation
   subroutine chanini
     !
     use commvar,  only: prandtl,mach,gamma,turbmode,                   &
-                        xmin,xmax,ymin,ymax,zmin,zmax,Reynolds,ref_len
+                        xmin,xmax,ymin,ymax,zmin,zmax,Reynolds,ref_len,ref_vel
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
     use fludyna,  only: thermal,miucal
     use commfunc, only: dis2point2
@@ -916,147 +916,147 @@ module initialisation
       !
     elseif(ndims==3) then
       !
-      ! if(mpirank==0) then
-      !   do l=1,15
-      !     call random_number(randomv(l))
-      !   end do
-      ! endif
-      ! !
-      ! call bcast(randomv)
-      ! !
-      ! do k=0,km
-      ! do j=0,jm
-      ! do i=0,im
-      !   !
-      !   call random_number(ran)
-      !   ran=ran*2.d0-1.d0
-      !   !
-      !   theter=x(i,0,k,1)/(xmax-xmin)*2.d0*pi
-      !   fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*0.192450089729875d0
-      !   !
-      !   gz=0.d0
-      !   do l=1,10
-      !     !
-      !     if(l==1) then
-      !       zl=0.2d0/(1.d0-0.8d0**10)
-      !     else
-      !       zl=zl*0.8d0
-      !     end if
-      !     !
-      !     gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/(zmax-zmin)+randomv(l)))
-      !     !
-      !   end do
-      !   !
-      !   rho(i,j,k)  =roinf
-      !   vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)-1.d0)**2)*(1.d0+0.3d0*fx*gz+0.1d0*ran)
-      !   vel(i,j,k,2)=0.d0
-      !   vel(i,j,k,3)=0.d0
-      !   tmp(i,j,k)=1.d0+(gamma-1.d0)*prandtl*mach**2/3.d0*             &
-      !                                1.5d0*(1.d0-((x(i,j,k,2)-1.d0)**4))
-      !   !
-      !   prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-      !   !
-      !   if(num_species>0) then
-      !     spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
-      !   endif
-      !   !
-      ! enddo
-      ! enddo
-      ! enddo
+      if(mpirank==0) then
+        do l=1,15
+          call random_number(randomv(l))
+        end do
+      endif
       !
-      ! copied from xcompact 
-      !! Simplified version of SEM 
-      init_noise=0.03d0
+      call bcast(randomv)
       !
-      dim_min(1) = 0.d0
-      dim_min(2) = 0.d0
-      dim_min(3) = 0.d0
-      dim_max(1) = xmax
-      dim_max(2) = ymax
-      dim_max(3) = zmax
-      volsemini = xmax * ymax * zmax
-      !
-      ! 3 int to get different random numbers
-      seed1 =  2345
-      seed2 = 13456
-      seed3 = 24567
-      do jj=1,nsemini
-        !
-        ! Vortex Position
-        do ii=1,3
-          seed11 = return_30k(seed1+jj*2+ii*379)
-          seed22 = return_30k(seed2+jj*5+ii*5250)
-          seed33 = return_30k(seed3+jj*3+ii*8170)
-          rrand1  = real(r8_random(seed11, seed22, seed33),8)
-          call random_number(rrand)
-          !write(*,*) ' rr r1 ', rrand, rrand1
-          posvor(ii,jj) = dim_min(ii)+(dim_max(ii)-dim_min(ii))*rrand
-        enddo
-        !
-        ! Eddy intensity
-        do ii=1,3
-           seed11 = return_30k(seed1+jj*7+ii*7924)
-           seed22 = return_30k(seed2+jj*11+ii*999)
-           seed33 = return_30k(seed3+jj*5+ii*5054)
-           rrand1  = real(r8_random(seed11, seed22, seed33),8)
-           call random_number(rrand)
-           !write(*,*) ' rr r1 ', rrand, rrand1
-           if (rrand <= 0.5d0) then
-              eddy(ii,jj) = -1.d0
-           else
-              eddy(ii,jj) =  1.d0
-           endif 
-        enddo
-        !
-      enddo
-      !
-      ! Loops to apply the fluctuations 
       do k=0,km
       do j=0,jm
       do i=0,im
         !
+        call random_number(ran)
+        ran=ran*2.d0-1.d0
+        !
+        theter=x(i,0,k,1)/(xmax-xmin)*2.d0*pi
+        fx=4.d0*dsin(theter)*(1.d0-dcos(theter))*0.192450089729875d0
+        !
+        gz=0.d0
+        do l=1,10
+          !
+          if(l==1) then
+            zl=0.2d0/(1.d0-0.8d0**10)
+          else
+            zl=zl*0.8d0
+          end if
+          !
+          gz=gz+zl*dsin(2.d0*pi*l*(x(i,0,k,3)/(zmax-zmin)+randomv(l)))
+          !
+        end do
+        !
         rho(i,j,k)  =roinf
-        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*uinf
+        vel(i,j,k,1)=1.5d0*uinf*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*(1.d0+0.3d0*fx*gz+0.1d0*ran)
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
         tmp(i,j,k)  =tinf+tinf*(gamma-1.d0)*prandtl*mach**2/3.d0*             &
                                      1.5d0*(1.d0-((x(i,j,k,2)/ref_len-1.d0)**4))
         !
-        lsem = 0.15d0 ! For the moment we keep it constant
-        upr = 0.d0
-        vpr = 0.d0
-        wpr = 0.d0
-        do jj=1,nsemini
-          !
-          ddx = abs(x(i,j,k,1)/ref_len-posvor(1,jj))
-          ddy = abs(x(i,j,k,2)/ref_len-posvor(2,jj))
-          ddz = abs(x(i,j,k,3)/ref_len-posvor(3,jj))
-          if (ddx < lsem .and. ddy < lsem .and. ddz < lsem) then
-            ! coefficients for the intensity of the fluctuation
-            ftent = (1.d0-ddx/lsem)*(1.d0-ddy/lsem)*(1.d0-ddz/lsem)
-            ftent = ftent / (sqrt(num2d3*lsem))**3
-            upr = upr + eddy(1,jj) * ftent
-            vpr = vpr + eddy(2,jj) * ftent
-            wpr = wpr + eddy(3,jj) * ftent
-          endif
-          !
-        enddo
-        !
-        upr = upr * sqrt(volsemini/nsemini)
-        vpr = vpr * sqrt(volsemini/nsemini)
-        wpr = wpr * sqrt(volsemini/nsemini)
-        ! 
-        um=vel(i,j,k,1)
-        !
-        vel(i,j,k,1)=upr*sqrt(num2d3*init_noise*um) + um
-        vel(i,j,k,2)=vpr*sqrt(num2d3*init_noise*um)
-        vel(i,j,k,3)=wpr*sqrt(num2d3*init_noise*um)
-        !
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
         !
+        if(num_species>0) then
+          spc(i,j,k,1)=(tanh((x(i,j,k,2)-1.d0)/theta)+1.d0)*0.5d0
+        endif
+        !
       enddo
       enddo
       enddo
+      !
+      ! copied from xcompact 
+      !! Simplified version of SEM 
+      ! init_noise=0.03d0
+      ! !
+      ! dim_min(1) = 0.d0
+      ! dim_min(2) = 0.d0
+      ! dim_min(3) = 0.d0
+      ! dim_max(1) = xmax
+      ! dim_max(2) = ymax
+      ! dim_max(3) = zmax
+      ! volsemini = xmax * ymax * zmax
+      ! !
+      ! ! 3 int to get different random numbers
+      ! seed1 =  2345
+      ! seed2 = 13456
+      ! seed3 = 24567
+      ! do jj=1,nsemini
+      !   !
+      !   ! Vortex Position
+      !   do ii=1,3
+      !     seed11 = return_30k(seed1+jj*2+ii*379)
+      !     seed22 = return_30k(seed2+jj*5+ii*5250)
+      !     seed33 = return_30k(seed3+jj*3+ii*8170)
+      !     rrand1  = real(r8_random(seed11, seed22, seed33),8)
+      !     call random_number(rrand)
+      !     !write(*,*) ' rr r1 ', rrand, rrand1
+      !     posvor(ii,jj) = dim_min(ii)+(dim_max(ii)-dim_min(ii))*rrand
+      !   enddo
+      !   !
+      !   ! Eddy intensity
+      !   do ii=1,3
+      !      seed11 = return_30k(seed1+jj*7+ii*7924)
+      !      seed22 = return_30k(seed2+jj*11+ii*999)
+      !      seed33 = return_30k(seed3+jj*5+ii*5054)
+      !      rrand1  = real(r8_random(seed11, seed22, seed33),8)
+      !      call random_number(rrand)
+      !      !write(*,*) ' rr r1 ', rrand, rrand1
+      !      if (rrand <= 0.5d0) then
+      !         eddy(ii,jj) = -1.d0
+      !      else
+      !         eddy(ii,jj) =  1.d0
+      !      endif 
+      !   enddo
+      !   !
+      ! enddo
+      ! !
+      ! ! Loops to apply the fluctuations 
+      ! do k=0,km
+      ! do j=0,jm
+      ! do i=0,im
+      !   !
+      !   rho(i,j,k)  =roinf
+      !   vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*uinf
+      !   vel(i,j,k,2)=0.d0
+      !   vel(i,j,k,3)=0.d0
+      !   tmp(i,j,k)  =tinf+tinf*(gamma-1.d0)*prandtl*mach**2/3.d0*             &
+      !                                1.5d0*(1.d0-((x(i,j,k,2)/ref_len-1.d0)**4))
+      !   !
+      !   lsem = 0.15d0 ! For the moment we keep it constant
+      !   upr = 0.d0
+      !   vpr = 0.d0
+      !   wpr = 0.d0
+      !   do jj=1,nsemini
+      !     !
+      !     ddx = abs(x(i,j,k,1)-posvor(1,jj))
+      !     ddy = abs(x(i,j,k,2)-posvor(2,jj))
+      !     ddz = abs(x(i,j,k,3)-posvor(3,jj))
+      !     if (ddx < lsem .and. ddy < lsem .and. ddz < lsem) then
+      !       ! coefficients for the intensity of the fluctuation
+      !       ftent = (1.d0-ddx/lsem)*(1.d0-ddy/lsem)*(1.d0-ddz/lsem)
+      !       ftent = ftent / (sqrt(num2d3*lsem))**3
+      !       upr = upr + eddy(1,jj) * ftent
+      !       vpr = vpr + eddy(2,jj) * ftent
+      !       wpr = wpr + eddy(3,jj) * ftent
+      !     endif
+      !     !
+      !   enddo
+      !   !
+      !   upr = upr * sqrt(volsemini/nsemini)
+      !   vpr = vpr * sqrt(volsemini/nsemini)
+      !   wpr = wpr * sqrt(volsemini/nsemini)
+      !   ! 
+      !   um=vel(i,j,k,1)
+      !   !
+      !   vel(i,j,k,1)=upr*ref_vel*sqrt(num2d3*init_noise*um) + um
+      !   vel(i,j,k,2)=vpr*ref_vel*sqrt(num2d3*init_noise*um)
+      !   vel(i,j,k,3)=wpr*ref_vel*sqrt(num2d3*init_noise*um)
+      !   !
+      !   prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !   !
+      ! enddo
+      ! enddo
+      ! enddo
       !
     endif
     !

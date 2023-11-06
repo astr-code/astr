@@ -147,7 +147,7 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine meanflowcal(timerept)
     !
-    use commvar,   only : reynolds,nstep,time
+    use commvar,   only : reynolds,nstep,time,nondimen
     use commarray, only : rho,vel,prs,tmp,dvel
     use fludyna,   only : miucal
     !
@@ -282,7 +282,11 @@ module statistic
       d21=dvel(i,j,k,2,1); d22=dvel(i,j,k,2,2); d23=dvel(i,j,k,2,3)
       d31=dvel(i,j,k,3,1); d32=dvel(i,j,k,3,2); d33=dvel(i,j,k,3,3)
       !
-      miu=miucal(tmp_t)/reynolds
+      if(nondimen) then
+        miu=miucal(tmp(i,j,k))/reynolds
+      else
+        miu=miucal(tmp(i,j,k))
+      endif
       !
       skk=num1d3*(d11+d22+d33)
       !
@@ -451,7 +455,7 @@ module statistic
   !+-------------------------------------------------------------------+
   subroutine turbstats
     !
-    use commvar,  only : reynolds,lrestart,mach
+    use commvar,  only : reynolds,lrestart,mach,nondimen
     use commarray,only : vel,rho,tmp,dvel,q
     use fludyna,  only : miucal,sos
     use utility,  only : listinit,listwrite
@@ -490,7 +494,11 @@ module statistic
     do j=1,jm
     do i=1,im
       !
-      miu=miucal(tmp(i,j,k))/Reynolds
+      if(nondimen) then
+        miu=miucal(tmp(i,j,k))/Reynolds
+      else
+        miu=miucal(tmp(i,j,k))
+      endif
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -979,7 +987,7 @@ module statistic
   !+-------------------------------------------------------------------+
   function diss_rate_cal() result(vout)
     !
-    use commvar,  only : im,jm,km,ia,ja,ka,reynolds
+    use commvar,  only : im,jm,km,ia,ja,ka,reynolds,nondimen
     use commarray,only : tmp,dvel
     use fludyna,  only : miucal
     !
@@ -997,7 +1005,11 @@ module statistic
     do j=1,jm
     do i=1,im
       ! 
-      miu=miucal(tmp(i,j,k))/reynolds
+      if(nondimen) then
+        miu=miucal(tmp(i,j,k))/reynolds
+      else
+        miu=miucal(tmp(i,j,k))
+      endif
       !
       du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2); du13=dvel(i,j,k,1,3)
       du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2); du23=dvel(i,j,k,2,3)
@@ -1104,10 +1116,11 @@ module statistic
       !
       do k=0,km
       do i=0,im
+        !
         if(nondimen) then
           miu=miucal(tmp(i,j,k))/reynolds
         else
-          miu=1.d0
+          miu=miucal(tmp(i,j,k))
         endif
         !
         tau(i,k)=miu*dvel(i,j,k,1,2)
@@ -1209,7 +1222,7 @@ module statistic
   !+-------------------------------------------------------------------+
   real(8) function whfbl()
     !
-    use commvar,  only : reynolds,const5,prandtl,nondimen
+    use commvar,  only : reynolds,const5,prandtl,nondimen,cp
     use commarray,only : tmp,dtmp,x
     use parallel, only : jrk,jrkm
     use fludyna,  only : miucal
@@ -1233,7 +1246,8 @@ module statistic
           miu=miucal(tmp(i,j,k))/reynolds
           hcc=(miu/prandtl)/const5
         else
-          hcc=1.d0
+          miu=miucal(tmp(i,j,k))
+          hcc=cp*miu/prandtl
         endif
         !
         qw(i,k)=hcc*dtmp(i,j,k,2)
@@ -1282,7 +1296,7 @@ module statistic
   !+-------------------------------------------------------------------+
   real(8) function fbcxchan()
     !
-    use commvar,  only : reynolds
+    use commvar,  only : reynolds,nondimen
     use commarray,only : tmp,dvel
     use parallel, only : jrk,jrkm
     use fludyna,  only : miucal
@@ -1310,7 +1324,12 @@ module statistic
       j=0
       do k=k1,k2
       do i=1,im
-        miu=miucal(tmp(i,j,k))/reynolds
+        !
+        if(nondimen) then
+          miu=miucal(tmp(i,j,k))/reynolds
+        else
+          miu=miucal(tmp(i,j,k))
+        endif
         !
         fbcxchan=fbcxchan+miu*dvel(i,j,k,1,2)
       enddo
@@ -1323,7 +1342,12 @@ module statistic
       j=jm
       do k=k1,k2
       do i=1,im
-        miu=miucal(tmp(i,j,k))/reynolds
+        !
+        if(nondimen) then
+          miu=miucal(tmp(i,j,k))/reynolds
+        else
+          miu=miucal(tmp(i,j,k))
+        endif
         !
         fbcxchan=fbcxchan-miu*dvel(i,j,k,1,2)
       enddo
@@ -1463,6 +1487,8 @@ module statistic
   !+-------------------------------------------------------------------+
   real(8) function chanfoce(force,massflux,friction,massfluxtarget)
     !
+    use commvar, only: time,roinf,uinf,ref_len,ref_tim,ref_miu,nondimen
+    !
     ! arguments
     real(8),intent(in) :: force,massflux,friction,massfluxtarget
     !
@@ -1478,11 +1504,25 @@ module statistic
       gn=(ly*force-friction)
       qn1=massflux+deltat*gn
       chanfoce=force-(2.d0*(qn1-massfluxtarget)-                       &
-               0.2d0*(massflux-massfluxtarget))/ly
+               0.2d0*(massflux-massfluxtarget))/ly*(uinf/ref_len)
     endif
     !
-    ! if(lio) write(*,"(I7,5(1X,E20.13E2))")                             &
-    !                           nstep,massflux,qn1,force,chanfoce,friction
+    ! if(nondimen) then
+    !   if(lio) write(*,"(I7,6(1X,E20.13E2))")                           &
+    !                      nstep,time,deltat*gn 
+    !                      !massflux,qn1,force,chanfoce,friction
+    ! else
+    !   if(lio) write(*,"(I7,6(1X,E20.13E2))")                           &
+    !           nstep,time/ref_tim,                                      &
+    !           deltat*gn/(roinf*uinf*ref_len)
+    !           ! massflux/(ref_den*uinf*ref_len),                      &
+    !           ! qn1/(ref_den*uinf*ref_len),                           &
+    !           ! force/(ref_den*uinf*uinf/ref_len),                 &
+    !           ! chanfoce/(ref_den*uinf*uinf/ref_len),              &
+    !           ! friction/(ref_miu*uinf/ref_len)
+    ! endif
+    ! !
+    ! if(nstep==100) call mpistop
     !
   end function chanfoce
   !+-------------------------------------------------------------------+
