@@ -1387,6 +1387,8 @@ module bc
           call jetinflow
         elseif(trim(flowtype)=='mixlayer') then
           call mixlayerinflow
+        elseif(trim(flowtype)=='channel') then
+          call channelinflow
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. trim(flowtype)=='1dflame') then
           !
           call profileinflow
@@ -3476,15 +3478,8 @@ module bc
       do k=0,km
       do j=0,jm
         !
-        if(nondimen) then 
-          css=sos(tmp(i,j,k))
-        else
-          !
-#ifdef COMB
-          call aceval(tmp(i,j,k),spc(i,j,k,:),css)
-#endif
-          !
-        endif
+        css=sos(tmp(i,j,k),spc(i,j,k,:))
+         ! 
         ub =vel(i,j,k,1)*bvec_im(j,k,1)+vel(i,j,k,2)*bvec_im(j,k,2)+   &
             vel(i,j,k,3)*bvec_im(j,k,3)
         !
@@ -3493,17 +3488,8 @@ module bc
         we  =extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
         pe  =extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
         roe =extrapolate(rho(i-1,j,k),  rho(i-2,j,k),dv=0.d0)
-        if(nondimen) then 
-          csse=extrapolate(sos(tmp(i-1,j,k)),sos(tmp(i-2,j,k)),dv=0.d0)
-        else
-          !
-#ifdef COMB
-          call aceval(tmp(i-1,j,k),spc(i-1,j,k,:),css1)
-          call aceval(tmp(i-2,j,k),spc(i-2,j,k,:),css2)
-          csse=extrapolate(css1,css2,dv=0.d0)
-#endif
-          !
-        endif
+        csse=extrapolate(sos(tmp(i-1,j,k),spc(i-1,j,k,:)),&
+                         sos(tmp(i-2,j,k),spc(i-2,j,k,:)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i-1,j,k,jspec),                  &
@@ -6942,6 +6928,40 @@ module bc
   end subroutine mixlayerinflow
   !+-------------------------------------------------------------------+
   !| The end of the subroutine mixlayerinflow.                         |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to obtain the inlet flow for spatial channel   |
+  !| flow.                                                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 06-10-2023: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine channelinflow
+    !
+    use fludyna, only : mixinglayervel,thermal
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: radi
+    !
+    i=0
+    do k=0,km
+    do j=0,jm
+      !
+      rho_in(j,k)   = rho_prof(j)
+      vel_in(j,k,:) = vel_prof(j,:)
+      tmp_in(j,k)   = tmp_prof(j)
+      !
+      prs_in(j,k)   = thermal(density=rho_in(j,k),temperature=tmp_in(j,k))
+      !
+    enddo
+    enddo
+    !
+  end subroutine channelinflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine channelinflow.                         |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

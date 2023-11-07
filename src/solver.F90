@@ -79,17 +79,40 @@ module solver
     !
     prandtl=0.72d0
     !
-#ifndef COMB
+#ifdef COMB
+    rgas=287.1d0
+    uinf=1.d0
+    vinf=0.d0
+    winf=0.d0
+    pinf=1.01325d5
+    tinf=300.d0
+
+    allocate(spcinf(num_species))
+    
+    spcinf(:)=0.d0
+    spcinf(spcindex('O2'))=0.233d0
+    spcinf(spcindex('N2'))=1.d0-sum(spcinf(:))
+
+    roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+#else
     !
     gamma=1.4d0
     !
     if(nondimen) then 
       !
+      const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+      const2=gamma*mach**2
+      const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+      const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+      const5=(gamma-1.d0)*mach**2
+      const6=1.d0/(gamma-1.d0)
+      const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+      !
+      roinf=1.d0
       uinf=1.d0
       vinf=0.d0
       winf=0.d0
       tinf=1.d0
-      roinf=1.d0
       !
       pinf=roinf*tinf/const2
       !
@@ -102,7 +125,10 @@ module solver
       !
     else 
       !
-      rgas=287.1d0
+      ! rgas=287.1d0
+      !
+      rgas=376.177d0
+      !
       cp  =gamma/(gamma-1.d0)*rgas
       cv  = rgas/(gamma-1.d0)
       !
@@ -124,15 +150,15 @@ module solver
         spcinf=0.d0
       endif
       !
+      const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+      const2=gamma*mach**2
+      const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+      const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+      const5=(gamma-1.d0)*mach**2
+      const6=1.d0/(gamma-1.d0)
+      const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+      !
     endif 
-    !
-    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
-    const2=gamma*mach**2
-    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
-    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
-    const5=(gamma-1.d0)*mach**2
-    const6=1.d0/(gamma-1.d0)
-    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
     !
 #endif
     !
@@ -159,7 +185,7 @@ module solver
     !
     use commarray, only : qrhs,x,q
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
-                          recon_schem,limmbou,lchardecomp
+                          recon_schem,limmbou,lchardecomp,lihomo
     use commcal,   only : ShockSolid,ducrossensor
     use comsolver, only : gradcal
     use userdefine,only : udf_src
@@ -219,7 +245,7 @@ module solver
     if(diffterm) call diffrsdcal6(timerept=ltimrpt)
     !
     if(trim(flowtype)=='channel') then 
-      call src_chan
+      if(lihomo) call src_chan
     elseif(trim(flowtype)=='rti') then 
       call src_rti
     elseif(trim(flowtype)=='tbl') then 

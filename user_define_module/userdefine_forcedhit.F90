@@ -62,76 +62,31 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_flowinit
     !
-!     use commvar,  only: im,jm,km,ndims,roinf,uinf,nondimen,xmax,pinf,  &
-!                         ia,num_species
-!     use commarray,only: x,vel,rho,prs,spc,tmp,q
-!     use parallel, only: lio
-!     use fludyna,  only: thermal
-!     !
-! #ifdef COMB
-!     !
-!     use thermchem,only : tranco,spcindex,mixture,convertxiyi
-!     use cantera 
-!     !
-!     ! local data
-!     integer :: i,j,k
-!     real(8) ::  xc,yc,zc,tmpr,tmpp,xloc,xwid,specr(num_species),  &
-!       specp(num_species),arg,prgvar,masflx,specx(num_species)
-!     real(8) :: pthick
-!     !
-!     tmpr=300.d0
-!     xloc=3.d0*xmax/4.d0
-!     xwid=xmax/(12.d0*5.3d0*2.d0)
-!     !
-!     !reactants
-!     specr(:)=0.d0
-!     specr(spcindex('H2'))=0.0173
-!     specr(spcindex('O2'))=0.2289
-!     specr(spcindex('N2'))=1.d0-sum(specr)
-!     !
-!     !products
-!     tmpp=1814.32d0
-!     !
-!     ! pthick=1.d-4
-!     !
-!     do k=0,km
-!     do j=0,jm
-!     do i=0,im
-!       !
-!       xc=x(i,j,k,1)
-!       !
-!       !prgvar=0.5d0*(1.d0+tanh(10.d0*(xc-xloc)/xloc))
-!       ! if(xc-xloc<xwid*0.5d0*1.2d0) then 
-!       !   prgvar=0.d0
-!       !   if(xc-xloc>xwid*0.5d0) &
-!       !   prgvar=1.d0-(xc-xloc-(xwid*0.5d0))/(xwid*0.5d0*0.2d0)
-!       ! else
-!       !   prgvar=1.d0
-!       ! endif
-!       !
-!       prgvar=1.d0*exp(-0.5d0*((xc-xloc)/xwid)**2)
-!       !
-!       spc(i,j,k,:)=specr(:)
-!       !
-!       vel(i,j,k,1)=uinf
-!       !
-!       vel(i,j,k,2)=0.d0
-!       vel(i,j,k,3)=0.d0
-!       !
-!       tmp(i,j,k)=tmpr+prgvar*(tmpp-tmpr)
-!       !
-!       prs(i,j,k)=pinf
-!       !
-!       rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
-!                           species=spc(i,j,k,:))
-!     enddo
-!     enddo
-!     enddo
-!     !
-!     !
-!     if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
-!     !
-! #endif
+    use commvar,  only: im,jm,km,ref_den,ref_tem
+    use commarray,only: x,vel,rho,prs,tmp
+    use parallel, only: lio
+    use fludyna,  only: thermal
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)=ref_den
+      !
+      vel(i,j,k,:)=0.d0
+      !
+      tmp(i,j,k)=ref_tem
+      !
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+    enddo
+    enddo
+    enddo
+    !
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** HIT flame initialised.'
     !
   end subroutine udf_flowinit
   !+-------------------------------------------------------------------+
@@ -146,9 +101,58 @@ module userdefine
   !| 23-Aug-2023: created by Jian Fang @ Daresbury                     |
   !+-------------------------------------------------------------------+
   subroutine udf_grid
+    !
+    use commvar,  only : im,jm,km,gridfile,ia,ja,ka,ref_len
+    use parallel, only : ig0,jg0,kg0,lio
+    use commarray,only : x
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1)=ref_len/real(ia,8)*real(i+ig0,8)
+      if(ja==0) then
+        x(i,j,k,2)=ref_len
+      else
+        x(i,j,k,2)=ref_len/real(ja,8)*real(j+jg0,8)
+      endif
+      if(ka==0) then
+        x(i,j,k,3)=0.d0
+      else
+        x(i,j,k,3)=ref_len/real(ka,8)*real(k+kg0,8)
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio) print*,' ** cubic grid generated'
+    !
+    !
   end subroutine udf_grid
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_grid.                               |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate fluctuations for inflow            |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 05-Oct-2023: Created by by Jian Fang @ Daresbury                  |
+  !+-------------------------------------------------------------------+
+  subroutine udf_inflow_fluc(umean,uinst)
+    !
+    use commvar, only : jm,km
+    !
+    real(8),intent(in) ::  umean(0:jm,1:3)  ! inflow mean velocity
+    real(8),intent(out) :: uinst(0:jm,0:km,1:3)  ! velocity with fluctuations
+    !
+  end subroutine udf_inflow_fluc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_inflow_fluc.                        |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -161,7 +165,7 @@ module userdefine
   subroutine udf_stalist
     !
     use constdef
-    use commvar,  only : reynolds,lrestart,mach,ia,ja,ka,im,jm,km
+    use commvar,  only : reynolds,lrestart,mach,ia,ja,ka,im,jm,km,nondimen
     use commarray,only : vel,rho,tmp,dvel,q
     use fludyna,  only : miucal,sos
     use utility,  only : listinit,listwrite
@@ -203,7 +207,11 @@ module userdefine
     do j=1,jm
     do i=1,im
       !
-      miu=miucal(tmp(i,j,k))/Reynolds
+      if(nondimen) then
+        miu=miucal(tmp(i,j,k))/Reynolds
+      else
+        miu=miucal(tmp(i,j,k))
+      endif
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -331,14 +339,14 @@ module userdefine
     !
     use constdef
     use commvar,  only : im,jm,km,ndims,deltat,ia,ja,ka,rkstep,xmax,ymax,zmax
-    use parallel, only : mpirank,psum,bcast
+    use parallel, only : mpirank,psum,bcast,lio
     use commarray,only : rho,tmp,vel,qrhs,x,jacob
     ! !
     ! ! local data
-    integer,parameter :: nfan=5 !the number of fans
+    integer,parameter :: nfan=1 !the number of fans
     !
     integer :: i,j,k,k1,k2,n
-    real(8) :: force(3)
+    real(8) :: force(3),ampA,ampB
     logical,save :: linit=.true.
     real(8),save :: A(3,3,nfan),B(3,3,nfan)
     real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave
@@ -349,11 +357,11 @@ module userdefine
       !
       if(mpirank==0) then
         !
-        FR=1.d0/16.d0
         FC=0.d0
+        FR=1.d0/16.d0
         !
-        var1=sqrt(num2d3*FC/deltat)
-        var2=sqrt(num1d3*FR/deltat)
+        var1=sqrt(num2d3*FC/2.d-5)
+        var2=sqrt(num1d3*FR/2.d-5)
         !
         call random_seed(size=n)
         allocate(seed(n))
@@ -385,22 +393,28 @@ module userdefine
         end do
         end do
         !
+        ampA=2900.d0
+        ampB=2900.d0
+        !
+        A=ampA*A
+        B=ampB*B
+        !
+        print*,' ** amplitude of force A, comp:',sqrt(3.d0)*var1*ampA,' sole:',sqrt(3.d0)*var2*ampA
+        print*,' ** amplitude of force B, comp:',sqrt(3.d0)*var1*ampB,' sole:',sqrt(3.d0)*var2*ampB
+        !
       endif
       !
       call bcast(A)
       call bcast(B)
       !
-      A=1.d0*A
-      B=1.d0*B
-      !
       linit=.false.
-      !  
+      !
     endif
     !
     lwave=ymax
     !
-    xs=5.d0
-    xe=xs+4.d0*lwave
+    xs=0.d0
+    xe=xmax
     !
     hsource=0.d0
     tavg=0.d0
@@ -411,9 +425,12 @@ module userdefine
       !
       if(x(i,j,k,1)>=xs .and. x(i,j,k,1)<=xe) then
         !
-        n=int((x(i,j,k,1)-xs)/lwave)+1
+        ! n=int((x(i,j,k,1)-xs)/lwave)+1
         !
-        xx=(x(i,j,k,1)-xs)/lwave*2.d0*pi
+        ! xx=(x(i,j,k,1)-xs)/lwave*2.d0*pi
+        n=1
+        !
+        xx=x(i,j,k,1)/lwave*2.d0*pi
         yy=x(i,j,k,2)/lwave*2.d0*pi
         zz=x(i,j,k,3)/lwave*2.d0*pi
         !

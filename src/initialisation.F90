@@ -844,12 +844,13 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine chanini
     !
-    use commvar,  only: prandtl,mach,gamma,turbmode,                   &
+    use commvar,  only: prandtl,mach,gamma,turbmode,lihomo,             &
                         xmin,xmax,ymin,ymax,zmin,zmax,Reynolds,ref_len,ref_vel
     use commarray,only: x,vel,rho,prs,spc,tmp,q,dgrid,tke,omg,miut,res12
     use fludyna,  only: thermal,miucal
     use commfunc, only: dis2point2
     use parallel, only: preadprofile
+    use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof
     !
     ! local data
     integer :: i,j,k,l,ii,jj
@@ -881,38 +882,59 @@ module initialisation
     !
     if(ndims==2) then
       !
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        rho(i,j,k)  =roinf
-        vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*uinf
-        vel(i,j,k,2)=0.d0
-        vel(i,j,k,3)=0.d0
-        tmp(i,j,k)=tinf+tinf*(gamma-1.d0)*prandtl*mach**2/3.d0*             &
-                                     1.5d0*(1.d0-((x(i,j,k,2)/ref_len-1.d0)**4))
+      if(lihomo) then
         !
-        prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
-        !
-        if(num_species>0) then
-          spc(i,j,k,1)=(tanh((x(i,j,k,2)/ref_len-1.d0)/theta)+1.d0)*0.5d0
-        endif
-        !
-        if(trim(turbmode)=='k-omega') then
-          tke(i,j,k)=1.5d0*0.0001d0*10.d0
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+          rho(i,j,k)  =roinf
+          vel(i,j,k,1)=1.5d0*(1.d0-(x(i,j,k,2)/ref_len-1.d0)**2)*uinf
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          tmp(i,j,k)=tinf+tinf*(gamma-1.d0)*prandtl*mach**2/3.d0*             &
+                                       1.5d0*(1.d0-((x(i,j,k,2)/ref_len-1.d0)**4))
           !
-          ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
-          delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
-          miu=miucal(tmp(i,j,k))/Reynolds
-          omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
+          prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
           !
-        elseif(trim(turbmode)=='udf1') then
-          miut(i,j,k)=nth(j)
-          res12(i,j,k)=r12(j)
-        endif
+          if(num_species>0) then
+            spc(i,j,k,1)=(tanh((x(i,j,k,2)/ref_len-1.d0)/theta)+1.d0)*0.5d0
+          endif
+          !
+          if(trim(turbmode)=='k-omega') then
+            tke(i,j,k)=1.5d0*0.0001d0*10.d0
+            !
+            ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
+            delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
+            miu=miucal(tmp(i,j,k))/Reynolds
+            omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
+            !
+          elseif(trim(turbmode)=='udf1') then
+            miut(i,j,k)=nth(j)
+            res12(i,j,k)=r12(j)
+          endif
+          !
+        enddo
+        enddo
+        enddo
         !
-      enddo
-      enddo
-      enddo
+      else
+        !
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+          rho(i,j,k)  =roinf
+          vel(i,j,k,1)=vel_prof(j,1)
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          tmp(i,j,k)  =tinf
+          !
+          prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+          !
+        enddo
+        enddo
+        enddo
+        !
+      endif
       !
     elseif(ndims==3) then
       !
@@ -1529,7 +1551,8 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine inletprofile
     !
-    use commvar,  only: flowtype,nondimen,spcinf,num_species
+    use commvar,  only: flowtype,nondimen,spcinf,num_species,jm
+    use commarray,only: x
     use parallel, only: preadprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
     use fludyna,  only: thermal
@@ -1539,7 +1562,7 @@ module initialisation
 #endif
     !
     ! local data
-    integer :: fh,i
+    integer :: fh,i,j
     logical :: lfex
     !
     allocate( rho_prof(0:jm),tmp_prof(0:jm),prs_prof(0:jm),          &
@@ -1631,11 +1654,25 @@ module initialisation
       mome_thick=0.d0
       fric_velocity=1.d5
       !
-      rho_prof(:)  =roinf
-      vel_prof(:,1)=uinf
-      vel_prof(:,2)=vinf
-      vel_prof(:,3)=winf
-      tmp_prof(:)  =tinf
+      if(flowtype=='channel') then
+        !
+        rho_prof(:)  =roinf
+        do j=0,jm
+          vel_prof(j,1)=uinf*cos(0.5d0*pi*(x(0,j,0,2)-1.d0))**2
+        enddo
+        vel_prof(:,2)=vinf
+        vel_prof(:,3)=winf
+        tmp_prof(:)  =tinf
+        !
+      else
+        !
+        rho_prof(:)  =roinf
+        vel_prof(:,1)=uinf
+        vel_prof(:,2)=vinf
+        vel_prof(:,3)=winf
+        tmp_prof(:)  =tinf
+        !
+      endif
       !
       if(nondimen) then 
         prs_prof(:)  =thermal(density=rho_prof(:),temperature=tmp_prof(:),dim=jm+1)
