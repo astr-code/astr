@@ -348,8 +348,8 @@ module userdefine
     integer :: i,j,k,k1,k2,n
     real(8) :: force(3),ampA,ampB
     logical,save :: linit=.true.
-    real(8),save :: A(3,3,nfan),B(3,3,nfan)
-    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave
+    real(8),save :: A(3,3,nfan),B(3,3,nfan),phaseA(3,3,nfan),phaseB(3,3,nfan)
+    real(8) :: FC,FR,var1,var2,tavg,at,xs,xe,xx,yy,zz,lwave,ran1,ran2,ran3,ran4
     real(8) :: xs1,xs2,xs3,xs4,xs5
     integer,allocatable :: seed(:)
     !
@@ -357,11 +357,16 @@ module userdefine
       !
       if(mpirank==0) then
         !
-        FC=0.d0
-        FR=1.d0/16.d0
+        open(12,file='datin/userinput.txt')
+        read(12,*)FC,FR
+        close(12)
+        print*, ' ** FC =',FC,'FR=',FR
         !
-        var1=sqrt(num2d3*FC/2.d-5)
-        var2=sqrt(num1d3*FR/2.d-5)
+        ! FC=0.d0
+        ! FR=1.d0/16.d0
+        ! !
+        ! var1=sqrt(num2d3*FC/2.d-5)
+        ! var2=sqrt(num1d3*FR/2.d-5)
         !
         call random_seed(size=n)
         allocate(seed(n))
@@ -378,34 +383,29 @@ module userdefine
         end do
         end do
         !
-        A=sqrt(3.d0)*(2.d0*A-1.d0)
-        B=sqrt(3.d0)*(2.d0*B-1.d0)
+        A=(2.d0*A-1.d0)
+        B=(2.d0*B-1.d0)
         !
         do j=1,3
         do i=1,3
           if(i==j) then
-            A(i,j,:)=var1*A(i,j,:)
-            B(i,j,:)=var1*B(i,j,:)
+            A(i,j,:)=0.d0
+            B(i,j,:)=0.d0
           else
-            A(i,j,:)=var2*A(i,j,:)
-            B(i,j,:)=var2*B(i,j,:)
+            A(i,j,:)=FR*A(i,j,:)
+            B(i,j,:)=FR*B(i,j,:)
           endif
         end do
         end do
         !
-        ampA=2900.d0
-        ampB=2900.d0
-        !
-        A=ampA*A
-        B=ampB*B
-        !
-        print*,' ** amplitude of force A, comp:',sqrt(3.d0)*var1*ampA,' sole:',sqrt(3.d0)*var2*ampA
-        print*,' ** amplitude of force B, comp:',sqrt(3.d0)*var1*ampB,' sole:',sqrt(3.d0)*var2*ampB
+        print*,' ** Amplitude of force, comp:',FC,' sole:',FR
         !
       endif
       !
       call bcast(A)
       call bcast(B)
+      call bcast(phaseA)
+      call bcast(phaseB)
       !
       linit=.false.
       !
