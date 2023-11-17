@@ -10,6 +10,8 @@ module userdefine
   implicit none
   !
   real(8) :: hsource
+  real(8) :: dudx,dvdy,dwdz,dudx2,dvdy2,dwdz2
+  integer :: nsamples_udf
   !
   contains
   !
@@ -94,6 +96,64 @@ module userdefine
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
+  !| This subroutine is to collect statistics.                         | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-Nov-2023: created by Jian Fang @ Appleton                      |
+  !+-------------------------------------------------------------------+
+  subroutine udf_meanflow
+    !
+    use commvar,  only: im,jm,km
+    use commarray,only: dvel
+    !
+    logical,save :: linit=.true.
+    real(8) :: d11,d22,d33
+    integer :: i,j,k
+    !
+    if(linit) then
+      !
+      dudx = 0.d0
+      dvdy = 0.d0
+      dwdz = 0.d0
+      dudx2 = 0.d0
+      dvdy2 = 0.d0
+      dwdz2 = 0.d0
+      !
+      nsamples_udf=0
+      !
+      linit=.false.
+      !
+    endif
+    !
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      !
+      d11=dvel(i,j,k,1,1)
+      d22=dvel(i,j,k,2,2)
+      d33=dvel(i,j,k,3,3)
+      !
+      dudx=dudx+d11
+      dvdy=dvdy+d22
+      dwdz=dwdz+d33
+      !
+      dudx2=dudx2+d11*d11
+      dvdy2=dvdy2+d22*d22
+      dwdz2=dwdz2+d33*d33
+      !
+    enddo
+    enddo
+    enddo
+    !
+    nsamples_udf=nsamples_udf+1
+    !
+  end subroutine udf_meanflow
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_meanflow.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is to generate grid.                              | 
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
@@ -173,8 +233,10 @@ module userdefine
     !
     integer :: i,j,k,ns
     real(8) :: s11,s12,s13,s22,s23,s33,div,miu,dissa
-    real(8) :: rsamples,miudrho,dudx2,csavg,v2,cs,ufluc,ens,omegax,omegay,omegaz
-    real(8) :: urms,taylorlength,kolmoglength,Retaylor,machrms,macht,rhoe,skewness,du2,du3
+    real(8) :: rsamples,miudrho,dux2,csavg,v2,cs,ufluc,ens,omegax,omegay,omegaz
+    real(8) :: urms,taylorlength,kolmoglength,Retaylor,machrms,macht,rhoe
+    real(8) :: skewness,flatness,du2,du3,du4
+    real(8) :: skewness_u,flatness_u
     !
     logical :: fex
     logical,save :: linit=.true.
@@ -184,7 +246,7 @@ module userdefine
       !
       if(lio) then
         call listinit(filename='fturbstats.dat',handle=hand_fs, &
-                      firstline='nstep time urms enstrophy taylorlength kolmoglength Retaylor machrms macht Tavg hsource skewness')
+                      firstline='nstep time u_rms Ω λ η Re_λ Ma_rms Ma_t <T> Sk(du) Fl(du) Sk(u) Fl(u)')
       endif
       !
       linit=.false.
@@ -197,12 +259,15 @@ module userdefine
     machrms=0.d0
     !
     miudrho=0.d0
-    dudx2=0.d0
+    dux2=0.d0
     csavg=0.d0
     dissa=0.d0
     ens=0.d0
+    du4=0.d0
     du3=0.d0
     du2=0.d0
+    skewness_u=0.d0
+    flatness_u=0.d0
     do k=1,km
     do j=1,jm
     do i=1,im
@@ -232,7 +297,7 @@ module userdefine
       !
       urms=urms+v2
       !
-      dudx2=dudx2+s11**2+s22**2+s33**2
+      dux2=dux2+s11**2+s22**2+s33**2
       !
       miudrho=miudrho+miu/rho(i,j,k)
       !
@@ -246,13 +311,20 @@ module userdefine
       !
       ens=ens+(omegax*omegax+omegay*omegay+omegaz*omegaz)
       !
-      du3=du3+(s11*s11*s11+s22*s22*s22+s33*s33*s33)
-      du2=du2+(s11*s11+s22*s22+s33*s33)
+      du4=du4+(s11**4+s22**4+s33**4)
+      du3=du3+(s11**3+s22**3+s33**3)
+      du2=du2+(s11**2+s22**2+s33**2)
+      !
+      skewness_u=skewness_u+vel(i,j,k,1)**3+vel(i,j,k,2)**3+vel(i,j,k,3)**3
+      !
+      flatness_u=flatness_u+vel(i,j,k,1)**4+vel(i,j,k,2)**4+vel(i,j,k,3)**4
+      !
     enddo
     enddo
     enddo
+    !
     urms  = sqrt(psum(urms)/rsamples)
-    dudx2      = num1d3*psum(dudx2)/rsamples
+    dux2      = num1d3*psum(dux2)/rsamples
     miudrho    = psum(miudrho)/rsamples
     csavg      = psum(csavg)/rsamples
     dissa      = psum(dissa)/rsamples
@@ -266,16 +338,21 @@ module userdefine
     ufluc=urms/sqrt(3.d0)
     !
     macht         = urms/csavg
-    taylorlength  = ufluc/sqrt(dudx2)
+    taylorlength  = ufluc/sqrt(dux2)
     retaylor      = ufluc*taylorlength/miudrho
     kolmoglength  = sqrt(sqrt(miudrho**3/dissa))
 
     skewness      = psum(du3)/(3.d0*rsamples)/sqrt((psum(du2)/(3.d0*rsamples))**3)
+    flatness      = psum(du4)/(3.d0*rsamples)/(psum(du2)/(3.d0*rsamples))**2
     ! kolmogvelocity= sqrt(sqrt(dissipation*miudrho))
     ! kolmogtime    = sqrt(miudrho/dissipation)
     !
-    if(lio) call listwrite(hand_fs,urms,ens,taylorlength,kolmoglength, &
-                           Retaylor,machrms,macht,rhoe,hsource,skewness)
+    skewness_u    = psum(skewness_u)/(3.d0*rsamples)/ufluc**3
+    flatness_u    = psum(flatness_u)/(3.d0*rsamples)/ufluc**4
+    !
+    if(lio) call listwrite(hand_fs,ufluc,ens,taylorlength,kolmoglength,  &
+                                   Retaylor,machrms,macht,rhoe,skewness, &
+                                   flatness,skewness_u,flatness_u)
     !
   end subroutine udf_stalist
   !+-------------------------------------------------------------------+
@@ -495,7 +572,30 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_write
     !
-    
+    use commvar, only: ia,ja,ka
+    use parallel,only: psum,lio
+    use hdf5io,  only: h5srite
+    !
+    real(8) :: var1,var2,var3,var4,var5,var6
+    !
+    var1=psum(dudx)/dble(nsamples_udf*ia*ja*ka)
+    var2=psum(dvdy)/dble(nsamples_udf*ia*ja*ka)
+    var3=psum(dwdz)/dble(nsamples_udf*ia*ja*ka)
+    !
+    var4=psum(dudx2)/dble(nsamples_udf*ia*ja*ka)-var1*var1
+    var5=psum(dvdy2)/dble(nsamples_udf*ia*ja*ka)-var2*var2
+    var6=psum(dwdz2)/dble(nsamples_udf*ia*ja*ka)-var3*var3
+    !
+    if(lio .and. nsamples_udf>0) then
+      !
+      call h5srite(varname='dudx', var=var1,filename='outdat/duidxi.h5',newfile=.true.)
+      call h5srite(varname='dvdy', var=var2,filename='outdat/duidxi.h5')
+      call h5srite(varname='dwdz', var=var3,filename='outdat/duidxi.h5')
+      call h5srite(varname='dudx2',var=var4,filename='outdat/duidxi.h5')
+      call h5srite(varname='dvdy2',var=var5,filename='outdat/duidxi.h5')
+      call h5srite(varname='dwdz2',var=var6,filename='outdat/duidxi.h5')
+      !
+    endif
     !
   end subroutine udf_write
   !+-------------------------------------------------------------------+
