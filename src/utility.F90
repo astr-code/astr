@@ -354,7 +354,9 @@ module utility
       nargs=size(args)
       !
       write(txtformat,'(A,I0,A)')'(',nargs,'(1X,A20))'
-
+      !
+      print*,nargs,txtformat
+      !
       write(handle,txtformat)(trim(args(n)),n=1,nargs)
       !
     endif
@@ -371,16 +373,22 @@ module utility
   !| -------------                                                     |
   !| 17-Aug-2023: Created by J. Fang @ Appleton                        |
   !+-------------------------------------------------------------------+
-  subroutine listwrite(handle,var1,var2,var3,var4,var5,var6,var7,var8,var9,var10)
+  subroutine listwrite(handle,var1,var2,var3,var4,var5,var6,var7,var8,var9,var10,var11,var12)
     !
     use commvar, only: nstep,time,ref_tim
     !
     integer,intent(in) :: handle
     real(8),intent(in),optional :: var1,var2,var3,var4,var5,var6,      &
-                                   var7,var8,var9,var10
+                                   var7,var8,var9,var10,var11,var12
 
     !
-    if(present(var10)) then
+    if(present(var12)) then
+      write(handle,"(1X,I20,13(1X,E20.13E2))")nstep,time/ref_tim,       &
+           var1,var2,var3,var4,var5,var6,var7,var8,var9,var10,var11,var12
+    elseif(present(var11)) then
+      write(handle,"(1X,I20,12(1X,E20.13E2))")nstep,time/ref_tim,       &
+                 var1,var2,var3,var4,var5,var6,var7,var8,var9,var10,var11
+    elseif(present(var10)) then
       write(handle,"(1X,I20,11(1X,E20.13E2))")nstep,time/ref_tim,       &
                        var1,var2,var3,var4,var5,var6,var7,var8,var9,var10
     elseif(present(var9)) then

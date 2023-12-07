@@ -578,17 +578,18 @@ module userdefine
     !
     real(8) :: var1,var2,var3,var4,var5,var6
     !
-    var1=psum(dudx)/dble(nsamples_udf*ia*ja*ka)
-    var2=psum(dvdy)/dble(nsamples_udf*ia*ja*ka)
-    var3=psum(dwdz)/dble(nsamples_udf*ia*ja*ka)
+    var1=psum(dudx) !/dble(nsamples_udf*ia*ja*ka)
+    var2=psum(dvdy) !/dble(nsamples_udf*ia*ja*ka)
+    var3=psum(dwdz) !/dble(nsamples_udf*ia*ja*ka)
     !
-    var4=psum(dudx2)/dble(nsamples_udf*ia*ja*ka)-var1*var1
-    var5=psum(dvdy2)/dble(nsamples_udf*ia*ja*ka)-var2*var2
-    var6=psum(dwdz2)/dble(nsamples_udf*ia*ja*ka)-var3*var3
+    var4=psum(dudx2) !/dble(nsamples_udf*ia*ja*ka)-var1*var1
+    var5=psum(dvdy2) !/dble(nsamples_udf*ia*ja*ka)-var2*var2
+    var6=psum(dwdz2) !/dble(nsamples_udf*ia*ja*ka)-var3*var3
     !
     if(lio .and. nsamples_udf>0) then
       !
-      call h5srite(varname='dudx', var=var1,filename='outdat/duidxi.h5',newfile=.true.)
+      call h5srite(varname='nsamples', var=nsamples_udf,filename='outdat/duidxi.h5',newfile=.true.)
+      call h5srite(varname='dudx', var=var1,filename='outdat/duidxi.h5')
       call h5srite(varname='dvdy', var=var2,filename='outdat/duidxi.h5')
       call h5srite(varname='dwdz', var=var3,filename='outdat/duidxi.h5')
       call h5srite(varname='dudx2',var=var4,filename='outdat/duidxi.h5')

@@ -1038,7 +1038,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*4)
+          open(fh(n),file=trim(filename),access='direct',recl=8*8)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1094,9 +1094,8 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
-        ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
-        !                        tmp(i,j,k),dvel(i,j,k,:,:)
+        ! write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),prs(i,j,k),dvel(i,j,k,1,1),dvel(i,j,k,1,2)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
       enddo

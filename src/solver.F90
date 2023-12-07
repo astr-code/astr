@@ -125,9 +125,9 @@ module solver
       !
     else 
       !
-      ! rgas=287.1d0
+      rgas=287.1d0
       !
-      rgas=376.177d0
+      ! rgas=376.177d0
       !
       cp  =gamma/(gamma-1.d0)*rgas
       cv  = rgas/(gamma-1.d0)

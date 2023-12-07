@@ -671,7 +671,7 @@ module mainloop
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
     use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
                          nxtchkpt,nxtwsequ
-    use userdefine,only: udf_stalist,udf_write
+    use userdefine,only: udf_stalist,udf_write,udf_meanflow
     !
     ! local data
     integer,save :: nxtavg
@@ -696,6 +696,8 @@ module mainloop
       if(lavg) then
         if(nstep==nxtavg) then
           call meanflowcal(timerept=ltimrpt)
+          !
+          call udf_meanflow
           !
           nxtavg=nstep+feqavg
         endif
