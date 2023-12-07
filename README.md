@@ -22,7 +22,8 @@ By default ASTR solves equations under non-dimensional form, unless the chemstry
 
 create a case folder, e.g.
 mkdir test_case
-cd test_case
+sh path_to_the_source/script/astr.case.creater #create a new case
+
 cmake path_to_the_source
 cmake --build ./   or make
 cmake --install ./ or make install

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo ' this is to create a new ASTR case'
+
+mkdir -p ./user_define_module
+
+echo ' ASTR PATH:'$apath
+
+cp -v $apath/user_define_module/userdefine.F90 ./user_define_module/
+
+cp -rv $apath/examples/Taylor_Green_Vortex_2D/datin ./
