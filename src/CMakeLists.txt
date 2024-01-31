@@ -10,8 +10,8 @@ message(STATUS "UDF path: ${UDF_SRC}")
     
 add_executable(astr 
                     astr.F90
+                    ${UDF_SOURCE_FILES}
                     bc.F90
-                    CMakeLists.txt
                     cmdefne.F90
                     commarray.F90
                     comsolver.F90
@@ -42,7 +42,6 @@ add_executable(astr
                     tecio.F90
                     test.F90
                     thermchem.F90
-                    ${UDF_SOURCE_FILES}
                     utility.F90
                     vtkio.F90)
 

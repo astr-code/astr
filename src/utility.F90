@@ -14,6 +14,65 @@ module utility
   contains
   !
   !+-------------------------------------------------------------------+
+  !| Progress indicators library.                                      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 31-01-2024  | copied by J. Fang via:                              |
+  !| https://github.com/macie/fortran-libs                             |
+  !|  Maciej Żok, 2010 MIT License                                     |
+  !+-------------------------------------------------------------------+
+  subroutine progress_bar(iteration,maximum,info2show,barlength)
+     !
+     ! Prints progress bar.
+     !
+     ! Args: 
+     !     iteration - iteration number
+     !     maximum - total iterations
+     !     barlength - length of the bar
+     !   
+     ! use iso_fortran_env
+     integer,intent(in) :: iteration,maximum
+     character(len=*),intent(in),optional :: info2show
+     integer,intent(in),optional :: barlength
+     integer :: counter,nlength
+     integer :: done
+     real(4) :: perc
+     !
+     if(present(barlength)) then
+         nlength=barlength
+     else
+         nlength=10
+     endif
+     !
+     perc = 100.0*real(iteration)/real(maximum)
+     done = floor(perc/(100.0/real(nlength)))  ! mark length
+     !
+     write(6,'(1A1,A,A)',advance='no')char(13),info2show,'['
+     if (done .LE. 0) then
+         do counter = 1, nlength
+             write(6,'(1A1,A)',advance='no')'='
+         end do
+     else if ((done .GT. 0) .and. (done .LT. nlength)) then
+         do counter = 1, done
+             write(6,'(1A1,A)',advance='no')'>'
+         end do
+         do counter = done+1, nlength
+             write(6,'(1A1,A)',advance='no')'='
+         end do 
+     else
+         do counter = 1, nlength
+             write(6,'(1A1,A)',advance='no')'>'
+         end do
+     end if
+     write(6,'(A,F5.1,A)',advance='no')'] ',perc,'%'
+     !
+  end subroutine progress_bar
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine progress_bar.                           |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
   !| This subroutine is used to report time cost by each subroutine.   |
   !+-------------------------------------------------------------------+
   !| note: should only be called from one rank, usually the root       |
