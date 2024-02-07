@@ -29,7 +29,7 @@ module comvardef
   real :: ctime(12)
   !
   real(8),allocatable,dimension(:,:,:) :: rho,prs,tmp
-  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,qsave,vel,dtmp
+  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,qsave,vel,dtmp,sigma,qflux
   real(8),allocatable,dimension(:,:,:,:,:) :: dvel
   !
   contains
@@ -46,6 +46,8 @@ module comvardef
     allocate( tmp(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
     allocate(dvel(0:im,0:jm,0:km,1:3,1:3))
     allocate(dtmp(0:im,0:jm,0:km,1:3))
+    allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
+              qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     !
     print*,' ** common array allocated'
     !
@@ -369,8 +371,6 @@ module solver
     !
     integer :: i,j,k
     !
-    !$acc data copy(rho,prs,tmp,vel)
-    !
     ! b.c. at the i direction
     !$acc parallel loop gang collapse(2) present(rho,prs,tmp,vel,q)
     do k=0,km
@@ -464,8 +464,6 @@ module solver
     enddo
     ! end of applying b.c. along k direction
     !
-    !$acc end data
-    !
   end subroutine bchomo
   !
   subroutine bchomovec(var)
@@ -545,8 +543,6 @@ module solver
         call cpu_time(tstart)
     endif
     !
-    !$acc data copyin(vel,tmp,prs) copy(dvel,dtmp)
-    !
     call gradcal(ctime(3))
     !
     call convection(ctime(4))
@@ -563,8 +559,6 @@ module solver
     enddo
     !
     call diffusion(ctime(5))
-    !
-    !$acc end data
     !
     if(present(comptime)) then
       call cpu_time(tfinish)
@@ -590,13 +584,13 @@ module solver
     !
     real :: tstart,tfinish
     !
-    !$acc data create(fi,fj,fk,dfi,dfj,dfk)
-    !
-    !call progress_bar(0,3,'  ** temperature and velocity gradient ',10)
-    !
     if(present(comptime)) then
         call cpu_time(tstart)
     endif
+    !
+    !$acc data create(fi,fj,fk,dfi,dfj,dfk)
+    !
+    !call progress_bar(0,3,'  ** temperature and velocity gradient ',10)
     !
     ! !$acc parallel loop gang collapse(3) present(x,du) 
     ! do k=0,km
@@ -702,13 +696,13 @@ module solver
     enddo
     enddo
     !
+    !$acc end data
+    !
     if(present(comptime)) then
       call cpu_time(tfinish)
       !
       comptime=comptime+tfinish-tstart
     endif
-    !
-    !$acc end data
     !
     !call progress_bar(3,3,'  ** temperature and velocity gradient ',10)
     !
@@ -886,14 +880,11 @@ module solver
   subroutine diffusion(comptime)
     !
     use comvardef, only: num1d3,reynolds,prandtl,const5,dx,dy,dz
-    use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp,ctime
+    use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp,ctime,sigma,qflux
     use dataoper,  only: miucal
     use numerics,  only: diff6ec
     !
     real,intent(inout),optional :: comptime
-    !
-    real(8) :: sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
-               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
     !
     real(8) :: fi(-hm:im+hm,4),dfi(0:im,4),fj(-hm:jm+hm,4),dfj(0:jm,4), &
                fk(-hm:km+hm,4),dfk(0:km,4)
@@ -908,7 +899,7 @@ module solver
         call cpu_time(tstart)
     endif
     !
-    !$acc data copy(sigma,qflux) create(fi,fj,fk,dfi,dfj,dfk)
+    !$acc data create(fi,fj,fk,dfi,dfj,dfk)
     !
     !call progress_bar(0,4,'  ** diffusion terms ',10)
     !
@@ -1172,8 +1163,6 @@ module solver
       firstcall=.false.
     endif
     !
-    !$acc data copyin(rho,vel,dvel)
-    !
     rhom=0.d0
     tke =0.d0
     enst=0.d0
@@ -1198,8 +1187,6 @@ module solver
     enddo
     enddo
     enddo
-    !
-    !$acc end data
     !
     rhom=rhom/dble(im*jm*km)
     tke =0.5d0*tke/dble(im*jm*km)
@@ -1249,8 +1236,6 @@ module solver
       firstcall=.false.
       !
     endif
-    !
-    !$acc data copy(qrhs,q,qsave)
     !
     do rkstep=1,3
       !
@@ -1304,7 +1289,6 @@ module solver
       !
       call filterq(ctime(6))
       !
-      !$acc data copyout(rho,vel,prs,tmp)
       !$acc parallel loop collapse(3) present(q,rho,vel,prs,tmp)
       do k=0,km
       do j=0,jm
@@ -1316,11 +1300,8 @@ module solver
       enddo
       enddo
       enddo
-      !$acc end data
       !
     enddo
-    !
-    !$acc end data
     !
     if(present(comptime)) then
       call cpu_time(tfinish)
@@ -1333,6 +1314,10 @@ module solver
   subroutine mainloop
     !
     use comvardef, only: time,nstep,deltat,ctime
+    use comvardef, only: qrhs,q,qsave,rho,vel,tmp,prs,dvel,dtmp,sigma,qflux
+    !
+    !$acc data copy(qrhs,q,qsave,rho,vel,tmp,prs,dvel,dtmp,sigma,qflux )
+
     !
     do while(nstep<100)
       !
@@ -1344,6 +1329,9 @@ module solver
       print*,nstep,time
       !
     enddo
+    !
+    !$acc end data
+    !
     !
   end subroutine mainloop
   !
