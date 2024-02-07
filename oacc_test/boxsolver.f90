@@ -369,7 +369,7 @@ module solver
     !
     integer :: i,j,k
     !
-    !$acc data copy(rho,prs,tmp,vel,q)
+    !$acc data copy(rho,prs,tmp,vel)
     !
     ! b.c. at the i direction
     !$acc parallel loop gang collapse(2) present(rho,prs,tmp,vel,q)
@@ -545,7 +545,7 @@ module solver
         call cpu_time(tstart)
     endif
     !
-    !$acc data copy(qrhs,q,vel,tmp,prs,dvel,dtmp)
+    !$acc data copyin(vel,tmp,prs) copy(dvel,dtmp)
     !
     call gradcal(ctime(3))
     !
@@ -571,6 +571,7 @@ module solver
       !
       comptime=comptime+tfinish-tstart
     endif
+    !
   end subroutine rhscal
   !
   subroutine gradcal(comptime)
@@ -1070,7 +1071,7 @@ module solver
         call cpu_time(tstart)
     endif
     !
-    !$acc data copy(q) create(phi,fphi,phj,fphj,phk,fphk) 
+    !$acc data create(phi,fphi,phj,fphj,phk,fphk) 
     !
     !call progress_bar(0,3,'  ** spatial filter ',10)
     !
@@ -1249,9 +1250,20 @@ module solver
       !
     endif
     !
+    !$acc data copy(qrhs,q,qsave)
+    !
     do rkstep=1,3
       !
-      qrhs=0.d0
+      !$acc parallel loop collapse(4) present(q)
+      do m=1,numq
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        qrhs(i,j,k,m)=0.d0
+      enddo
+      enddo
+      enddo
+      enddo
       !
       call bchomo
       
@@ -1261,7 +1273,6 @@ module solver
         !
         if(mod(nstep,10)==0) call stacal
         !
-        !$acc data copyin(qrhs),copy(q)
         !
         !$acc parallel loop collapse(4) present(q,qsave)
         do m=1,numq
@@ -1274,11 +1285,7 @@ module solver
         enddo
         enddo
         !
-        !$acc end data
-        !
       endif
-      !
-      !$acc data copyin(qrhs,qsave),copy(q)
       !
       !$acc parallel loop collapse(4) present(q,qsave,qrhs)
       do m=1,numq
@@ -1295,11 +1302,9 @@ module solver
       enddo
       enddo
       !
-      !$acc end data
-      !
       call filterq(ctime(6))
       !
-      !$acc data copyin(q),copyout(rho,vel,prs,tmp)
+      !$acc data copyout(rho,vel,prs,tmp)
       !$acc parallel loop collapse(3) present(q,rho,vel,prs,tmp)
       do k=0,km
       do j=0,jm
@@ -1315,6 +1320,8 @@ module solver
       !
     enddo
     !
+    !$acc end data
+    !
     if(present(comptime)) then
       call cpu_time(tfinish)
       !
@@ -1325,9 +1332,8 @@ module solver
   !
   subroutine mainloop
     !
-    use comvardef, only: time,nstep,deltat,ctime,rho,prs,tmp,q,qrhs,qsave,vel,dtmp,dvel
+    use comvardef, only: time,nstep,deltat,ctime
     !
-    !$acc data copy(qsave)
     do while(nstep<100)
       !
       call rk3(ctime(2))
@@ -1338,7 +1344,6 @@ module solver
       print*,nstep,time
       !
     enddo
-    !$acc end data
     !
   end subroutine mainloop
   !
