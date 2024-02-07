@@ -29,7 +29,7 @@ module comvardef
   real :: ctime(12)
   !
   real(8),allocatable,dimension(:,:,:) :: rho,prs,tmp
-  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,dtmp
+  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,qsave,vel,dtmp
   real(8),allocatable,dimension(:,:,:,:,:) :: dvel
   !
   contains
@@ -37,7 +37,7 @@ module comvardef
   subroutine alloarray
     !
     allocate( x(0:im,0:jm,0:km,1:3))
-    allocate(   q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
+    allocate( q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq),qsave(0:im,0:jm,0:km,1:numq))
     allocate(qrhs(0:im,0:jm,0:km,1:numq))
     !
     allocate( rho(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
@@ -181,26 +181,19 @@ module dataoper
     use comvardef, only: const6
     !
     real(8),intent(in) :: q(:)
-    real(8),intent(out) :: density
-    real(8),intent(out),optional :: velocity(:),pressure,temperature
+    real(8),intent(out) :: density,velocity(:),pressure,temperature
     !
     density   =q(1)
     !
-    if(present(velocity) .or. present(pressure) .or. present(temperature)) then
-      velocity(1)=q(2)/density
-      velocity(2)=q(3)/density
-      velocity(3)=q(4)/density
-    endif
+    velocity(1)=q(2)/density
+    velocity(2)=q(3)/density
+    velocity(3)=q(4)/density
     !
-    if(present(pressure) .or. present(temperature)) then
-      pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+  &
+    pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+  &
                                        velocity(3)**2) )/const6
-    endif
     !
-    if(present(temperature)) then
-      temperature=thermal_scar(pressure=pressure,density=density)
-    endif
-
+    temperature=thermal_scar(pressure=pressure,density=density)
+    !
   end subroutine q2fvar
   !
   pure real(8) function miucal(temper)
@@ -295,6 +288,7 @@ end module dataoper
 module numerics
   !
   use comvardef, only : num1d60
+  !
   implicit none
   !
   contains
@@ -338,6 +332,8 @@ module numerics
   !
   subroutine filter10ec(vin,dim,n,vout)
     !
+    !$acc routine seq
+    !
     integer,intent(in) :: dim,n
     real(8),intent(in) :: vin(-n:dim+n)
     real(8) :: vout(0:dim)
@@ -373,7 +369,10 @@ module solver
     !
     integer :: i,j,k
     !
+    !$acc data copy(rho,prs,tmp,vel,q)
+    !
     ! b.c. at the i direction
+    !$acc parallel loop gang collapse(2) present(rho,prs,tmp,vel,q)
     do k=0,km
     do j=0,jm
       !
@@ -404,6 +403,7 @@ module solver
     ! end of applying b.c. along i direction
     !
     ! b.c. at the j direction
+    !$acc parallel loop gang collapse(2) present(rho,prs,tmp,vel,q)
     do k=0,km
     do i=0,im
       !
@@ -434,6 +434,7 @@ module solver
     ! end of applying b.c. along j direction
     !
     ! b.c. at the k direction
+    !$acc parallel loop gang collapse(2) present(rho,prs,tmp,vel,q)
     do j=0,jm
     do i=0,im
       !
@@ -463,6 +464,8 @@ module solver
     enddo
     ! end of applying b.c. along k direction
     !
+    !$acc end data
+    !
   end subroutine bchomo
   !
   subroutine bchomovec(var)
@@ -477,6 +480,7 @@ module solver
     nd4=size(var,4)
     !
     ! b.c. at the i direction
+    !$acc parallel loop gang collapse(2) present(var)
     do k=0,km
     do j=0,jm
       !
@@ -493,6 +497,7 @@ module solver
     ! end of applying b.c. along i direction
     !
     ! b.c. at the j direction
+    !$acc parallel loop gang collapse(2) present(var)
     do k=0,km
     do i=0,im
       !
@@ -509,6 +514,7 @@ module solver
     ! end of applying b.c. along j direction
     !
     ! b.c. at the k direction
+    !$acc parallel loop gang collapse(2) present(var)
     do j=0,jm
     do i=0,im
       !
@@ -528,9 +534,10 @@ module solver
   !
   subroutine rhscal(comptime)
     !
-    use comvardef, only: vel,tmp,dvel,dtmp,qrhs,rho,prs,q,ctime
+    use comvardef, only: im,jm,km,numq,vel,tmp,dvel,dtmp,qrhs,rho,prs,q,ctime
     !
     real,intent(inout),optional :: comptime
+    integer :: i,j,k,m
     
     real :: tstart,tfinish
 
@@ -538,13 +545,26 @@ module solver
         call cpu_time(tstart)
     endif
     !
+    !$acc data copy(qrhs,q,vel,tmp,prs,dvel,dtmp)
+    !
     call gradcal(ctime(3))
     !
     call convection(ctime(4))
     !
-    qrhs=-qrhs
+    !$acc parallel loop collapse(4) present(qrhs)
+    do m=1,numq
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      qrhs(i,j,k,m)=-qrhs(i,j,k,m)
+    enddo
+    enddo
+    enddo
+    enddo
     !
     call diffusion(ctime(5))
+    !
+    !$acc end data
     !
     if(present(comptime)) then
       call cpu_time(tfinish)
@@ -569,7 +589,7 @@ module solver
     !
     real :: tstart,tfinish
     !
-    !$acc data copyin(vel,tmp) copyout(dvel,dtmp)  create(fi,fj,fk,dfi,dfj,dfk)
+    !$acc data create(fi,fj,fk,dfi,dfj,dfk)
     !
     !call progress_bar(0,3,'  ** temperature and velocity gradient ',10)
     !
@@ -735,7 +755,7 @@ module solver
     !
     real :: tstart,tfinish
     !
-    !$acc data copyin(q,prs,vel) copy(qrhs) create(fi,fj,fk,dfi,dfj,dfk)
+    !$acc data create(fi,fj,fk,dfi,dfj,dfk)
     !
     if(present(comptime)) then
         call cpu_time(tstart)
@@ -871,8 +891,11 @@ module solver
     !
     real,intent(inout),optional :: comptime
     !
-    real(8),allocatable,dimension(:,:,:,:),save :: sigma,qflux
-    real(8),allocatable :: f(:,:),df(:,:)
+    real(8) :: sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
+               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
+    !
+    real(8) :: fi(-hm:im+hm,4),dfi(0:im,4),fj(-hm:jm+hm,4),dfj(0:jm,4), &
+               fk(-hm:km+hm,4),dfk(0:km,4)
     !
     real :: tstart,tfinish
     !
@@ -884,15 +907,12 @@ module solver
         call cpu_time(tstart)
     endif
     !
-    if(firstcall) then
-      allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
-                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
-      !
-      firstcall=.false.
-    endif
+    !$acc data copy(sigma,qflux) create(fi,fj,fk,dfi,dfj,dfk)
     !
     !call progress_bar(0,4,'  ** diffusion terms ',10)
     !
+    !$acc parallel loop collapse(3) present(dvel,vel,dtmp,tmp,sigma,qflux) &
+    !$acc                           private(miu,miu2,hcc,s11,s12,s13,s22,s23,s33,skk)
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -938,96 +958,89 @@ module solver
     !
     !call progress_bar(1,4,'  ** diffusion terms ',10)
     !
-    allocate(f(-hm:im+hm,1:4),df(0:im,1:4))
-    !
+    !$acc parallel loop gang collapse(2) present(sigma,qflux,qrhs) private(fi,dfi)
     do k=0,km
     do j=0,jm
       !
       do i=-hm,im+hm
-        f(i,1)=sigma(i,j,k,1)
-        f(i,2)=sigma(i,j,k,2)
-        f(i,3)=sigma(i,j,k,3)
-        f(i,4)=qflux(i,j,k,1)
+        fi(i,1)=sigma(i,j,k,1)
+        fi(i,2)=sigma(i,j,k,2)
+        fi(i,3)=sigma(i,j,k,3)
+        fi(i,4)=qflux(i,j,k,1)
       enddo
       !
-      call diff6ec(f(:,1),im,hm,df(:,1))
-      call diff6ec(f(:,2),im,hm,df(:,2))
-      call diff6ec(f(:,3),im,hm,df(:,3))
-      call diff6ec(f(:,4),im,hm,df(:,4))
+      call diff6ec(fi(:,1),im,hm,dfi(:,1))
+      call diff6ec(fi(:,2),im,hm,dfi(:,2))
+      call diff6ec(fi(:,3),im,hm,dfi(:,3))
+      call diff6ec(fi(:,4),im,hm,dfi(:,4))
       !
       do i=0,im
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(i,1)/dx
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(i,2)/dx
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(i,3)/dx
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(i,4)/dx
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+dfi(i,1)/dx
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+dfi(i,2)/dx
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+dfi(i,3)/dx
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+dfi(i,4)/dx
       enddo
       !
     enddo
     enddo
-    !
-    deallocate(f,df)
     !
     !call progress_bar(2,4,'  ** diffusion terms ',10)
     !
-    allocate(f(-hm:jm+hm,1:4),df(0:jm,1:4))
-    !
+    !$acc parallel loop gang collapse(2) present(sigma,qflux,qrhs) private(fj,dfj)
     do k=0,km
     do i=0,im
       !
       do j=-hm,jm+hm
-        f(j,1)=sigma(i,j,k,2)
-        f(j,2)=sigma(i,j,k,4)
-        f(j,3)=sigma(i,j,k,5)
-        f(j,4)=qflux(i,j,k,2)
+        fj(j,1)=sigma(i,j,k,2)
+        fj(j,2)=sigma(i,j,k,4)
+        fj(j,3)=sigma(i,j,k,5)
+        fj(j,4)=qflux(i,j,k,2)
       enddo
       !
-      call diff6ec(f(:,1),jm,hm,df(:,1))
-      call diff6ec(f(:,2),jm,hm,df(:,2))
-      call diff6ec(f(:,3),jm,hm,df(:,3))
-      call diff6ec(f(:,4),jm,hm,df(:,4))
+      call diff6ec(fj(:,1),jm,hm,dfj(:,1))
+      call diff6ec(fj(:,2),jm,hm,dfj(:,2))
+      call diff6ec(fj(:,3),jm,hm,dfj(:,3))
+      call diff6ec(fj(:,4),jm,hm,dfj(:,4))
       !
       do j=0,jm
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(j,1)/dy
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(j,2)/dy
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(j,3)/dy
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(j,4)/dy
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+dfj(j,1)/dy
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+dfj(j,2)/dy
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+dfj(j,3)/dy
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+dfj(j,4)/dy
       enddo
       !
     enddo
     enddo
-    !
-    deallocate(f,df)
     !
     !call progress_bar(3,4,'  ** diffusion terms ',10)
     !
-    allocate(f(-hm:km+hm,1:4),df(0:km,1:4))
-    !
+    !$acc parallel loop gang collapse(2) present(sigma,qflux,qrhs) private(fk,dfk)
     do j=0,jm
     do i=0,im
       !
       do k=-hm,km+hm
-        f(k,1)=sigma(i,j,k,3)
-        f(k,2)=sigma(i,j,k,5)
-        f(k,3)=sigma(i,j,k,6)
-        f(k,4)=qflux(i,j,k,3)
+        fk(k,1)=sigma(i,j,k,3)
+        fk(k,2)=sigma(i,j,k,5)
+        fk(k,3)=sigma(i,j,k,6)
+        fk(k,4)=qflux(i,j,k,3)
       enddo
       !
-      call diff6ec(f(:,1),km,hm,df(:,1))
-      call diff6ec(f(:,2),km,hm,df(:,2))
-      call diff6ec(f(:,3),km,hm,df(:,3))
-      call diff6ec(f(:,4),km,hm,df(:,4))
+      call diff6ec(fk(:,1),km,hm,dfk(:,1))
+      call diff6ec(fk(:,2),km,hm,dfk(:,2))
+      call diff6ec(fk(:,3),km,hm,dfk(:,3))
+      call diff6ec(fk(:,4),km,hm,dfk(:,4))
       !
       do k=0,km
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(k,1)/dz
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(k,2)/dz
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(k,3)/dz
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(k,4)/dz
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+dfk(k,1)/dz
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+dfk(k,2)/dz
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+dfk(k,3)/dz
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+dfk(k,4)/dz
       enddo
       !
     enddo
     enddo
     !
-    deallocate(f,df)
+    !$acc end data
     !
     if(present(comptime)) then
       call cpu_time(tfinish)
@@ -1048,7 +1061,8 @@ module solver
     
     real :: tstart,tfinish
 
-    real(8),allocatable :: phi(:),fph(:)
+    real(8) :: phi(-hm:im+hm),fphi(0:im),phj(-hm:jm+hm),fphj(0:jm), &
+               phk(-hm:km+hm),fphk(0:km)
     !
     integer :: i,j,k,n
     !
@@ -1056,9 +1070,13 @@ module solver
         call cpu_time(tstart)
     endif
     !
+    !$acc data copy(q) create(phi,fphi,phj,fphj,phk,fphk) 
+    !
     !call progress_bar(0,3,'  ** spatial filter ',10)
     !
-    allocate(phi(-hm:im+hm),fph(0:im))
+    !
+    !$acc parallel loop gang collapse(2) present(q) private(phi,fphi)
+    !
     do k=0,km
     do j=0,jm
       !
@@ -1068,65 +1086,64 @@ module solver
           phi(i)=q(i,j,k,n)
         enddo
         !
-        call filter10ec(phi,im,hm,fph)
+        call filter10ec(phi,im,hm,fphi)
         !
         do i=0,im
-          q(i,j,k,n)=fph(i)
+          q(i,j,k,n)=fphi(i)
         enddo
         !
       enddo
       !
     enddo
     enddo
-    deallocate(phi,fph)
     !
     !call progress_bar(1,3,'  ** spatial filter ',10)
     !
-    allocate(phi(-hm:jm+hm),fph(0:jm))
+    !$acc parallel loop gang collapse(2) present(q) private(phj,fphj) 
     do k=0,km
     do i=0,im
       !
       do n=1,numq
         !
         do j=-hm,jm+hm
-          phi(j)=q(i,j,k,n)
+          phj(j)=q(i,j,k,n)
         enddo
         !
-        call filter10ec(phi,jm,hm,fph)
+        call filter10ec(phj,jm,hm,fphj)
         !
         do j=0,jm
-          q(i,j,k,n)=fph(j)
+          q(i,j,k,n)=phj(j)
         enddo
         !
       enddo
       !
     enddo
     enddo
-    deallocate(phi,fph)
     !
     !call progress_bar(2,3,'  ** spatial filter ',10)
     !
-    allocate(phi(-hm:km+hm),fph(0:km))
+    !$acc parallel loop gang collapse(2) present(q) private(phk,fphk) 
     do j=0,jm
     do i=0,im
       !
       do n=1,numq
         !
         do k=-hm,km+hm
-          phi(k)=q(i,j,k,n)
+          phk(k)=q(i,j,k,n)
         enddo
         !
-        call filter10ec(phi,km,hm,fph)
+        call filter10ec(phk,km,hm,fphk)
         !
         do k=0,jm
-          q(i,j,k,n)=fph(k)
+          q(i,j,k,n)=fphk(k)
         enddo
         !
       enddo
       !
     enddo
     enddo
-    deallocate(phi,fph)
+    !
+    !$acc end data
     !
     if(present(comptime)) then
       call cpu_time(tfinish)
@@ -1160,7 +1177,7 @@ module solver
     tke =0.d0
     enst=0.d0
     !
-    !$acc parallel loop reduction(+:tke,rhom,enst) private(var1)
+    !$acc parallel loop collapse(3) reduction(+:tke,rhom,enst) private(var1)
     do k=1,km
     do j=1,jm
     do i=1,im
@@ -1198,7 +1215,7 @@ module solver
   subroutine rk3(comptime)
     !
     use comvardef, only: im,jm,km,numq,num1d3,num2d3,q,qrhs,deltat,    &
-                         rho,vel,tmp,prs,nstep,ctime
+                         rho,vel,tmp,prs,qsave,nstep,ctime
     use dataoper,  only: q2fvar
     !
     real,intent(inout),optional :: comptime
@@ -1206,7 +1223,6 @@ module solver
     ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: rkstep,i,j,k,m
     !
     real :: tstart,tfinish
@@ -1229,8 +1245,6 @@ module solver
       rkcoe(2,3)=num2d3
       rkcoe(3,3)=num2d3
       !
-      allocate(qsave(0:im,0:jm,0:km,1:numq))
-      !
       firstcall=.false.
       !
     endif
@@ -1247,22 +1261,46 @@ module solver
         !
         if(mod(nstep,10)==0) call stacal
         !
+        !$acc data copyin(qrhs),copy(q)
+        !
+        !$acc parallel loop collapse(4) present(q,qsave)
         do m=1,numq
-          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+          qsave(i,j,k,m)=q(i,j,k,m)
         enddo
+        enddo
+        enddo
+        enddo
+        !
+        !$acc end data
         !
       endif
       !
+      !$acc data copyin(qrhs,qsave),copy(q)
+      !
+      !$acc parallel loop collapse(4) present(q,qsave,qrhs)
       do m=1,numq
+      do k=0,km
+      do j=0,jm
+      do i=0,im
         !
-        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+   &
-                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)    +   &
-                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
+        q(i,j,k,m)=rkcoe(1,rkstep)*qsave(i,j,k,m)+   &
+                   rkcoe(2,rkstep)*q(i,j,k,m)    +   &
+                   rkcoe(3,rkstep)*qrhs(i,j,k,m)*deltat
         !
       enddo
+      enddo
+      enddo
+      enddo
+      !
+      !$acc end data
       !
       call filterq(ctime(6))
       !
+      !$acc data copyin(q),copyout(rho,vel,prs,tmp)
+      !$acc parallel loop collapse(3) present(q,rho,vel,prs,tmp)
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -1273,6 +1311,7 @@ module solver
       enddo
       enddo
       enddo
+      !$acc end data
       !
     enddo
     !
@@ -1286,8 +1325,9 @@ module solver
   !
   subroutine mainloop
     !
-    use comvardef, only: time,nstep,deltat,ctime
+    use comvardef, only: time,nstep,deltat,ctime,rho,prs,tmp,q,qrhs,qsave,vel,dtmp,dvel
     !
+    !$acc data copy(qsave)
     do while(nstep<100)
       !
       call rk3(ctime(2))
@@ -1298,6 +1338,7 @@ module solver
       print*,nstep,time
       !
     enddo
+    !$acc end data
     !
   end subroutine mainloop
   !
