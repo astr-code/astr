@@ -261,7 +261,7 @@ module dataoper
       vel(i,j,k,1)= sin(x(i,j,k,1))*cos(x(i,j,k,2))*cos(x(i,j,k,3))
       vel(i,j,k,2)=-cos(x(i,j,k,1))*sin(x(i,j,k,2))*cos(x(i,j,k,3))
       vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf+1.d0/16.d0*(cos(x(i,j,k,1))+cos(x(i,j,k,2)))*(cos(x(i,j,k,3))+2.d0)
+      prs(i,j,k)  =pinf+1.d0/16.d0*(cos(2.d0*x(i,j,k,1))+cos(2.d0*x(i,j,k,2)))*(cos(2.d0*x(i,j,k,3))+2.d0)
       !
       tmp(i,j,k)  =thermal_scar(density=rho(i,j,k),pressure=prs(i,j,k))
       !
@@ -308,7 +308,7 @@ module numerics
     do i=0,dim
       vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))- &
                 0.15d0 *(vin(i+2)-vin(i-2))+ &
-               num1d60 *(vin(i+3)-vin(i-3))
+            1.d0/60.d0 *(vin(i+3)-vin(i-3))
     enddo
     !
   end subroutine diff6ec
@@ -547,17 +547,6 @@ module solver
     !
     call convection(ctime(4))
     !
-    !$acc parallel loop collapse(4) present(qrhs)
-    do m=1,numq
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      qrhs(i,j,k,m)=-qrhs(i,j,k,m)
-    enddo
-    enddo
-    enddo
-    enddo
-    !
     call diffusion(ctime(5))
     !
     if(present(comptime)) then
@@ -779,7 +768,7 @@ module solver
         !
         do i=0,im
           !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfi(i,n)/dx
+          qrhs(i,j,k,n)=qrhs(i,j,k,n)-dfi(i,n)/dx
           !
         enddo
         !
@@ -816,7 +805,7 @@ module solver
         !
         do j=0,jm
           !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfj(j,n)/dy
+          qrhs(i,j,k,n)=qrhs(i,j,k,n)-dfj(j,n)/dy
           !
         enddo
         !
@@ -853,7 +842,7 @@ module solver
         !
         do k=0,km
           !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfk(k,n)/dz
+          qrhs(i,j,k,n)=qrhs(i,j,k,n)-dfk(k,n)/dz
           !
         enddo
         !
@@ -1104,7 +1093,7 @@ module solver
         call filter10ec(phj,jm,hm,fphj)
         !
         do j=0,jm
-          q(i,j,k,n)=phj(j)
+          q(i,j,k,n)=fphj(j)
         enddo
         !
       enddo
@@ -1126,7 +1115,7 @@ module solver
         !
         call filter10ec(phk,km,hm,fphk)
         !
-        do k=0,jm
+        do k=0,km
           q(i,j,k,n)=fphk(k)
         enddo
         !
@@ -1258,7 +1247,6 @@ module solver
         !
         if(mod(nstep,10)==0) call stacal
         !
-        !
         !$acc parallel loop collapse(4) present(q,qsave)
         do m=1,numq
         do k=0,km
@@ -1286,6 +1274,8 @@ module solver
       enddo
       enddo
       enddo
+      !
+      call bchomovec(q)
       !
       call filterq(ctime(6))
       !
@@ -1317,9 +1307,8 @@ module solver
     use comvardef, only: qrhs,q,qsave,rho,vel,tmp,prs,dvel,dtmp,sigma,qflux
     !
     !$acc data copy(qrhs,q,qsave,rho,vel,tmp,prs,dvel,dtmp,sigma,qflux )
-
     !
-    do while(nstep<100)
+    do while(nstep<20001)
       !
       call rk3(ctime(2))
       !
