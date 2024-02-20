@@ -1228,7 +1228,7 @@ module solver
     !
     do rkstep=1,3
       !
-      !$acc parallel loop collapse(4) present(q)
+      !$acc parallel loop collapse(4) present(qrhs)
       do m=1,numq
       do k=0,km
       do j=0,jm
@@ -1308,7 +1308,7 @@ module solver
     !
     !$acc data copy(qrhs,q,qsave,rho,vel,tmp,prs,dvel,dtmp,sigma,qflux )
     !
-    do while(nstep<20001)
+    do while(nstep<101)
       !
       call rk3(ctime(2))
       !
