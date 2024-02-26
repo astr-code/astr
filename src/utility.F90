@@ -67,6 +67,8 @@ module utility
      end if
      write(6,'(A,F5.1,A)',advance='no')'] ',perc,'%'
      !
+     if(iteration==maximum) write(6,*)
+     !
   end subroutine progress_bar
   !+-------------------------------------------------------------------+
   !| The end of the subroutine progress_bar.                           |

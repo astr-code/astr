@@ -126,8 +126,8 @@ module readwrite
                         reynolds,mach,num_species,                     &
                         flowtype,ndims,lfilter,alfa_filter,            &
                         lfftk,kcutoff,ninit,rkscheme,                  &
-                        spg_imin,spg_imax,spg_jmin,spg_jmax,           &
-                        spg_kmin,spg_kmax,lchardecomp,recon_schem,     &
+                        spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,     &
+                        lchardecomp,recon_schem,                       &
                         lrestart,limmbou,solidfile,bfacmpld,           &
                         turbmode,schmidt,ibmode,gridfile,testmode
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -514,8 +514,8 @@ module readwrite
                         ref_den,reynolds,mach,                         &
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,kcutoff,              &
-                        ninit,rkscheme,spg_imin,spg_imax,spg_jmin,     &
-                        spg_jmax,spg_kmin,spg_kmax,lchardecomp,        &
+                        ninit,rkscheme,spg_i0,spg_im,spg_j0,spg_jm,    &
+                        spg_k0,spg_km,lchardecomp,                     &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
                         ltimrpt,testmode
@@ -629,7 +629,7 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)ninit
       read(fh,'(/)')
-      read(fh,*)spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
+      read(fh,*)spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
       read(fh,'(/)')
       read(fh,'(A)')gridfile
       if(limmbou) then
@@ -712,12 +712,12 @@ module readwrite
     call bcast(xslip)
     call bcast(ninit)
     !
-    call bcast(spg_imin)
-    call bcast(spg_imax)
-    call bcast(spg_jmin)
-    call bcast(spg_jmax)
-    call bcast(spg_kmin)
-    call bcast(spg_kmax)
+    call bcast(spg_i0)
+    call bcast(spg_im)
+    call bcast(spg_j0)
+    call bcast(spg_jm)
+    call bcast(spg_k0)
+    call bcast(spg_km)
     !
     call bcast(turbinf)
     call bcast(xrhjump)
@@ -1038,7 +1038,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*8)
+          open(fh(n),file=trim(filename),access='direct',recl=8*4)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1094,8 +1094,9 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        ! write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
-        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),prs(i,j,k),dvel(i,j,k,1,1),dvel(i,j,k,1,2)
+        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
+        !                        tmp(i,j,k),dvel(i,j,k,:,:)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
       enddo
@@ -1912,6 +1913,7 @@ module readwrite
     !
     !
     savfilenmae=outfilename
+    !
     nxtwsequ=nstep+feqwsequ
     !
     if(present(timerept) .and. timerept) then

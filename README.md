@@ -41,8 +41,11 @@ python scons/scripts/scons.py install
 you may need to make and test ASTR with chemstry with following cmake commands:
 <!-- export CANTERA_DIR=<the directory of centera to install> -->
 cmake -DCHEMISTRY=TRUE -DCANTERA_DIR=path_to_cantera path_to_the_source
+
 cmake --build ./   or make
+
 cmake --install ./ or make install
+
 ctest -L combustion
 
 

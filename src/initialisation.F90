@@ -146,6 +146,9 @@ module initialisation
     if(lio) print*,' ** flowfield initialised.'
     !
     call writeflfed
+    !
+    ! call mpistop
+    ! !
     ! stop
     !
   end subroutine flowinit
@@ -160,232 +163,205 @@ module initialisation
   !| -------------                                                     |
   !| 11-03-2021  | Created by J. Fang @ Warrington                     |
   !|             | (have not consider subdomain situation)             |
+  !| 22-02-2024  | Applied only for Cartesian mesh, include subdomain  |
   !+-------------------------------------------------------------------+
   subroutine spongelayerini
     !
-    use commvar, only : spg_imin,spg_imax,spg_jmin,spg_jmax,           &
-                        spg_kmin,spg_kmax,im,jm,km,ia,ja,ka,           &
-                        lisponge,ljsponge,lksponge
-    use commarray,only: lspg_imin,lspg_imax,lspg_jmin,lspg_jmax,       &
-                        lspg_kmin,lspg_kmax,x
-    use parallel,only : ig0,jg0,kg0
+    use commvar, only : is,ie,js,je,ks,ke,                               &
+                        lspg_i0,lspg_im,lspg_j0,lspg_jm,lspg_k0,lspg_km, &
+                        spg_i0,spg_im,spg_j0,spg_jm,                     &
+                        spg_k0,spg_km,im,jm,km,ia,ja,ka,                 &
+                        spg_i0_beg,spg_i0_end,spg_im_beg,spg_im_end,     &
+                        spg_j0_beg,spg_j0_end,spg_jm_beg,spg_jm_end,     &
+                        spg_k0_beg,spg_k0_end,spg_km_beg,spg_km_end 
+    !
+    use commarray,only: lenspg_i0,lenspg_im,lenspg_j0,lenspg_jm,       &
+                        lenspg_k0,lenspg_km,xspg_i0,xspg_im,xspg_j0,   &
+                        xspg_jm,xspg_k0,xspg_km,x
+    use parallel,only : ig0,jg0,kg0,bcast,psum,irk,jrk,krk,irkm,       &
+                        jrkm,mpi_igroup,mpi_jgroup,mpistop
     !
     ! local data
-    integer :: i,j,k
+    integer :: i,j,k,iglobal_spg_beg,iglobal_beg,iglobal_end,          &
+                     jglobal_spg_beg,jglobal_beg,jglobal_end,          &
+                     kglobal_spg_beg,kglobal_beg,kglobal_end
     !
-    if(spg_imin>0 .or. spg_imax>0) then
-      lisponge=.true.
-    else
-      lisponge=.false.
+    lspg_i0=.false.
+    lspg_im=.false.
+    lspg_j0=.false.
+    lspg_jm=.false.
+    lspg_k0=.false.
+    lspg_km=.false.
+    !
+    if(spg_i0>0) then
+      lspg_i0=.true.
     endif
     !
-    if(spg_jmin>0 .or. spg_jmax>0) then
-      ljsponge=.true.
-    else
-      ljsponge=.false.
+    if(spg_im>0) then
+      lspg_im=.true.
     endif
     !
-    if(spg_kmin>0 .or. spg_kmax>0) then
-      lksponge=.true.
-    else
-      lksponge=.false.
+    if(spg_j0>0) then
+      lspg_j0=.true.
+    endif
+    !
+    if(spg_jm>0) then
+      lspg_jm=.true.
+    endif
+    !
+    if(spg_k0>0) then
+      lspg_k0=.true.
+    endif
+    !
+    if(spg_km>0) then
+      lspg_km=.true.
     endif
     !
     if(mpirank==0) then
+      !
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                        *** sponge layer ***'
-      if(lisponge) then
-        write(*,'(22X,3(A,I4))')'i direction:   0 ~',spg_imin,         &
-                                        ' ....... ',ia-spg_imax,' ~ ',ia
+      if(lspg_i0 .or. lspg_im) then
+        write(*,'(22X,3(A,I4))')'i direction:   0 ~',spg_i0,         &
+                                        ' ....... ',ia-spg_im,' ~ ',ia
       endif
-      if(ljsponge) then
-        write(*,'(22X,3(A,I4))')'j direction:   0 ~',spg_jmin,         &
-                                        ' ....... ',ja-spg_jmax,' ~ ',ja
+      if(lspg_j0 .or. lspg_jm) then
+        write(*,'(22X,3(A,I4))')'j direction:   0 ~',spg_j0,         &
+                                        ' ....... ',ja-spg_jm,' ~ ',ja
       endif
-      if(lksponge) then
-        write(*,'(22X,3(A,I4))')'k direction:   0 ~',spg_kmin,         &
-                                        ' ....... ',ka-spg_kmax,' ~ ',ka
+      if(lspg_k0 .or. lspg_km) then
+        write(*,'(22X,3(A,I4))')'k direction:   0 ~',spg_k0,         &
+                                        ' ....... ',ka-spg_km,' ~ ',ka
       endif
       write(*,'(2X,62A)')('-',i=1,62)
+      !
     endif
     !
-    if(spg_imin>0) then
+    if(lspg_im) then
       !
-      if(spg_imin<ig0) then
-        spg_imin=0
-      elseif(spg_imin>ig0+im) then
-        spg_imin=im
+      iglobal_spg_beg=ia-spg_im
+      !
+      iglobal_beg=ig0
+      iglobal_end=ig0+im
+      !
+      if(iglobal_spg_beg<=iglobal_beg) then
+        ! the sponger layer is completely within the domain
+        spg_im_beg=0
+        spg_im_end=ie
+      elseif(iglobal_spg_beg>=iglobal_beg .and. iglobal_spg_beg<=iglobal_end) then
+        ! the sponger layer is partly within the domain
+        spg_im_beg=iglobal_spg_beg-iglobal_beg
+        spg_im_end=ie
+      elseif(iglobal_spg_beg>iglobal_end) then
+        ! the sponger layer is not within the domain
+        spg_im_beg=-1
+        spg_im_end=-1
       else
-        spg_imin=spg_imin-ig0
+        stop ' error 1: local domain define error @ spongelayerini'
       endif
       !
-    endif
-    !
-    allocate(lspg_imin(0:jm,0:km))
-    lspg_imin=0.d0
-    if(spg_imin>0) then
-      do k=0,km
-      do j=0,jm
+      ! calculate the length of the sponger layer
+      !
+      allocate( lenspg_im(0:jm,0:km),xspg_im(0:jm,0:km,1:3) )
+      !
+      xspg_im=0.d0
+      lenspg_im=0.d0
+      !
+      if(spg_im_beg>0) then
         !
-        do i=1,spg_imin
-          lspg_imin(j,k)=lspg_imin(j,k)+                               &
-                                  sqrt((x(i,j,k,1)-x(i-1,j,k,1))**2+   &
-                                       (x(i,j,k,2)-x(i-1,j,k,2))**2+   &
-                                       (x(i,j,k,3)-x(i-1,j,k,3))**2)
+        i=spg_im_beg
+        do k=0,km
+        do j=0,jm
+          xspg_im(j,k,1)=x(i,j,k,1)
+          xspg_im(j,k,2)=x(i,j,k,2)
+          xspg_im(j,k,3)=x(i,j,k,3)
+        enddo
         enddo
         !
-      enddo
-      enddo
-    endif
-    !
-    if(spg_imax>0) then
-      !
-      if(ia-spg_imax>ig0+im) then
-        spg_imax=0
-      elseif(ia-spg_imax<ig0) then
-        spg_imax=im
-      else
-        spg_imax=ig0+im-(ia-spg_imax)
       endif
       !
-    endif
-    !
-    allocate(lspg_imax(0:jm,0:km))
-    lspg_imax=0.d0
-    if(spg_imax>0) then
-      do k=0,km
-      do j=0,jm
+      xspg_im=psum(xspg_im,comm=mpi_igroup)
+      !
+      if(irk==irkm) then
         !
-        do i=im-spg_imax,im-1
-          lspg_imax(j,k)=lspg_imax(j,k)+                               &
-                                  sqrt((x(i+1,j,k,1)-x(i,j,k,1))**2+   &
-                                       (x(i+1,j,k,2)-x(i,j,k,2))**2+   &
-                                       (x(i+1,j,k,3)-x(i,j,k,3))**2)
+        i=im
+        do k=0,km
+        do j=0,jm
+          lenspg_im(j,k)= (x(i,j,k,1)-xspg_im(j,k,1))**2 + &
+                          (x(i,j,k,2)-xspg_im(j,k,2))**2 + &
+                          (x(i,j,k,3)-xspg_im(j,k,3))**2 
+        enddo
         enddo
         !
-      enddo
-      enddo
-    endif
-    !
-    if(spg_jmin>0) then
-      !
-      if(spg_jmin<jg0) then
-        spg_jmin=0
-      elseif(spg_jmin>jg0+jm) then
-        spg_jmin=jm
-      else
-        spg_jmin=spg_jmin-jg0
       endif
       !
-    endif
-    !
-    allocate(lspg_jmin(0:im,0:km))
-    lspg_jmin=0.d0
-    if(spg_jmin>0) then
-      do k=0,km
-      do i=0,im
-        !
-        do j=1,spg_jmin
-          lspg_jmin(i,k)=lspg_jmin(i,k)+                               &
-                                  sqrt((x(i,j,k,1)-x(i,j-1,k,1))**2+   &
-                                       (x(i,j,k,2)-x(i,j-1,k,2))**2+   &
-                                       (x(i,j,k,3)-x(i,j-1,k,3))**2)
-        enddo
-        !
-      enddo
-      enddo
+      lenspg_im=psum(lenspg_im,comm=mpi_igroup)
       !
     endif
     !
-    if(spg_jmax>0) then
+    if(lspg_jm) then
       !
-      if(ja-spg_jmax>jg0+jm) then
-        spg_jmax=0
-      elseif(ja-spg_jmax<jg0) then
-        spg_jmax=jm
+      jglobal_spg_beg=ja-spg_jm
+      !
+      jglobal_beg=jg0
+      jglobal_end=jg0+jm
+      !
+      if(jglobal_spg_beg<=jglobal_beg) then
+        ! the sponger layer is completely within the domain
+        spg_jm_beg=0
+        spg_jm_end=je
+      elseif(jglobal_spg_beg>=jglobal_beg .and. jglobal_spg_beg<=jglobal_end) then
+        ! the sponger layer is partly within the domain
+        spg_jm_beg=jglobal_spg_beg-jglobal_beg
+        spg_jm_end=je
+      elseif(jglobal_spg_beg>jglobal_end) then
+        ! the sponger layer is not within the domain
+        spg_jm_beg=-1
+        spg_jm_end=-1
       else
-        spg_jmax=jg0+jm-(ja-spg_jmax)
+        stop ' error 1: local domain define error @ spongelayerini'
       endif
       !
-    endif
-    !
-    allocate(lspg_jmax(0:im,0:km))
-    lspg_jmax=0.d0
-    if(spg_jmax>0) then
-      do k=0,km
-      do i=0,im
+      ! calculate the length of the sponger layer
+      !
+      allocate( lenspg_jm(0:im,0:km),xspg_jm(0:im,0:km,1:3) )
+      !
+      xspg_jm=0.d0
+      lenspg_jm=0.d0
+      !
+      if(spg_jm_beg>0) then
         !
-        do j=jm-spg_jmax,jm-1
-          lspg_jmax(i,k)=lspg_jmax(i,k)+                               &
-                                  sqrt((x(i,j+1,k,1)-x(i,j,k,1))**2+   &
-                                       (x(i,j+1,k,2)-x(i,j,k,2))**2+   &
-                                       (x(i,j+1,k,3)-x(i,j,k,3))**2)
+        j=spg_jm_beg
+        do k=0,km
+        do i=0,im
+          xspg_jm(i,k,1)=x(i,j,k,1)
+          xspg_jm(i,k,2)=x(i,j,k,2)
+          xspg_jm(i,k,3)=x(i,j,k,3)
+        enddo
         enddo
         !
-      enddo
-      enddo
-    endif
-    !
-    if(spg_kmin>0) then
-      !
-      if(spg_kmin<kg0) then
-        spg_kmin=0
-      elseif(spg_kmin>kg0+km) then
-        spg_kmin=km
-      else
-        spg_kmin=spg_kmin-kg0
       endif
       !
-    endif
-    !
-    allocate(lspg_kmin(0:im,0:jm))
-    lspg_kmin=0.d0
-    if(spg_kmin>0) then
-      do j=0,jm
-      do i=0,im
+      xspg_jm=psum(xspg_jm,comm=mpi_jgroup)
+      !
+      if(jrk==jrkm) then
         !
-        do k=1,spg_kmin
-          lspg_kmin(i,j)=lspg_kmin(i,j)+                               &
-                                  sqrt((x(i,j,k,1)-x(i,j,k-1,1))**2+   &
-                                       (x(i,j,k,2)-x(i,j,k-1,2))**2+   &
-                                       (x(i,j,k,3)-x(i,j,k-1,3))**2)
+        j=jm
+        do k=0,km
+        do i=0,im
+          lenspg_jm(i,k)= (x(i,j,k,1)-xspg_jm(i,k,1))**2 + &
+                          (x(i,j,k,2)-xspg_jm(i,k,2))**2 + &
+                          (x(i,j,k,3)-xspg_jm(i,k,3))**2 
+        enddo
         enddo
         !
-      enddo
-      enddo
-    endif
-    !
-    if(spg_kmax>0) then
-      !
-      if(ka-spg_kmax>kg0+km) then
-        spg_kmax=0
-      elseif(ka-spg_kmax<kg0) then
-        spg_kmax=km
-      else
-        spg_kmax=kg0+km-(ka-spg_kmax)
       endif
       !
+      lenspg_jm=psum(lenspg_jm,comm=mpi_jgroup)
+      !
     endif
     !
-    allocate(lspg_kmax(0:im,0:jm))
-    lspg_kmax=0.d0
-    if(spg_kmax>0) then
-      do j=0,jm
-      do i=0,im
-        !
-        do k=1,spg_kmax
-          lspg_kmax(i,j)=lspg_kmax(i,j)+                               &
-                                  sqrt((x(i,j,k,1)-x(i,j,k-1,1))**2+   &
-                                       (x(i,j,k,2)-x(i,j,k-1,2))**2+   &
-                                       (x(i,j,k,3)-x(i,j,k-1,3))**2)
-        enddo
-        !
-      enddo
-      enddo
-    endif
-    !
-    ! print*,mpirank,'|',lspg_imin(0,0),lspg_imax(0,0),'|',            &
-    !                    lspg_jmin(0,0),lspg_jmax(0,0)
+    ! print*,mpirank,'|',xspg_jm(0,0,:),lenspg_jm(0,0)
     ! !
     ! call mpistop
     !

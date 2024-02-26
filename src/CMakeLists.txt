@@ -3,7 +3,7 @@ message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
 # message(STATUS "the local path: ${PROJECT_BINARY_DIR}")
 
-set(UDF_SRC ${PROJECT_BINARY_DIR}/user_define_module)
+set(UDF_SRC ${CMAKE_SOURCE_DIR}/user_define_module)
 file(GLOB UDF_SOURCE_FILES ${UDF_SRC}/*.F90)
 
 message(STATUS "UDF path: ${UDF_SRC}")

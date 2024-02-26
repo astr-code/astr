@@ -140,8 +140,11 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|               force | body force.                                 |
   !+---------------------+---------------------------------------------+
-  logical :: lisponge,ljsponge,lksponge
-  integer :: spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax
+  logical :: lspg_i0,lspg_im,lspg_j0,lspg_jm,lspg_k0,lspg_km
+  integer :: spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
+  integer :: spg_i0_beg,spg_i0_end,spg_im_beg,spg_im_end, &
+             spg_j0_beg,spg_j0_end,spg_jm_beg,spg_jm_end, &
+             spg_k0_beg,spg_k0_end,spg_km_beg,spg_km_end
   !+---------------------+---------------------------------------------+
   !|   spg_imin,spg_imax |                                             |
   !|   spg_jmin,spg_jmax | number of nodes in the sponge layer near    |

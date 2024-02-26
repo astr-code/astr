@@ -103,7 +103,6 @@ else (MPI_FOUND)
 endif (MPI_FOUND)
 
 set(HDF5_PREFER_PARALLEL TRUE)
-# set(HDF5_DIR "/home/fangjian/opt/hdf5")
 find_package(HDF5 REQUIRED COMPONENTS Fortran HL)
 
 message(STATUS "HDF5_Fortran_COMPILER found: ${HDF5_Fortran_COMPILER_EXECUTABLE}")

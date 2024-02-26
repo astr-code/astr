@@ -18,9 +18,12 @@ module commarray
   real(8),allocatable,dimension(:,:,:) :: bnorm_i0,bnorm_im,bnorm_j0,  &
                                           bnorm_jm,bnorm_k0,bnorm_km
   real(8),allocatable,dimension(:,:,:) :: dis2wall
-  real(8),allocatable,dimension(:,:) :: lspg_imin,lspg_imax,           &
-                                        lspg_jmin,lspg_jmax,           &
-                                        lspg_kmin,lspg_kmax
+  real(8),allocatable,dimension(:,:) :: lenspg_i0,lenspg_im,         &
+                                        lenspg_j0,lenspg_jm,         &
+                                        lenspg_k0,lenspg_km
+  real(8),allocatable,dimension(:,:,:) :: xspg_i0,xspg_im,       &
+                                          xspg_j0,xspg_jm,       &
+                                          xspg_k0,xspg_km
   integer,allocatable,dimension(:,:,:) :: nodestat
   logical,allocatable,dimension(:,:,:) :: lsolid,lshock,crinod
   type(nodcel),allocatable,dimension(:,:,:) :: cell
@@ -39,7 +42,8 @@ module commarray
   !|                 tmp | temperature.                                |
   !|                 vel | velocity.                                   |
   !|                 spc | species.                                    |
-  !|              lspg_* | length of sponge layer                      |
+  !|            lenspg_* | length of sponge layer                      |
+  !|              xspg_* | starting x,y,z of sponge layer              |
   !|            nodestat | node status: fluid or solid                 |
   !|             bnorm_* | the vector of boundary normal direction,    |
   !|                     | towards the inside of the domain            |

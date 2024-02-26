@@ -463,7 +463,7 @@ module statistic
     type(tsta) :: stas
     !
     integer :: i,j,k,ns
-    real(8) :: s11,s12,s13,s22,s23,s33,div,miu,dissa,rhoavg
+    real(8) :: s11,s12,s13,s22,s23,s33,div,miu,dissa
     real(8) :: rsamples,miudrho,dudx2,csavg,v2,cs,ufluc
     !
     logical :: fex
@@ -490,7 +490,6 @@ module statistic
     dudx2=0.d0
     csavg=0.d0
     dissa=0.d0
-    rhoavg=0.d0
     do k=1,km
     do j=1,jm
     do i=1,im
@@ -520,8 +519,6 @@ module statistic
       !
       miudrho=miudrho+miu/rho(i,j,k)
       !
-      rhoavg=rhoavg+rho(i,j,k)
-      !
       csavg=csavg+cs
       !
       stas%machrms=stas%machrms+v2/(cs*cs)
@@ -536,7 +533,6 @@ module statistic
     stas%urms  = sqrt(psum(stas%urms)/rsamples)
     dudx2      = num1d3*psum(dudx2)/rsamples
     miudrho    = psum(miudrho)/rsamples
-    rhoavg     = psum(rhoavg)/rsamples
     csavg      = psum(csavg)/rsamples
     dissa      = psum(dissa)/rsamples
     !
@@ -549,13 +545,12 @@ module statistic
     stas%macht         = stas%urms/csavg
     stas%taylorlength  = ufluc/sqrt(dudx2)
     stas%retaylor      = ufluc*stas%taylorlength/miudrho
-    stas%kolmoglength  = sqrt(sqrt(miudrho**3/dissa/rhoavg))
+    stas%kolmoglength  = sqrt(sqrt(miudrho**3/dissa))
     ! stas%kolmogvelocity= sqrt(sqrt(dissipation*miudrho))
     ! stas%kolmogtime    = sqrt(miudrho/dissipation)
     !
-    if(lio) call listwrite(hand_fs,stas%urms,stas%taylorlength,          &
-                           stas%kolmoglength,stas%Retaylor,stas%machrms, &
-                           stas%macht,stas%rhoe)
+    if(lio) call listwrite(hand_fs,stas%urms,stas%taylorlength,       &
+                stas%kolmoglength,stas%Retaylor,stas%machrms,stas%macht,stas%rhoe)
     !
   end subroutine turbstats
   !+-------------------------------------------------------------------+

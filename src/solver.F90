@@ -94,6 +94,8 @@ module solver
     spcinf(spcindex('N2'))=1.d0-sum(spcinf(:))
 
     roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+
+    ref_tim=1.d0
 #else
     !
     gamma=1.4d0
@@ -125,9 +127,9 @@ module solver
       !
     else 
       !
-      rgas=287.1d0
+      ! rgas=287.1d0
       !
-      ! rgas=376.177d0
+      rgas=376.177d0
       !
       cp  =gamma/(gamma-1.d0)*rgas
       cv  = rgas/(gamma-1.d0)

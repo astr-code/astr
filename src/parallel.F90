@@ -59,6 +59,7 @@ module parallel
     module procedure psum_r8
     module procedure psum_r8_ary
     module procedure psum_r8_ary_2d
+    module procedure psum_r8_ary_3d
   end interface
   !
   interface pmax
@@ -125,9 +126,10 @@ module parallel
   integer :: mpi_imin,mpi_imax,mpi_jmin,mpi_jmax
   integer :: irk_islice,jrk_jslice,krk_kslice
   integer :: mpi_islice,mpi_jslice,mpi_kslice
-  integer :: mpi_ibcom
+  integer :: mpi_ibcom,cartcomm
   integer,allocatable :: mpi_ikgroup(:)
-  integer,allocatable :: mpi_kgroup(:,:)
+  integer :: mpi_igroup,mpi_jgroup,mpi_kgroup
+  integer :: mpi_group_test
   character(mpi_max_processor_name) :: processor_name
   !
   contains
@@ -547,7 +549,7 @@ module parallel
   !+-------------------------------------------------------------------+
   subroutine subcomm(nrank,irkg,jrkg,krkg,img,jmg,kmg,i0g,j0g,k0g)
     !
-    use commvar,   only : islice,jslice,kslice
+    use commvar,   only : islice,jslice,kslice,ndims
     !
     ! arguments
     integer,intent(in) :: nrank(0:irkm,0:jrkm,0:krkm),                 &
@@ -559,9 +561,11 @@ module parallel
     !
     ! local data
     integer :: group_mpi,mpi_group_world
-    integer :: ni,nj,nk,n,nrk
+    integer :: ni,nj,nk,n,nrk,ntest
     integer :: newsize,ierr
-    integer,allocatable :: rank_use(:)
+    integer :: dim_size(2)
+    logical :: periods(2),reorder
+    integer,allocatable :: rank_use(:),group_use_2d(:,:)
     !
     allocate(rank_use(jsize*ksize))
     rank_use=-1
@@ -786,8 +790,69 @@ module parallel
     deallocate(rank_use)
     ! end of set i-k group
     !
+    ! create i group from comm in j and k directions
+    allocate(rank_use(isize),group_use_2d(0:jsize-1,0:ksize-1))
+     
+    do nk=0,ksize-1
+    do nj=0,jsize-1
+      !
+      rank_use=-1
+      n=0
+      do ni=0,isize-1
+        n=n+1
+        rank_use(n)=nrank(ni,nj,nk)
+        !
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,group_use_2d(nj,nk),ierr)
+      !
+    enddo
+    enddo
+    !
+    mpi_igroup=group_use_2d(jrk,krk)
+    !
+    ! ntest=mpirank
+    ! !
+    ! ntest=psum(var=ntest,comm=mpi_igroup)
+    ! !
+    ! print*,mpirank,'|',ntest
+    ! print*,' new communicator: mpi_igroup:',mpi_group_test,'-',mpirank,jrk,krk
+    !
+    deallocate(rank_use,group_use_2d)
+    !
+    ! create j group from comm in i and k directions
+    allocate(rank_use(jsize),group_use_2d(0:isize-1,0:ksize-1))
+     
+    do nk=0,ksize-1
+    do ni=0,isize-1
+      !
+      rank_use=-1
+      n=0
+      do nj=0,jsize-1
+        n=n+1
+        rank_use(n)=nrank(ni,nj,nk)
+        !
+      end do
+      !
+      call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+      call mpi_comm_create(mpi_comm_world,group_mpi,group_use_2d(ni,nk),ierr)
+      !
+    enddo
+    enddo
+    !
+    mpi_jgroup=group_use_2d(irk,krk)
+    !
+    ! ntest=mpirank
+    ! !
+    ! ntest=psum(var=ntest,comm=mpi_jgroup)
+    ! !
+    ! print*,mpirank,'|',ntest
+    !
+    deallocate(rank_use,group_use_2d)
+    !
     ! create k group from comm in i and k directions
-    allocate(rank_use(ksize),mpi_kgroup(0:isize-1,0:jsize-1))
+    allocate(rank_use(ksize),group_use_2d(0:isize-1,0:jsize-1))
     !
     do nj=0,jsize-1
     do ni=0,isize-1
@@ -800,18 +865,14 @@ module parallel
       end do
       !
       call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
-      call mpi_comm_create(mpi_comm_world,group_mpi,mpi_kgroup(ni,nj),ierr)
-      if(jrk==nj .and. irk==ni) then
-        call mpi_comm_size(mpi_kgroup(ni,nj),newsize,ierr)
-        ! if(irk==0 .and. krk==0) then
-        !   print*,' ** new communicator: mpi_kgroup  ... created, size: ',newsize
-        ! endif
-      endif
+      call mpi_comm_create(mpi_comm_world,group_mpi,group_use_2d(ni,nj),ierr)
       !
     enddo
     enddo
     !
-    deallocate(rank_use)
+    mpi_kgroup=group_use_2d(irk,jrk)
+    !
+    deallocate(rank_use,group_use_2d)
     ! end of set k group
     !
     if(lio) print*,' ** sub-communicators created'
@@ -2386,14 +2447,21 @@ module parallel
     !
   end function psum_r8_ary
   !
-  function psum_r8_ary_2d(var) result(varsum)
+  function psum_r8_ary_2d(var,comm) result(varsum)
     !
     ! arguments
     real(8),intent(in) :: var(:,:)
+    integer,intent(in),optional :: comm
     real(8),allocatable :: varsum(:,:)
     !
     ! local data
-    integer :: ierr,nsize1,nsize2
+    integer :: ierr,nsize1,nsize2,comm_use
+    !
+    if(present(comm)) then
+      comm_use=comm
+    else
+      comm_use=mpi_comm_world
+    endif
     !
     nsize1=size(var,1)
     nsize2=size(var,2)
@@ -2401,11 +2469,40 @@ module parallel
     allocate(varsum(nsize1,nsize2))
     !
     call mpi_allreduce(var,varsum,nsize1*nsize2,mpi_real8,mpi_sum,     &
-                                                    mpi_comm_world,ierr)
+                                                          comm_use,ierr)
     !
     return
     !
   end function psum_r8_ary_2d
+  !
+  function psum_r8_ary_3d(var,comm) result(varsum)
+    !
+    ! arguments
+    real(8),intent(in) :: var(:,:,:)
+    integer,intent(in),optional :: comm
+    real(8),allocatable :: varsum(:,:,:)
+    !
+    ! local data
+    integer :: ierr,nsize1,nsize2,nsize3,comm_use
+    !
+    if(present(comm)) then
+      comm_use=comm
+    else
+      comm_use=mpi_comm_world
+    endif
+    !
+    nsize1=size(var,1)
+    nsize2=size(var,2)
+    nsize3=size(var,3)
+    !
+    allocate(varsum(nsize1,nsize2,nsize3))
+    !
+    call mpi_allreduce(var,varsum,nsize1*nsize2*nsize3,mpi_real8,     &
+                                                 mpi_sum,comm_use,ierr)
+    !
+    return
+    !
+  end function psum_r8_ary_3d
   !+-------------------------------------------------------------------+
   !| The end of the subroutine psum.                                   |
   !+-------------------------------------------------------------------+
