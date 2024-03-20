@@ -28,6 +28,7 @@ module pp
     use readwrite,       only : readinput
     use gridgeneration,  only : gridgen
     use solver,          only : refcal
+    use udf_postprocess
     !
     ! local data
     character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
@@ -87,6 +88,11 @@ module pp
         !
       call flamegen(trim(flowfieldfile),trim(viewmode),trim(inputfile))
         !
+    elseif(trim(cmd)=='udf') then
+        !
+        call readkeyboad(inputfile)
+        !
+        call flame2d_pp(trim(inputfile))
     else
       stop ' !! pp command not defined. @ ppentrance'
     endif

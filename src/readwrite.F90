@@ -525,10 +525,10 @@ module readwrite
     !
 #ifdef COMB
     use thermchem,only: chemrep,chemread,thermdyn
-    logical :: lfex
 #endif
     !
     ! local data
+    logical :: lfex
     character(len=64) :: inputfile
     character(len=5) :: char
     integer :: n,fh,i
