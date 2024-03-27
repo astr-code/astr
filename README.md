@@ -7,7 +7,6 @@ ASTR code is a high-order finite-difference flow solver for compressible turbule
 Required dependencies: Fortran 90, MPI, HDF5
 
 ## Download the astr code:
-#git clone git@gitlab.com:astr-code/astr.git
 
 git clone git@github.com:astr-code/astr.git
 
@@ -25,8 +24,8 @@ mkdir test_case
 sh path_to_the_source/script/astr.case.creater #create a new case
 
 cmake path_to_the_source
-cmake --build ./   or make
-cmake --install ./ or make install
+cmake --build 
+cmake --install 
 ctest -L nondim
 
 The code will be installed in test_case and excutable can be found at test_case/bin/astr
@@ -39,12 +38,12 @@ python scons/scripts/scons.py test
 python scons/scripts/scons.py install
 
 you may need to make and test ASTR with chemstry with following cmake commands:
-<!-- export CANTERA_DIR=<the directory of centera to install> -->
+
 cmake -DCHEMISTRY=TRUE -DCANTERA_DIR=path_to_cantera path_to_the_source
 
-cmake --build ./   or make
+cmake --build 
 
-cmake --install ./ or make install
+cmake --install 
 
 ctest -L combustion
 
