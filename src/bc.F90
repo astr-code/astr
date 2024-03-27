@@ -4702,6 +4702,38 @@ module bc
     !
     gmachmax2=0.d0
     !
+    if(ndir==1 .and. irk==0) then
+      i=0
+      do k=0,km
+      do j=0,jm
+        !
+        css=sos(tmp(i,j,k),spc(i,j,k,:))
+        !
+        var1=1.d0/( dxi(i,j,k,1,1)**2+dxi(i,j,k,1,2)**2+               &
+                    dxi(i,j,k,1,3)**2 )
+        var2=vel(i,j,k,1)*dxi(i,j,k,1,1)+vel(i,j,k,2)*dxi(i,j,k,1,2)+  &
+             vel(i,j,k,3)*dxi(i,j,k,1,3)
+        gmachmax2=max(gmachmax2,var2*var2*var1/css/css)
+        !
+      enddo
+      enddo
+    endif
+    gmachmax2=pmax(gmachmax2)
+    !
+    if(ndir==1 .and. irk==0) then
+      !
+      i=0
+      !
+
+      !
+    endif
+    !
+    !+------------------------+
+    ! face 2
+    !+------------------------+
+
+    gmachmax2=0.d0
+    !
     if(ndir==2 .and. irk==irkm) then
       i=im
       do k=0,km

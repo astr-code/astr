@@ -22,7 +22,7 @@ module gridgeneration
   !+-------------------------------------------------------------------+
   subroutine gridgen
     !
-    use parallel, only : mpirank
+    use parallel, only : mpirank,mpistop
     use commvar,  only : flowtype,lreadgrid,nondimen,gridfile,ref_len
     use readwrite,only : readgrid,writegrid,xdmfwriter
     use userdefine,only: udf_grid
@@ -30,12 +30,14 @@ module gridgeneration
     if(lreadgrid) then
       call readgrid(trim(gridfile))
     else
-      if(flowtype(1:3)=='tgv') then
+      if(trim(flowtype)=='tgv') then
         call gridcube(ref_len*2.d0*pi,ref_len*2.d0*pi,ref_len*2.d0*pi)
       elseif(trim(flowtype)=='jet') then
         call gridjet
       elseif(trim(flowtype)=='hit') then
         call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
+      elseif(trim(flowtype)=='tgvflame') then
+        call gridcube(2.d0*pi*1.d-3,2.d0*pi*1.d-3,2.d0*pi*1.d-3)
       elseif(trim(flowtype)=='2dvort') then
         call gridcube(20.d0,10.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then
@@ -48,7 +50,7 @@ module gridgeneration
         call grichan(2.d0*pi*ref_len,2.d0*ref_len,pi*ref_len)
       elseif(trim(flowtype)=='0dreactor') then
         call gridhitflame(mode='cuboid')
-      elseif(trim(flowtype)=='1dflame') then
+      elseif(trim(flowtype)=='onedflame') then
         call gridcube(1.d-2,1.d-3,0.d0)
       elseif(trim(flowtype)=='h2supersonic') then
         call gridsupersonicjet
@@ -255,7 +257,7 @@ module gridgeneration
     enddo
     enddo
     !
-    if(lio) print*,' ** cubic grid generated'
+    if(lio) print*,' ** cubic grid generated',lx,ly,lz
     !
   end subroutine gridcube
   !+-------------------------------------------------------------------+

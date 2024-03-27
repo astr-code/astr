@@ -14,7 +14,7 @@ FCFLAGS= -O3 -fbounds-check -fallow-argument-mismatch
 
 # OPTIONS1 = -fcheck=all
 OPTIONS2 = -J $(OBJDIR)
-OPTIONS3 = -DHDF5s
+OPTIONS3 = -DHDF5
 # OPTIONS4 = -DCOMB -I$(CTRDIR)/include/cantera 
 # OMP = -fopenacc
 

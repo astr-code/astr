@@ -3,7 +3,7 @@
 ########################################################################
 
 # flowtype                                              : The type of flow problem
-hitflame
+onedflame
 
 # im,jm,km                                              : The size of grid.
 768,0,0

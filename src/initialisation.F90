@@ -103,7 +103,7 @@ module initialisation
           call wtini
         case('0dreactor')
           call reactorini
-        case('1dflame')
+        case('onedflame')
           call onedflameini
         case('h2supersonic')
           call h2supersonicini
