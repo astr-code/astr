@@ -30,6 +30,9 @@ module commarray
   !
   real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12,ssf
   real(8),allocatable,dimension(:,:,:,:) :: dtke,domg
+  real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux
+  real(8),allocatable,dimension(:,:,:,:,:) :: yflux
+  real(8),allocatable,dimension(:,:,:,:) :: mijk,rij
   !
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
@@ -110,6 +113,10 @@ module commarray
     !
     allocate(crinod(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating crinod'
+    !
+    allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
+              qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    sigma = 0.0d0 ; qflux = 0.0d0
     !
   end subroutine allocommarray
   !+-------------------------------------------------------------------+

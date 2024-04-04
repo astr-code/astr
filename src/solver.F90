@@ -2350,99 +2350,46 @@ module solver
   ! End of the subroutine ConvRsdCal6.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! This subroutine is used to calculate the diffusion term with 6-order
-  ! Compact Central scheme.
-  !   sixth-order Compact Central scheme.
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! Writen by Fang Jian, 2009-06-09.
-  ! Add scalar transport equation by Fang Jian, 2022-01-12.
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine diffrsdcal6(timerept)
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to return stress tensor and heat flux vector   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 20-10-2022  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
+  !+-------------------------------------------------------------------+
+  subroutine stress_heatflux
     !
-    use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
-                          conschm,ndims,num_species,num_modequ,        &
-                          reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
-                          turbmode,nondimen,schmidt,nstep,deltat,      &
-                          cp,flowtype
+    use commvar,   only : im,jm,km,nondimen,reynolds,prandtl,const5,   &
+                          num_species,schmidt,cp
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
-                          rho,vor,omg,tke,miut,dtke,domg,res12
-    use commfunc,  only : ddfc
-    use comsolver, only : alfa_dif,dci,dcj,dck
+                          rho,vor,omg,tke,miut,dtke,domg,res12,sigma,  &
+                          qflux,yflux
     use fludyna,   only : miucal
-    use models,    only : komega,src_komega
-    use tecio
-    use parallel,  only : yflux_sendrecv
+    !
 #ifdef COMB
     use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
 #endif
     !
-    ! arguments
-    logical,intent(in),optional :: timerept
-    !
-    ! local data
-    integer :: i,j,k,n,ncolm,jspc,idir
-    real(8),allocatable :: df(:,:),ff(:,:)
-    real(8),allocatable,dimension(:,:,:,:),  save :: sigma,qflux,dkflux,doflux
-    real(8),allocatable,dimension(:,:,:,:,:),save :: yflux
-    real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
+    ! local variables
+    integer :: i,j,k,jspc,idir
+    real(8) :: mw,miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
-    real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
-    real(8) :: detk
+    real(8) :: tau11,tau12,tau13,tau22,tau23,tau33,detk,kama,cpe
     real(8),allocatable :: dispec(:,:)
-    real(8) :: corrdiff,hispec(num_species),xi(num_species),cpe,kama, &
-               gradyi(num_species),sum1,sum2,mw
-    real(8),allocatable :: dfu(:)
+    real(8) ::   dfu(num_species),gradyi(num_species),                &
+              hispec(num_species),    xi(num_species)
+    !
     logical,save :: firstcall=.true.
-    !
-    real(8) :: time_beg
-    real(8),save :: subtime=0.d0
-    !
-    if(present(timerept) .and. timerept) time_beg=ptime() 
-    !
-    if(firstcall) then
-      allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
-                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
-    endif
     !
     sigma =0.d0
     qflux =0.d0
-    !
-    if(num_species>0) then
-      !
-      if(firstcall) then
-        allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
-      endif
-      !
-#ifndef  COMB
-      allocate(dfu(1:num_species))
-#endif
-      yflux=0.d0
-      !
-    endif
-    !
-    if(trim(turbmode)=='k-omega') then
-      !
-      if(firstcall) then
-        allocate( dkflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),             &
-                  doflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
-      endif
-      !
-      dkflux=0.d0
-      doflux=0.d0
-      !
-    endif
-    !
-    if(firstcall) firstcall=.false.
-    !
-    if(trim(turbmode)=='k-omega') call src_komega
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       !
 #ifdef COMB
-
+      !
      call enthpy(tmp(i,j,k),hispec(:))
      call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
      mw=sum(wmolar(:)*xi(:))
@@ -2487,69 +2434,30 @@ module solver
       tau23=0.d0
       tau33=0.d0
       !
-      if(trim(turbmode)=='k-omega') then
-        !
-        miu2=2.d0*(miu+miut(i,j,k))
-        !
-        hcc=(miu/prandtl+miut(i,j,k)/komega%prt)/const5
-        !
-        detk=num2d3*rho(i,j,k)*tke(i,j,k)
-        !
-        miu3=miu+komega%sigma_k(i,j,k)    *miut(i,j,k)
-        miu4=miu+komega%sigma_omega(i,j,k)*miut(i,j,k)
-        !
-        dkflux(i,j,k,:)=miu3*dtke(i,j,k,:)
-        doflux(i,j,k,:)=miu4*domg(i,j,k,:)
-      elseif(trim(turbmode)=='udf1') then
-        !
-        ! miu2=2.d0*(miu+miut(i,j,k))
-        ! hcc=(miu/prandtl+miut(i,j,k)/0.9d0)/const5
-        !
-        miu2=2.d0*miu
-        hcc=(miu/prandtl)/const5
-        !
-        tau11=0.d0
-        tau12=-res12(i,j,k)*rho(i,j,k)
-        tau13=0.d0
-        tau22=0.d0
-        tau23=0.d0
-        tau33=0.d0
-        !
-        detk=0.d0
-        !
-      elseif(trim(turbmode)=='none') then
-        miu2=2.d0*miu
-        !
+      miu2=2.d0*miu
+      !
 #ifdef COMB
-        hcc=kama
+      hcc=kama
 #else
-        if(nondimen) then 
-          hcc=(miu/prandtl)/const5
-        else
-          hcc=cp*miu/prandtl
-        endif 
+      if(nondimen) then 
+        hcc=(miu/prandtl)/const5
+      else
+        hcc=cp*miu/prandtl
+      endif 
 #endif
-        !
-        detk=0.d0
-        !
-      endif
       !
-      sigma(i,j,k,1)=miu2*(s11-skk)-detk + tau11 !s11   
-      sigma(i,j,k,2)=miu2* s12           + tau12 !s12  
-      sigma(i,j,k,3)=miu2* s13           + tau13 !s13   
-      sigma(i,j,k,4)=miu2*(s22-skk)-detk + tau22 !s22   
-      sigma(i,j,k,5)=miu2* s23           + tau23 !s23  
-      sigma(i,j,k,6)=miu2*(s33-skk)-detk + tau33 !s33  
+      detk=0.d0
       !
-      qflux(i,j,k,1)=hcc*dtmp(i,j,k,1)+sigma(i,j,k,1)*vel(i,j,k,1) +   &
-                                       sigma(i,j,k,2)*vel(i,j,k,2) +   &
-                                       sigma(i,j,k,3)*vel(i,j,k,3)
-      qflux(i,j,k,2)=hcc*dtmp(i,j,k,2)+sigma(i,j,k,2)*vel(i,j,k,1) +   &
-                                       sigma(i,j,k,4)*vel(i,j,k,2) +   &
-                                       sigma(i,j,k,5)*vel(i,j,k,3)
-      qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
-                                       sigma(i,j,k,5)*vel(i,j,k,2) +   &
-                                       sigma(i,j,k,6)*vel(i,j,k,3)
+      sigma(i,j,k,1)=-miu2*(s11-skk)-detk + tau11 !s11   
+      sigma(i,j,k,2)=-miu2* s12           + tau12 !s12  
+      sigma(i,j,k,3)=-miu2* s13           + tau13 !s13   
+      sigma(i,j,k,4)=-miu2*(s22-skk)-detk + tau22 !s22   
+      sigma(i,j,k,5)=-miu2* s23           + tau23 !s23  
+      sigma(i,j,k,6)=-miu2*(s33-skk)-detk + tau33 !s33  
+      !
+      qflux(i,j,k,1)=-hcc*dtmp(i,j,k,1)
+      qflux(i,j,k,2)=-hcc*dtmp(i,j,k,2)
+      qflux(i,j,k,3)=-hcc*dtmp(i,j,k,3)
       !                                      
       if(num_species>0) then
         !
@@ -2612,37 +2520,91 @@ module solver
     !
     call dataswap(qflux,timerept=ltimrpt)
     !
+  end subroutine stress_heatflux
+  !+-------------------------------------------------------------------+
+  !| This end of the subroutine stress_heatflux.                       |
+  !+-------------------------------------------------------------------+
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the diffusion term with 6-order
+  ! Compact Central scheme.
+  !   sixth-order Compact Central scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2009-06-09.
+  ! Add scalar transport equation by Fang Jian, 2022-01-12.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine diffrsdcal6(timerept)
+    !
+    use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm, &
+                          ndims,num_species,is,ie,js,je,ks,ke,     &
+                          nstep,deltat
+    use commarray, only : vel,dxi,jacob,qrhs,yflux,sigma,qflux
+    use commfunc,  only : ddfc
+    use comsolver, only : alfa_dif,dci,dcj,dck
+    use tecio
+    !
+    ! arguments
+    logical,intent(in),optional :: timerept
+    !
+    ! local data
+    integer :: i,j,k,n,ncolm,jspc,idir
+    real(8),allocatable :: df(:,:),ff(:,:),gg(:,:)
+    logical,save :: firstcall=.true.
+    !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
+    !
     if(num_species>0) then
-      call dataswap(yflux,timerept=ltimrpt)
-      ! call yflux_sendrecv(yflux,timerept=ltimrpt)
+      !
+      if(firstcall) then
+        allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
+      endif
+      !
+      yflux=0.d0
+      !
     endif
     !
-    if(trim(turbmode)=='k-omega') then
-      call dataswap(dkflux,timerept=ltimrpt)
-      !
-      call dataswap(doflux,timerept=ltimrpt)
-    endif
+    if(firstcall) firstcall=.false.
+    !
+    ! if(num_species>0) then
+    !   call species_flux
+    ! endif
+    !
+    call stress_heatflux
     !
     ! Calculating along i direction.
     !
-    ncolm=5+num_species+num_modequ
+    ncolm=5+num_species
     !
     allocate(ff(-hm:im+hm,2:ncolm),df(0:im,2:ncolm))
+    allocate(gg(-hm:im+hm,1:3))
     do k=0,km
     do j=0,jm
       !
-      ff(:,2)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                        &
-                sigma(:,j,k,2)*dxi(:,j,k,1,2) +                        &
+      gg(:,1)=qflux(:,j,k,1)+sigma(:,j,k,1)*vel(:,j,k,1) +   &
+                             sigma(:,j,k,2)*vel(:,j,k,2) +   &
+                             sigma(:,j,k,3)*vel(:,j,k,3)
+      gg(:,2)=qflux(:,j,k,2)+sigma(:,j,k,2)*vel(:,j,k,1) +   &
+                             sigma(:,j,k,4)*vel(:,j,k,2) +   &
+                             sigma(:,j,k,5)*vel(:,j,k,3)
+      gg(:,3)=qflux(:,j,k,3)+sigma(:,j,k,3)*vel(:,j,k,1) +   &
+                             sigma(:,j,k,5)*vel(:,j,k,2) +   &
+                             sigma(:,j,k,6)*vel(:,j,k,3)
+      !
+      ff(:,2)=(-sigma(:,j,k,1)*dxi(:,j,k,1,1) -                        &
+                sigma(:,j,k,2)*dxi(:,j,k,1,2) -                        &
                 sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(:,3)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                        &
-                sigma(:,j,k,4)*dxi(:,j,k,1,2) +                        &
+      ff(:,3)=(-sigma(:,j,k,2)*dxi(:,j,k,1,1) -                        &
+                sigma(:,j,k,4)*dxi(:,j,k,1,2) -                        &
                 sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(:,4)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                        &
-                sigma(:,j,k,5)*dxi(:,j,k,1,2) +                        &
+      ff(:,4)=(-sigma(:,j,k,3)*dxi(:,j,k,1,1) -                        &
+                sigma(:,j,k,5)*dxi(:,j,k,1,2) -                        &
                 sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(:,5)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                        &
-                qflux(:,j,k,2)*dxi(:,j,k,1,2) +                        &
-                qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,5)=(-gg(:,1)*dxi(:,j,k,1,1) -                        &
+                gg(:,2)*dxi(:,j,k,1,2) -                        &
+                gg(:,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       !
       if(num_species>0) then
         do jspc=1,num_species
@@ -2650,17 +2612,6 @@ module solver
                          yflux(:,j,k,jspc,2)*dxi(:,j,k,1,2) +               &
                          yflux(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
         enddo
-      endif
-      !
-      if(trim(turbmode)=='k-omega') then
-        n=5+num_species
-        !
-        ff(:,1+n)=( dkflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
-                    dkflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
-                    dkflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-        ff(:,2+n)=( doflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
-                    doflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
-                    doflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       endif
       !
       !+------------------------------+
@@ -2679,7 +2630,6 @@ module solver
       qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,4)
       qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,5)
       ! freeze energy flux for startup
-      ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(is:ie,j,k,5)=0.d0
       
       if(num_species>0) then
         do jspc=6,5+num_species
@@ -2687,17 +2637,10 @@ module solver
         enddo
       endif
       !
-      if(trim(turbmode)=='k-omega') then
-        n=5+num_species
-        !
-        qrhs(is:ie,j,k,1+n)=qrhs(is:ie,j,k,1+n)+df(is:ie,1+n)
-        qrhs(is:ie,j,k,2+n)=qrhs(is:ie,j,k,2+n)+df(is:ie,2+n)
-      endif
-      !
     enddo
     enddo
     !
-    deallocate(ff,df)
+    deallocate(ff,df,gg)
     !!!!!!!!!!!!!!!!!!!!!!!!!!
     ! End calculating along i
     !!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2706,21 +2649,32 @@ module solver
       ! Calculating along j direction.
       !
       allocate(ff(-hm:jm+hm,2:ncolm),df(0:jm,2:ncolm))
+      allocate(gg(-hm:jm+hm,1:3))
       do k=0,km
       do i=0,im
         !
-        ff(:,2)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
-                  sigma(i,:,k,2)*dxi(i,:,k,2,2) +                        &
+        gg(:,1)=qflux(i,:,k,1)+sigma(i,:,k,1)*vel(i,:,k,1) +   &
+                               sigma(i,:,k,2)*vel(i,:,k,2) +   &
+                               sigma(i,:,k,3)*vel(i,:,k,3)
+        gg(:,2)=qflux(i,:,k,2)+sigma(i,:,k,2)*vel(i,:,k,1) +   &
+                               sigma(i,:,k,4)*vel(i,:,k,2) +   &
+                               sigma(i,:,k,5)*vel(i,:,k,3)
+        gg(:,3)=qflux(i,:,k,3)+sigma(i,:,k,3)*vel(i,:,k,1) +   &
+                               sigma(i,:,k,5)*vel(i,:,k,2) +   &
+                               sigma(i,:,k,6)*vel(i,:,k,3)
+        !
+        ff(:,2)=(-sigma(i,:,k,1)*dxi(i,:,k,2,1) -                        &
+                  sigma(i,:,k,2)*dxi(i,:,k,2,2) -                        &
                   sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-        ff(:,3)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                        &
-                  sigma(i,:,k,4)*dxi(i,:,k,2,2) +                        &
+        ff(:,3)=(-sigma(i,:,k,2)*dxi(i,:,k,2,1) -                        &
+                  sigma(i,:,k,4)*dxi(i,:,k,2,2) -                        &
                   sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-        ff(:,4)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                        &
-                  sigma(i,:,k,5)*dxi(i,:,k,2,2) +                        &
+        ff(:,4)=(-sigma(i,:,k,3)*dxi(i,:,k,2,1) -                        &
+                  sigma(i,:,k,5)*dxi(i,:,k,2,2) -                        &
                   sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-        ff(:,5)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                        &
-                  qflux(i,:,k,2)*dxi(i,:,k,2,2) +                        &
-                  qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(:,5)=(-gg(:,1)*dxi(i,:,k,2,1) -                        &
+                  gg(:,2)*dxi(i,:,k,2,2) -                        &
+                  gg(:,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
         !
         if(num_species>0) then
           do jspc=1,num_species
@@ -2728,16 +2682,6 @@ module solver
                            yflux(i,:,k,jspc,2)*dxi(i,:,k,2,2) +          &
                            yflux(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
           enddo
-        endif
-        !
-        if(trim(turbmode)=='k-omega') then
-          n=5+num_species
-          ff(:,1+n)=( dkflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
-                      dkflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
-                      dkflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-          ff(:,2+n)=( doflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
-                      doflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
-                      doflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
         endif
         !
         !+------------------------------+
@@ -2763,42 +2707,46 @@ module solver
           enddo
         endif
         !
-        if(trim(turbmode)=='k-omega') then
-          n=5+num_species
-          !
-          qrhs(i,js:je,k,1+n)=qrhs(i,js:je,k,1+n)+df(js:je,1+n)
-          qrhs(i,js:je,k,2+n)=qrhs(i,js:je,k,2+n)+df(js:je,2+n)
-        endif
-        !
       enddo
       enddo
       !
-      deallocate(ff,df)
+      deallocate(ff,df,gg)
       !!!!!!!!!!!!!!!!!!!!!!!!!!
       ! End calculating along j
       !!!!!!!!!!!!!!!!!!!!!!!!!!
-      !
     endif
     !
+    
     if(ndims==3) then
       ! Calculating along k direction.
       !
       allocate(ff(-hm:km+hm,2:ncolm),df(0:km,2:ncolm))
+      allocate(gg(-hm:km+hm,1:3))
       do j=0,jm
       do i=0,im
         !
-        ff(:,2)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
-                  sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+        gg(:,1)=qflux(i,j,:,1)+sigma(i,j,:,1)*vel(i,j,:,1) +   &
+                               sigma(i,j,:,2)*vel(i,j,:,2) +   &
+                               sigma(i,j,:,3)*vel(i,j,:,3)
+        gg(:,2)=qflux(i,j,:,2)+sigma(i,j,:,2)*vel(i,j,:,1) +   &
+                               sigma(i,j,:,4)*vel(i,j,:,2) +   &
+                               sigma(i,j,:,5)*vel(i,j,:,3)
+        gg(:,3)=qflux(i,j,:,3)+sigma(i,j,:,3)*vel(i,j,:,1) +   &
+                               sigma(i,j,:,5)*vel(i,j,:,2) +   &
+                               sigma(i,j,:,6)*vel(i,j,:,3)
+        !
+        ff(:,2)=(-sigma(i,j,:,1)*dxi(i,j,:,3,1) -                      &
+                  sigma(i,j,:,2)*dxi(i,j,:,3,2) -                      &
                   sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(:,3)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                      &
-                  sigma(i,j,:,4)*dxi(i,j,:,3,2) +                      &
+        ff(:,3)=(-sigma(i,j,:,2)*dxi(i,j,:,3,1) -                      &
+                  sigma(i,j,:,4)*dxi(i,j,:,3,2) -                      &
                   sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(:,4)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                      &
-                  sigma(i,j,:,5)*dxi(i,j,:,3,2) +                      &
+        ff(:,4)=(-sigma(i,j,:,3)*dxi(i,j,:,3,1) -                      &
+                  sigma(i,j,:,5)*dxi(i,j,:,3,2) -                      &
                   sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(:,5)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                      &
-                  qflux(i,j,:,2)*dxi(i,j,:,3,2) +                      &
-                  qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(:,5)=(-gg(:,1)*dxi(i,j,:,3,1) -                      &
+                  gg(:,2)*dxi(i,j,:,3,2) -                      &
+                  gg(:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
         if(num_species>0) then
           do jspc=1,num_species
@@ -2806,17 +2754,6 @@ module solver
                            yflux(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
                            yflux(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
           enddo
-        endif
-        !
-        if(trim(turbmode)=='k-omega') then
-          n=5+num_species
-          !
-          ff(:,1+n)=( dkflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
-                      dkflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
-                      dkflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-          ff(:,2+n)=( doflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
-                      doflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
-                      doflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         endif
         !
         !+------------------------------+
@@ -2842,29 +2779,14 @@ module solver
           enddo
         endif
         !
-        if(trim(turbmode)=='k-omega') then
-          n=5+num_species
-          !
-          qrhs(i,j,ks:ke,1+n)=qrhs(i,j,ks:ke,1+n)+df(ks:ke,1+n)
-          qrhs(i,j,ks:ke,2+n)=qrhs(i,j,ks:ke,2+n)+df(ks:ke,2+n)
-        endif
-        !
       enddo
       enddo
       !
-      deallocate(ff,df)
+      deallocate(ff,df,gg)
       !!!!!!!!!!!!!!!!!!!!!!!!!!
       ! End calculating along j
       !!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
-    !
-    ! if(allocated(sigma))  deallocate(sigma)
-    ! if(allocated(qflux))  deallocate(qflux)
-    ! if(allocated(dkflux)) deallocate(dkflux)
-    ! if(allocated(doflux)) deallocate(doflux)
-    ! if(allocated(yflux))  deallocate(yflux)
-    if(allocated(dispec)) deallocate(dispec)
-    if(allocated(dfu))    deallocate(dfu)
     !
     if(present(timerept) .and. timerept) then
       !
