@@ -129,7 +129,7 @@ module readwrite
                         spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,     &
                         lchardecomp,recon_schem,                       &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,schmidt,ibmode,gridfile,testmode
+                        turbmode,schmidt,ibmode,gridfile,testmode,moment
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
 #ifdef COMB
     use commvar, only : odetype,lcomb
@@ -469,6 +469,22 @@ module readwrite
       !
       write(*,'(2X,62A)')('-',i=1,62)
       !
+      write(*,'(2X,A)')'                      *** method of moment ***'
+      if(moment=='r13') then
+        write(*,'(35X,A)')'    13-moment system to solve'
+      ! elseif(moment=='r20') then
+      !   write(*,'(35X,A)')'    20-moment system to solve'
+      elseif(moment=='r26') then
+        write(*,'(35X,A)')'    26-moment system to solve'
+      elseif(moment=='r05') then
+        write(*,'(35X,A)')'Conventional 5-Eqs N-S system'
+      else
+        print*,' !! ERROR in defining moment: ',moment
+        stop
+      endif
+      !
+      write(*,'(2X,62A)')('-',i=1,62)
+      !
       write(*,'(2X,A)')'                 *** Initialising method model ***'
       if(lrestart) then
         write(*,'(2X,A62)')' restart a previous computation'
@@ -518,10 +534,11 @@ module readwrite
                         spg_k0,spg_km,lchardecomp,                     &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
-                        ltimrpt,testmode
+                        ltimrpt,testmode,moment
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
+    use strings, only : split
     !
 #ifdef COMB
     use thermchem,only: chemrep,chemread,thermdyn
@@ -532,6 +549,9 @@ module readwrite
     character(len=64) :: inputfile
     character(len=5) :: char
     integer :: n,fh,i
+    integer :: ios
+    character(len=128) :: iom,charin
+    character(len=16),allocatable :: arguments(:)
     !
     if(mpirank==0) then
       !
@@ -599,7 +619,21 @@ module readwrite
       endif
 #endif
       read(fh,'(/)')
-      read(fh,*)turbmode,iomode
+      read(fh,'(A)')charin
+      call split(charin,arguments,',')
+      if(size(arguments)==3) then
+        turbmode=trim(arguments(1))
+        iomode  =trim(arguments(2))
+        moment  =trim(arguments(3))
+      elseif(size(arguments)==2) then
+        turbmode=trim(arguments(1))
+        iomode  =trim(arguments(2))
+        moment  ='r05'
+      else
+        turbmode='none'
+        iomode  ='h'
+        moment  ='r05'
+      endif
       read(fh,'(/)')
       do n=1,6
         read(fh,*)bctype(n)
@@ -679,6 +713,7 @@ module readwrite
     call bcast(turbmode)
     call bcast(iomode)
     call bcast(ibmode)
+    call bcast(moment)
     !
     call bcast(conschm)
     call bcast(difschm)

@@ -32,7 +32,8 @@ module solver
                         const2,const3,const4,const5,const6,const7,     &
                         tempconst,tempconst1,reynolds,mach,num_modequ, &
                         turbmode,spcinf,nondimen,ref_tem,ref_vel,      &
-                        ref_len,ref_den,ref_miu,ref_tim
+                        ref_len,ref_den,ref_miu,ref_tim,moment,        &
+                        num_xtrmom
     use thermchem, only: spcindex
     use fludyna,   only: thermal,sos,miucal
     use userdefine,only: udf_setflowenv
@@ -41,10 +42,14 @@ module solver
     ! local data
     character(len=8) :: mpimaxname
     !
-    if(trim(turbmode)=='k-omega') then
-      num_modequ=2
-    else
-      num_modequ=0
+    num_modequ=0
+    !
+    if(moment=='r05') then
+      num_xtrmom=0
+    elseif(moment=='r13') then
+      num_xtrmom=8
+    elseif(moment=='r26') then
+      num_xtrmom=21
     endif
     !
     numq=5+num_species+num_modequ
@@ -2361,9 +2366,8 @@ module solver
     !
     use commvar,   only : im,jm,km,nondimen,reynolds,prandtl,const5,   &
                           num_species,schmidt,cp
-    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
-                          rho,vor,omg,tke,miut,dtke,domg,res12,sigma,  &
-                          qflux,yflux
+    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,rho,vor,res12,    &
+                          sigma,qflux,yflux
     use fludyna,   only : miucal
     !
 #ifdef COMB
@@ -2373,7 +2377,6 @@ module solver
     ! local variables
     integer :: i,j,k,jspc,idir
     real(8) :: mw,miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
-    real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33,detk,kama,cpe
     real(8) :: corrdiff,sum1,sum2
     real(8),allocatable :: dispec(:,:)

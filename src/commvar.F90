@@ -17,11 +17,12 @@ module commvar
   !
   integer :: ia,ja,ka,im,jm,km,is,ie,js,je,ks,ke
   integer :: hm
-  integer :: numq,num_species,ndims,ninit,num_modequ
+  integer :: numq,num_species,ndims,ninit,num_modequ,num_xtrmom
   character(len=1) :: iomode
   character(len=10) :: turbmode,ibmode
   character(len=4) :: conschm,difschm
   character(len=64) :: gridfile,solidfile
+  character(len=3)  :: moment
   !+---------------------+---------------------------------------------+
   !|            ia,ja,ka | the dimension of the entire domain          | 
   !|            im,jm,km | the dimension of the local domain           | 
@@ -35,6 +36,7 @@ module commvar
   !|               ninit | initialisation method.                      |
   !|            gridfile | the gridfile.                               |
   !|       solidbodyfile | the file contains solid body geometry .     |
+  !|              moment | the method of moment option.                |
   !+---------------------+---------------------------------------------+
   logical :: lihomo,ljhomo,lkhomo
   logical :: nondimen,diffterm,lfilter,lreadgrid,lfftk,limmbou,        &
