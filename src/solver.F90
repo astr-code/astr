@@ -2357,7 +2357,7 @@ module solver
   !| -------------                                                     |
   !| 20-10-2022  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
   !+-------------------------------------------------------------------+
-  subroutine stress_heatflux
+  subroutine diffusion_flux
     !
     use commvar,   only : im,jm,km,nondimen,reynolds,prandtl,const5,   &
                           num_species,schmidt,cp
@@ -2375,6 +2375,7 @@ module solver
     real(8) :: mw,miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
     real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
     real(8) :: tau11,tau12,tau13,tau22,tau23,tau33,detk,kama,cpe
+    real(8) :: corrdiff,sum1,sum2
     real(8),allocatable :: dispec(:,:)
     real(8) ::   dfu(num_species),gradyi(num_species),                &
               hispec(num_species),    xi(num_species)
@@ -2461,6 +2462,10 @@ module solver
       !                                      
       if(num_species>0) then
         !
+        if(.not. allocated(yflux)) then
+          allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
+        endif
+        !
 #ifdef COMB
         !
         do idir=1,3
@@ -2478,7 +2483,7 @@ module solver
                 !species diffusive flux
                 yflux(i,j,k,jspc,idir)=-1.d0*wmolar(jspc)/mw*sum2
                 !energy flux due to species diffusion
-                qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+                qflux(i,j,k,idir)=qflux(i,j,k,idir)+yflux(i,j,k,jspc,idir)*hispec(jspc)
               enddo
               !
             case default
@@ -2492,9 +2497,9 @@ module solver
                 yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
                                         -corrdiff
                 !energy flux due to species diffusion
-                qflux(i,j,k,idir)=qflux(i,j,k,idir)+yflux(i,j,k,jspc,idir)*hispec(jspc)
+                qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
               enddo
-              !
+              ! 
           end select
           !
         enddo 
@@ -2520,9 +2525,13 @@ module solver
     !
     call dataswap(qflux,timerept=ltimrpt)
     !
-  end subroutine stress_heatflux
+    if(num_species>0) then
+      call dataswap(yflux,timerept=ltimrpt)
+    endif
+    !
+  end subroutine diffusion_flux
   !+-------------------------------------------------------------------+
-  !| This end of the subroutine stress_heatflux.                       |
+  !| This end of the subroutine diffusion_flux.                       |
   !+-------------------------------------------------------------------+
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2556,23 +2565,9 @@ module solver
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
     !
-    if(num_species>0) then
-      !
-      if(firstcall) then
-        allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
-      endif
-      !
-      yflux=0.d0
-      !
-    endif
-    !
     if(firstcall) firstcall=.false.
     !
-    ! if(num_species>0) then
-    !   call species_flux
-    ! endif
-    !
-    call stress_heatflux
+    call diffusion_flux
     !
     ! Calculating along i direction.
     !
@@ -2583,15 +2578,15 @@ module solver
     do k=0,km
     do j=0,jm
       !
-      gg(:,1)=qflux(:,j,k,1)+sigma(:,j,k,1)*vel(:,j,k,1) +   &
-                             sigma(:,j,k,2)*vel(:,j,k,2) +   &
-                             sigma(:,j,k,3)*vel(:,j,k,3)
-      gg(:,2)=qflux(:,j,k,2)+sigma(:,j,k,2)*vel(:,j,k,1) +   &
-                             sigma(:,j,k,4)*vel(:,j,k,2) +   &
-                             sigma(:,j,k,5)*vel(:,j,k,3)
-      gg(:,3)=qflux(:,j,k,3)+sigma(:,j,k,3)*vel(:,j,k,1) +   &
-                             sigma(:,j,k,5)*vel(:,j,k,2) +   &
-                             sigma(:,j,k,6)*vel(:,j,k,3)
+      gg(:,1)= qflux(:,j,k,1)+sigma(:,j,k,1)*vel(:,j,k,1) +   &
+                              sigma(:,j,k,2)*vel(:,j,k,2) +   &
+                              sigma(:,j,k,3)*vel(:,j,k,3)
+      gg(:,2)= qflux(:,j,k,2)+sigma(:,j,k,2)*vel(:,j,k,1) +   &
+                              sigma(:,j,k,4)*vel(:,j,k,2) +   &
+                              sigma(:,j,k,5)*vel(:,j,k,3)
+      gg(:,3)= qflux(:,j,k,3)+sigma(:,j,k,3)*vel(:,j,k,1) +   &
+                              sigma(:,j,k,5)*vel(:,j,k,2) +   &
+                              sigma(:,j,k,6)*vel(:,j,k,3)
       !
       ff(:,2)=(-sigma(:,j,k,1)*dxi(:,j,k,1,1) -                        &
                 sigma(:,j,k,2)*dxi(:,j,k,1,2) -                        &
@@ -2653,15 +2648,15 @@ module solver
       do k=0,km
       do i=0,im
         !
-        gg(:,1)=qflux(i,:,k,1)+sigma(i,:,k,1)*vel(i,:,k,1) +   &
-                               sigma(i,:,k,2)*vel(i,:,k,2) +   &
-                               sigma(i,:,k,3)*vel(i,:,k,3)
-        gg(:,2)=qflux(i,:,k,2)+sigma(i,:,k,2)*vel(i,:,k,1) +   &
-                               sigma(i,:,k,4)*vel(i,:,k,2) +   &
-                               sigma(i,:,k,5)*vel(i,:,k,3)
-        gg(:,3)=qflux(i,:,k,3)+sigma(i,:,k,3)*vel(i,:,k,1) +   &
-                               sigma(i,:,k,5)*vel(i,:,k,2) +   &
-                               sigma(i,:,k,6)*vel(i,:,k,3)
+        gg(:,1)= qflux(i,:,k,1)+sigma(i,:,k,1)*vel(i,:,k,1) +   &
+                                sigma(i,:,k,2)*vel(i,:,k,2) +   &
+                                sigma(i,:,k,3)*vel(i,:,k,3)
+        gg(:,2)= qflux(i,:,k,2)+sigma(i,:,k,2)*vel(i,:,k,1) +   &
+                                sigma(i,:,k,4)*vel(i,:,k,2) +   &
+                                sigma(i,:,k,5)*vel(i,:,k,3)
+        gg(:,3)= qflux(i,:,k,3)+sigma(i,:,k,3)*vel(i,:,k,1) +   &
+                                sigma(i,:,k,5)*vel(i,:,k,2) +   &
+                                sigma(i,:,k,6)*vel(i,:,k,3)
         !
         ff(:,2)=(-sigma(i,:,k,1)*dxi(i,:,k,2,1) -                        &
                   sigma(i,:,k,2)*dxi(i,:,k,2,2) -                        &
@@ -2725,15 +2720,15 @@ module solver
       do j=0,jm
       do i=0,im
         !
-        gg(:,1)=qflux(i,j,:,1)+sigma(i,j,:,1)*vel(i,j,:,1) +   &
-                               sigma(i,j,:,2)*vel(i,j,:,2) +   &
-                               sigma(i,j,:,3)*vel(i,j,:,3)
-        gg(:,2)=qflux(i,j,:,2)+sigma(i,j,:,2)*vel(i,j,:,1) +   &
-                               sigma(i,j,:,4)*vel(i,j,:,2) +   &
-                               sigma(i,j,:,5)*vel(i,j,:,3)
-        gg(:,3)=qflux(i,j,:,3)+sigma(i,j,:,3)*vel(i,j,:,1) +   &
-                               sigma(i,j,:,5)*vel(i,j,:,2) +   &
-                               sigma(i,j,:,6)*vel(i,j,:,3)
+        gg(:,1)= qflux(i,j,:,1)+sigma(i,j,:,1)*vel(i,j,:,1) +   &
+                                sigma(i,j,:,2)*vel(i,j,:,2) +   &
+                                sigma(i,j,:,3)*vel(i,j,:,3)
+        gg(:,2)= qflux(i,j,:,2)+sigma(i,j,:,2)*vel(i,j,:,1) +   &
+                                sigma(i,j,:,4)*vel(i,j,:,2) +   &
+                                sigma(i,j,:,5)*vel(i,j,:,3)
+        gg(:,3)= qflux(i,j,:,3)+sigma(i,j,:,3)*vel(i,j,:,1) +   &
+                                sigma(i,j,:,5)*vel(i,j,:,2) +   &
+                                sigma(i,j,:,6)*vel(i,j,:,3)
         !
         ff(:,2)=(-sigma(i,j,:,1)*dxi(i,j,:,3,1) -                      &
                   sigma(i,j,:,2)*dxi(i,j,:,3,2) -                      &
