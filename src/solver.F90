@@ -2549,7 +2549,7 @@ module solver
     !
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm, &
                           ndims,num_species,is,ie,js,je,ks,ke,     &
-                          nstep,deltat
+                          nstep,deltat,moment
     use commarray, only : vel,dxi,jacob,qrhs,yflux,sigma,qflux
     use commfunc,  only : ddfc
     use comsolver, only : alfa_dif,dci,dcj,dck
@@ -2560,7 +2560,8 @@ module solver
     !
     ! local data
     integer :: i,j,k,n,ncolm,jspc,idir
-    real(8),allocatable :: df(:,:),ff(:,:),gg(:,:)
+    real(8),allocatable :: df(:,:),ff(:,:)
+    real(8),allocatable :: gg(:,:,:,:)
     logical,save :: firstcall=.true.
     !
     real(8) :: time_beg
@@ -2570,26 +2571,33 @@ module solver
     !
     if(firstcall) firstcall=.false.
     !
-    call diffusion_flux
+    if(moment=='r05') then
+      call diffusion_flux
+    endif
     !
-    ! Calculating along i direction.
+    allocate(gg(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+    !
+    gg(:,:,:,1) = qflux(:,:,:,1) + sigma(:,:,:,1)*vel(:,:,:,1) + &
+                                   sigma(:,:,:,2)*vel(:,:,:,2) + &
+                                   sigma(:,:,:,3)*vel(:,:,:,3)
+    !
+    gg(:,:,:,2) = qflux(:,:,:,2) + sigma(:,:,:,2)*vel(:,:,:,1) + &
+                                   sigma(:,:,:,4)*vel(:,:,:,2) + &
+                                   sigma(:,:,:,5)*vel(:,:,:,3)
+    !
+    gg(:,:,:,3) = qflux(:,:,:,3) + sigma(:,:,:,3)*vel(:,:,:,1) + &
+                                   sigma(:,:,:,5)*vel(:,:,:,2) + &
+                                   sigma(:,:,:,6)*vel(:,:,:,3)
     !
     ncolm=5+num_species
     !
+    !+----------------------------------------------------------------+
+    !| Calculating along i direction.                                 | 
+    !+----------------------------------------------------------------+
     allocate(ff(-hm:im+hm,2:ncolm),df(0:im,2:ncolm))
-    allocate(gg(-hm:im+hm,1:3))
+    !
     do k=0,km
     do j=0,jm
-      !
-      gg(:,1)= qflux(:,j,k,1)+sigma(:,j,k,1)*vel(:,j,k,1) +   &
-                              sigma(:,j,k,2)*vel(:,j,k,2) +   &
-                              sigma(:,j,k,3)*vel(:,j,k,3)
-      gg(:,2)= qflux(:,j,k,2)+sigma(:,j,k,2)*vel(:,j,k,1) +   &
-                              sigma(:,j,k,4)*vel(:,j,k,2) +   &
-                              sigma(:,j,k,5)*vel(:,j,k,3)
-      gg(:,3)= qflux(:,j,k,3)+sigma(:,j,k,3)*vel(:,j,k,1) +   &
-                              sigma(:,j,k,5)*vel(:,j,k,2) +   &
-                              sigma(:,j,k,6)*vel(:,j,k,3)
       !
       ff(:,2)=(-sigma(:,j,k,1)*dxi(:,j,k,1,1) -                        &
                 sigma(:,j,k,2)*dxi(:,j,k,1,2) -                        &
@@ -2600,9 +2608,9 @@ module solver
       ff(:,4)=(-sigma(:,j,k,3)*dxi(:,j,k,1,1) -                        &
                 sigma(:,j,k,5)*dxi(:,j,k,1,2) -                        &
                 sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
-      ff(:,5)=(-gg(:,1)*dxi(:,j,k,1,1) -                        &
-                gg(:,2)*dxi(:,j,k,1,2) -                        &
-                gg(:,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,5)=(-gg(:,j,k,1)*dxi(:,j,k,1,1) -                        &
+                gg(:,j,k,2)*dxi(:,j,k,1,2) -                        &
+                gg(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
       !
       if(num_species>0) then
         do jspc=1,num_species
@@ -2638,28 +2646,19 @@ module solver
     enddo
     enddo
     !
-    deallocate(ff,df,gg)
-    !!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! End calculating along i
-    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    deallocate(ff,df)
+    !+----------------------------------------------------------------+
+    !| End of Calculation along i direction.                          | 
+    !+----------------------------------------------------------------+
     !
+    !+----------------------------------------------------------------+
+    !| Calculating along j direction.                                 | 
+    !+----------------------------------------------------------------+
     if(ndims>=2) then
-      ! Calculating along j direction.
       !
       allocate(ff(-hm:jm+hm,2:ncolm),df(0:jm,2:ncolm))
-      allocate(gg(-hm:jm+hm,1:3))
       do k=0,km
       do i=0,im
-        !
-        gg(:,1)= qflux(i,:,k,1)+sigma(i,:,k,1)*vel(i,:,k,1) +   &
-                                sigma(i,:,k,2)*vel(i,:,k,2) +   &
-                                sigma(i,:,k,3)*vel(i,:,k,3)
-        gg(:,2)= qflux(i,:,k,2)+sigma(i,:,k,2)*vel(i,:,k,1) +   &
-                                sigma(i,:,k,4)*vel(i,:,k,2) +   &
-                                sigma(i,:,k,5)*vel(i,:,k,3)
-        gg(:,3)= qflux(i,:,k,3)+sigma(i,:,k,3)*vel(i,:,k,1) +   &
-                                sigma(i,:,k,5)*vel(i,:,k,2) +   &
-                                sigma(i,:,k,6)*vel(i,:,k,3)
         !
         ff(:,2)=(-sigma(i,:,k,1)*dxi(i,:,k,2,1) -                        &
                   sigma(i,:,k,2)*dxi(i,:,k,2,2) -                        &
@@ -2670,9 +2669,9 @@ module solver
         ff(:,4)=(-sigma(i,:,k,3)*dxi(i,:,k,2,1) -                        &
                   sigma(i,:,k,5)*dxi(i,:,k,2,2) -                        &
                   sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
-        ff(:,5)=(-gg(:,1)*dxi(i,:,k,2,1) -                        &
-                  gg(:,2)*dxi(i,:,k,2,2) -                        &
-                  gg(:,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(:,5)=(-gg(i,:,k,1)*dxi(i,:,k,2,1) -                        &
+                  gg(i,:,k,2)*dxi(i,:,k,2,2) -                        &
+                  gg(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
         !
         if(num_species>0) then
           do jspc=1,num_species
@@ -2708,30 +2707,20 @@ module solver
       enddo
       enddo
       !
-      deallocate(ff,df,gg)
-      !!!!!!!!!!!!!!!!!!!!!!!!!!
-      ! End calculating along j
-      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      deallocate(ff,df)
+      
     endif
+    !+----------------------------------------------------------------+
+    !| End of Calculation along j direction.                          | 
+    !+----------------------------------------------------------------+
     !
-    
+    !+----------------------------------------------------------------+
+    !| Calculating along k direction.                                 | 
+    !+----------------------------------------------------------------+
     if(ndims==3) then
-      ! Calculating along k direction.
-      !
       allocate(ff(-hm:km+hm,2:ncolm),df(0:km,2:ncolm))
-      allocate(gg(-hm:km+hm,1:3))
       do j=0,jm
       do i=0,im
-        !
-        gg(:,1)= qflux(i,j,:,1)+sigma(i,j,:,1)*vel(i,j,:,1) +   &
-                                sigma(i,j,:,2)*vel(i,j,:,2) +   &
-                                sigma(i,j,:,3)*vel(i,j,:,3)
-        gg(:,2)= qflux(i,j,:,2)+sigma(i,j,:,2)*vel(i,j,:,1) +   &
-                                sigma(i,j,:,4)*vel(i,j,:,2) +   &
-                                sigma(i,j,:,5)*vel(i,j,:,3)
-        gg(:,3)= qflux(i,j,:,3)+sigma(i,j,:,3)*vel(i,j,:,1) +   &
-                                sigma(i,j,:,5)*vel(i,j,:,2) +   &
-                                sigma(i,j,:,6)*vel(i,j,:,3)
         !
         ff(:,2)=(-sigma(i,j,:,1)*dxi(i,j,:,3,1) -                      &
                   sigma(i,j,:,2)*dxi(i,j,:,3,2) -                      &
@@ -2742,9 +2731,9 @@ module solver
         ff(:,4)=(-sigma(i,j,:,3)*dxi(i,j,:,3,1) -                      &
                   sigma(i,j,:,5)*dxi(i,j,:,3,2) -                      &
                   sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
-        ff(:,5)=(-gg(:,1)*dxi(i,j,:,3,1) -                      &
-                  gg(:,2)*dxi(i,j,:,3,2) -                      &
-                  gg(:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(:,5)=(-gg(i,j,:,1)*dxi(i,j,:,3,1) -                      &
+                  gg(i,j,:,2)*dxi(i,j,:,3,2) -                      &
+                  gg(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
         !
         if(num_species>0) then
           do jspc=1,num_species
@@ -2780,11 +2769,12 @@ module solver
       enddo
       enddo
       !
-      deallocate(ff,df,gg)
-      !!!!!!!!!!!!!!!!!!!!!!!!!!
-      ! End calculating along j
-      !!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
+    !+----------------------------------------------------------------+
+    !| End of Calculation along k direction.                          | 
+    !+----------------------------------------------------------------+
+    !
+    deallocate(gg)
     !
     if(present(timerept) .and. timerept) then
       !
