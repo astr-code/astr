@@ -28,8 +28,8 @@ module statistic
   logical :: lmeanallocated=.false.
   logical :: liosta=.false.
   real(8) :: time_sbeg
-  real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
-             wallheatflux,dissipation,nominal_thickness,xflame,vflame, &
+  real(8) :: enstophy,enstomax,kenergy,kengmax,fbcx,massflux,massflux_target,wrms,      &
+             wallheatflux,dissipation,dissipmax,nominal_thickness,xflame,vflame, &
              poutrt
   real(8) :: maxT,overall_qdot,v_H2O,v_HO2
   real(8) :: vel_incom,prs_incom,rho_incom
@@ -584,9 +584,9 @@ module statistic
     if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-      enstophy=enstophycal()
-      kenergy =kenergycal()
-      dissipation=diss_rate_cal()
+      call enstophycal(enstophy,enstomax)
+      call kenergycal(kenergy,kengmax)
+      call diss_rate_cal(dissipation,dissipmax)
       !
       if(trim(flowtype)=='hit') then
         !
@@ -680,7 +680,7 @@ module statistic
       umax=maxval(vel(0:im,0:jm,0:km,1))
       umax=pmax(umax)
       !
-      enstophy=enstophycal()
+      call enstophycal(enstophy)
       !
       var1=0.d0
       var2=0.d0
@@ -791,7 +791,7 @@ module statistic
       if(linit) then
         !
         if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-          fstitle='nstep time kenergy enstophy dissipation'
+          fstitle='nstep time kenergy enstophy dissipation kengmax enstomax dissipmax'
         elseif(trim(flowtype)=='channel') then
           fstitle='nstep time massflux fbcx forcex wrms'
         elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli') then
@@ -816,7 +816,7 @@ module statistic
       endif
       !
       if(trim(flowtype)=='tgv' .or. trim(flowtype)=='hit') then
-        call listwrite(hand_fs,kenergy,enstophy,dissipation)
+        call listwrite(hand_fs,kenergy,enstophy,dissipation,kengmax,enstomax,dissipmax)
       elseif(trim(flowtype)=='channel') then
         call listwrite(hand_fs,massflux,fbcx,force(1),wrms)
       elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='tbl' .or. trim(flowtype)=='swbli') then
@@ -862,36 +862,25 @@ module statistic
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  function enstophycal() result(vout)
+  subroutine enstophycal(ens,enmax)
     !
     use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf
     use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
-    real(8) :: vout
+    real(8),intent(out) :: ens
+    real(8),intent(out),optional :: enmax
     !
     ! local data
     integer :: i,j,k
-    real(8) :: omega(3),omegam
+    real(8) :: omega(3),omegam,var1
     real(8) :: l_0,u_0
     !
-    vout=0.d0
+    ens=0.d0
+    enmax=0.d0
     !
-    if(ndims==2) then
-      k=0
-      do j=1,jm
-      do i=1,im
-        !
-        omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
-        omegam=omega(3)*omega(3)
-        !
-        vout=vout+rho(i,j,k)*omegam
-        !
-        !
-      enddo
-      enddo
-      vout=0.5d0*psum(vout)/real(ia*ja,8)
-    elseif(ndims==3) then
+    if(ndims==3) then
+      !
       do k=1,km
       do j=1,jm
       do i=1,im
@@ -901,23 +890,51 @@ module statistic
         omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
         omegam=omega(1)*omega(1)+omega(2)*omega(2)+omega(3)*omega(3)
         !
-        vout=vout+rho(i,j,k)*omegam
+        var1=rho(i,j,k)*omegam
         !
+        ens=ens+var1
+        !
+        if(present(enmax)) enmax=max(enmax,var1)
         !
       enddo
       enddo
       enddo
       !
-      vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+      ens=0.5d0*psum(ens)/real(ia*ja*ka,8)
+      !
+      if(present(enmax)) enmax=0.5d0*pmax(enmax)
+      !
+    elseif(ndims==2) then
+      !
+      k=0
+      do j=1,jm
+      do i=1,im
+        ! dx=
+        omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
+        omegam=omega(3)*omega(3)
+        !
+        var1=rho(i,j,k)*omegam
+        !
+        ens=ens+var1
+        !
+        if(present(enmax)) enmax=max(enmax,var1)
+        !
+      enddo
+      enddo
+      !
+      ens=0.5d0*psum(ens)/real(ia*ja,8)
+      if(present(enmax)) enmax=0.5d0*pmax(enmax)
+      !
     endif
     !
     l_0=xmax/(2.d0*pi)
     !
-    vout=vout/(roinf*(uinf/l_0)**2)
+    ens=ens/(roinf*(uinf/l_0)**2)
+    if(present(enmax)) enmax=enmax/(roinf*(uinf/l_0)**2)
     !
     return
     !
-  end function enstophycal
+  end subroutine enstophycal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine enstophycal.                            |
   !+-------------------------------------------------------------------+
@@ -929,51 +946,74 @@ module statistic
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  function kenergycal() result(vout)
+  subroutine kenergycal(keng,kemax)
     !
-    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf
+    use commvar,   only : im,jm,km,ia,ja,ka,roinf,uinf,ndims
     use commarray, only : vel,cell,rho,dvel
     use commfunc,  only : volhex
     !
-    real(8) :: vout
+    real(8),intent(out) :: keng
+    real(8),intent(out),optional :: kemax
     !
     ! local data
     integer :: i,j,k
     real(8) :: var1
     !
-    vout=0.d0
-    if(ndims==2) then
-      k=0
-      do j=1,jm
-      do i=1,im
-        ! 
-        var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
-        !
-        vout=vout+rho(i,j,k)*var1
-      enddo
-      enddo
+    keng=0.d0
+    kemax=0.d0
+    !
+    if(ndims==3) then
       !
-      vout=0.5d0*psum(vout)/real(ia*ja,8)
-    elseif(ndims==3) then
       do k=1,km
       do j=1,jm
       do i=1,im
         ! 
         var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
         !
-        vout=vout+rho(i,j,k)*var1
+        var1=rho(i,j,k)*var1
+        !
+        keng=keng+var1
+        !
+        if(present(kemax)) kemax=max(kemax,var1)
+        !
       enddo
       enddo
       enddo
       !
-      vout=0.5d0*psum(vout)/real(ia*ja*ka,8)
+      keng=0.5d0*psum(keng)/real(ia*ja*ka,8)
+      !
+      if(present(kemax)) kemax=0.5d0*pmax(kemax)
+      !
+    elseif(ndims==2) then
+      !
+      k=0
+      do j=1,jm
+      do i=1,im
+        ! 
+        var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2
+        !
+        var1=rho(i,j,k)*var1
+        !
+        keng=keng+rho(i,j,k)*var1
+        !
+        if(present(kemax)) kemax=max(kemax,var1)
+        !
+      enddo
+      enddo
+      !
+      keng=0.5d0*psum(keng)/real(ia*ja,8)
+      !
+      if(present(kemax)) kemax=0.5d0*pmax(kemax)
+      !
     endif
     !
-    vout=vout/(roinf*uinf*uinf)
+    keng=keng/(roinf*uinf*uinf)
+    !
+    if(present(kemax)) kemax=kemax/(roinf*uinf*uinf)
     !
     return
     !
-  end function kenergycal
+  end subroutine kenergycal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine kenergycal.                             |
   !+-------------------------------------------------------------------+
@@ -985,13 +1025,14 @@ module statistic
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang STFC Daresbury Laboratory        |
   !+-------------------------------------------------------------------+
-  function diss_rate_cal() result(vout)
+  subroutine diss_rate_cal(dissp,disspmax)
     !
-    use commvar,  only : im,jm,km,ia,ja,ka,reynolds,nondimen
+    use commvar,  only : im,jm,km,ia,ja,ka,reynolds
     use commarray,only : tmp,dvel
     use fludyna,  only : miucal
     !
-    real(8) :: vout
+    real(8),intent(out) :: dissp
+    real(8),intent(out),optional :: disspmax
     !
     ! local data
     integer :: i,j,k
@@ -999,45 +1040,80 @@ module statistic
     real(8) :: du11,du12,du13,du21,du22,du23,du31,du32,du33,           &
                s11,s12,s13,s22,s23,s33,div
     !
-    vout=0.d0
+    dissp=0.d0
+    disspmax=0.d0
     !
-    do k=1,km
-    do j=1,jm
-    do i=1,im
-      ! 
-      if(nondimen) then
+    if(ndims==3) then
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        ! 
         miu=miucal(tmp(i,j,k))/reynolds
-      else
-        miu=miucal(tmp(i,j,k))
-      endif
+        !
+        du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2); du13=dvel(i,j,k,1,3)
+        du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2); du23=dvel(i,j,k,2,3)
+        du31=dvel(i,j,k,3,1); du32=dvel(i,j,k,3,2); du33=dvel(i,j,k,3,3)
+        !
+        s11=du11; s12=0.5d0*(du12+du21); s13=0.5d0*(du13+du31)
+                  s22=du22;              s23=0.5d0*(du23+du32)
+                                         s33=du33
+        !
+        div=s11+s22+s33
+        !
+        var1=2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)- &
+                                                            num1d3*div**2)
+        !
+        dissp=dissp+var1
+        !
+        if(present(disspmax)) disspmax=max(disspmax,var1)
+        !
+      enddo
+      enddo
+      enddo
       !
-      du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2); du13=dvel(i,j,k,1,3)
-      du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2); du23=dvel(i,j,k,2,3)
-      du31=dvel(i,j,k,3,1); du32=dvel(i,j,k,3,2); du33=dvel(i,j,k,3,3)
+      dissp=psum(dissp)/dble(ia*ja*ka)
       !
-      s11=du11; s12=0.5d0*(du12+du21); s13=0.5d0*(du13+du31)
-                s22=du22;              s23=0.5d0*(du23+du32)
-                                       s33=du33
+      if(present(disspmax)) disspmax=pmax(disspmax)
       !
-      div=s11+s22+s33
+    elseif(ndims==2) then
+      k=0
+      do j=1,jm
+      do i=1,im
+        ! 
+        miu=miucal(tmp(i,j,k))/reynolds
+        !
+        du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2)
+        du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2)
+        !
+        s11=du11; s12=0.5d0*(du12+du21)
+                  s22=du22;            
+                                       
+        !
+        div=s11+s22
+        !
+        var1=2.d0*miu*(s11**2+s22**2+2.d0*(s12**2)-num1d3*div**2)
+        !
+        dissp=dissp+var1
+        !
+        if(present(disspmax)) disspmax=max(disspmax,var1)
+        !
+        !
+      enddo
+      enddo
       !
-      var1=2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)- &
-                                                          num1d3*div**2)
+      dissp=psum(dissp)/dble(ia*ja)
       !
-      vout=vout+var1
+      if(present(disspmax)) disspmax=pmax(disspmax)
       !
-    enddo
-    enddo
-    enddo
-    !
-    vout=psum(vout)/dble(ia*ja*ka)
+    endif
     !
     return
     !
-  end function diss_rate_cal
+  end subroutine diss_rate_cal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine diss_rate_cal.                          |
   !+-------------------------------------------------------------------+
+  !!
   !+-------------------------------------------------------------------+
   !| This function is to return rms spanwise velocity fluctuation.     |
   !+-------------------------------------------------------------------+

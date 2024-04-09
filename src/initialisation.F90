@@ -30,14 +30,17 @@ module initialisation
   subroutine flowinit
     !
     use commvar,  only: flowtype,nstep,time,filenumb,fnumslic,ninit,   &
-                        lrestart,lavg,turbmode,ymax
+                        lrestart,lavg,turbmode,ymax,moment
     use commarray,only: vel,rho,prs,spc,q,tke,omg
+    use comsolver,only: gradcal
+    use solver,   only: diffusion_flux
     use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d,          &
                         readcheckpoint,readmeanflow,readmonc,writeflfed
-    use fludyna,  only: updateq
+    use fludyna,  only: updateq,miucomp
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
     use userdefine,only: udf_flowinit
+    use methodmoment,only: init_moment,updateqmom
     !
     call inletprofile
     !
@@ -119,6 +122,20 @@ module initialisation
         end select
         !
         call udf_flowinit
+        !
+      endif
+      !
+      call miucomp
+      !
+      if(moment=='r13' .or. moment=='r26') then
+        !
+        call gradcal(dswap=.true.)
+        !
+        call diffusion_flux()
+        !
+        call init_moment()
+        !
+        call updateqmom()
         !
       endif
       !
@@ -693,7 +710,7 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine tgvini
     !
-    use commvar,  only: nondimen,ref_len
+    use commvar,  only: nondimen,moment,gamma
     use commarray,only: x,vel,rho,prs,spc,tmp,q
     use fludyna,  only: thermal
 #ifdef COMB
@@ -704,49 +721,60 @@ module initialisation
     integer :: i,j,k,jspc
     real(8) :: l_0,miu
     !
-#ifdef COMB
-    tinf=347.d0
-    roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
-    l_0=xmax/(2.d0*pi)
-    uinf=40.d0
-#endif
-
     if(nondimen) then
+      roinf=1.d0
+      tinf=1.d0
+      pinf=thermal(temperature=tinf,density=roinf)
       l_0=1.d0
+      uinf=1.d0
     else
-      l_0=ref_len
+#ifdef COMB
+      tinf=347.d0
+      roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
+      l_0=xmax/(2.d0*pi)
+      uinf=40.d0
+      !
+      ! call tranco(tmp=tinf,spc=spcinf,mu=miu,den=roinf)
+      ! if(lio) print*,' ** miu=',miu,'Re=',roinf*uinf*l_0/miu,'pinf=',pinf
+#endif
     endif
+    !
+    call tgvelini
     !
     do k=0,km
     do j=0,jm
     do i=0,im
-      rho(i,j,k)  =roinf
-      vel(i,j,k,1)= uinf*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
-      vel(i,j,k,2)=-uinf*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
-      vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf+roinf/16.d0*(uinf**2) &
+      tmp(i,j,k)  =tinf
+      prs(i,j,k)  =pinf+0.1d0*roinf/(16.d0*gamma)*(uinf**2) &
                         *(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
                         *(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
+      ! prs(i,j,k)  =pinf+1.d0/16.d0*( cos(2.d0*x(i,j,k,1)/l_0) + &
+      !                                 cos(2.d0*x(i,j,k,2)/l_0) )*(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
+      !
+      if(prs(i,j,k)<=0.d0) then
+        print*,i,j,k,prs(i,j,k)
+      endif
       !
       if(nondimen) then
-        tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
-        if(num_species>1) then
-          spc(i,j,k,1)=0.5d0+0.499d0*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
-          spc(i,j,k,2)=1.d0-spc(i,j,k,1)
-        endif
+        rho(i,j,k)=thermal(temperature=tmp(i,j,k),pressure=prs(i,j,k))
+        if(num_species>1) spc(i,j,k,1)=1.d0
       else 
-        if(num_species>1) then
-          spc(i,j,k,:)=spcinf(:)
-          tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
-        else
-          tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
-        endif
+        spc(i,j,k,:)=spcinf(:)
+        tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k),species=spc(i,j,k,:))
       endif 
+      !
+      if(num_species>=1 .and. nondimen) then
+        !
+        spc(i,j,k,1)=sin(x(i,j,k,1))**2
+        do jspc=2,num_species
+          spc(i,j,k,jspc)=1.d0-spc(i,j,k,1)
+        enddo
+        !
+      endif
       !
     enddo
     enddo
     enddo
-    !
     !
     ! call tecbin('testout/tecinit'//mpirankname//'.plt',                &
     !                                   x(0:im,0:jm,0:km,1),'x',         &
@@ -761,6 +789,28 @@ module initialisation
     if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D TGV initialised.'
     !
   end subroutine tgvini
+  !
+  subroutine tgvelini
+    !
+    use commarray,only: x,vel
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: l_0
+    !
+    l_0=1.d0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      vel(i,j,k,1)= uinf*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
+      vel(i,j,k,2)=-uinf*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
+      vel(i,j,k,3)=0.d0
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine tgvelini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine tgvini.                                 |
   !+-------------------------------------------------------------------+

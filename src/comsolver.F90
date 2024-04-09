@@ -193,8 +193,9 @@ module comsolver
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 08-10-2021  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
+  !| 09-04-2024  | add swap option                                     |
   !+-------------------------------------------------------------------+
-  subroutine gradcal(timerept)
+  subroutine gradcal(timerept,dswap)
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims,    &
                           num_species,num_modequ,is,ie,js,je,ks,ke,    &
@@ -204,7 +205,7 @@ module comsolver
     use commfunc,  only : ddfc
     !
     ! arguments
-    logical,intent(in),optional :: timerept
+    logical,intent(in),optional :: timerept,dswap
     !
     ! local data
     integer :: i,j,k,n,ncolm
@@ -212,8 +213,15 @@ module comsolver
     !
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
+    logical :: lswap
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
+    !
+    if(present(dswap)) then
+      lswap=dswap
+    else
+      lswap=.false.
+    endif
     !
     dvel=0.d0
     dtmp=0.d0
@@ -225,6 +233,12 @@ module comsolver
     endif
     !
     ncolm=4+num_species+num_modequ
+    !
+    if(lswap) then
+      call dataswap(vel)
+      call dataswap(tmp)
+      if(num_species>0) call dataswap(spc)
+    endif
     !
     ! calculate velocity and temperature gradient
     !
@@ -296,77 +310,73 @@ module comsolver
     !
     deallocate(ff,df)
     !
-    if(ndims>=2) then
+    allocate(ff(-hm:jm+hm,ncolm),df(0:jm,ncolm))
+    do k=0,km
+    do i=0,im
       !
-      allocate(ff(-hm:jm+hm,ncolm),df(0:jm,ncolm))
-      do k=0,km
-      do i=0,im
-        !
-        ff(:,1)=vel(i,:,k,1)
-        ff(:,2)=vel(i,:,k,2)
-        ff(:,3)=vel(i,:,k,3)
-        ff(:,4)=tmp(i,:,k)
-        !
-        if(num_species>0) then
-          do n=1,num_species
-            ff(:,4+n)=spc(i,:,k,n)
-          enddo
-        endif
-        !
-        if(trim(turbmode)=='k-omega') then
-          n=4+num_species
-          !
-          ff(:,n+1)=tke(i,:,k)
-          ff(:,n+2)=omg(i,:,k)
-        endif
-        !
-        do n=1,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+      ff(:,1)=vel(i,:,k,1)
+      ff(:,2)=vel(i,:,k,2)
+      ff(:,3)=vel(i,:,k,3)
+      ff(:,4)=tmp(i,:,k)
+      !
+      if(num_species>0) then
+        do n=1,num_species
+          ff(:,4+n)=spc(i,:,k,n)
         enddo
-        !
-        dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
-        dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(:,1)*dxi(i,0:jm,k,2,2)
-        dvel(i,:,k,1,3)=dvel(i,:,k,1,3)+df(:,1)*dxi(i,0:jm,k,2,3)
-        !
-        dvel(i,:,k,2,1)=dvel(i,:,k,2,1)+df(:,2)*dxi(i,0:jm,k,2,1)
-        dvel(i,:,k,2,2)=dvel(i,:,k,2,2)+df(:,2)*dxi(i,0:jm,k,2,2)
-        dvel(i,:,k,2,3)=dvel(i,:,k,2,3)+df(:,2)*dxi(i,0:jm,k,2,3)
-        !
-        dvel(i,:,k,3,1)=dvel(i,:,k,3,1)+df(:,3)*dxi(i,0:jm,k,2,1)
-        dvel(i,:,k,3,2)=dvel(i,:,k,3,2)+df(:,3)*dxi(i,0:jm,k,2,2)
-        dvel(i,:,k,3,3)=dvel(i,:,k,3,3)+df(:,3)*dxi(i,0:jm,k,2,3)
-        !
-        dtmp(i,:,k,1)=dtmp(i,:,k,1)+df(:,4)*dxi(i,0:jm,k,2,1)
-        dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
-        dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
-        !
-        if(num_species>0) then
-          do n=1,num_species
-            dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
-            dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
-            dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df(:,4+n)*dxi(i,0:jm,k,2,3)
-          enddo
-        endif
-        !
-        if(trim(turbmode)=='k-omega') then
-          n=4+num_species
-          !
-          dtke(i,:,k,1)=dtke(i,:,k,1)+df(:,1+n)*dxi(i,0:jm,k,2,1)
-          dtke(i,:,k,2)=dtke(i,:,k,2)+df(:,1+n)*dxi(i,0:jm,k,2,2)
-          dtke(i,:,k,3)=dtke(i,:,k,3)+df(:,1+n)*dxi(i,0:jm,k,2,3)
-          !
-          domg(i,:,k,1)=domg(i,:,k,1)+df(:,2+n)*dxi(i,0:jm,k,2,1)
-          domg(i,:,k,2)=domg(i,:,k,2)+df(:,2+n)*dxi(i,0:jm,k,2,2)
-          domg(i,:,k,3)=domg(i,:,k,3)+df(:,2+n)*dxi(i,0:jm,k,2,3)
-          !
-          !
-        endif
-        !
-      enddo
-      enddo
-      deallocate(ff,df)
+      endif
       !
-    endif
+      if(trim(turbmode)=='k-omega') then
+        n=4+num_species
+        !
+        ff(:,n+1)=tke(i,:,k)
+        ff(:,n+2)=omg(i,:,k)
+      endif
+      !
+      do n=1,ncolm
+        df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+      enddo
+      !
+      dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
+      dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(:,1)*dxi(i,0:jm,k,2,2)
+      dvel(i,:,k,1,3)=dvel(i,:,k,1,3)+df(:,1)*dxi(i,0:jm,k,2,3)
+      !
+      dvel(i,:,k,2,1)=dvel(i,:,k,2,1)+df(:,2)*dxi(i,0:jm,k,2,1)
+      dvel(i,:,k,2,2)=dvel(i,:,k,2,2)+df(:,2)*dxi(i,0:jm,k,2,2)
+      dvel(i,:,k,2,3)=dvel(i,:,k,2,3)+df(:,2)*dxi(i,0:jm,k,2,3)
+      !
+      dvel(i,:,k,3,1)=dvel(i,:,k,3,1)+df(:,3)*dxi(i,0:jm,k,2,1)
+      dvel(i,:,k,3,2)=dvel(i,:,k,3,2)+df(:,3)*dxi(i,0:jm,k,2,2)
+      dvel(i,:,k,3,3)=dvel(i,:,k,3,3)+df(:,3)*dxi(i,0:jm,k,2,3)
+      !
+      dtmp(i,:,k,1)=dtmp(i,:,k,1)+df(:,4)*dxi(i,0:jm,k,2,1)
+      dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(:,4)*dxi(i,0:jm,k,2,2)
+      dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(:,4)*dxi(i,0:jm,k,2,3)
+      !
+      if(num_species>0) then
+        do n=1,num_species
+          dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(:,4+n)*dxi(i,0:jm,k,2,1)
+          dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(:,4+n)*dxi(i,0:jm,k,2,2)
+          dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df(:,4+n)*dxi(i,0:jm,k,2,3)
+        enddo
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        n=4+num_species
+        !
+        dtke(i,:,k,1)=dtke(i,:,k,1)+df(:,1+n)*dxi(i,0:jm,k,2,1)
+        dtke(i,:,k,2)=dtke(i,:,k,2)+df(:,1+n)*dxi(i,0:jm,k,2,2)
+        dtke(i,:,k,3)=dtke(i,:,k,3)+df(:,1+n)*dxi(i,0:jm,k,2,3)
+        !
+        domg(i,:,k,1)=domg(i,:,k,1)+df(:,2+n)*dxi(i,0:jm,k,2,1)
+        domg(i,:,k,2)=domg(i,:,k,2)+df(:,2+n)*dxi(i,0:jm,k,2,2)
+        domg(i,:,k,3)=domg(i,:,k,3)+df(:,2+n)*dxi(i,0:jm,k,2,3)
+        !
+        !
+      endif
+      !
+    enddo
+    enddo
+    deallocate(ff,df)
     !
     if(ndims==3) then
       allocate(ff(-hm:km+hm,ncolm),df(0:km,ncolm))
@@ -464,14 +474,15 @@ module comsolver
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Writen by Fang Jian, 2008-11-03.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine filterq(timerept)
+  subroutine filterq(qfilt,nq,timerept)
     !
-    use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
-                         alfa_filter,ndims,is,ie,js,je,ks,ke,turbmode
-    use commarray,only : q
+    use commvar,  only : im,jm,km,npdci,npdcj,npdck,alfa_filter,ndims, &
+                         is,ie,js,je,ks,ke,turbmode
     use commfunc, only : spafilter10,spafilter6exp
     !
     ! arguments
+    integer,intent(in) :: nq
+    real(8),intent(inout) :: qfilt(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:nq)
     logical,intent(in),optional :: timerept
     !
     ! local data
@@ -484,21 +495,21 @@ module comsolver
     if(present(timerept) .and. timerept) time_beg=ptime() 
     !
     ! filtering in i direction
-    call dataswap(q,direction=1,timerept=ltimrpt)
+    call dataswap(qfilt,direction=1,timerept=ltimrpt)
     !
-    allocate(phi(-hm:im+hm,1:numq),fph(0:im,1:numq))
+    allocate(phi(-hm:im+hm,1:nq),fph(0:im,1:nq))
     !
     do k=0,km
     do j=0,jm
       !
-      phi(:,:)=q(:,j,k,:)
+      phi(:,:)=qfilt(:,j,k,:)
       !
-      do n=1,numq
+      do n=1,nq
         fph(:,n)=spafilter10(phi(:,n),npdci,im,alfa_filter,fci)
         ! fph(:,n)=spafilter6exp(phi(:,n),npdci,im)
       enddo
       !
-      q(0:im,j,k,:)=fph(0:im,:)
+      qfilt(0:im,j,k,:)=fph(0:im,:)
       !
       ! if(npdci==1) then
       !   q(2:im,j,k,:)=fph(2:im,:)
@@ -517,40 +528,36 @@ module comsolver
     ! end filter in i direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    if(ndims>=2) then
+    ! filtering in j direction
+    call dataswap(qfilt,direction=2,timerept=ltimrpt)
+    !
+    allocate(phi(-hm:jm+hm,1:nq),fph(0:jm,1:nq))
+    !
+    do k=0,km
+    do i=0,im
       !
-      ! filtering in j direction
-      call dataswap(q,direction=2,timerept=ltimrpt)
+      phi(:,:)=qfilt(i,:,k,:)
       !
-      allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
+      do n=1,nq
+        fph(:,n)=spafilter10(phi(:,n),npdcj,jm,alfa_filter,fcj)
+        ! fph(:,n)=spafilter6exp(phi(:,n),npdcj,jm)
+      enddo
       !
-      do k=0,km
-      do i=0,im
-        !
-        phi(:,:)=q(i,:,k,:)
-        !
-        do n=1,numq
-          fph(:,n)=spafilter10(phi(:,n),npdcj,jm,alfa_filter,fcj)
-          ! fph(:,n)=spafilter6exp(phi(:,n),npdcj,jm)
-        enddo
-        !
-        q(i,0:jm,k,:)=fph(0:jm,:)
-        !
-        ! if(npdcj==1) then
-        !   q(i,2:jm,k,:)=fph(2:jm,:)
-        ! elseif(npdcj==2) then
-        !   q(i,0:jm-2,k,:)=fph(0:jm-2,:)
-        ! elseif(npdcj==3) then
-        !   q(i,0:jm,k,:)=fph(0:jm,:)
-        ! endif
-        !
-        !
-      end do
-      end do
+      qfilt(i,0:jm,k,:)=fph(0:jm,:)
       !
-      deallocate(phi,fph)
+      ! if(npdcj==1) then
+      !   q(i,2:jm,k,:)=fph(2:jm,:)
+      ! elseif(npdcj==2) then
+      !   q(i,0:jm-2,k,:)=fph(0:jm-2,:)
+      ! elseif(npdcj==3) then
+      !   q(i,0:jm,k,:)=fph(0:jm,:)
+      ! endif
       !
-    endif
+      !
+    end do
+    end do
+    !
+    deallocate(phi,fph)
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in j direction.
@@ -558,22 +565,22 @@ module comsolver
     !
     if(ndims==3) then
       !
-      call dataswap(q,direction=3,timerept=ltimrpt)
+      call dataswap(qfilt,direction=3,timerept=ltimrpt)
       !
       !
-      allocate(phi(-hm:km+hm,1:numq),fph(0:km,1:numq))
+      allocate(phi(-hm:km+hm,1:nq),fph(0:km,1:nq))
       !
       ! filtering in k direction
       do j=0,jm
       do i=0,im
         !
-        phi(:,:)=q(i,j,:,:)
+        phi(:,:)=qfilt(i,j,:,:)
         !
-        do n=1,numq
+        do n=1,nq
           fph(:,n)=spafilter10(phi(:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
         enddo
         !
-        q(i,j,0:km,:)=fph
+        qfilt(i,j,0:km,:)=fph
         !
       end do
       end do
@@ -593,7 +600,7 @@ module comsolver
     ! call filter2e(q(:,:,:,5))
     ! call filter2e(q(:,:,:,6))
     if(trim(turbmode)=='k-omega') then
-      call filter2e(q(:,:,:,7))
+      call filter2e(qfilt(:,:,:,7))
     endif
     !
     if(present(timerept) .and. timerept) then

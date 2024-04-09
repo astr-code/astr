@@ -187,53 +187,52 @@ module fludyna
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 04-Aug-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !| 10-04-2024:  Merge the range by J. Fang @ Warrington              |
   !+-------------------------------------------------------------------+
-  subroutine updatefvar
+  subroutine updatefvar(qint,ibeg,iend,jbeg,jend,kbeg,kend)
     !
     use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
-    use commvar,  only : im,jm,km,num_species,num_modequ,turbmode
+    use commvar,  only : im,jm,km,num_species,num_modequ,turbmode,hm,numq
     !
+    ! arguments
+    real(8),intent(inout) :: qint(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq)
+    integer,intent(in),optional :: ibeg,iend,jbeg,jend,kbeg,kend
     ! local data
     integer :: i,j,k
+    integer :: iss,iee,jss,jee,kss,kee
+    !
+    iss=-hm
+    iee=im+hm
+    jss=-hm
+    jee=jm+hm
+    kss=-hm
+    kee=km+hm
+    if(present(ibeg)) iss=ibeg
+    if(present(iend)) iee=iend
+    if(present(jbeg)) jss=jbeg
+    if(present(jend)) jee=jend
+    if(present(kbeg)) kss=kbeg
+    if(present(kend)) kee=kend
     !
     if(trim(turbmode)=='k-omega') then
       !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:),    &
-                                         tke=tke(0:im,0:jm,0:km),      &
-                                       omega=omg(0:im,0:jm,0:km) )
-      !
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        !
-        if(tke(i,j,k)<0.d0) then
-          tke(i,j,k)=0.d0
-          q(i,j,k,6+num_species)=rho(i,j,k)*tke(i,j,k)
-        endif
-        !
-        if(omg(i,j,k)<0.01d0) then
-          omg(i,j,k)=0.01d0
-          q(i,j,k,7+num_species)=rho(i,j,k)*omg(i,j,k)
-        endif
-        !
-      enddo
-      enddo
-      enddo
+      call q2fvar(q=qint(iss:iee,jss:jee,kss:kee,:),                            &
+                                     density=rho(iss:iee,jss:jee,kss:kee),      &
+                                    velocity=vel(iss:iee,jss:jee,kss:kee,:),    &
+                                    pressure=prs(iss:iee,jss:jee,kss:kee),      &
+                                 temperature=tmp(iss:iee,jss:jee,kss:kee),      &
+                                     species=spc(iss:iee,jss:jee,kss:kee,:),    &
+                                         tke=tke(iss:iee,jss:jee,kss:kee),      &
+                                       omega=omg(iss:iee,jss:jee,kss:kee) )
       !
     elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
       !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:) )
-      !
+      call q2fvar(q=qint(iss:iee,jss:jee,kss:kee,:),                            &
+                                     density=rho(iss:iee,jss:jee,kss:kee),      &
+                                    velocity=vel(iss:iee,jss:jee,kss:kee,:),    &
+                                    pressure=prs(iss:iee,jss:jee,kss:kee),      &
+                                 temperature=tmp(iss:iee,jss:jee,kss:kee),      &
+                                     species=spc(iss:iee,jss:jee,kss:kee,:) )
     else
       print*,' !! ERROR @ updatefvar'
       stop
@@ -821,6 +820,23 @@ module fludyna
     return
     !
   end function miucal
+  !
+  subroutine miucomp
+    !
+    use commvar,   only :  Reynolds,im,jm,km
+    use commarray, only : miu,tmp
+    !
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      miu(i,j,k)=miucal(tmp(i,j,k))/Reynolds
+    enddo
+    enddo
+    enddo
+    !
+  end subroutine miucomp
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of function MiuCal.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

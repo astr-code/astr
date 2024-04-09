@@ -29,6 +29,7 @@ add_executable(astr
                     initialisation.F90
                     interp.F90
                     mainloop.F90
+                    methodmoment.F90
                     models.F90
                     parallel.F90
                     pp.F90

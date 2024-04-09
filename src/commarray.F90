@@ -13,7 +13,7 @@ module commarray
   !
   real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp,     &
                                             dgrid,vor
-  real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp
+  real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp,miu
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
   real(8),allocatable,dimension(:,:,:) :: bnorm_i0,bnorm_im,bnorm_j0,  &
                                           bnorm_jm,bnorm_k0,bnorm_km
@@ -32,7 +32,6 @@ module commarray
   real(8),allocatable,dimension(:,:,:,:) :: dtke,domg
   real(8),allocatable,dimension(:,:,:,:) :: sigma,qflux
   real(8),allocatable,dimension(:,:,:,:,:) :: yflux
-  real(8),allocatable,dimension(:,:,:,:) :: mijk,rij
   !
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
@@ -113,6 +112,9 @@ module commarray
     !
     allocate(crinod(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating crinod'
+    !
+    allocate(miu(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating miu'
     !
     allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )

@@ -13,6 +13,8 @@ module interp
     module procedure linear1d_s
     module procedure linear1d_a1
     module procedure linear1d_a2
+    module procedure linear1d_a3
+    module procedure linear1d_a4
   end interface interlinear
   !
   contains
@@ -62,7 +64,37 @@ module interp
     !
     return
     !
-  end function linear1d_a2
+  end function 
+  !
+  function linear1d_a3(xx1,xx2,yy1,yy2,xx) result(yy)
+    !
+    real(8),intent(in) :: xx1,xx2,xx
+    real(8),intent(in) ::  yy1(:,:,:),yy2(:,:,:)
+    real(8) :: yy(1:size(yy1,1),1:size(yy1,2),1:size(yy1,3))
+    !
+    real(8) :: var1
+    !
+    var1=(xx-xx1)/(xx2-xx1)
+    yy=(yy2-yy1)*var1+yy1
+    !
+    return
+    !
+  end function linear1d_a3
+  !
+  function linear1d_a4(xx1,xx2,yy1,yy2,xx) result(yy)
+    !
+    real(8),intent(in) :: xx1,xx2,xx
+    real(8),intent(in) ::  yy1(:,:,:,:),yy2(:,:,:,:)
+    real(8) :: yy(1:size(yy1,1),1:size(yy1,2),1:size(yy1,3),1:size(yy1,4))
+    !
+    real(8) :: var1
+    !
+    var1=(xx-xx1)/(xx2-xx1)
+    yy=(yy2-yy1)*var1+yy1
+    !
+    return
+    !
+  end function linear1d_a4
   !+-------------------------------------------------------------------+
   !| The end of the function linear1d                                  |
   !+-------------------------------------------------------------------+

@@ -11,7 +11,7 @@ module mainloop
   use parallel, only: lio,mpistop,mpirank,qswap,mpirankname,pmax,      &
                       ptime,irk,jrk,irkm,jrkm
   use commvar,  only: im,jm,km,ia,ja,ka,ctime,nstep,lcracon,lreport,   &
-                      ltimrpt,rkstep
+                      ltimrpt,rkstep,hm,numq
   use commarray,only: crinod
   use tecio
   use stlaio,   only: get_unit
@@ -25,6 +25,8 @@ module mainloop
   integer :: nstep0
   real(8) :: time_start
   !
+  real(8),allocatable :: qsub(:,:,:,:),q00(:,:,:,:)
+  !
   contains
   !
   !+-------------------------------------------------------------------+
@@ -36,17 +38,23 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine steploop
     !
-    use commvar,  only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
-                        rkscheme,nsrpt,flowtype,limmbou
-    use readwrite,only: readcont,timerept,nxtchkpt,nxtwsequ
-    use commcal,  only: cflcal
-    use ibmethod, only: ibforce
+    use commvar,   only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
+                         rkscheme,nsrpt,flowtype,limmbou,moment
+    use commarray, only: q
+    use comsolver, only: gradcal
+    use readwrite, only: readcont,timerept,nxtchkpt,nxtwsequ
+    use commcal,   only: cflcal
+    use ibmethod,  only: ibforce
     use userdefine,only: udf_eom_set
+    use fludyna,   only: updatefvar,miucomp
+    use interp,    only: interlinear
+    use methodmoment, only: rk3mom,qmomswap,updatemoment
     !
     ! local data
     real(8) :: time_beg,time_next_step
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
+    real(8),save :: subtime=0.d0,subdeltat
     integer,dimension(8) :: value
     real(8) :: time_total,time_dowhile
     !
@@ -57,6 +65,14 @@ module mainloop
     nstep0=nstep
     !
     if(firstcall) then
+      !
+      if(moment=='r13' .or. moment=='r26') then
+        subtime=time
+        ! subdeltat=deltat
+        subdeltat=0.125d0*deltat
+        !
+        allocate(qsub(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
+      endif
       !
       crinod=.false.
       firstcall=.false.
@@ -83,6 +99,41 @@ module mainloop
       !
       if(rkscheme=='rk3') then
         call rk3(timerept=ltimrpt)
+        !
+        ! solve moment equations with smaller time step.
+        if(moment=='r13' .or. moment=='r26') then
+          !
+          call qswap
+          !
+          ! temporal integration for mom equations
+          do while(subtime<time+deltat)
+            !
+            ! interpolate q in time
+            qsub=interlinear(time,time+deltat,q00,q,subtime)
+            !
+            ! update flow variables, including halos
+            call updatefvar(qsub,-hm,im+hm,-hm,jm+hm,-hm,km+hm)
+            !
+            call miucomp()
+            !
+            call gradcal(timerept=ltimrpt)
+            !
+            call rk3mom(timestep=subdeltat)
+            !
+            subtime=subtime+subdeltat
+            !
+          enddo
+          !
+          ! update stress and heatflux for N=S eq.
+          call updatemoment(0,im,0,jm,0,km)
+          !
+          call qmomswap()
+          !
+          ! retore flow variables from q
+          call updatefvar(q,-hm,im+hm,-hm,jm+hm,-hm,km+hm)
+          !
+        endif
+        !
       elseif(rkscheme=='rk4') then
         call rk4
       endif
@@ -275,7 +326,7 @@ module mainloop
                          feqwsequ,lwslic,lreport,flowtype,     &
                          ndims,num_species,maxstep
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
-    use fludyna,  only : updatefvar
+    use fludyna,  only : updatefvar,miucomp
     use comsolver,only : filterq,spongefilter,filter2e
     use solver,   only : rhscal
     use bc,       only : boucon,immbody
@@ -293,7 +344,6 @@ module mainloop
     real(8),save :: rkcoe(3,3)
     integer :: i,j,k,m,n
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
-    real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
     real(8) :: hrr,time_beg_2
     real(8),save :: subtime=0.d0
@@ -326,7 +376,7 @@ module mainloop
       rkcoe(2,3)=num2d3
       rkcoe(3,3)=num2d3
       !
-      allocate(qsave(0:im,0:jm,0:km,1:numq))
+      allocate(q00(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
       !
       firstcall=.false.
       !
@@ -374,9 +424,7 @@ module mainloop
       !
       if(rkstep==1) then
         !
-        do m=1,numq
-          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
-        enddo
+        q00=q
         !
         call rkfirst
         !
@@ -384,39 +432,23 @@ module mainloop
       !
       do m=1,numq
         !
-        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+      &
-                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)*          &
-                                     jacob(0:im,0:jm,0:km)+            &
-                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
-        !
-        q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*q00(0:im,0:jm,0:km,m) +    &
+                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)   +    &
+                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)*deltat
         !
       enddo
       !
       ctime(14)=ctime(14)+ptime()-time_beg_2
       !
       if(lfilter) then
-        call filterq(timerept=ltimrpt)
+        call filterq(q,numq,timerept=ltimrpt)
       endif
       !
       call spongefilter
       !
       time_beg_2=ptime()
       !
-      call updatefvar
-      !
-      ! for debug
-      ! do k=0,km
-      ! do j=0,jm
-      ! do i=0,im
-      !   !
-      !   print*,qrhs(i,j,k,:)
-      !   !
-      ! enddo
-      ! enddo
-      ! enddo
-      !
-      ! call mpistop
+      call updatefvar(q)
       !
       ctime(15)=ctime(15)+ptime()-time_beg_2
       !
@@ -502,15 +534,18 @@ module mainloop
         !
         ctime(13)=ctime(13)+ptime()-time_beg_2
         !
-        time_beg_2=ptime()
-        !
-        call updatefvar
-        !
-        ctime(15)=ctime(15)+ptime()-time_beg_2
-        !
       endif !odetype
+      !
 #endif
     !
+      time_beg_2=ptime()
+      !
+      call updatefvar(q,0,im,0,jm,0,km)
+      !
+      call miucomp()
+      !
+      ctime(15)=ctime(15)+ptime()-time_beg_2
+      !
     enddo !rk
     !
 #ifdef COMB
@@ -634,11 +669,11 @@ module mainloop
         enddo
       endif
       !
-      if(lfilter) call filterq(timerept=ltimrpt)
+      if(lfilter) call filterq(q,numq,timerept=ltimrpt)
       !
       call spongefilter
       !
-      call updatefvar
+      call updatefvar(q)
       !
       ! call crashcheck
       if(lcracon) call crashfix
@@ -985,7 +1020,7 @@ module mainloop
         stop ' !! error 2 of datpnt @ databakup'
       endif
       !
-      call updatefvar
+      call updatefvar(q)
       !
     else
       stop ' !! mode error @ databakup'

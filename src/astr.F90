@@ -19,6 +19,7 @@ program astr
   use ibmethod
   use test
   use comsolver
+  use methodmoment
   !
   implicit none
   !
