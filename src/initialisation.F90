@@ -50,7 +50,13 @@ module initialisation
       !
       call readcheckpoint(folder='outdat',mode='h')
       !
-      call updateq
+      call updateq()
+      !
+      if(moment=='r13' .or. moment=='r26') then
+        !
+        call updateqmom()
+        !
+      endif
       !
     else
       !
@@ -127,9 +133,9 @@ module initialisation
       !
       call miucomp
       !
+      call gradcal(dswap=.true.)
+      !
       if(moment=='r13' .or. moment=='r26') then
-        !
-        call gradcal(dswap=.true.)
         !
         call diffusion_flux()
         !

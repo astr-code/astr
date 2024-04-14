@@ -129,7 +129,8 @@ module readwrite
                         spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,     &
                         lchardecomp,recon_schem,                       &
                         lrestart,limmbou,solidfile,bfacmpld,           &
-                        turbmode,schmidt,ibmode,gridfile,testmode,moment
+                        turbmode,schmidt,ibmode,gridfile,testmode,     &
+                        moment,knudsen,gamma
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
 #ifdef COMB
     use commvar, only : odetype,lcomb
@@ -229,8 +230,8 @@ module readwrite
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                      *** Flow Parameters ***'
       if(nondimen) then
-        write(*,'(4X,3(A20))')'ref_tem','Reynolds','Mach'
-        write(*,"(4X,3(F20.6))")ref_tem,reynolds,mach
+        write(*,'(4X,5(A12))')'ref_tem','Reynolds','Mach','Knudsen','Gamma'
+        write(*,"(4X,5(F12.6))")ref_tem,reynolds,mach,knudsen,gamma
       else
         write(*,'(35X,A)')' everything is under SI units'
         write(*,'(4(A16))')'ref_tem','ref_vel','ref_len','ref_den'
@@ -527,7 +528,7 @@ module readwrite
     use parallel,only : bcast,mpibar
     use commvar, only : ia,ja,ka,lihomo,ljhomo,lkhomo,conschm,difschm, &
                         nondimen,diffterm,ref_tem,ref_vel,ref_len,     &
-                        ref_den,reynolds,mach,                         &
+                        ref_den,reynolds,mach,gamma,                   &
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,kcutoff,              &
                         ninit,rkscheme,spg_i0,spg_im,spg_j0,spg_jm,    &
@@ -589,12 +590,42 @@ module readwrite
 #ifdef COMB
       read(fh,'(//)')
 #else 
+      read(fh,'(/)')
+      read(fh,'(A)')charin
+      call split(charin,arguments,',')
       if(nondimen) then
-        read(fh,'(/)')
-        read(fh,*)ref_tem,reynolds,mach
+        !
+        if(size(arguments)==3) then
+          read(arguments(1),*)ref_tem
+          read(arguments(2),*)reynolds
+          read(arguments(3),*)mach
+          gamma=1.4d0 ! default
+        elseif(size(arguments)==4) then
+          read(arguments(1),*)ref_tem
+          read(arguments(2),*)reynolds
+          read(arguments(3),*)mach
+          read(arguments(4),*)gamma
+        else 
+          stop ' !! error 1 at read input, flow parameters !!'
+        endif
+        !
       else
-        read(fh,'(/)')
-        read(fh,*)ref_tem,ref_vel,ref_len,ref_den
+        if(size(arguments)==4) then
+          read(arguments(1),*)ref_tem
+          read(arguments(2),*)ref_vel
+          read(arguments(3),*)ref_len
+          read(arguments(4),*)ref_den
+          gamma=1.4d0 ! default
+        elseif(size(arguments)==5) then
+          read(arguments(1),*)ref_tem
+          read(arguments(2),*)ref_vel
+          read(arguments(3),*)ref_len
+          read(arguments(4),*)ref_den
+          read(arguments(5),*)gamma
+        else 
+          stop ' !! error 2 at read input, flow parameters !!'
+        endif
+        !
       endif
 #endif
       !
@@ -729,6 +760,8 @@ module readwrite
     call bcast(bfacmpld)
     call bcast(shkcrt)
     call bcast(kcutoff)
+    !
+    call bcast(gamma)
     !
     call bcast(ref_tem)
     call bcast(ref_vel)
@@ -1453,8 +1486,9 @@ module readwrite
     !
     use commvar, only: nstep,filenumb,fnumslic,time,flowtype,           &
                        num_species,im,jm,km,force,numq,turbmode,lwsequ, &
-                       nondimen
-    use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut
+                       nondimen,moment
+    use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut,sigma,qflux
+    use methodmoment, only: mijk, Rij
     use statistic, only : massflux,massflux_target,nsamples
     use hdf5io
     use bc,        only : ninflowslice
@@ -1528,6 +1562,34 @@ module readwrite
         call h5read(varname='miut',  var=miut(0:im,0:jm,0:km),mode=modeio)
       endif
       !
+      if(moment=='r13' .or. moment == 'r26') then
+        !
+        call h5read(varname='sigmaxx',var=sigma(0:im,0:jm,0:km,1),mode=modeio)
+        call h5read(varname='sigmaxy',var=sigma(0:im,0:jm,0:km,2),mode=modeio)
+        call h5read(varname='sigmaxz',var=sigma(0:im,0:jm,0:km,3),mode=modeio)
+        call h5read(varname='sigmayy',var=sigma(0:im,0:jm,0:km,4),mode=modeio)
+        call h5read(varname='sigmayz',var=sigma(0:im,0:jm,0:km,5),mode=modeio)
+        call h5read(varname='sigmazz',var=sigma(0:im,0:jm,0:km,6),mode=modeio)
+          !
+        call h5read(varname='qx',var=qflux(0:im,0:jm,0:km,1),mode=modeio)
+        call h5read(varname='qy',var=qflux(0:im,0:jm,0:km,2),mode=modeio)
+        call h5read(varname='qz',var=qflux(0:im,0:jm,0:km,3),mode=modeio)
+        !
+        call h5read(varname='mxxx',var=mijk(0:im,0:jm,0:km,1),mode=modeio)
+        call h5read(varname='mxxy',var=mijk(0:im,0:jm,0:km,2),mode=modeio)
+        call h5read(varname='mxxz',var=mijk(0:im,0:jm,0:km,3),mode=modeio)
+        call h5read(varname='mxyy',var=mijk(0:im,0:jm,0:km,4),mode=modeio)
+        call h5read(varname='myyy',var=mijk(0:im,0:jm,0:km,5),mode=modeio)
+        call h5read(varname='myyz',var=mijk(0:im,0:jm,0:km,6),mode=modeio)
+        call h5read(varname='mxyz',var=mijk(0:im,0:jm,0:km,7),mode=modeio)
+
+        call h5read(varname='Rxx',var=Rij(0:im,0:jm,0:km,1),mode=modeio)
+        call h5read(varname='Rxy',var=Rij(0:im,0:jm,0:km,2),mode=modeio)
+        call h5read(varname='Rxz',var=Rij(0:im,0:jm,0:km,3),mode=modeio)
+        call h5read(varname='Ryy',var=Rij(0:im,0:jm,0:km,4),mode=modeio)
+        call h5read(varname='Ryz',var=Rij(0:im,0:jm,0:km,5),mode=modeio)
+        !
+      endif
       ! call h5io_init('checkpoint/qdata.'//modeio//'5',mode='read')
       ! do jsp=1,numq
       !   write(qname,'(i2.2)')jsp
@@ -1787,8 +1849,9 @@ module readwrite
   subroutine writeflfed(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax
-    use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
+                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax,moment
+    use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod,sigma,qflux
+    use methodmoment,only: mijk,Rij
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
     use bc,       only : ninflowslice
@@ -1883,6 +1946,35 @@ module readwrite
       call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
     elseif(trim(turbmode)=='udf1') then
       call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
+    endif
+    !
+    if(moment=='r13' .or. moment == 'r26') then
+      !
+      call h5write(varname='sigmaxx',var=sigma(0:im,0:jm,0:km,1),mode=iomode)
+      call h5write(varname='sigmaxy',var=sigma(0:im,0:jm,0:km,2),mode=iomode)
+      call h5write(varname='sigmaxz',var=sigma(0:im,0:jm,0:km,3),mode=iomode)
+      call h5write(varname='sigmayy',var=sigma(0:im,0:jm,0:km,4),mode=iomode)
+      call h5write(varname='sigmayz',var=sigma(0:im,0:jm,0:km,5),mode=iomode)
+      call h5write(varname='sigmazz',var=sigma(0:im,0:jm,0:km,6),mode=iomode)
+      !
+      call h5write(varname='qx',var=qflux(0:im,0:jm,0:km,1),mode=iomode)
+      call h5write(varname='qy',var=qflux(0:im,0:jm,0:km,2),mode=iomode)
+      call h5write(varname='qz',var=qflux(0:im,0:jm,0:km,3),mode=iomode)
+      !
+      call h5write(varname='mxxx',var=mijk(0:im,0:jm,0:km,1),mode=iomode)
+      call h5write(varname='mxxy',var=mijk(0:im,0:jm,0:km,2),mode=iomode)
+      call h5write(varname='mxxz',var=mijk(0:im,0:jm,0:km,3),mode=iomode)
+      call h5write(varname='mxyy',var=mijk(0:im,0:jm,0:km,4),mode=iomode)
+      call h5write(varname='myyy',var=mijk(0:im,0:jm,0:km,5),mode=iomode)
+      call h5write(varname='myyz',var=mijk(0:im,0:jm,0:km,6),mode=iomode)
+      call h5write(varname='mxyz',var=mijk(0:im,0:jm,0:km,7),mode=iomode)
+
+      call h5write(varname='Rxx',var=Rij(0:im,0:jm,0:km,1),mode=iomode)
+      call h5write(varname='Rxy',var=Rij(0:im,0:jm,0:km,2),mode=iomode)
+      call h5write(varname='Rxz',var=Rij(0:im,0:jm,0:km,3),mode=iomode)
+      call h5write(varname='Ryy',var=Rij(0:im,0:jm,0:km,4),mode=iomode)
+      call h5write(varname='Ryz',var=Rij(0:im,0:jm,0:km,5),mode=iomode)
+      !
     endif
     !
     call h5io_end

@@ -93,7 +93,7 @@ module commvar
   real(8) :: time,deltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
   real(8) :: ref_tem,ref_vel,ref_len,ref_den,ref_miu,ref_tim
-  real(8) :: reynolds,mach,rgas,cp,cv,gamma,prandtl
+  real(8) :: reynolds,mach,rgas,cp,cv,gamma,prandtl,knudsen
   real(8),allocatable :: schmidt(:)
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1

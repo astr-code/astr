@@ -33,7 +33,7 @@ module solver
                         tempconst,tempconst1,reynolds,mach,num_modequ, &
                         turbmode,spcinf,nondimen,ref_tem,ref_vel,      &
                         ref_len,ref_den,ref_miu,ref_tim,moment,        &
-                        num_xtrmom
+                        num_xtrmom,knudsen
     use thermchem, only: spcindex
     use fludyna,   only: thermal,sos,miucal
     use userdefine,only: udf_setflowenv
@@ -103,8 +103,6 @@ module solver
     ref_tim=1.d0
 #else
     !
-    gamma=1.4d0
-    !
     if(nondimen) then 
       !
       const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
@@ -130,6 +128,7 @@ module solver
       ref_len=1.d0
       ref_tim=ref_len/ref_vel
       !
+      knudsen=mach/reynolds*sqrt(0.5d0*gamma*pi)
     else 
       !
       ! rgas=287.1d0

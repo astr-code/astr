@@ -100,7 +100,7 @@ module test
     ! enstrophy=0.5d0*psum(enstrophy)/real(ia*ja*ka,8)
     ! enstrophy=enstrophy/(roinf*(uinf)**2)
     !
-    enstrophy=enstophycal()
+    call enstophycal(enstrophy)
     print*,' ** enstrophy=',enstrophy
     !
     if(mpirank==0) then

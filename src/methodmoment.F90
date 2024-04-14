@@ -64,8 +64,6 @@ module methodmoment
     !
     use commvar, only: im,jm,km,hm,num_xtrmom
     !
-    print*,allocated(q_mom)
-    !
     allocate(q_mom(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_xtrmom),source=0.d0)
     allocate(qrhs_mom(0:im,0:jm,0:km,1:num_xtrmom),source=0.d0)
     allocate( dprs(0:im,0:jm,0:km,1:3),source=0.d0)
@@ -1017,7 +1015,7 @@ module methodmoment
   !+-------------------------------------------------------------------+
   subroutine qmomswap(timerept)
     !
-    use mpi,      only: MPI_PROC_NULL,mpi_sendrecv,mpi_real8,mpi_comm_world
+    use mpi
     use commvar,  only: num_xtrmom,ia,ja,ka,lreport
     use parallel, only: isize,jsize,ksize,lio,lihomo,ljhomo,lkhomo,    &
                         mpileft,mpiright,mpidown,mpiup,mpifront,mpiback, &

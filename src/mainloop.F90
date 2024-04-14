@@ -402,22 +402,6 @@ module mainloop
       !
       call rhscal(timerept=ltimrpt)
       !
-      !for debug
-      ! do k=0,km
-      ! do j=0,jm
-      ! do i=0,im
-      !   !
-      !   do n=1,numq
-      !     if(isnan(qrhs(i,j,k,n))) then
-      !       print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',rkstep
-      !       stop
-      !     endif
-      !   enddo
-      !   !
-      ! enddo
-      ! enddo
-      ! enddo
-      !
       if(flowtype(1:2)=='0d') jacob=1.d0
       !
       time_beg_2=ptime()
