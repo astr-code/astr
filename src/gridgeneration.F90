@@ -56,6 +56,8 @@ module gridgeneration
         call gridsupersonicjet
       elseif(trim(flowtype)=='rti') then
         call gridcube(0.25d0,1.d0,0.d0)
+      elseif(trim(flowtype)=='ldcavity') then
+        call gridcube(1.d0,1.d0,0.d0)
       else
         call udf_grid
         ! print*,trim(flowtype),' is not defined @ gridgen'

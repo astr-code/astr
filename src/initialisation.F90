@@ -120,6 +120,8 @@ module initialisation
           call tgvflameini
         case('rti')
           call rtini
+        case('ldcavity')
+          call ldcavityini
         ! case('hitflame')
         !   call hitflameini
         ! case default
@@ -864,6 +866,45 @@ module initialisation
   end subroutine rtini
   !+-------------------------------------------------------------------+
   !| The end of the subroutine rtini.                                  |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to initialise field for a lid-driven      |
+  !| cavity flow                                                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 17-04-2024: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+  subroutine ldcavityini
+    !
+    use commarray,only: x,vel,rho,prs,tmp
+    use fludyna,  only: thermal
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)=1.d0
+      tmp(i,j,k)=1.d0
+      prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k))
+      !
+      vel(i,j,k,1)=  0.d0
+      vel(i,j,k,2)=  0.d0
+      vel(i,j,k,3)=  0.d0
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D R–T instability initialised.'
+    !
+  end subroutine ldcavityini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine ldcavityini.                            |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

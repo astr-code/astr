@@ -6187,7 +6187,7 @@ module bc
         do i=0,im
           pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
           !
-          vel(i,j,k,1)=0.d0
+          vel(i,j,k,1)=-1.d0
           vel(i,j,k,2)=0.d0
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe
@@ -6219,15 +6219,95 @@ module bc
             !
           endif
           !
-          if(trim(turbmode)=='k-omega') then
-            tke(i,j,k)=0.d0
+        enddo
+        enddo
+        !
+      endif
+      !
+    elseif(ndir==1) then
+      !
+      if(irk==0) then
+        !
+        i=0
+        do k=0,km
+        do j=0,jm
+          pe=num1d3*(4.d0*prs(i+1,j,k)-prs(i+2,j,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =tw
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i+1,j,k,1)-spc(i,j+2,k,1))
+          endif
+          !
+          if(nondimen) then
             !
-            delta_d1=dis2point2(x(i,j,k,:),x(i,j-1,k,:))
-            miu=miucal(tmp(i,j,k))/Reynolds
-            omg(i,j,k)=50.d0*miu/rho(i,j,k)/beta1/delta_d1
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
             !
-            q(i,j,k,5+num_species+1)=tke(i,j,k)*rho(i,j,k)
-            q(i,j,k,5+num_species+2)=omg(i,j,k)*rho(i,j,k)
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
+    elseif(ndir==2) then
+      !
+      if(irk==irkm) then
+        !
+        i=im
+        do k=0,km
+        do j=0,jm
+          pe=num1d3*(4.d0*prs(i-1,j,k)-prs(i-2,j,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =tw
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i-1,j,k,1)-spc(i,j-2,k,1))
+          endif
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
             !
           endif
           !
@@ -6237,6 +6317,7 @@ module bc
       endif
       !
     else
+      print*,ndir,irk
       stop ' !! ndir not defined @ noslip'
     endif
     !
@@ -6445,7 +6526,7 @@ module bc
       endif
       !
     else
-      stop ' !! ndir not defined @ noslip'
+      stop ' !! ndir not defined @ noslip_adibatic'
     endif
     !
   end subroutine noslip_adibatic
