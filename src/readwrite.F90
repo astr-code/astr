@@ -518,7 +518,8 @@ module readwrite
                         spg_k0,spg_km,lchardecomp,                     &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
-                        ltimrpt,testmode
+                        ltimrpt,testmode,xcav_left,xcav_right,         &
+                        xcav2_left,xcav2_right,ycav_upper       
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -635,6 +636,12 @@ module readwrite
       if(limmbou) then
         read(fh,'(/)')
         read(fh,*)ibmode,solidfile
+        if(trim(solidfile)=='cavity') then
+           read(fh,*)xcav_left,xcav_right,ycav_upper
+         endif
+         if(trim(solidfile)=='2cavity') then
+           read(fh,*)xcav_left,xcav_right,xcav2_left,xcav2_right,ycav_upper
+         endif
       endif
 #ifdef COMB
       if(.not.nondimen) then
@@ -684,6 +691,12 @@ module readwrite
     call bcast(difschm)
     call bcast(gridfile)
     call bcast(solidfile)
+
+    call bcast(xcav_right)
+    call bcast(xcav_left)
+    call bcast(xcav2_right)
+    call bcast(xcav2_left)
+    call bcast(ycav_upper)
     !
     call bcast(nondimen)
     call bcast(diffterm)

@@ -177,6 +177,7 @@ module commvar
   !|             lreport | to control report of subroutines            |
   !+---------------------+---------------------------------------------+
   character(len=4) :: testmode
+  real(8) :: xcav_left,xcav_right,xcav2_left,xcav2_right,ycav_upper
   !
 #ifdef COMB
   logical :: lcomb

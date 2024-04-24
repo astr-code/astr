@@ -4661,6 +4661,7 @@ module geom
   subroutine solid_udf_cavity(xp,inside,bnode)
     !
     use commtype,  only : sboun
+    use commvar,   only : xcav_left,xcav_right,ycav_upper
     !
     real(8),intent(in) :: xp(3)
     logical,intent(out),optional :: inside
@@ -4669,9 +4670,9 @@ module geom
     real(8) :: dis1,dis2
     real(8) :: step_upper_y,step_right_x,step_left_x
     !
-    step_left_x=5.d0
-    step_right_x=25.d0
-    step_upper_y=0.d0
+    step_left_x=xcav_left
+    step_right_x=xcav_right
+    step_upper_y=ycav_upper
     !
     if(xp(2)<step_upper_y .and. xp(1)<=step_left_x) then
       !
