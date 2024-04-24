@@ -746,7 +746,7 @@ module commfunc
       allocate(alfa(3))
       alfa(3)=num1d3
       alfa(2)=0.25d0
-      alfa(1)=0.d0
+      alfa(1)=3.d0
     elseif(scheme==553) then
       allocate(alfa(5))
       alfa(1)=0.5d0
@@ -2846,7 +2846,7 @@ module commfunc
         !
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=0.5d0*( vin(1)-vin(-1))
+        vout(0)=-num17d6*vin(0)+1.5d0*(vin(1)+vin(2))-num1d6*vin(3)
         ! vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
         ! vout(0)=-1.5d0*vin(0)+2.d0*vin(1)-0.5d0*vin(2)
         vout(1)=0.75d0*( vin(2)-vin(0))
@@ -2880,7 +2880,7 @@ module commfunc
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)=0.5d0 *( vin(dim+1)-vin(dim-1))
+        vout(dim)=num17d6*vin(dim)-1.5d0*(vin(dim-1)+vin(dim-2))+num1d6*vin(dim-3)
         ! vout(dim)=num2d3 *( vin(dim+1)-vin(dim-1)) -                   &
         !           num1d12*( vin(dim+2)-vin(dim-2))
         
@@ -2910,7 +2910,7 @@ module commfunc
         !
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=0.5d0*( vin(1)-vin(-1))
+        vout(0)=-num17d6*vin(0)+1.5d0*(vin(1)+vin(2))-num1d6*vin(3)
         ! vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
         ! vout(0)=-1.5d0*vin(0)+2.d0*vin(1)-0.5d0*vin(2)
         vout(1)=0.75d0*( vin(2)-vin(0))
@@ -2930,7 +2930,7 @@ module commfunc
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)=0.5d0 *( vin(dim+1)-vin(dim-1))
+        vout(dim)=num17d6*vin(dim)-1.5d0*(vin(dim-1)+vin(dim-2))+num1d6*vin(dim-3)
         ! vout(dim)=num2d3 *( vin(dim+1)-vin(dim-1)) -                   &
         !           num1d12*( vin(dim+2)-vin(dim-2))
         
