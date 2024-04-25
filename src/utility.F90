@@ -416,8 +416,6 @@ module utility
       !
       write(txtformat,'(A,I0,A)')'(',nargs,'(1X,A20))'
       !
-      print*,nargs,txtformat
-      !
       write(handle,txtformat)(trim(args(n)),n=1,nargs)
       !
     endif

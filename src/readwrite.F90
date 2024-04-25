@@ -1019,10 +1019,10 @@ module readwrite
   subroutine writemon
     !
     use commvar, only: nmonitor,imon,nstep,time,pinf,deltat
-    use commarray, only : x,rho,vel,prs,tmp,dvel
+    use commarray, only : x,rho,vel,prs,tmp,dvel,dtmp
     !
     ! local data
-    integer :: n,i,j,k,ios,ns
+    integer :: n,i,j,k,ios,ns,recl_size
     integer,allocatable,save :: fh(:),record(:)
     logical,save :: firstcall = .true.
     logical :: lexist
@@ -1051,7 +1051,8 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*4)
+          recl_size=8*8
+          open(fh(n),file=trim(filename),access='direct',recl=recl_size)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1107,7 +1108,8 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),tmp(i,j,k),dvel(i,j,k,1,2), &
+                                  dvel(i,j,k,2,1),dtmp(i,j,k,1),dtmp(i,j,k,2)
         ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &

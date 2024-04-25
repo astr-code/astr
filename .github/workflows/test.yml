@@ -3,9 +3,6 @@ on:
   push:
     branches:
      - main
-  pull_request:
-    branches:
-     - main
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -19,26 +16,16 @@ jobs:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v4
 
-    - name: Build openmpi
+    - name: Install openmpi
       run: |
-        wget https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.4.tar.gz
-        tar -xf openmpi-4.1.4.tar.gz
-        cd openmpi-4.1.4/ && mkdir installed
-        ./configure --prefix=$(pwd)/installed
-        make all install
+        sudo apt-get install -y openmpi-bin libopenmpi-dev
 
-    - name: Build HDF5
+    - name: Install  HDF5
       run: |
-        wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.12/hdf5-1.12.0/src/hdf5-1.12.0.tar.bz2
-        tar -xf hdf5-1.12.0.tar.bz2
-        cd hdf5-1.12.0/ && mkdir installed
-        ./configure --prefix=$(pwd)/installed --enable-fortran --disable-shared --enable-parallel CC=mpicc FC=mpif90
-        make all install
+        sudo apt-get install -y openmpi-bin libopenmpi-dev
 
     - name: Build ASTR
       run: |
-        export PATH=$(pwd)/hdf5-1.12.0/installed/bin/:$PATH
-        export FC=h5pfc
         cmake -S . -B build 
         cmake --build build -j 2
         cmake --install build
