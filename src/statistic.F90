@@ -998,39 +998,68 @@ module statistic
     real(8) :: var1,miu
     real(8) :: du11,du12,du13,du21,du22,du23,du31,du32,du33,           &
                s11,s12,s13,s22,s23,s33,div
-    !
+    !S
     vout=0.d0
     !
-    do k=1,km
-    do j=1,jm
-    do i=1,im
-      ! 
-      if(nondimen) then
-        miu=miucal(tmp(i,j,k))/reynolds
-      else
-        miu=miucal(tmp(i,j,k))
-      endif
+    if(ndims==2) then
+      k=0
+      do j=1,jm
+      do i=1,im
+        ! 
+        if(nondimen) then
+          miu=miucal(tmp(i,j,k))/reynolds
+        else
+          miu=miucal(tmp(i,j,k))
+        endif
+        !
+        du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2)
+        du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2)
+        !
+        s11=du11; s12=0.5d0*(du12+du21)
+                  s22=du22
+        !
+        div=s11+s22
+        !
+        var1=2.d0*miu*(s11**2+s22**2+2.d0*(s12**2)-num1d3*div**2)
+        !
+        vout=vout+var1
+        !
+      enddo
+      enddo
       !
-      du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2); du13=dvel(i,j,k,1,3)
-      du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2); du23=dvel(i,j,k,2,3)
-      du31=dvel(i,j,k,3,1); du32=dvel(i,j,k,3,2); du33=dvel(i,j,k,3,3)
+      vout=psum(vout)/dble(ia*ja)
+    elseif(ndims==3) then
+      do k=1,km
+      do j=1,jm
+      do i=1,im
+        ! 
+        if(nondimen) then
+          miu=miucal(tmp(i,j,k))/reynolds
+        else
+          miu=miucal(tmp(i,j,k))
+        endif
+        !
+        du11=dvel(i,j,k,1,1); du12=dvel(i,j,k,1,2); du13=dvel(i,j,k,1,3)
+        du21=dvel(i,j,k,2,1); du22=dvel(i,j,k,2,2); du23=dvel(i,j,k,2,3)
+        du31=dvel(i,j,k,3,1); du32=dvel(i,j,k,3,2); du33=dvel(i,j,k,3,3)
+        !
+        s11=du11; s12=0.5d0*(du12+du21); s13=0.5d0*(du13+du31)
+                  s22=du22;              s23=0.5d0*(du23+du32)
+                                         s33=du33
+        !
+        div=s11+s22+s33
+        !
+        var1=2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)- &
+                                                            num1d3*div**2)
+        !
+        vout=vout+var1
+        !
+      enddo
+      enddo
+      enddo
       !
-      s11=du11; s12=0.5d0*(du12+du21); s13=0.5d0*(du13+du31)
-                s22=du22;              s23=0.5d0*(du23+du32)
-                                       s33=du33
-      !
-      div=s11+s22+s33
-      !
-      var1=2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)- &
-                                                          num1d3*div**2)
-      !
-      vout=vout+var1
-      !
-    enddo
-    enddo
-    enddo
-    !
-    vout=psum(vout)/dble(ia*ja*ka)
+      vout=psum(vout)/dble(ia*ja*ka)
+    endif
     !
     return
     !
