@@ -367,6 +367,9 @@ module readwrite
           write(*,'(23X,I0,2(A))')bctype(n),' slip-nonslip isothermal wall at: ',bcdir(n)
           write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+        elseif(bctype(n)==413) then
+          write(*,'(23X,I0,2(A))')bctype(n),'  slip condition for rarefied flow: ',bcdir(n)
+          write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
         elseif(bctype(n)==421) then
           write(*,'(23X,I0,2(A))')bctype(n),'  slip-nonslip adiabatic wall at: ',bcdir(n)
           write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
@@ -833,11 +836,14 @@ module readwrite
   subroutine readcont
     !
     use commvar, only: deltat,lwsequ,lwslic,lavg,maxstep,feqchkpt,     &
-                       feqwsequ,feqslice,feqlist,feqavg,lcracon
+                       feqwsequ,feqslice,feqlist,feqavg,lcracon,subdeltat
     use parallel,only: bcast
+    use strings, only : split
     !
     ! local data
     character(len=64) :: inputfile
+    character(len=128) :: charin
+    character(len=16),allocatable :: arguments(:)
     integer :: fh
     !
     inputfile='datin/controller'
@@ -852,7 +858,15 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
       read(fh,'(/)')
-      read(fh,*)deltat
+      read(fh,'(A)')charin
+      call split(charin,arguments,',')
+      if(size(arguments)==2) then
+        read(arguments(1),*)deltat
+        read(arguments(2),*)subdeltat
+      else
+        read(arguments(1),*)deltat
+        subdeltat=0.1d0*deltat
+      endif
       close(fh)
       print*,' >> ',trim(inputfile),' ... done'
       !
@@ -869,6 +883,7 @@ module readwrite
     call bcast(feqlist)
     call bcast(feqavg)
     call bcast(deltat)
+    call bcast(subdeltat)
     !
   end subroutine readcont
   !+-------------------------------------------------------------------+

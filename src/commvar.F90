@@ -90,7 +90,7 @@ module commvar
   integer :: nstep,nsrpt,maxstep,filenumb,nmonitor,fnumslic,rkstep
   integer :: islice,jslice,kslice
   integer,allocatable :: imon(:,:)
-  real(8) :: time,deltat
+  real(8) :: time,deltat,subdeltat
   real(8) :: uinf,vinf,winf,roinf,pinf,tinf
   real(8) :: ref_tem,ref_vel,ref_len,ref_den,ref_miu,ref_tim
   real(8) :: reynolds,mach,rgas,cp,cv,gamma,prandtl,knudsen

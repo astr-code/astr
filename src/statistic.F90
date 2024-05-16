@@ -877,7 +877,7 @@ module statistic
     real(8) :: l_0,u_0
     !
     ens=0.d0
-    enmax=0.d0
+    if(present(enmax)) enmax=0.d0
     !
     if(ndims==3) then
       !

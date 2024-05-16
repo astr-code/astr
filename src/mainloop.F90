@@ -39,7 +39,7 @@ module mainloop
   subroutine steploop
     !
     use commvar,   only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
-                         rkscheme,nsrpt,flowtype,limmbou,moment
+                         rkscheme,nsrpt,flowtype,limmbou,moment,subdeltat
     use commarray, only: q
     use comsolver, only: gradcal
     use readwrite, only: readcont,timerept,nxtchkpt,nxtwsequ
@@ -54,7 +54,7 @@ module mainloop
     real(8) :: time_beg,time_next_step
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
-    real(8),save :: subtime=0.d0,subdeltat
+    real(8),save :: subtime=0.d0
     integer,dimension(8) :: value
     real(8) :: time_total,time_dowhile
     !
@@ -69,7 +69,7 @@ module mainloop
       if(moment=='r13' .or. moment=='r26') then
         subtime=time
         ! subdeltat=deltat
-        subdeltat=0.125d0*deltat
+        subdeltat=0.1d0*deltat
         !
         allocate(qsub(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
       endif

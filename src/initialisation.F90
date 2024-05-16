@@ -34,13 +34,13 @@ module initialisation
     use commarray,only: vel,rho,prs,spc,q,tke,omg
     use comsolver,only: gradcal
     use solver,   only: diffusion_flux
-    use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d,          &
+    use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d, &
                         readcheckpoint,readmeanflow,readmonc,writeflfed
     use fludyna,  only: updateq,miucomp
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
     use userdefine,only: udf_flowinit
-    use methodmoment,only: init_moment,updateqmom
+    use methodmoment,only: allo_moment,updateqmom,mijkcal,Rijcal,deltacal
     !
     call inletprofile
     !
@@ -141,7 +141,17 @@ module initialisation
         !
         call diffusion_flux()
         !
-        call init_moment()
+        call allo_moment()
+        !
+        if(moment=='r26') then
+          !
+          call mijkcal
+          !
+          call Rijcal
+          !
+          call deltacal
+          !
+        endif
         !
         call updateqmom()
         !
@@ -753,9 +763,9 @@ module initialisation
     do j=0,jm
     do i=0,im
       tmp(i,j,k)  =tinf
-      prs(i,j,k)  =pinf+0.1d0*roinf/(16.d0*gamma)*(uinf**2) &
-                        *(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
-                        *(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
+      prs(i,j,k)  =pinf !+0.01d0*roinf/(16.d0*gamma)*(uinf**2) &
+                        !*(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
+                        !*(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
       ! prs(i,j,k)  =pinf+1.d0/16.d0*( cos(2.d0*x(i,j,k,1)/l_0) + &
       !                                 cos(2.d0*x(i,j,k,2)/l_0) )*(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
       !

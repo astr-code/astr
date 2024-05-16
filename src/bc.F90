@@ -6187,7 +6187,7 @@ module bc
         do i=0,im
           pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
           !
-          vel(i,j,k,1)=-1.d0
+          vel(i,j,k,1)=0.d0
           vel(i,j,k,2)=0.d0
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe

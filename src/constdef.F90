@@ -9,7 +9,7 @@ module constdef
   !
   implicit none
   !
-  real(8),parameter :: pi=4.d0*atan(1.0_8),                            &
+  real(8),parameter :: pi=3.141592653589793d0,                         &
                        num1d35 =1.d0/35.d0,  num1d3  =1.d0/3.d0,       &
                        num2d3  =2.d0/3.d0,   num1d24 =1.d0/24.d0,      &
                        num4d3  =4.d0/3.d0,   num1d6  =1.d0/6.d0,       &
@@ -23,7 +23,19 @@ module constdef
                        num5d6  =5.d0/6.d0,   num1d18 =1.d0/18.d0,      &
                        num19d18=19.d0/18.d0, num5d9  =5.d0/9.d0,       &
                        num9d36 =9.d0/36.d0,  num7d6  =7.d0/8.d0,       &
-                       num4d15 =4.d0/15.d0
+                       num4d15 =4.d0/15.d0,  num12d7 =12.d0/7.d0,      &
+                       num13d7 =13.d0/7.d0,  num15d7 =15.d0/7.d0,      &
+                       num16d7 =16.d0/7.d0,  num2d7  =2.d0/7.d0,       &
+                       num6d7  =6.d0/7.d0,   num9d7  =9.d0/7.d0,       &
+                       num27d21=27.d0/21.d0,num27d35 =27.d0/35.d0,     &
+                       num7d3  =7.d0/3.d0,   num1d7  =1.d0/7.d0,       &
+                       num2d35 =2.d0/35.d0,  num6d35 =6.d0/35.d0,      &
+                       num9d35 =9.d0/35.d0,  num8d35 =8.d0/35.d0,      &
+                       num14d5 =14.d0/5.d0,  num28d15=28.d0/15.d0,     &
+                       num14d3 =14.d0/3.d0,  num2d15 = 2.d0/15.d0,     &
+                       num4d7  =4.d0/7.d0,   num8d3  = 8.d0/3.d0,      &
+                       num17d6 = 17.d0/6.d0
+
   !+-------------------------------------------------------------------+
   !| constants.                                                        |
   !+-------------------------------------------------------------------+

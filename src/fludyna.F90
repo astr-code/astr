@@ -191,7 +191,7 @@ module fludyna
   !+-------------------------------------------------------------------+
   subroutine updatefvar(qint,ibeg,iend,jbeg,jend,kbeg,kend)
     !
-    use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
+    use commarray,only : q,rho,vel,prs,tmp,spc
     use commvar,  only : im,jm,km,num_species,num_modequ,turbmode,hm,numq
     !
     ! arguments
@@ -214,29 +214,12 @@ module fludyna
     if(present(kbeg)) kss=kbeg
     if(present(kend)) kee=kend
     !
-    if(trim(turbmode)=='k-omega') then
-      !
-      call q2fvar(q=qint(iss:iee,jss:jee,kss:kee,:),                            &
-                                     density=rho(iss:iee,jss:jee,kss:kee),      &
-                                    velocity=vel(iss:iee,jss:jee,kss:kee,:),    &
-                                    pressure=prs(iss:iee,jss:jee,kss:kee),      &
-                                 temperature=tmp(iss:iee,jss:jee,kss:kee),      &
-                                     species=spc(iss:iee,jss:jee,kss:kee,:),    &
-                                         tke=tke(iss:iee,jss:jee,kss:kee),      &
-                                       omega=omg(iss:iee,jss:jee,kss:kee) )
-      !
-    elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
-      !
-      call q2fvar(q=qint(iss:iee,jss:jee,kss:kee,:),                            &
-                                     density=rho(iss:iee,jss:jee,kss:kee),      &
-                                    velocity=vel(iss:iee,jss:jee,kss:kee,:),    &
-                                    pressure=prs(iss:iee,jss:jee,kss:kee),      &
-                                 temperature=tmp(iss:iee,jss:jee,kss:kee),      &
-                                     species=spc(iss:iee,jss:jee,kss:kee,:) )
-    else
-      print*,' !! ERROR @ updatefvar'
-      stop
-    endif
+    call q2fvar(q=qint(iss:iee,jss:jee,kss:kee,:),                            &
+                                   density=rho(iss:iee,jss:jee,kss:kee),      &
+                                  velocity=vel(iss:iee,jss:jee,kss:kee,:),    &
+                                  pressure=prs(iss:iee,jss:jee,kss:kee),      &
+                               temperature=tmp(iss:iee,jss:jee,kss:kee),      &
+                                   species=spc(iss:iee,jss:jee,kss:kee,:) )
     !
   end subroutine updatefvar
   !+-------------------------------------------------------------------+
@@ -252,50 +235,33 @@ module fludyna
   !+-------------------------------------------------------------------+
   subroutine updateq
     !
-    use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
+    use commarray,only : q,rho,vel,prs,tmp,spc
     use commvar,  only : im,jm,km,num_species,num_modequ,turbmode,numq
     !
     integer :: i,j,k,n
     !
-    if(trim(turbmode)=='k-omega') then
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                    density=rho(0:im,0:jm,0:km),                     &
+                   velocity=vel(0:im,0:jm,0:km,:),                   &
+                   pressure=prs(0:im,0:jm,0:km),                     &
+                   temperature=tmp(0:im,0:jm,0:km),                  &
+                    species=spc(0:im,0:jm,0:km,:)                    )
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
       !
-      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
-                      density=rho(0:im,0:jm,0:km),                     &
-                     velocity=vel(0:im,0:jm,0:km,:),                   &
-                     pressure=prs(0:im,0:jm,0:km),                     &
-                      species=spc(0:im,0:jm,0:km,:),                   &
-                          tke=tke(0:im,0:jm,0:km),                     &
-                        omega=omg(0:im,0:jm,0:km)                      )
-      !
-    elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
-      !
-      call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
-                      density=rho(0:im,0:jm,0:km),                     &
-                     velocity=vel(0:im,0:jm,0:km,:),                   &
-                     pressure=prs(0:im,0:jm,0:km),                     &
-                     temperature=tmp(0:im,0:jm,0:km),                  &
-                      species=spc(0:im,0:jm,0:km,:)                    )
-      !
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        !
-        do n=1,numq
-          if(isnan(q(i,j,k,n))) then
-            print*,i,j,k,n
-            print*,'q:',rho(i,j,k),prs(i,j,k),tmp(i,j,k)
-            print*,'q:',q(i,j,k,n),'@ updateq'
-          endif
-        enddo
-        !
-      enddo
-      enddo
+      do n=1,numq
+        if(isnan(q(i,j,k,n))) then
+          print*,i,j,k,n
+          print*,'q:',rho(i,j,k),prs(i,j,k),tmp(i,j,k)
+          print*,'q:',q(i,j,k,n),'@ updateq'
+        endif
       enddo
       !
-    else
-      print*,' !! ERROR @ updatefvar'
-      stop
-    endif
+    enddo
+    enddo
+    enddo
     !
     ! call mpistop
     !
@@ -311,13 +277,12 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine fvar2q_sca(q,density,velocity,pressure,temperature,       &
-                       species,tke,omega)
+  subroutine fvar2q_sca(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
     real(8),intent(in) :: density,velocity(:)
-    real(8),intent(in),optional :: pressure,temperature,species(:),tke,omega
+    real(8),intent(in),optional :: pressure,temperature,species(:)
     real(8),intent(out) :: q(:)
     !
     ! local data
@@ -365,13 +330,6 @@ module fludyna
       do jspec=1,num_species
         q(5+jspec)=density*species(jspec)
       enddo
-      !
-    endif
-    !
-    if(present(tke) .and. present(omega)) then
-      !
-      q(5+num_species+1)=density*tke
-      q(5+num_species+2)=density*omega
       !
     endif
     !
@@ -448,14 +406,13 @@ module fludyna
     !
   end subroutine fvar2q_1da
   !
-  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species,tke,omega)
+  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
     real(8),intent(in) :: density(:,:,:),velocity(:,:,:,:)
     real(8),intent(in),optional :: pressure(:,:,:),temperature(:,:,:), &
-                                   species(:,:,:,:),tke(:,:,:),        &
-                                   omega(:,:,:)
+                                   species(:,:,:,:)
     real(8),intent(out) :: q(:,:,:,:)
     !
     ! local data
@@ -525,13 +482,6 @@ module fludyna
       !
     endif
     !
-    if(present(tke) .and. present(omega)) then
-      !
-      q(:,:,:,5+num_species+1)=tke(:,:,:)*density(:,:,:)
-      q(:,:,:,5+num_species+2)=omega(:,:,:)*density(:,:,:)
-      !
-    endif
-    !
   end subroutine fvar2q_3da
   !+-------------------------------------------------------------------+
   !| The end of the subroutine fvar2q.                                 |
@@ -544,15 +494,14 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species,tke,omega)
+  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6,tinf
     !
     real(8),intent(inout) :: q(:,:,:,:)
     real(8),intent(out) :: density(:,:,:)
     real(8),intent(out),optional :: temperature(:,:,:),pressure(:,:,:),&
-                                    species(:,:,:,:),velocity(:,:,:,:),&
-                                    tke(:,:,:),omega(:,:,:)
+                                    species(:,:,:,:),velocity(:,:,:,:)
     !
     ! local data
     integer :: jspec,i,j,k
@@ -625,25 +574,16 @@ module fludyna
     !
 #endif
     !
-    if(present(tke)) then
-      tke(:,:,:)=q(:,:,:,5+num_species+1)/density
-    endif
-    !
-    if(present(omega)) then
-      omega(:,:,:)=q(:,:,:,5+num_species+2)/density
-    endif
-    !
   end subroutine q2fvar_3da
   !
-  subroutine q2fvar_1da(q,density,velocity,pressure,temperature,species,tke,omega)
+  subroutine q2fvar_1da(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: q(:,:)
     real(8),intent(out) :: density(:)
     real(8),intent(out),optional :: velocity(:,:),pressure(:),         &
-                                    temperature(:),species(:,:),       &
-                                    tke(:),omega(:)
+                                    temperature(:),species(:,:)
     !
     ! local data
     integer :: jspec,j
@@ -706,24 +646,16 @@ module fludyna
 
 #endif
     !
-    if(present(tke)) then
-      tke(:)=q(:,5+num_species+1)/density
-    endif
-    !
-    if(present(omega)) then
-      omega(:)=q(:,5+num_species+2)/density
-    endif
-    !
   end subroutine q2fvar_1da
   !
-  subroutine q2fvar_sca(q,density,velocity,pressure,temperature,species,tke,omega)
+  subroutine q2fvar_sca(q,density,velocity,pressure,temperature,species)
     !
     use commvar, only: numq,ndims,num_species,const1,const6
     !
     real(8),intent(in) :: q(:)
     real(8),intent(out) :: density
     real(8),intent(out),optional :: velocity(:),pressure,temperature,  &
-                                    species(:),tke,omega
+                                    species(:)
     !
     ! local data
     integer :: jspec
@@ -772,14 +704,6 @@ module fludyna
     endif
 
 #endif
-    !
-    if(present(tke)) then
-      tke=q(5+num_species+1)/density
-    endif
-    !
-    if(present(omega)) then
-      omega=q(5+num_species+2)/density
-    endif
     !
   end subroutine q2fvar_sca
   !+-------------------------------------------------------------------+
