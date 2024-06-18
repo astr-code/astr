@@ -35,7 +35,8 @@ module initialisation
     use comsolver,only: gradcal
     use solver,   only: diffusion_flux
     use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d, &
-                        readcheckpoint,readmeanflow,readmonc,writeflfed
+                        readmeanflow,readmonc
+    use io,       only: readcheckpoint,writeflfed
     use fludyna,  only: updateq,miucomp
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf

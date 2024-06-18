@@ -688,8 +688,8 @@ module mainloop
     use commvar,  only : lavg,lwslic,lwsequ,feqavg,feqchkpt,feqwsequ,  &
                          feqslice,iomode
     use statistic,only : statcal,statout,meanflowcal,liosta,nsamples
-    use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
-                         nxtchkpt,nxtwsequ
+    use readwrite,only : writemon,writeslice,nxtchkpt,nxtwsequ
+    use io,       only : writeflfed,writechkpt
     use userdefine,only: udf_stalist,udf_write
     !
     ! local data
@@ -774,7 +774,7 @@ module mainloop
     use commarray,only: q,rho,tmp,prs,x,nodestat
     use parallel, only: por
     use fludyna,  only: updateq
-    use readwrite,only: readcheckpoint
+    use io,       only: readcheckpoint
     use statistic,only: nsamples
     !
     ! local data
