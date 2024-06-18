@@ -6,7 +6,7 @@
 ldcavity
 
 # im,jm,km                                              : The size of grid.
-128,128,0
+64,64,0
 
 # lihomo,ljhomo,lkhomo                                  : The homogeneous directions
 f,f,t
@@ -15,13 +15,13 @@ f,f,t
 t,t,t,f,f,f,t,f
 
 # lrestar                                               : start mode
-t
+f
 
 # alfa_filter, kcutoff                                  : Filter parameters
 0.49d0, 48
 
-# ref_t,reynolds,mach                                   : Reference variables
-273.15d0, 1000.d0, 0.1d0
+# ref_t,reynolds,mach,gamma                                  : Reference variables
+273.15d0, 600.d0, 0.1d0, 1.4d0
 
 # conschm,difschm,rkscheme,odetype                              : Numerical scheme
 642c, 642c, rk3, rk3 
@@ -33,18 +33,18 @@ t
 0
 
 # turbmode,iomode                                       : turbulence model
-none,h
+none,h,r13
 
 # bctype                                                : Boundary condition definition 
-41, 1.d0
-41, 1.d0 
-41, 1.d0
-41, 1.d0
+413, 1.d0
+413, 1.d0 
+413, 1.d0
+413, 1.d0
 1
 1
 
 # ninit                                                 : Initial method
-0
+2
 
 # spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax : Sponge layer range
 0, 0, 0, 0, 0, 0

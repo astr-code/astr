@@ -6,10 +6,11 @@
        f,     f,   f,      f
 
 # maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
-   50,      50,     100,      50,      1,    50
+   500000,      1000,     100,      50,      10,    50
 
 # deltat
-3.d-4
+1.d-4
+
 
 # The controller file will be read during a simulation, 
 # everytime after dumping checkpoint.
