@@ -93,6 +93,12 @@ module pp
         call readkeyboad(inputfile)
         !
         call flame2d_pp(trim(inputfile))
+    elseif(trim(cmd)=='cavity') then
+        !
+        call readkeyboad(flowfieldfile)
+        call readkeyboad(inputfile)
+        !
+        call cavity_pp(flowfieldfile,inputfile)
     else
       stop ' !! pp command not defined. @ ppentrance'
     endif
@@ -2003,10 +2009,10 @@ module pp
       call h5_read2dfrom3d( p_2d,im,jm,km, 'p',flowfile,kslice=0)
       call h5_read2dfrom3d( t_2d,im,jm,km, 't',flowfile,kslice=0)
       !
-      call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
-                                     v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
-       ! call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
-       !                                   v_2d,'v',p_2d,'p',t_2d,'t')
+      ! call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+      !                                v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
+       call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+                                         v_2d,'v',p_2d,'p',t_2d,'t')
     elseif(viewmode=='3d') then
       allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
     elseif(viewmode=='1d') then
@@ -2053,6 +2059,76 @@ module pp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flowfieldview.                          |
   !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This function is to post-process cavity flow.                     |
+  !+-------------------------------------------------------------------+
+  subroutine cavity_pp(flowfile,inputfile)
+    !
+    use hdf5io
+    use tecio
+    !
+    character(len=*),intent(in) :: flowfile,inputfile
+    !
+    ! local data
+    logical :: lihomo,ljhomo,lkhomo
+    integer :: im,jm,km
+    real(8) :: ref_tem,reynolds,mach,gamma
+    character(len=32) :: gridfile
+    !
+    real(8),allocatable,dimension(:,:) :: x,y,ro,u,v,w,p,t
+    !
+    integer :: i,j
+    !
+    open(11,file=inputfile,form='formatted',status='old')
+    read(11,'(///////)')
+    read(11,*)im,jm,km
+    read(11,"(/)")
+    read(11,*)lihomo,ljhomo,lkhomo
+    read(11,'(//////////)')
+    read(11,*)ref_tem,reynolds,mach,gamma
+    read(11,'(/////////)')
+    read(11,'(/////////////////)')
+    read(11,'(A)')gridfile
+    close(11)
+    print*,' >> ',inputfile
+    !
+    allocate(x(0:im,0:jm),y(0:im,0:jm))
+    call H5ReadSubset(x,im,jm,km,'x',gridfile,kslice=0)
+    call H5ReadSubset(y,im,jm,km,'y',gridfile,kslice=0)
+    !
+    allocate(ro(0:im,0:jm),u(0:im,0:jm), v(0:im,0:jm), w(0:im,0:jm),p(0:im,0:jm), t(0:im,0:jm))
+    !
+    call h5_read2dfrom3d(ro,im,jm,km,'ro',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( u,im,jm,km,'u1',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( v,im,jm,km,'u2',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( w,im,jm,km,'u3',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( p,im,jm,km, 'p',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( t,im,jm,km, 't',trim(flowfile),kslice=0)
+    !
+    call tecbin('tecfield.plt',x,'x',y,'y',ro,'ro',u,'u',v,'v',p,'p',t,'T')
+    !
+    i=im/2
+    print*,' ** profile extracted at x=',x(i,0)
+    open(18,file='profile_verticle.dat')
+    write(18,"(6(1X,A15))")'y','ro','u','v','p','T'
+    write(18,"(6(1X,E15.7E3))")(y(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),j=0,jm)
+    close(18)
+    print*,' << profile_verticle.dat'
+    !
+    j=jm/2
+    print*,' ** profile extracted at y=',y(0,j)
+    open(18,file='profile_horizontal.dat')
+    write(18,"(6(1X,A15))")'x','ro','u','v','p','T'
+    write(18,"(6(1X,E15.7E3))")(x(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),i=0,im)
+    close(18)
+    print*,' << profile_horizontal.dat'
+    !
+  end subroutine cavity_pp
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine cavity_pp.                              |
+  !+-------------------------------------------------------------------+
+  !
   !+-------------------------------------------------------------------+
   !| This function is to generate specific flame with postprocess data.|
   !+-------------------------------------------------------------------+
@@ -2210,7 +2286,7 @@ module pp
     !
   end subroutine flamegen
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine flamegen.                          |
+  !| The end of the subroutine flamegen.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
