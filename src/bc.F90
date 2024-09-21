@@ -692,10 +692,10 @@ module bc
         vel(i,j,k,1)= -1.d0*var_u(1)*pb%dis2ghost/pb%dis2image
         vel(i,j,k,2)= -1.d0*var_u(2)*pb%dis2ghost/pb%dis2image
         vel(i,j,k,3)= -1.d0*var_u(3)*pb%dis2ghost/pb%dis2image
-          ! tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
+        ! isothernal
+          tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
         ! adiabatic
-        tmp(i,j,k)=var_t
-        ! tmp(i,j,k)=twall(3)
+        ! tmp(i,j,k)=var_t
         prs(i,j,k)=var_p
         if(nondimen) then 
           rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
@@ -714,8 +714,9 @@ module bc
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
         ! aidabatic
-        tmp(i,j,k)=var_t
-        ! tmp(i,j,k)=twall(3)
+        ! tmp(i,j,k)=var_t
+        ! isothermal
+        tmp(i,j,k)=twall(3)
         prs(i,j,k)=var_p
         !
         if(nondimen) then 
@@ -767,8 +768,8 @@ module bc
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
-        ! tmp(i,j,k)  =twall(3)
-        tmp(i,j,k)  =tinf
+        tmp(i,j,k)  =twall(3)
+        ! tmp(i,j,k)  =tinf
         prs(i,j,k)  =pinf
         if(nondimen) then 
           rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))

@@ -4674,7 +4674,7 @@ module geom
     step_right_x=xcav_right
     step_upper_y=ycav_upper
     !
-    if(xp(2)<step_upper_y .and. xp(1)<=step_left_x) then
+    if(xp(2)<=step_upper_y .and. xp(1)<=step_left_x) then
       !
       if(present(inside)) inside=.true.
       !
@@ -4703,7 +4703,7 @@ module geom
         !
       endif
       !
-    elseif(xp(2)<step_upper_y .and. xp(1)>=step_right_x) then
+    elseif(xp(2)<=step_upper_y .and. xp(1)>=step_right_x) then
       !
       if(present(inside)) inside=.true.
       !

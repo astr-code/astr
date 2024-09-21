@@ -1747,6 +1747,8 @@ module parallel
     !
     deallocate(senddispls,recvdispls)
     !
+    call mpi_type_free(newtype,ierr)
+    !
     if(present(timerept) .and. timerept) then
       !
       subtime=subtime+ptime()-time_beg
