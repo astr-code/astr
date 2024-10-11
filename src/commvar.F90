@@ -140,11 +140,13 @@ module commvar
   !+---------------------+---------------------------------------------+
   !|               force | body force.                                 |
   !+---------------------+---------------------------------------------+
-  logical :: lspg_i0,lspg_im,lspg_j0,lspg_jm,lspg_k0,lspg_km
+  logical :: lsponge,lsponge_loc,lspg_i0,lspg_im,lspg_j0,lspg_jm,      &
+                                 lspg_k0,lspg_km
   integer :: spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
   integer :: spg_i0_beg,spg_i0_end,spg_im_beg,spg_im_end, &
              spg_j0_beg,spg_j0_end,spg_jm_beg,spg_jm_end, &
              spg_k0_beg,spg_k0_end,spg_km_beg,spg_km_end
+  character(len=5) :: spg_def
   !+---------------------+---------------------------------------------+
   !|   spg_imin,spg_imax |                                             |
   !|   spg_jmin,spg_jmax | number of nodes in the sponge layer near    |
@@ -177,7 +179,6 @@ module commvar
   !|             lreport | to control report of subroutines            |
   !+---------------------+---------------------------------------------+
   character(len=4) :: testmode
-  real(8) :: xcav_left,xcav_right,xcav2_left,xcav2_right,ycav_upper
   !
 #ifdef COMB
   logical :: lcomb

@@ -72,7 +72,7 @@ module mainloop
     fhand_err=get_unit()
     open(fhand_err,file='errnode.log')
     !
-    if(lio) call timereporter(routine='steploop',timecost=time_dowhile,  &
+    if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
                               message='init file')
     !
     do while(nstep<=maxstep)
@@ -159,7 +159,7 @@ module mainloop
             !
             nsrpt=nstep
             !
-            call timereporter(routine='steploop',timecost=time_dowhile,  &
+            if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
                               message='main loop')
           endif
           !
@@ -187,7 +187,7 @@ module mainloop
     !
     time_total=ptime()-time_start
     !
-    if(lio) call timereporter(timecost=time_total,mode='final')
+    if(lio .and. lreport .and. ltimrpt) call timereporter(timecost=time_total,mode='final')
     !
     ! call errest
     !
@@ -525,7 +525,7 @@ module mainloop
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. loop_counter==feqchkpt) call timereporter(routine='rk3',   &
+      if(lio .and. loop_counter==feqchkpt .and. ltimrpt) call timereporter(routine='rk3',   &
                                                             timecost=subtime)
     endif
     !

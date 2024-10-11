@@ -343,7 +343,7 @@ module commcal
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ducrossensor', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ducrossensor', &
                                              timecost=subtime, &
                                               message='shock sensor')
     endif

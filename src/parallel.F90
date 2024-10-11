@@ -117,6 +117,14 @@ module parallel
     module procedure size_integer
   end interface
   !
+  interface precv
+    module procedure precv_rel2d_array
+  end interface
+  !
+  interface psend
+    module procedure psend_rel2d_array
+  end interface
+  !
   integer :: mpirank,mpisize,mpirankmax
   integer :: isize,jsize,ksize,irkm,jrkm,krkm,irk,jrk,krk,ig0,jg0,kg0
   integer :: mpileft,mpiright,mpidown,mpiup,mpifront,mpiback,mpitag
@@ -1622,7 +1630,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='updatable_int_a2a_v', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='updatable_int_a2a_v', &
                                              timecost=subtime, &
                                               message='used to sync ib nodes')
       !
@@ -1677,7 +1685,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='updatable_rel_a2a_v', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='updatable_rel_a2a_v', &
                                              timecost=subtime, &
                                               message='')
       !
@@ -1747,13 +1755,11 @@ module parallel
     !
     deallocate(senddispls,recvdispls)
     !
-    call mpi_type_free(newtype,ierr)
-    !
     if(present(timerept) .and. timerept) then
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='updatable_rel2d_a2a_v', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='updatable_rel2d_a2a_v', &
                                              timecost=subtime, &
                                               message='used to sync ib nodes')
       !
@@ -3145,7 +3151,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='array3d_sendrecv_log', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='array3d_sendrecv_log', &
                                               timecost=subtime, &
                                               message='communication 3D logical array')
       !
@@ -3371,7 +3377,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='array3d_sendrecv_int', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='array3d_sendrecv_int', &
                                               timecost=subtime, &
                                               message='communication 3D integer array')
       !
@@ -3597,7 +3603,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='array3d_sendrecv', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='array3d_sendrecv', &
                                               timecost=subtime, &
                                               message='message passing 3D real8 array')
     endif
@@ -3806,7 +3812,7 @@ module parallel
     if(present(timerept) .and. timerept) then
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='array3d_sync', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='array3d_sync', &
                                               timecost=subtime, &
                                               message='synconise interface')
     endif
@@ -4056,7 +4062,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='array4d_sendrecv', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='array4d_sendrecv', &
                                               timecost=subtime, &
                                               message='message passing 4D real8 array')
     endif
@@ -4284,7 +4290,7 @@ module parallel
     if(present(timerept) .and. timerept) then
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='array5d_sendrecv', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='array5d_sendrecv', &
                                               timecost=subtime, &
                                               message='message passing 5D real8 array')
     endif
@@ -4525,7 +4531,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='yflux_sendrecv', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='yflux_sendrecv', &
                                               timecost=subtime )
     endif
     !
@@ -5005,7 +5011,7 @@ module parallel
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='qswap', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='qswap', &
                                               timecost=subtime )
     endif
     !
@@ -5604,7 +5610,7 @@ module parallel
     !
   end subroutine ijk2int8
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine ijk2int8.                              |
+  !| The end of the subroutine ijk2int8.                               |
   !+-------------------------------------------------------------------+
   !
   pure function size_integer(var) result(nsize)
@@ -5621,6 +5627,76 @@ module parallel
     return
     !
   end function size_integer
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to receive data with mpi                       | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 18-09-2024  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine precv_rel2d_array(vario,recv_dir,tag,communicator)
+    !
+    ! arguments
+    real(8),intent(inout) :: vario(:,:)
+    integer,intent(in) :: recv_dir,tag 
+    integer,intent(in),optional :: communicator
+    !
+    ! local data
+    integer :: nsize,ierr
+    integer :: comm
+    !
+    if(present(communicator)) then
+      comm=communicator
+    else
+      comm=mpi_comm_world
+    endif
+    !
+    nsize=size(vario,1)*size(vario,2)
+    !
+    call mpi_recv(vario,nsize,mpi_real8,recv_dir,tag,comm,status,ierr)
+    !
+    return
+    !
+  end subroutine precv_rel2d_array
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine precv_rel2d_array.                      |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to receive data with mpi                       | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 18-09-2024  | Created by J. Fang @ Warrington                     |
+  !+-------------------------------------------------------------------+
+  subroutine psend_rel2d_array(varin,send_dir,tag,communicator)
+    !
+    ! arguments
+    real(8),intent(in) :: varin(:,:)
+    integer,intent(in) :: send_dir,tag
+    integer,intent(in),optional :: communicator
+    !
+    ! local data
+    integer :: nsize,ierr
+    integer :: comm
+    !
+    if(present(communicator)) then
+      comm=communicator
+    else
+      comm=mpi_comm_world
+    endif
+    !
+    nsize=size(varin,1)*size(varin,2)
+    !
+    call mpi_send(varin,nsize,mpi_real8,send_dir,tag,comm,ierr) 
+    !
+    return
+    !
+  end subroutine psend_rel2d_array
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine psend_rel2d_array.                      |
+  !+-------------------------------------------------------------------+
   !
 end module parallel
 !+---------------------------------------------------------------------+

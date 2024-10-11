@@ -127,7 +127,7 @@ module readwrite
                         flowtype,ndims,lfilter,alfa_filter,            &
                         lfftk,kcutoff,ninit,rkscheme,                  &
                         spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,     &
-                        lchardecomp,recon_schem,                       &
+                        spg_def,lchardecomp,recon_schem,               &
                         lrestart,limmbou,solidfile,bfacmpld,           &
                         turbmode,schmidt,ibmode,gridfile,testmode
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -515,21 +515,20 @@ module readwrite
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,kcutoff,              &
                         ninit,rkscheme,spg_i0,spg_im,spg_j0,spg_jm,    &
-                        spg_k0,spg_km,lchardecomp,                     &
+                        spg_k0,spg_km,spg_def,lchardecomp,             &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
-                        ltimrpt,testmode,xcav_left,xcav_right,         &
-                        xcav2_left,xcav2_right,ycav_upper       
+                        ltimrpt,testmode
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
     !
 #ifdef COMB
     use thermchem,only: chemrep,chemread,thermdyn
+    logical :: lfex
 #endif
     !
     ! local data
-    logical :: lfex
     character(len=64) :: inputfile
     character(len=5) :: char
     integer :: n,fh,i
@@ -630,18 +629,12 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)ninit
       read(fh,'(/)')
-      read(fh,*)spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
+      read(fh,*)spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,spg_def
       read(fh,'(/)')
       read(fh,'(A)')gridfile
       if(limmbou) then
         read(fh,'(/)')
         read(fh,*)ibmode,solidfile
-        if(trim(solidfile)=='cavity') then
-           read(fh,*)xcav_left,xcav_right,ycav_upper
-         endif
-         if(trim(solidfile)=='2cavity') then
-           read(fh,*)xcav_left,xcav_right,xcav2_left,xcav2_right,ycav_upper
-         endif
       endif
 #ifdef COMB
       if(.not.nondimen) then
@@ -691,12 +684,6 @@ module readwrite
     call bcast(difschm)
     call bcast(gridfile)
     call bcast(solidfile)
-
-    call bcast(xcav_right)
-    call bcast(xcav_left)
-    call bcast(xcav2_right)
-    call bcast(xcav2_left)
-    call bcast(ycav_upper)
     !
     call bcast(nondimen)
     call bcast(diffterm)
@@ -731,6 +718,7 @@ module readwrite
     call bcast(spg_jm)
     call bcast(spg_k0)
     call bcast(spg_km)
+    call bcast(spg_def)
     !
     call bcast(turbinf)
     call bcast(xrhjump)
@@ -1019,10 +1007,10 @@ module readwrite
   subroutine writemon
     !
     use commvar, only: nmonitor,imon,nstep,time,pinf,deltat
-    use commarray, only : x,rho,vel,prs,tmp,dvel,dtmp
+    use commarray, only : x,rho,vel,prs,tmp,dvel
     !
     ! local data
-    integer :: n,i,j,k,ios,ns,recl_size
+    integer :: n,i,j,k,ios,ns
     integer,allocatable,save :: fh(:),record(:)
     logical,save :: firstcall = .true.
     logical :: lexist
@@ -1051,8 +1039,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          recl_size=8*8
-          open(fh(n),file=trim(filename),access='direct',recl=recl_size)
+          open(fh(n),file=trim(filename),access='direct',recl=8*4)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1108,8 +1095,7 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),tmp(i,j,k),dvel(i,j,k,1,2), &
-                                  dvel(i,j,k,2,1),dtmp(i,j,k,1),dtmp(i,j,k,2)
+        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
         ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
@@ -1935,7 +1921,7 @@ module readwrite
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='writeflfed', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='writeflfed', &
                                               timecost=subtime, &
                                               message='write flow data')
       !
@@ -2106,7 +2092,7 @@ module readwrite
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='writeflfed2d', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='writeflfed2d', &
                                               timecost=subtime, &
                                               message='write flow data')
       !
@@ -2460,7 +2446,7 @@ module readwrite
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='writechkpt', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='writechkpt', &
                                               timecost=subtime, &
                                               message='write checkpoint')
       !

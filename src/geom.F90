@@ -81,8 +81,9 @@ module geom
     !
     if(lio) write(*,'(A,F12.8)')'  ** time cost in processing immersed grid :',subtime
     !
-    if(lio) call timereporter(routine='immsgrid',timecost=subtime, &
-                              message='processing immersed grid')
+    ! if((lio .and. lreport .and. ltimrpt) call timereporter(routine='immsgrid', &
+    !                                                       timecost=subtime,    &
+    !                                           message='process immersed grid')
     !
   end subroutine immsgrid
   !+-------------------------------------------------------------------+
@@ -4661,7 +4662,6 @@ module geom
   subroutine solid_udf_cavity(xp,inside,bnode)
     !
     use commtype,  only : sboun
-    use commvar,   only : xcav_left,xcav_right,ycav_upper
     !
     real(8),intent(in) :: xp(3)
     logical,intent(out),optional :: inside
@@ -4670,11 +4670,11 @@ module geom
     real(8) :: dis1,dis2
     real(8) :: step_upper_y,step_right_x,step_left_x
     !
-    step_left_x=xcav_left
-    step_right_x=xcav_right
-    step_upper_y=ycav_upper
+    step_left_x=5.d0
+    step_right_x=25.d0
+    step_upper_y=0.d0
     !
-    if(xp(2)<=step_upper_y .and. xp(1)<=step_left_x) then
+    if(xp(2)<step_upper_y .and. xp(1)<=step_left_x) then
       !
       if(present(inside)) inside=.true.
       !
@@ -4703,7 +4703,7 @@ module geom
         !
       endif
       !
-    elseif(xp(2)<=step_upper_y .and. xp(1)>=step_right_x) then
+    elseif(xp(2)<step_upper_y .and. xp(1)>=step_right_x) then
       !
       if(present(inside)) inside=.true.
       !

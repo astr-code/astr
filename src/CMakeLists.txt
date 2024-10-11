@@ -1,17 +1,11 @@
+
 message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
-# message(STATUS "the local path: ${PROJECT_BINARY_DIR}")
-
-set(UDF_SRC ${CMAKE_SOURCE_DIR}/user_define_module)
-file(GLOB UDF_SOURCE_FILES ${UDF_SRC}/*.F90)
-
-message(STATUS "UDF path: ${UDF_SRC}")
-    
 add_executable(astr 
                     astr.F90
-                    ${UDF_SOURCE_FILES}
                     bc.F90
+                    CMakeLists.txt
                     cmdefne.F90
                     commarray.F90
                     comsolver.F90
@@ -42,9 +36,9 @@ add_executable(astr
                     tecio.F90
                     test.F90
                     thermchem.F90
+                    userdefine.F90
                     utility.F90
                     vtkio.F90)
-
 target_link_libraries(astr)
 if (MPI_FOUND)
   target_link_libraries(astr PRIVATE MPI::MPI_Fortran)
