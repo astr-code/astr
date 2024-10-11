@@ -18,15 +18,14 @@ module commarray
   real(8),allocatable,dimension(:,:,:) :: bnorm_i0,bnorm_im,bnorm_j0,  &
                                           bnorm_jm,bnorm_k0,bnorm_km
   real(8),allocatable,dimension(:,:,:) :: dis2wall
-  real(8),allocatable,dimension(:,:) :: lenspg_i0,lenspg_im,         &
-                                        lenspg_j0,lenspg_jm,         &
-                                        lenspg_k0,lenspg_km
-  real(8),allocatable,dimension(:,:,:) :: xspg_i0,xspg_im,       &
-                                          xspg_j0,xspg_jm,       &
-                                          xspg_k0,xspg_km
   integer,allocatable,dimension(:,:,:) :: nodestat
   logical,allocatable,dimension(:,:,:) :: lsolid,lshock,crinod
   type(nodcel),allocatable,dimension(:,:,:) :: cell
+  !
+  real(8),allocatable,dimension(:,:,:) :: sponge_damp_coef_i0,sponge_damp_coef_im, &
+                                          sponge_damp_coef_j0,sponge_damp_coef_jm, &
+                                          sponge_damp_coef_k0,sponge_damp_coef_km, &
+                                          sponge_damp_coef
   !
   real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12,ssf
   real(8),allocatable,dimension(:,:,:,:) :: dtke,domg

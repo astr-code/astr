@@ -166,7 +166,7 @@ module solver
     !
     call udf_setflowenv
     !
-    if(lio) then
+    if(lio .and. ltimrpt) then
       write(mpimaxname,'(i8.8)')mpisize
       call timereporter(message=mpimaxname)
     endif
@@ -264,7 +264,7 @@ module solver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='rhscal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='rhscal', &
                                               timecost=subtime, &
                                               message='RHS term')
     endif
@@ -532,7 +532,7 @@ module solver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='srccomb', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='srccomb', &
                                              timecost=subtime, &
                                               message='SRC term for combustion')
     endif
@@ -1214,7 +1214,7 @@ module solver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='convrsduwd', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='convrsduwd', &
                                              timecost=subtime, &
                                               message='convection term using explicit upwind scheme')
     endif
@@ -1934,7 +1934,7 @@ module solver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='convrsdcmp', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='convrsdcmp', &
                                              timecost=subtime, &
                                               message='convection term using compact upwind scheme')
     endif
@@ -2338,7 +2338,7 @@ module solver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='convrsdcal6', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='convrsdcal6', &
                                              timecost=subtime, &
                                               message='diffusion term with central scheme')
     endif
@@ -2870,7 +2870,7 @@ module solver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='diffrsdcal6', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='diffrsdcal6', &
                                              timecost=subtime,      &
                                               message='diffusion term')
     endif

@@ -7,7 +7,7 @@
 !+---------------------------------------------------------------------+
 module commfunc
   !
-  use commvar, only : hm,kcutoff
+  use commvar, only : hm,kcutoff,ltimrpt
   use parallel, only: mpirank,mpistop,lio,lreport,ptime
   use constdef
   use utility,  only : timereporter
@@ -746,12 +746,7 @@ module commfunc
       allocate(alfa(3))
       alfa(3)=num1d3
       alfa(2)=0.25d0
-      alfa(1)=3.d0
-    elseif(scheme==643) then
-      allocate(alfa(3))
-      alfa(3)=num1d3
-      alfa(2)=0.25d0
-      alfa(1)=2.d0
+      alfa(1)=0.d0
     elseif(scheme==553) then
       allocate(alfa(5))
       alfa(1)=0.5d0
@@ -2851,12 +2846,9 @@ module commfunc
         !
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=-num17d6*vin(0)+1.5d0*(vin(1)+vin(2))-num1d6*vin(3)
-        vout(1)=0.75d0*( vin(2)-vin(0))
-        !
-      elseif(ns==643) then
-        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=-2.5d0*vin(0)+2.d0*vin(1)+0.5d0*vin(2)
+        vout(0)=0.5d0*( vin(1)-vin(-1))
+        ! vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
+        ! vout(0)=-1.5d0*vin(0)+2.d0*vin(1)-0.5d0*vin(2)
         vout(1)=0.75d0*( vin(2)-vin(0))
         !
       end if
@@ -2886,11 +2878,13 @@ module commfunc
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
         vout(dim)  =2.d0*  (-vin(dim-1)+vin(dim))
       elseif(ns==644) then
+        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)=num17d6*vin(dim)-1.5d0*(vin(dim-1)+vin(dim-2))+num1d6*vin(dim-3)
-      elseif(ns==643) then
-        vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)= 2.5d0*vin(dim)-2.d0*vin(dim-1)-0.5d0*vin(dim-2)
+        vout(dim)=0.5d0 *( vin(dim+1)-vin(dim-1))
+        ! vout(dim)=num2d3 *( vin(dim+1)-vin(dim-1)) -                   &
+        !           num1d12*( vin(dim+2)-vin(dim-2))
+        
+        ! vout(dim)=1.5d0*vin(dim)-2.d0*vin(dim-1)+0.5d0*vin(dim-2)
       end if
       !
     elseif(ntype==3) then
@@ -2916,11 +2910,9 @@ module commfunc
         !
       elseif(ns==644) then
         ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=-num17d6*vin(0)+1.5d0*(vin(1)+vin(2))-num1d6*vin(3)
-        vout(1)=0.75d0*( vin(2)-vin(0))
-      elseif(ns==643) then
-        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
-        vout(0)=-2.5d0*vin(0)+2.d0*vin(1)+0.5d0*vin(2)
+        vout(0)=0.5d0*( vin(1)-vin(-1))
+        ! vout(0)=num2d3*( vin(1)-vin(-1)) - num1d12*( vin(2)-vin(-2))
+        ! vout(0)=-1.5d0*vin(0)+2.d0*vin(1)-0.5d0*vin(2)
         vout(1)=0.75d0*( vin(2)-vin(0))
         !
       end if
@@ -2936,11 +2928,13 @@ module commfunc
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
         vout(dim)  =2.d0*  (-vin(dim-1)+vin(dim))
       elseif(ns==644) then
+        ! ns==644: 4-4-6-6-6-...-6-6-6-4-4
         vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)=num17d6*vin(dim)-1.5d0*(vin(dim-1)+vin(dim-2))+num1d6*vin(dim-3)
-      elseif(ns==643) then
-        vout(dim-1)=0.75d0*( vin(dim)  -vin(dim-2))
-        vout(dim)=2.5d0*vin(dim)-2.d0*vin(dim-1)-0.5d0*vin(dim-2)
+        vout(dim)=0.5d0 *( vin(dim+1)-vin(dim-1))
+        ! vout(dim)=num2d3 *( vin(dim+1)-vin(dim-1)) -                   &
+        !           num1d12*( vin(dim+2)-vin(dim-2))
+        
+        ! vout(dim)=1.5d0*vin(dim)-2.d0*vin(dim-1)+0.5d0*vin(dim-2)
       end if
       !
     else
@@ -2953,7 +2947,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds_rhs', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds_rhs', &
                                              timecost=subtime, &
                                               message='rhs of compact scheme')
     endif
@@ -3080,7 +3074,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds2d_rhs', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds2d_rhs', &
                                              timecost=subtime,      &
                                               message='rhs of compact scheme')
     endif
@@ -3207,7 +3201,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds2d_rhs', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds2d_rhs', &
                                              timecost=subtime,      &
                                               message='rhs of compact scheme')
     endif
@@ -3337,7 +3331,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds3d_rhs', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds3d_rhs', &
                                              timecost=subtime,      &
                                               message='rhs of compact scheme')
     endif
@@ -3464,7 +3458,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds4d_rhs', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds4d_rhs', &
                                              timecost=subtime,      &
                                               message='rhs of compact scheme')
     endif
@@ -3569,7 +3563,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds_cal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds_cal', &
                                               timecost=subtime, &
                                               message='solve compact tridiagonal system')
     endif
@@ -3656,7 +3650,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds2d_cal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds2d_cal', &
                                               timecost=subtime,     &
                                               message='solve compact tridiagonal system')
     endif
@@ -3744,7 +3738,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds2d_cal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds2d_cal', &
                                               timecost=subtime,     &
                                               message='solve compact tridiagonal system')
     endif
@@ -3831,7 +3825,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds3d_cal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds3d_cal', &
                                               timecost=subtime,     &
                                               message='solve compact tridiagonal system')
     endif
@@ -3919,7 +3913,7 @@ module commfunc
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='ptds4d_cal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='ptds4d_cal', &
                                               timecost=subtime,     &
                                               message='solve compact tridiagonal system')
     endif

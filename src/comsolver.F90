@@ -440,7 +440,7 @@ module comsolver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='gradcal', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='gradcal', &
                                              timecost=subtime,  &
                                               message='calculation of gradients')
     endif
@@ -600,7 +600,7 @@ module comsolver
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. lreport) call timereporter(routine='filterq', &
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='filterq', &
                                              timecost=subtime, &
                                               message='low-pass filter')
     endif
@@ -683,23 +683,88 @@ module comsolver
   !       37: 388-401.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine spongefilter
+    
+    use commvar,  only : spg_def
+
+    if(spg_def=='layer') then
+      call spongefilter_layer
+    elseif(spg_def=='circl') then
+      call spongefilter_global
+    endif
+
+  end subroutine spongefilter
+  !
+  subroutine spongefilter_layer
     !
     use commvar,  only : is,ie,js,je,ks,ke,numq,                       &
                          spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,    &
                          lspg_i0,lspg_im,lspg_j0,lspg_jm,lspg_k0,      &
-                         lspg_km,spg_im_beg,spg_im_end,spg_jm_beg,     &
-                         spg_jm_end
+                         lspg_km,spg_i0_beg,spg_i0_end,spg_im_beg,     &
+                         spg_im_end,spg_jm_beg,spg_jm_end
                          
-    use commarray,only: lenspg_i0,lenspg_im,lenspg_j0,lenspg_jm,       &
-                        lenspg_k0,lenspg_km,xspg_i0,xspg_im,xspg_j0,   &
-                        xspg_jm,xspg_k0,xspg_km,x,q
+    use commarray,only: sponge_damp_coef_i0,sponge_damp_coef_im, &
+                        sponge_damp_coef_j0,sponge_damp_coef_jm, &
+                        sponge_damp_coef_k0,sponge_damp_coef_km,x,q
     use commfunc, only : spafilter10
     !
-    real(8),parameter :: dampfac=0.05d0
-    !
     integer :: i,j,k,n
-    real(8) :: dis,var1
+    real(8) :: var1
     real(8),allocatable :: qtemp(:,:,:,:)
+    !
+    ! sponger layer attached at the im end.
+    if(lspg_i0) then
+      !
+      call dataswap(q,direction=1,timerept=ltimrpt)
+      !
+      if(spg_i0_beg>=0) then
+        !
+        print*,mpirank,'|',spg_i0_beg,spg_i0_end
+        !
+        allocate(qtemp(spg_i0_beg:spg_i0_end,js:je,ks:ke,1:numq))
+        !
+        do k=ks,ke
+        do j=js,je
+          !
+          do i=spg_i0_beg,spg_i0_end
+            !
+            var1=sponge_damp_coef_i0(i,j,k)
+            !
+            do n=1,numq
+              qtemp(i,j,k,n)=(1.d0-var1)*q(i,j,k,n)+        &
+                             num1d6*var1*(q(i+1,j,k,n)+     &
+                                          q(i-1,j,k,n)+     &
+                                          q(i,j+1,k,n)+     &
+                                          q(i,j-1,k,n)+     &
+                                          q(i,j,k+1,n)+     &
+                                          q(i,j,k-1,n)      )
+            enddo
+            !
+            ! if(j==0) print*,i,sponge_damp_coef_i0(i,j,k)
+            !
+          enddo
+          !
+        enddo
+        enddo
+        !
+        do k=ks,ke
+        do j=js,je
+          !
+          do i=spg_i0_beg,spg_i0_end
+            !
+            do n=1,numq
+              q(i,j,k,n)=qtemp(i,j,k,n)
+            enddo
+            !
+          enddo
+          !
+        enddo
+        enddo
+        !
+        deallocate(qtemp)
+        !
+      endif
+      !
+    endif
     !
     ! sponger layer attached at the im end.
     if(lspg_im) then
@@ -713,14 +778,9 @@ module comsolver
         do k=ks,ke
         do j=js,je
           !
-          dis=0.d0
           do i=spg_im_beg,spg_im_end
             !
-            dis=  (x(i,j,k,1)-xspg_im(j,k,1))**2+               &
-                  (x(i,j,k,2)-xspg_im(j,k,2))**2+               &
-                  (x(i,j,k,3)-xspg_im(j,k,3))**2                
-            !
-            var1=dampfac*dis/lenspg_im(j,k)
+            var1=sponge_damp_coef_im(i,j,k)
             !
             do n=1,numq
               qtemp(i,j,k,n)=(1.d0-var1)*q(i,j,k,n)+        &
@@ -769,14 +829,9 @@ module comsolver
         do k=ks,ke
         do i=is,ie
           !
-          dis=0.d0
           do j=spg_jm_beg,spg_jm_end
             !
-            dis=  (x(i,j,k,1)-xspg_jm(i,k,1))**2+               &
-                  (x(i,j,k,2)-xspg_jm(i,k,2))**2+               &
-                  (x(i,j,k,3)-xspg_jm(i,k,3))**2                
-            !
-            var1=dampfac*dis/lenspg_jm(i,k)
+            var1=sponge_damp_coef_jm(i,j,k)
             !
             do n=1,numq
               qtemp(i,j,k,n)=(1.d0-var1)*q(i,j,k,n)+        &
@@ -813,7 +868,51 @@ module comsolver
       !
     endif
     !
-  end subroutine spongefilter
+  end subroutine spongefilter_layer
+
+  subroutine spongefilter_global
+    !
+    use commvar,  only : is,ie,js,je,ks,ke,numq,lsponge,lsponge_loc
+    use commarray,only: sponge_damp_coef,x,q
+    !
+    integer :: i,j,k,n
+    real(8) :: var1
+    real(8),allocatable :: qtemp(:,:,:,:)
+    !
+    ! sponger layer attached at the im end.
+
+    if(lsponge) call dataswap(q)
+
+    if(lsponge_loc) then
+
+      allocate(qtemp(is:ie,js:je,ks:ke,1:numq))
+  
+      do k=ks,ke
+      do j=js,je
+      do i=is,ie
+        var1=sponge_damp_coef(i,j,k)
+
+        do n=1,numq
+          qtemp(i,j,k,n)=(1.d0-var1)*q(i,j,k,n)+        &
+                         num1d6*var1*(q(i+1,j,k,n)+     &
+                                      q(i-1,j,k,n)+     &
+                                      q(i,j+1,k,n)+     &
+                                      q(i,j-1,k,n)+     &
+                                      q(i,j,k+1,n)+     &
+                                      q(i,j,k-1,n)      )
+        enddo
+
+      enddo
+      enddo
+      enddo
+
+      q(is:ie,js:je,ks:ke,1:numq)=qtemp(is:ie,js:je,ks:ke,1:numq)
+
+      deallocate(qtemp)
+
+    endif
+
+  end subroutine spongefilter_global
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine spongefilter.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
