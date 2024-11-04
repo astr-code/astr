@@ -522,14 +522,17 @@ module readwrite
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
+    use utility, only : line_2_strings
     !
 #ifdef COMB
     use thermchem,only: chemrep,chemread,thermdyn
-    logical :: lfex
 #endif
     !
     ! local data
+    logical :: lfex
     character(len=64) :: inputfile
+    character(len=255) :: lineread
+    character(len=20),allocatable :: strings(:)
     character(len=5) :: char
     integer :: n,fh,i,ios
     !
@@ -629,8 +632,20 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)ninit
       read(fh,'(/)')
-      read(fh,*)spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
-      spg_def='layer'
+      read(fh,'(A)')lineread
+      strings=line_2_strings(lineread)
+      read(strings(1),*)spg_i0
+      read(strings(2),*)spg_im
+      read(strings(3),*)spg_j0
+      read(strings(4),*)spg_jm
+      read(strings(5),*)spg_k0
+      read(strings(6),*)spg_km
+      print*, spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
+      if(size(strings)>6 .or. trim(strings(7))=='layer' .or. trim(strings(7))=='circl') then
+        read(strings(7),*)spg_def
+      else
+        spg_def='layer'
+      endif
       read(fh,'(/)')
       read(fh,'(A)')gridfile
       if(limmbou) then

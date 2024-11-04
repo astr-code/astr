@@ -682,6 +682,106 @@ module utility
   !| The end of the subroutine progress_bar.                           |
   !+-------------------------------------------------------------------+
 
+
+  function line_2_strings(line) result(strings)
+
+    ! arguments
+    character(len=*), intent(in) :: line
+
+    ! local data
+    character(len=20), allocatable :: strings(:)
+    character(len=20) :: token
+
+    integer :: n,i,istart
+
+    ! Initialize counters
+  
+    ! Count number of tokens for allocation
+    n = count_tokens(line)
+  
+    ! Allocate arrays based on the number of tokens
+    allocate(strings(n))
+
+    ! Split line into tokens and categorize them
+    istart=1
+    do i = 1, n
+      call get_token(line, istart, token)
+      strings(i) = token
+    end do
+
+    return
+
+  end function line_2_strings
+
+  ! Function to count tokens in a line
+  integer function count_tokens(line)
+    character(len=*), intent(in) :: line
+    integer :: idx, len_line, count
+
+    count = 0
+    idx = 1
+    len_line = len_trim(line)
+
+    do while (idx <= len_line)
+      ! Skip delimiters
+      if (line(idx:idx) == ' ' .or. line(idx:idx) == ',') then
+        idx = idx + 1
+      else
+        count = count + 1
+        ! Skip the current token
+        do while (idx <= len_line .and. &
+                  line(idx:idx) /= ' ' .and. line(idx:idx) /= ',')
+          idx = idx + 1
+        end do
+      end if
+    end do
+
+    count_tokens = count
+
+  end function count_tokens
+
+
+  ! Function to get each token from the line
+  subroutine get_token(line, istart, token)
+    character(len=*), intent(in) :: line
+    integer, intent(inout) :: istart
+    character(len=*), intent(out) :: token
+    integer :: i, len_line
+
+    len_line = len_trim(line)
+    token = ''
+    i = istart
+    do while (i <= len_line .and. (line(i:i) == ' ' .or. line(i:i) == ','))
+      i = i + 1
+    end do
+    istart = i
+    do while (i <= len_line .and. line(i:i) /= ' ' .and. line(i:i) /= ',')
+      token = trim(adjustl(token)) // line(i:i)
+      i = i + 1
+    end do
+    istart = i
+  end subroutine get_token
+
+  ! Function to check if a string is numeric
+  logical function is_numeric(str)
+    character(len=*), intent(in) :: str
+    integer :: i, dot_count
+    dot_count = 0
+    is_numeric = .true.
+    do i = 1, len_trim(str)
+      if (str(i:i) == '.') then
+        dot_count = dot_count + 1
+        if (dot_count > 1) then
+          is_numeric = .false.
+          return
+        end if
+      else if (.not. (str(i:i) >= '0' .and. str(i:i) <= '9')) then
+        is_numeric = .false.
+        return
+      end if
+    end do
+  end function is_numeric
+
 end module utility
 !+---------------------------------------------------------------------+
 !| The end of the module utility                                       |
