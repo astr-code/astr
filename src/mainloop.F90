@@ -37,7 +37,7 @@ module mainloop
   subroutine steploop
     !
     use commvar,  only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
-                        rkscheme,nsrpt,flowtype,limmbou
+                        nsrpt,flowtype,limmbou
     use readwrite,only: readcont,timerept,nxtchkpt,nxtwsequ
     use commcal,  only: cflcal
     use ibmethod, only: ibforce
@@ -81,11 +81,7 @@ module mainloop
       !
       call crashcheck
       !
-      if(rkscheme=='rk3') then
-        call rk3(timerept=ltimrpt)
-      elseif(rkscheme=='rk4') then
-        call rk4
-      endif
+      call time_integration_rk
       !
       time_dowhile=time_dowhile+ptime()-time_beg
       !
@@ -264,16 +260,23 @@ module mainloop
   !| This subroutine advances the field solution in time using 3-step  |
   !| 3rd-rder Rungle-Kutta scheme.                                     |
   !+-------------------------------------------------------------------+
+  !| rk3: Gottlieb, S., & Shu, C. W. (1998). Total variation           |
+  !| diminishing Runge-Kutta schemes. Math. Comput., 67, 73-85         |
+  !| rk4: A. Dipankar, T.K. Sengupta, Symmetrized compact scheme for   |
+  !| receptivity study of 2D transitional channel flow, Journal of     |
+  !| Computational Physics 215 (2006) 245–273.                         |
+  !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 27-Nov-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
+  !| 04-Nov-2024: add all explicit rk time integrator into one routine |
   !+-------------------------------------------------------------------+
-  subroutine rk3(timerept)
+  subroutine time_integration_rk(timerept)
     !
     use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
                          lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
                          feqwsequ,lwslic,lreport,flowtype,     &
-                         ndims,num_species,maxstep
+                         ndims,num_species,maxstep,rkscheme
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use comsolver,only : filterq,spongefilter,filter2e
@@ -290,16 +293,18 @@ module mainloop
     !
     ! local data
     logical,save :: firstcall = .true.
-    real(8),save :: rkcoe(3,3)
-    integer :: i,j,k,m,n
+    real(8),allocatable,save :: rkcoe(:,:)
+    integer :: i,j,k,m
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable,save :: qsave(:,:,:,:)
+    real(8),allocatable :: rhsav(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
     real(8) :: hrr,time_beg_2
     real(8),save :: subtime=0.d0
+    integer,save :: n_rk_steps
     !
-    time_beg=ptime()
-    !
+    time_beg=ptime() 
+    
 #ifdef COMB
     if(odetype=='dnn') then 
       if(nstep==nstep0) then
@@ -311,35 +316,63 @@ module mainloop
       dt_ratio=delta_t/deltat
     endif 
 #endif
-    !
+
     if(firstcall) then
-      !
-      rkcoe(1,1)=1.d0
-      rkcoe(2,1)=0.d0
-      rkcoe(3,1)=1.d0
-      !
-      rkcoe(1,2)=0.75d0
-      rkcoe(2,2)=0.25d0
-      rkcoe(3,2)=0.25d0
-      !
-      rkcoe(1,3)=num1d3
-      rkcoe(2,3)=num2d3
-      rkcoe(3,3)=num2d3
+
+      if(rkscheme=='rk3') then
+
+        allocate(rkcoe(3,3))
+
+        rkcoe(1,1)=1.d0
+        rkcoe(2,1)=0.d0
+        rkcoe(3,1)=1.d0
+        !
+        rkcoe(1,2)=0.75d0
+        rkcoe(2,2)=0.25d0
+        rkcoe(3,2)=0.25d0
+        !
+        rkcoe(1,3)=num1d3
+        rkcoe(2,3)=num2d3
+        rkcoe(3,3)=num2d3
+
+        n_rk_steps=3
+        !
+      elseif(rkscheme=='rk4') then
+
+        allocate(rkcoe(2,4))
+
+        rkcoe(1,1)=0.5d0
+        rkcoe(1,2)=0.5d0
+        rkcoe(1,3)=1.d0
+        rkcoe(1,4)=num1d6
+        !
+        rkcoe(2,1)=1.d0
+        rkcoe(2,2)=2.d0
+        rkcoe(2,3)=2.d0
+        rkcoe(2,4)=1.d0
+
+        n_rk_steps=4
+
+      else
+        stop ' rkscheme error @  time_integration_rk'
+      endif
       !
       allocate(qsave(0:im,0:jm,0:km,1:numq))
-      !
+
       firstcall=.false.
       !
     endif
     !
-    do rkstep=1,3
+    if(rkscheme=='rk4') allocate(rhsav(0:im,0:jm,0:km,1:numq))
+    !
+    do rkstep=1,n_rk_steps
       !
       if( (loop_counter==feqchkpt .or. loop_counter==0) .and. rkstep==1 ) then
         lreport=.true.
       else
         lreport=.false.
       endif
-      !
+
       qrhs=0.d0
       !
       if(limmbou) call immbody(timerept=ltimrpt)
@@ -352,22 +385,6 @@ module mainloop
       !
       call rhscal(timerept=ltimrpt)
       !
-      !for debug
-      ! do k=0,km
-      ! do j=0,jm
-      ! do i=0,im
-      !   !
-      !   do n=1,numq
-      !     if(isnan(qrhs(i,j,k,n))) then
-      !       print*,'!! have NaN in qrhs !! the ',n,'one is wrong, and rk = ',rkstep
-      !       stop
-      !     endif
-      !   enddo
-      !   !
-      ! enddo
-      ! enddo
-      ! enddo
-      !
       if(flowtype(1:2)=='0d') jacob=1.d0
       !
       time_beg_2=ptime()
@@ -376,24 +393,50 @@ module mainloop
         !
         do m=1,numq
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
+
+          if(rkscheme=='rk4') rhsav(0:im,0:jm,0:km,m)=0.d0
         enddo
         !
         call rkfirst
         !
       endif
       !
-      do m=1,numq
-        !
-        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+      &
-                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)*          &
-                                     jacob(0:im,0:jm,0:km)+            &
-                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
-        !
-        q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
-        !
-      enddo
-      !
-      ctime(14)=ctime(14)+ptime()-time_beg_2
+      if(rkscheme=='rk3') then
+        do m=1,numq
+          !
+          q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+      &
+                              rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)*          &
+                                       jacob(0:im,0:jm,0:km)+            &
+                              rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
+          !
+          q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+          !
+        enddo
+      elseif(rkscheme=='rk4') then
+        if(rkstep<=3) then
+          do m=1,numq
+            q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
+                                rkcoe(1,rkstep)*deltat*qrhs(0:im,0:jm,0:km,m)
+            !
+            q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+            !
+            rhsav(0:im,0:jm,0:km,m)=rhsav(0:im,0:jm,0:km,m)+             &
+                                    rkcoe(2,rkstep)*qrhs(0:im,0:jm,0:km,m)
+          enddo
+        else
+          do m=1,numq
+            q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
+                                    rkcoe(1,rkstep)*deltat*(             &
+                                   qrhs(0:im,0:jm,0:km,m)+               &
+                                   rhsav(0:im,0:jm,0:km,m) )
+            !
+            q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
+            !
+          enddo
+        endif
+      else
+        stop ' !! error2 @ time_integration_rk'
+      endif
       !
       if(lfilter) then
         call filterq(timerept=ltimrpt)
@@ -405,25 +448,12 @@ module mainloop
       !
       call updatefvar
       !
-      ! for debug
-      ! do k=0,km
-      ! do j=0,jm
-      ! do i=0,im
-      !   !
-      !   print*,qrhs(i,j,k,:)
-      !   !
-      ! enddo
-      ! enddo
-      ! enddo
-      !
-      ! call mpistop
-      !
       ctime(15)=ctime(15)+ptime()-time_beg_2
       !
       if(lcracon) call crashfix(ctime(16))
       !
 #ifdef COMB
-      if(rkstep==3) then
+      if(rkstep==n_rk_steps) then
         !
         time_beg_2=ptime()
         !
@@ -525,135 +555,19 @@ module mainloop
       !
       subtime=subtime+ptime()-time_beg
       !
-      if(lio .and. loop_counter==feqchkpt) call timereporter(routine='rk3',   &
+      if(lio .and. loop_counter==feqchkpt .and. ltimrpt) call timereporter(routine='rk3',   &
                                                             timecost=subtime)
     endif
     !
-    return
-    !
-  end subroutine rk3
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine rk3.                                    |
-  !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine advances the field solution in time using 4-step  |
-  !| 4th-rder Rungle-Kutta scheme.                                     |
-  !+-------------------------------------------------------------------+
-  !| ref: A. Dipankar, T.K. Sengupta, Symmetrized compact scheme for   |
-  !| receptivity study of 2D transitional channel flow, Journal of     |
-  !| Computational Physics 215 (2006) 245–273.                         |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 27-Nov-2018: Created by J. Fang @ STFC Daresbury Laboratory       |
-  !+-------------------------------------------------------------------+
-  subroutine rk4
-    !
-    use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
-                         lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
-                         feqwsequ,lwslic
-    use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
-    use fludyna,  only : updatefvar
-    use comsolver,only : filterq,spongefilter
-    use solver,   only : rhscal
-    use bc,       only : boucon,immbody
-    !
-    !
-    ! local data
-    logical,save :: firstcall = .true.
-    real(8),save :: rkcoe(2,4)
-    integer :: i,j,k,m
-    real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
-    real(8),allocatable :: qsave(:,:,:,:),rhsav(:,:,:,:)
-    !
-    time_beg=ptime() 
-    !
-    if(firstcall) then
-      !
-      rkcoe(1,1)=0.5d0
-      rkcoe(1,2)=0.5d0
-      rkcoe(1,3)=1.d0
-      rkcoe(1,4)=num1d6
-      !
-      rkcoe(2,1)=1.d0
-      rkcoe(2,2)=2.d0
-      rkcoe(2,3)=2.d0
-      rkcoe(2,4)=1.d0
-      !
-      firstcall=.false.
-      !
-    endif
-    !
-    allocate(qsave(0:im,0:jm,0:km,1:numq),rhsav(0:im,0:jm,0:km,1:numq))
-    !
-    do rkstep=1,4
-      !
-      qrhs=0.d0
-      !
-      if(limmbou) call immbody(timerept=ltimrpt)
-      !
-      call qswap(timerept=ltimrpt)
-      !
-      call boucon
-      !
-      call qswap(timerept=ltimrpt)
-      !
-      call rhscal(timerept=ltimrpt)
-      !
-      if(rkstep==1) then
-        !
-        do m=1,numq
-          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
-          rhsav(0:im,0:jm,0:km,m)=0.d0
-        enddo
-        !
-        call rkfirst
-        !
-      endif
-      !
-      if(rkstep<=3) then
-        do m=1,numq
-          q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
-                              rkcoe(1,rkstep)*deltat*qrhs(0:im,0:jm,0:km,m)
-          !
-          q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
-          !
-          rhsav(0:im,0:jm,0:km,m)=rhsav(0:im,0:jm,0:km,m)+             &
-                                  rkcoe(2,rkstep)*qrhs(0:im,0:jm,0:km,m)
-        enddo
-      else
-        do m=1,numq
-          q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
-                                  rkcoe(1,rkstep)*deltat*(                &
-                                 qrhs(0:im,0:jm,0:km,m)+               &
-                                 rhsav(0:im,0:jm,0:km,m) )
-          !
-          q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
-          !
-        enddo
-      endif
-      !
-      if(lfilter) call filterq(timerept=ltimrpt)
-      !
-      call spongefilter
-      !
-      call updatefvar
-      !
-      ! call crashcheck
-      if(lcracon) call crashfix
-      !
-    enddo
-    !
-    deallocate(qsave,rhsav)
+    if(rkscheme=='rk4') deallocate(rhsav)
     !
     ctime(3)=ctime(3)+ptime()-time_beg
     !
     return
     !
-  end subroutine rk4
+  end subroutine time_integration_rk
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine rk4.                                    |
+  !| The end of the subroutine time_integration_rk.                    |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
