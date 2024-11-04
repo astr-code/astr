@@ -531,7 +531,7 @@ module readwrite
     ! local data
     character(len=64) :: inputfile
     character(len=5) :: char
-    integer :: n,fh,i
+    integer :: n,fh,i,ios
     !
     if(mpirank==0) then
       !
@@ -629,7 +629,8 @@ module readwrite
       read(fh,'(/)')
       read(fh,*)ninit
       read(fh,'(/)')
-      read(fh,*)spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,spg_def
+      read(fh,*)spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
+      spg_def='layer'
       read(fh,'(/)')
       read(fh,'(A)')gridfile
       if(limmbou) then
