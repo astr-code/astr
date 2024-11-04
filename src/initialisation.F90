@@ -103,7 +103,7 @@ module initialisation
           call wtini
         case('0dreactor')
           call reactorini
-        case('onedflame')
+        case('1dflame')
           call onedflameini
         case('h2supersonic')
           call h2supersonicini
@@ -164,8 +164,98 @@ module initialisation
   !| 11-03-2021  | Created by J. Fang @ Warrington                     |
   !|             | (have not consider subdomain situation)             |
   !| 22-02-2024  | Applied only for Cartesian mesh, include subdomain  |
+  !| 19-09-2024  | modified for body fitted mesh.                      |
+  !| 03-03-2024  | leave this as udf, based on the geom rather i,j,k.  |
   !+-------------------------------------------------------------------+
   subroutine spongelayerini
+    !
+    use commvar,  only : spg_def
+
+    if(spg_def=='layer') then
+      call spongelayer_define_ijk
+    elseif(spg_def=='circl') then
+      call spongelayer_define_circle
+    else
+      print*,'spg_def',spg_def
+      stop ' !! sponge layer not defined !!'
+    endif
+    !
+  end subroutine spongelayerini
+
+  subroutine spongelayer_define_circle
+
+    use commvar,  only : is,ie,js,je,ks,ke,spg_def,lsponge,lsponge_loc
+    use commarray,only : x,sponge_damp_coef
+    use parallel, only : pmax,por
+
+    ! local data
+    real(8),parameter :: dampfac=0.05d0
+    integer :: i,j,k
+    real(8) :: var1,var2,xc,yc,zc,range_spange,max_dis
+
+    lsponge_loc=.false.
+
+    allocate( sponge_damp_coef(is:ie,js:je,ks:ke) )
+
+    xc=0.d0
+    yc=0.d0
+    zc=0.d0
+
+    range_spange=0.06d0 !60mm
+
+    max_dis=0.d0
+
+    do k=ks,ke
+    do j=js,je
+    do i=is,ie
+
+      var1=sqrt((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2+(x(i,j,k,3)-zc)**2)
+
+      if (var1>=range_spange) then
+
+        var2=(var1-range_spange)**2
+
+        lsponge_loc=.true.
+      else
+        var2=0.d0
+      endif
+
+      sponge_damp_coef(i,j,k)=var2
+
+      max_dis=max(max_dis,var2)
+
+    enddo
+    enddo
+    enddo
+
+    max_dis=pmax(max_dis)
+
+    lsponge=por(lsponge_loc)
+
+    if(mpirank==0) then
+      !
+      write(*,'(2X,62A)')('-',i=1,62)
+      write(*,'(2X,A)')'                        *** sponge layer ***'
+      if(lsponge) then
+        write(*,'(32X,A,A)')' sponge layer definition: ',spg_def
+        write(*,'(A,F6.3)')'  based on the distance to the center, activation when distance >',range_spange
+      endif
+      write(*,'(2X,62A)')('-',i=1,62)
+      !
+    endif
+
+    sponge_damp_coef=sponge_damp_coef/max_dis*dampfac
+
+    ! call tecbin('testout/tecsponge'//mpirankname//'.plt',                &
+    !                                   x(is:ie,js:je,ks:ke,1),'x',         &
+    !                                   x(is:ie,js:je,ks:ke,2),'y',         &
+    !                                   x(is:ie,js:je,ks:ke,3),'z',         &
+    !                                   sponge_damp_coef(is:ie,js:je,ks:ke),'sp' )
+
+
+  end subroutine spongelayer_define_circle
+    !
+  subroutine spongelayer_define_ijk
     !
     use commvar, only : is,ie,js,je,ks,ke,                               &
                         lspg_i0,lspg_im,lspg_j0,lspg_jm,lspg_k0,lspg_km, &
@@ -173,15 +263,22 @@ module initialisation
                         spg_k0,spg_km,im,jm,km,ia,ja,ka,                 &
                         spg_i0_beg,spg_i0_end,spg_im_beg,spg_im_end,     &
                         spg_j0_beg,spg_j0_end,spg_jm_beg,spg_jm_end,     &
-                        spg_k0_beg,spg_k0_end,spg_km_beg,spg_km_end 
+                        spg_k0_beg,spg_k0_end,spg_km_beg,spg_km_end
     !
-    use commarray,only: lenspg_i0,lenspg_im,lenspg_j0,lenspg_jm,       &
-                        lenspg_k0,lenspg_km,xspg_i0,xspg_im,xspg_j0,   &
-                        xspg_jm,xspg_k0,xspg_km,x
-    use parallel,only : ig0,jg0,kg0,bcast,psum,irk,jrk,krk,irkm,       &
-                        jrkm,mpi_igroup,mpi_jgroup,mpistop
+    use commarray,only: sponge_damp_coef_i0,sponge_damp_coef_im,         &
+                        sponge_damp_coef_j0,sponge_damp_coef_jm,         &
+                        sponge_damp_coef_k0,sponge_damp_coef_km,x
+    use parallel,only : ig0,jg0,kg0,bcast,psum,irk,jrk,krk,irkm,         &
+                        jrkm,mpi_igroup,mpi_jgroup,mpistop,              &
+                        mpileft,mpiright,mpidown,mpiup,mpifront,mpiback, &
+                        precv,psend
     !
     ! local data
+    real(8),parameter :: dampfac=0.05d0
+    real(8),allocatable :: length_sponge(:,:),length_sponge_b(:,:),    &
+                           length_sponge_local(:,:)
+    real(8) :: dis,var1,var2,var3
+    !
     integer :: i,j,k,iglobal_spg_beg,iglobal_beg,iglobal_end,          &
                      jglobal_spg_beg,jglobal_beg,jglobal_end,          &
                      kglobal_spg_beg,kglobal_beg,kglobal_end
@@ -237,6 +334,95 @@ module initialisation
       !
     endif
     !
+    if(lspg_i0) then
+      !
+      iglobal_spg_beg=spg_i0
+      !
+      iglobal_beg=ig0
+      iglobal_end=ig0+im
+      !
+      if(iglobal_end<=iglobal_spg_beg) then
+        ! the sponger layer is completely within the domain
+        spg_i0_beg=is
+        spg_i0_end=ie
+      elseif(iglobal_beg>iglobal_spg_beg) then
+        ! the sponger layer is not within the domain
+        spg_i0_beg=-1
+        spg_i0_end=-1
+      elseif(iglobal_beg<=iglobal_spg_beg .and. iglobal_end>=iglobal_spg_beg) then
+        ! the sponger layer is partly within the domain
+        spg_i0_beg=is
+        spg_i0_end=iglobal_spg_beg-iglobal_beg
+      else
+        stop ' error 1: local domain define error @ spongelayerini'
+      endif
+      !
+      allocate( length_sponge(0:jm,0:km),length_sponge_b(0:jm,0:km), &
+                length_sponge_local(0:jm,0:km) )
+      allocate( sponge_damp_coef_i0(spg_i0_beg:spg_i0_end,0:jm,0:km) )
+      !
+      length_sponge      =0.d0
+      length_sponge_b    =0.d0
+      length_sponge_local=0.d0
+      !
+      call precv(vario=length_sponge_b,recv_dir=mpiright,tag=21)
+      !
+      if(spg_i0_end>0) then
+        !
+        do k=0,km
+        do j=0,jm
+          !
+          do i=spg_i0_end-1,spg_i0_beg,-1
+            length_sponge_local(j,k)=length_sponge_local(j,k)+     &
+                               sqrt((x(i+1,j,k,1)-x(i,j,k,1))**2 + &
+                                    (x(i+1,j,k,2)-x(i,j,k,2))**2 + &
+                                    (x(i+1,j,k,3)-x(i,j,k,3))**2)
+          enddo
+          !
+        enddo
+        enddo
+        !
+        length_sponge=length_sponge_b+length_sponge_local
+        !
+      endif
+      !
+      call psend(varin=length_sponge,send_dir=mpileft,tag=21)
+      !
+      length_sponge=psum(length_sponge_local,comm=mpi_igroup)
+      !
+      if(spg_i0_end>0) then
+        !
+        do k=0,km
+        do j=0,jm
+          !
+          dis =length_sponge_b(j,k)
+          var2=length_sponge(j,k)**2
+          do i=spg_i0_end,spg_i0_beg,-1
+            if(i<spg_i0_end) then
+              var3=sqrt((x(i+1,j,k,1)-x(i,j,k,1))**2 + &
+                        (x(i+1,j,k,2)-x(i,j,k,2))**2 + &
+                        (x(i+1,j,k,3)-x(i,j,k,3))**2)
+            else
+              var3=0.d0
+            endif
+            dis=dis + var3
+            sponge_damp_coef_i0(i,j,k)=dampfac*dis**2/var2
+          enddo
+          !
+        enddo
+        enddo
+        !
+        ! call tecbin('testout/tecsponge_i0'//mpirankname//'.plt',                &
+        !                                   x(spg_i0_beg:spg_i0_end,0:jm,0:km,1),'x',         &
+        !                                   x(spg_i0_beg:spg_i0_end,0:jm,0:km,2),'y',         &
+        !                                   x(spg_i0_beg:spg_i0_end,0:jm,0:km,3),'z',         &
+        !                                   sponge_damp_coef_i0(spg_i0_beg:spg_i0_end,0:jm,0:km),'sp' )
+      endif
+      !
+      deallocate(length_sponge,length_sponge_b,length_sponge_local)
+      !
+    endif
+    !
     if(lspg_im) then
       !
       iglobal_spg_beg=ia-spg_im
@@ -246,7 +432,7 @@ module initialisation
       !
       if(iglobal_spg_beg<=iglobal_beg) then
         ! the sponger layer is completely within the domain
-        spg_im_beg=0
+        spg_im_beg=is
         spg_im_end=ie
       elseif(iglobal_spg_beg>=iglobal_beg .and. iglobal_spg_beg<=iglobal_end) then
         ! the sponger layer is partly within the domain
@@ -257,45 +443,74 @@ module initialisation
         spg_im_beg=-1
         spg_im_end=-1
       else
-        stop ' error 1: local domain define error @ spongelayerini'
+        stop ' error 2: local domain define error @ spongelayerini'
       endif
       !
-      ! calculate the length of the sponger layer
+      allocate( length_sponge(0:jm,0:km),length_sponge_b(0:jm,0:km), &
+                length_sponge_local(0:jm,0:km) )
+      allocate( sponge_damp_coef_im(spg_im_beg:spg_im_end,0:jm,0:km) )
       !
-      allocate( lenspg_im(0:jm,0:km),xspg_im(0:jm,0:km,1:3) )
+      length_sponge      =0.d0
+      length_sponge_b    =0.d0
+      length_sponge_local=0.d0
       !
-      xspg_im=0.d0
-      lenspg_im=0.d0
+      call precv(vario=length_sponge_b,recv_dir=mpileft,tag=22)
       !
-      if(spg_im_beg>0) then
+      if(spg_im_end>0) then
         !
-        i=spg_im_beg
         do k=0,km
         do j=0,jm
-          xspg_im(j,k,1)=x(i,j,k,1)
-          xspg_im(j,k,2)=x(i,j,k,2)
-          xspg_im(j,k,3)=x(i,j,k,3)
+          !
+          do i=spg_im_beg+1,spg_im_end
+            length_sponge_local(j,k)=length_sponge_local(j,k)+     &
+                               sqrt((x(i,j,k,1)-x(i-1,j,k,1))**2 + &
+                                    (x(i,j,k,2)-x(i-1,j,k,2))**2 + &
+                                    (x(i,j,k,3)-x(i-1,j,k,3))**2)
+          enddo
+          !
         enddo
         enddo
+        !
+        length_sponge=length_sponge_b+length_sponge_local
         !
       endif
       !
-      xspg_im=psum(xspg_im,comm=mpi_igroup)
+      call psend(varin=length_sponge,send_dir=mpiright,tag=22)
       !
-      if(irk==irkm) then
+      length_sponge=psum(length_sponge_local,comm=mpi_igroup)
+      !
+      ! if(spg_im_end>0) print*,mpirank,'#',length_sponge_b(0,0),length_sponge_local(0,0)
+      !
+      if(spg_im_end>0) then
         !
-        i=im
         do k=0,km
         do j=0,jm
-          lenspg_im(j,k)= (x(i,j,k,1)-xspg_im(j,k,1))**2 + &
-                          (x(i,j,k,2)-xspg_im(j,k,2))**2 + &
-                          (x(i,j,k,3)-xspg_im(j,k,3))**2 
+          !
+          dis =length_sponge_b(j,k)
+          var2=length_sponge(j,k)**2
+          do i=spg_im_beg,spg_im_end
+            if(i>spg_im_beg) then
+              var3=sqrt((x(i,j,k,1)-x(i-1,j,k,1))**2 + &
+                        (x(i,j,k,2)-x(i-1,j,k,2))**2 + &
+                        (x(i,j,k,3)-x(i-1,j,k,3))**2)
+            else
+              var3=0.d0
+            endif
+            dis=dis + var3
+            sponge_damp_coef_im(i,j,k)=dampfac*dis**2/var2
+          enddo
+          !
         enddo
         enddo
         !
+        ! call tecbin('testout/tecsponge_im'//mpirankname//'.plt',                &
+        !                                   x(spg_im_beg:spg_im_end,0:jm,0:km,1),'x',         &
+        !                                   x(spg_im_beg:spg_im_end,0:jm,0:km,2),'y',         &
+        !                                   x(spg_im_beg:spg_im_end,0:jm,0:km,3),'z',         &
+        !                                   sponge_damp_coef_im(spg_im_beg:spg_im_end,0:jm,0:km),'sp' )
       endif
       !
-      lenspg_im=psum(lenspg_im,comm=mpi_igroup)
+      deallocate(length_sponge,length_sponge_b,length_sponge_local)
       !
     endif
     !
@@ -322,42 +537,71 @@ module initialisation
         stop ' error 1: local domain define error @ spongelayerini'
       endif
       !
-      ! calculate the length of the sponger layer
+      allocate( length_sponge(0:im,0:km),length_sponge_b(0:im,0:km), &
+                length_sponge_local(0:im,0:km) )
+      allocate( sponge_damp_coef_jm(0:im,spg_jm_beg:spg_jm_end,0:km) )
       !
-      allocate( lenspg_jm(0:im,0:km),xspg_jm(0:im,0:km,1:3) )
+      length_sponge      =0.d0
+      length_sponge_b    =0.d0
+      length_sponge_local=0.d0
       !
-      xspg_jm=0.d0
-      lenspg_jm=0.d0
+      call precv(vario=length_sponge_b,recv_dir=mpidown,tag=23)
       !
-      if(spg_jm_beg>0) then
+      if(spg_jm_end>0) then
         !
-        j=spg_jm_beg
         do k=0,km
         do i=0,im
-          xspg_jm(i,k,1)=x(i,j,k,1)
-          xspg_jm(i,k,2)=x(i,j,k,2)
-          xspg_jm(i,k,3)=x(i,j,k,3)
+          !
+          do j=spg_jm_beg+1,spg_jm_end
+            length_sponge_local(i,k)=length_sponge_local(i,k)+     &
+                               sqrt((x(i,j,k,1)-x(i,j-1,k,1))**2 + &
+                                    (x(i,j,k,2)-x(i,j-1,k,2))**2 + &
+                                    (x(i,j,k,3)-x(i,j-1,k,3))**2)
+          enddo
+          !
         enddo
         enddo
+        !
+        length_sponge=length_sponge_b+length_sponge_local
         !
       endif
       !
-      xspg_jm=psum(xspg_jm,comm=mpi_jgroup)
+      call psend(varin=length_sponge,send_dir=mpiup,tag=23)
       !
-      if(jrk==jrkm) then
+      length_sponge=psum(length_sponge_local,comm=mpi_jgroup)
+      !
+      ! if(spg_jm_end>0) print*,mpirank,'#',length_sponge_b(0,0),length_sponge_local(0,0)
+      !
+      if(spg_jm_end>0) then
         !
-        j=jm
         do k=0,km
         do i=0,im
-          lenspg_jm(i,k)= (x(i,j,k,1)-xspg_jm(i,k,1))**2 + &
-                          (x(i,j,k,2)-xspg_jm(i,k,2))**2 + &
-                          (x(i,j,k,3)-xspg_jm(i,k,3))**2 
+          !
+          dis =length_sponge_b(i,k)
+          var2=length_sponge(i,k)**2
+          do j=spg_jm_beg,spg_jm_end
+            if(j>spg_jm_beg) then
+              var3=sqrt((x(i,j,k,1)-x(i,j-1,k,1))**2 + &
+                        (x(i,j,k,2)-x(i,j-1,k,2))**2 + &
+                        (x(i,j,k,3)-x(i,j-1,k,3))**2)
+            else
+              var3=0.d0
+            endif
+            dis=dis + var3
+            sponge_damp_coef_jm(i,j,k)=dampfac*dis**2/var2
+          enddo
+          !
         enddo
         enddo
         !
+        ! call tecbin('testout/tecsponge_jm'//mpirankname//'.plt',                &
+        !                                   x(0:im,spg_jm_beg:spg_jm_end,0:km,1),'x',         &
+        !                                   x(0:im,spg_jm_beg:spg_jm_end,0:km,2),'y',         &
+        !                                   x(0:im,spg_jm_beg:spg_jm_end,0:km,3),'z',         &
+        !                                   sponge_damp_coef_jm(0:im,spg_jm_beg:spg_jm_end,0:km),'sp' )
       endif
       !
-      lenspg_jm=psum(lenspg_jm,comm=mpi_jgroup)
+      deallocate(length_sponge,length_sponge_b,length_sponge_local)
       !
     endif
     !
@@ -365,9 +609,9 @@ module initialisation
     ! !
     ! call mpistop
     !
-  end subroutine spongelayerini
+  end subroutine spongelayer_define_ijk
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine spongelayerini.                         |
+  !| The end of the subroutine spongelayer_define_ijk.                 |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

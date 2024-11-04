@@ -284,8 +284,7 @@ module fludyna
         do n=1,numq
           if(isnan(q(i,j,k,n))) then
             print*,i,j,k,n
-            print*,'q:',rho(i,j,k),prs(i,j,k),tmp(i,j,k)
-            print*,'q:',q(i,j,k,n),'@ updateq'
+            print*,'q:',q(i,j,k,:),'@ updateq'
           endif
         enddo
         !
@@ -297,8 +296,6 @@ module fludyna
       print*,' !! ERROR @ updatefvar'
       stop
     endif
-    !
-    ! call mpistop
     !
   end subroutine updateq
   !+-------------------------------------------------------------------+
