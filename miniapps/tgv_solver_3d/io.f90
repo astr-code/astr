@@ -17,7 +17,7 @@ module io
      call readkeyboad(input_file_name)
 
      write(*,'(A)',advance='no')'  >> '//trim(input_file_name)//'...'
-     
+
      ! Read parameters
      open(newunit=file_handle, file=trim(input_file_name))
 
@@ -43,5 +43,6 @@ module io
      write(*,'(3(A,I0))')  '  ** halo level         :',hm
 
    end subroutine casereport
+
 
 end module io

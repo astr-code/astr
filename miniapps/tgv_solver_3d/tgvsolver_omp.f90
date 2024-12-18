@@ -4,6 +4,7 @@ program astr_mini_omp
   use comvardef
   use io
   use field_init
+  use solver
 
   implicit none
 
@@ -20,6 +21,8 @@ program astr_mini_omp
   call alloarray
 
   call flowinit('tgv')
+
+  call mainloop
 
   call cpu_time(tfinish)
   

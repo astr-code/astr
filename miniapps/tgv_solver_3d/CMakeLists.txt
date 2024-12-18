@@ -10,6 +10,10 @@ add_executable(astr_omp
                     io.f90
                     fluidynamcs.f90
                     field_init.f90
+                    bc.f90
+                    numerics.f90
+                    solver.f90
+                    statistics.f90
                     tgvsolver_omp.f90)
 target_link_libraries(astr_omp)
 

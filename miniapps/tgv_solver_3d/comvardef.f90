@@ -2,9 +2,8 @@ module comvardef
   !
   implicit none
   !
-  integer :: im,jm,km,hm,numq
-  integer :: ndim,ih,jh,kh
-
+  integer :: im=64,jm=64,km=64,hm=5,numq=5
+  !
   integer :: nstep
   real(8) :: time,deltat
   !
@@ -22,41 +21,16 @@ module comvardef
   !
   subroutine alloarray
     !
-    if(im==0 .and. jm==0 .and. km==0) then
-      ndim=0
-      ih=0
-      jh=0
-      kh=0
-    elseif(im>0 .and. jm==0 .and. km==0) then
-      ndim=1
-      ih=hm
-      jh=0
-      kh=0
-    elseif(im>0 .and. jm>0 .and. km==0) then
-      ndim=2
-      ih=hm
-      jh=hm
-      kh=0
-    elseif(im>0 .and. jm>0 .and. km>0) then
-      ndim=3
-      ih=hm
-      jh=hm
-      kh=hm
-    else
-      stop ' error ndim set error @ alloarray'
-    endif
-    write(*,'(A,I0)')'  ** dimension problem  :',ndim
-    ! 
-    allocate( x(0:im,0:jm,0:km,1:ndim))
-    allocate( q(-ih:im+im,-jm:jm+jm,-kh:km+kh,1:numq))
+    allocate( x(0:im,0:jm,0:km,1:3))
+    allocate(   q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
     allocate(qrhs(0:im,0:jm,0:km,1:numq))
     !
-    allocate( rho(-ih:im+im,-jm:jm+jm,-kh:km+kh))
-    allocate( vel(-ih:im+im,-jm:jm+jm,-kh:km+kh,1:ndim))
-    allocate( prs(-ih:im+im,-jm:jm+jm,-kh:km+kh))
-    allocate( tmp(-ih:im+im,-jm:jm+jm,-kh:km+kh))
-    allocate(dvel(0:im,0:jm,0:km,1:ndim,1:ndim))
-    allocate(dtmp(0:im,0:jm,0:km,1:ndim))
+    allocate( rho(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+    allocate( prs(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate( tmp(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate(dvel(0:im,0:jm,0:km,1:3,1:3))
+    allocate(dtmp(0:im,0:jm,0:km,1:3))
     !
     print*,' ** common array allocated'
     !

@@ -108,6 +108,19 @@ module utility
     !
   end subroutine timereport
 
+  integer function time_in_second()
+
+    integer :: start_values(8)
+
+    ! Record the start time
+    call date_and_time(values=start_values)
+
+    time_in_second = start_values(6) * 3600 + start_values(7) * 60 + start_values(8)
+
+    return
+
+   end function time_in_second
+
    !+-------------------------------------------------------------------+
    !| This function Verifies that a character string represents a       |
    !|  numerical value                                                  |
