@@ -37,7 +37,7 @@ module io
 
      !$ print*,' !! OpenMP Activated !!'
 
-     !$ write(*,'(A,I0)')'  ** number of omp cores:',omp_get_num_procs()
+     !$ write(*,'(A,I0)')'  ** number of omp threads:',omp_get_num_threads()
      write(*,'(3(A,I0))')  '  ** number of equations:',numq
      write(*,'(3(A,I0))')  '  ** dimesion           :',im,'x',jm,'x',km
      write(*,'(3(A,I0))')  '  ** halo level         :',hm

@@ -1,6 +1,7 @@
 module solver
    
   use constdef
+  use utility, only: time_in_second
 
   implicit none
 
@@ -9,6 +10,7 @@ module solver
   subroutine mainloop
   
     use comvardef, only: time,nstep,deltat,ctime
+    use utility, only: progress_bar
   
     do while(nstep<100)
       
@@ -17,7 +19,7 @@ module solver
       nstep=nstep+1
       time =time + deltat
       
-      print*,nstep,time
+      call progress_bar(nstep,100,'  ** solving ',10)
       
     enddo
   
@@ -41,7 +43,7 @@ module solver
     real :: tstart,tfinish
 
     if(present(comptime)) then
-        call cpu_time(tstart)
+      tstart=time_in_second()
     endif
   
     if(firstcall) then
@@ -76,22 +78,43 @@ module solver
         !
         if(mod(nstep,10)==0) call stacal
         !
+        !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,m)
+        !$OMP DO
+        do k=0,km
+        do j=0,jm
+        do i=0,im
         do m=1,numq
-          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)
+          qsave(i,j,k,m)=q(i,j,k,m)
         enddo
+        enddo
+        enddo
+        enddo
+        !$OMP END DO
+        !$OMP END PARALLEL
         !
       endif
       
+      !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,m)
+      !$OMP DO
+      do k=0,km
+      do j=0,jm
+      do i=0,im
       do m=1,numq
         !
-        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+   &
-                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)    +   &
-                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
-        !
+        q(i,j,k,m)=rkcoe(1,rkstep)*qsave(i,j,k,m)+   &
+                   rkcoe(2,rkstep)*q(i,j,k,m)    +   &
+                   rkcoe(3,rkstep)*qrhs(i,j,k,m)*deltat
       enddo
+      enddo
+      enddo
+      enddo
+      !$OMP END DO
+      !$OMP END PARALLEL
       
       call filterq(ctime(6))
       
+      !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+      !$OMP DO
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -102,11 +125,14 @@ module solver
       enddo
       enddo
       enddo
+      !$OMP END DO
+      !$OMP END PARALLEL
+      
       
     enddo
   
     if(present(comptime)) then
-      call cpu_time(tfinish)
+      tfinish=time_in_second()
       
       comptime=comptime+tfinish-tstart
     endif
@@ -122,7 +148,7 @@ module solver
     real :: tstart,tfinish
 
     if(present(comptime)) then
-        call cpu_time(tstart)
+      tstart=time_in_second()
     endif
     !
     call gradcal(ctime(3))
@@ -134,7 +160,7 @@ module solver
     call diffusion(ctime(5))
     !
     if(present(comptime)) then
-      call cpu_time(tfinish)
+      tfinish=time_in_second()
       !
       comptime=comptime+tfinish-tstart
     endif
@@ -153,13 +179,20 @@ module solver
     !
     real :: tstart,tfinish
     !
-    !call progress_bar(0,3,'  ** temperature and velocity gradient ',10)
+    !$ save f,df
+    !$OMP THREADPRIVATE(f,df)
+    !
     !
     if(present(comptime)) then
-        call cpu_time(tstart)
+      tstart=time_in_second()
     endif
     !
+    !
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
     allocate(f(-hm:im+hm,4),df(0:im,4))
+
+    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -186,11 +219,15 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
+
     deallocate(f,df)
     !
     !call progress_bar(1,3,'  ** temperature and velocity gradient ',10)
     !
     allocate(f(-hm:jm+hm,4),df(0:jm,4))
+
+    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -218,11 +255,15 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
+
     deallocate(f,df)
     !
     !call progress_bar(2,3,'  ** temperature and velocity gradient ',10)
     !
     allocate(f(-hm:km+hm,4),df(0:km,4))
+
+    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -250,10 +291,14 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
+
     deallocate(f,df)
-    !
+
+    !$OMP END PARALLEL
+
     if(present(comptime)) then
-      call cpu_time(tfinish)
+      tfinish=time_in_second()
       !
       comptime=comptime+tfinish-tstart
     endif
@@ -274,17 +319,23 @@ module solver
     integer :: i,j,k,n
     !
     real :: tstart,tfinish
+
+    !$ save fcs,dfcs
+    !$OMP THREADPRIVATE(fcs,dfcs)
     
     if(present(comptime)) then
-        call cpu_time(tstart)
+      tstart=time_in_second()
     endif
     !
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
     !call progress_bar(0,3,'  ** convection terms ',10)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
     !
+    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -310,6 +361,7 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
     !
     deallocate(fcs,dfcs)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -323,6 +375,7 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
     !
+    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -348,6 +401,7 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
     !
     deallocate(fcs,dfcs)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -361,6 +415,7 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
     !
+    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -386,14 +441,17 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
     !
     deallocate(fcs,dfcs)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end calculating along k direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
+    !$OMP END PARALLEL
+
     if(present(comptime)) then
-      call cpu_time(tfinish)
+      tfinish=time_in_second()
       !
       comptime=comptime+tfinish-tstart
     endif
@@ -417,12 +475,16 @@ module solver
     !
     real :: tstart,tfinish
     !
-    integer :: i,j,k,n
+    integer :: i,j,k
     real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
     logical,save :: firstcall=.true.
     !
+    !$ save f,df
+    !$OMP THREADPRIVATE(f,df)
+
+
     if(present(comptime)) then
-        call cpu_time(tstart)
+      tstart=time_in_second()
     endif
     !
     if(firstcall) then
@@ -434,6 +496,8 @@ module solver
     !
     !call progress_bar(0,4,'  ** diffusion terms ',10)
     !
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc)
+    !$OMP DO
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -472,6 +536,8 @@ module solver
     enddo
     enddo
     enddo
+    !$OMP END DO
+    !$OMP END PARALLEL
     !
     call bchomovec(sigma)
     !
@@ -479,8 +545,11 @@ module solver
     !
     !call progress_bar(1,4,'  ** diffusion terms ',10)
     !
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
     allocate(f(-hm:im+hm,1:4),df(0:im,1:4))
     !
+    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -505,6 +574,7 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
     !
     deallocate(f,df)
     !
@@ -512,6 +582,7 @@ module solver
     !
     allocate(f(-hm:jm+hm,1:4),df(0:jm,1:4))
     !
+    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -536,6 +607,7 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
     !
     deallocate(f,df)
     !
@@ -543,6 +615,7 @@ module solver
     !
     allocate(f(-hm:km+hm,1:4),df(0:km,1:4))
     !
+    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -567,11 +640,14 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
     !
     deallocate(f,df)
+
+    !$OMP END PARALLEL
     !
     if(present(comptime)) then
-      call cpu_time(tfinish)
+      tfinish=time_in_second()
       !
       comptime=comptime+tfinish-tstart
     endif
@@ -593,13 +669,20 @@ module solver
     !
     integer :: i,j,k,n
     !
+    !$ save phi,fph
+    !$OMP THREADPRIVATE(phi,fph)
+
     if(present(comptime)) then
-        call cpu_time(tstart)
+      tstart=time_in_second()
     endif
     !
     !call progress_bar(0,3,'  ** spatial filter ',10)
     !
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
     allocate(phi(-hm:im+hm),fph(0:im))
+
+    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -619,11 +702,15 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
+
     deallocate(phi,fph)
     !
     !call progress_bar(1,3,'  ** spatial filter ',10)
     !
     allocate(phi(-hm:jm+hm),fph(0:jm))
+
+    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -643,11 +730,15 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
+
     deallocate(phi,fph)
     !
     !call progress_bar(2,3,'  ** spatial filter ',10)
     !
     allocate(phi(-hm:km+hm),fph(0:km))
+
+    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -667,10 +758,14 @@ module solver
       !
     enddo
     enddo
+    !$OMP END DO
+
     deallocate(phi,fph)
     !
+    !$OMP END PARALLEL
+
     if(present(comptime)) then
-      call cpu_time(tfinish)
+      tfinish=time_in_second()
       !
       comptime=comptime+tfinish-tstart
     endif

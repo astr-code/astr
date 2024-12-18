@@ -108,14 +108,14 @@ module utility
     !
   end subroutine timereport
 
-  integer function time_in_second()
+  real function time_in_second()
 
     integer :: start_values(8)
 
     ! Record the start time
     call date_and_time(values=start_values)
 
-    time_in_second = start_values(6) * 3600 + start_values(7) * 60 + start_values(8)
+    time_in_second = real(start_values(5) * 3600 + start_values(6) * 60 + start_values(7)) + real(start_values(8))*0.001
 
     return
 

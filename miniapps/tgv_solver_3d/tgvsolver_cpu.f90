@@ -2,7 +2,7 @@ module comvardef
   !
   implicit none
   !
-  integer :: im=64,jm=64,km=64,hm=5,numq=5
+  integer :: im=128,jm=128,km=128,hm=5,numq=5
 
   real(8),parameter :: pi=4.d0*atan(1.0_8),                            &
                        num1d35 =1.d0/35.d0,  num1d3  =1.d0/3.d0,       &

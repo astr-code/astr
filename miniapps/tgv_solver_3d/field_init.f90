@@ -17,12 +17,13 @@ module field_init
   end subroutine flowinit
 
   subroutine tgvinit
-    
+
+    !$ use omp_lib
     use constdef
     use comvardef, only: im,jm,km,gamma,mach,reynolds,prandtl,dx,dy,dz, &
                          const1,const2,const3,const4,const5,const6,    &
                          const7,time,nstep,deltat,ref_t,               &
-                         x,qrhs,q,vel,rho,prs,tmp,ctime
+                         x,qrhs,q,vel,rho,prs,tmp,ctime,mthread
     use  fluidynamcs, only: var2q,thermal_scar
     use xdmwrite, only: xdmfwriter
     use tecio, only: tecbin

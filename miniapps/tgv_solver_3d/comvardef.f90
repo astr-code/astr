@@ -2,6 +2,8 @@ module comvardef
   !
   implicit none
   !
+  integer :: nthread,mthread,ncore
+  
   integer :: im=64,jm=64,km=64,hm=5,numq=5
   !
   integer :: nstep
