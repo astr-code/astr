@@ -21,9 +21,6 @@ program astr_mini_omp
   !$ ncore=OMP_get_num_procs()
   !$ if(nthread>ncore) print *,' **!! Warning: the thread No. is larger than processers No.!'
   !
-  !$ mthread=omp_get_num_threads()
-  !$ write(*,'(A,I0,A)')'  ** The real number of threads ',mthread
-  !
   tstart=time_in_second()
 
   call readinput

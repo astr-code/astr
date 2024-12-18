@@ -18,6 +18,8 @@ module bc
     integer :: i,j,k
     !
     ! b.c. at the i direction
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -45,9 +47,11 @@ module bc
       !
     enddo
     enddo
+    !$OMP END DO
     ! end of applying b.c. along i direction
     !
     ! b.c. at the j direction
+    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -75,9 +79,11 @@ module bc
       !
     enddo
     enddo
+    !$OMP END DO
     ! end of applying b.c. along j direction
     !
     ! b.c. at the k direction
+    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -105,8 +111,11 @@ module bc
       !
     enddo
     enddo
+    !$OMP END DO
     ! end of applying b.c. along k direction
     !
+    !$OMP END PARALLEL
+
   end subroutine bchomo
   !
   subroutine bchomovec(var)
@@ -119,7 +128,10 @@ module bc
     !
     nd4=size(var,4)
     !
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
     ! b.c. at the i direction
+    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -133,9 +145,11 @@ module bc
       !
     enddo
     enddo
+    !$OMP END DO
     ! end of applying b.c. along i direction
     !
     ! b.c. at the j direction
+    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -149,9 +163,11 @@ module bc
       !
     enddo
     enddo
+    !$OMP END DO
     ! end of applying b.c. along j direction
     !
     ! b.c. at the k direction
+    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -165,8 +181,11 @@ module bc
       !
     enddo
     enddo
+    !$OMP END DO
     ! end of applying b.c. along k direction
     !
+    !$OMP END PARALLEL
+    
   end subroutine bchomovec
 
 end module bc

@@ -5,7 +5,7 @@ module statistics
   implicit none
 
   contains
-  
+
   subroutine stacal
     !
     use comvardef, only: im,jm,km,rho,vel,dvel,nstep,time
@@ -15,7 +15,10 @@ module statistics
     !
     logical,save :: firstcall = .true.
     integer,save :: filehand
-    !
+
+    !$ save omega
+    !$OMP THREADPRIVATE(omega)
+
     if(firstcall) then
       filehand=13
       open(filehand,file='state.dat')
@@ -25,6 +28,9 @@ module statistics
     rhom=0.d0
     tke =0.d0
     enst=0.d0
+
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,var1) REDUCTION(+:tke,rhom,enst)
+    !$OMP DO
     do k=1,km
     do j=1,jm
     do i=1,im
@@ -44,6 +50,9 @@ module statistics
     enddo
     enddo
     enddo
+    !$OMP END DO
+    !$OMP END PARALLEL
+
     rhom=rhom/dble(im*jm*km)
     tke =0.5d0*tke/dble(im*jm*km)
     enst=0.5d0*enst/dble(im*jm*km)

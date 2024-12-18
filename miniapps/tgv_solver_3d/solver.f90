@@ -18,8 +18,8 @@ module solver
       
       nstep=nstep+1
       time =time + deltat
-      
-      call progress_bar(nstep,100,'  ** solving ',10)
+
+      call progress_bar(nstep,100,'  ** solving ',50)
       
     enddo
   

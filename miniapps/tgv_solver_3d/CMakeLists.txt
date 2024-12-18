@@ -15,7 +15,9 @@ add_executable(astr_omp
                     solver.f90
                     statistics.f90
                     tgvsolver_omp.f90)
-target_link_libraries(astr_omp)
+                    
+find_package(OpenMP REQUIRED)
+target_link_libraries(astr_omp PRIVATE OpenMP::OpenMP_Fortran)
 
 install(TARGETS astr_omp
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
