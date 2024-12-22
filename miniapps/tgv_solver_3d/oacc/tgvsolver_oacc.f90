@@ -41,6 +41,4 @@ program astr_mini_omp
   
   call timereport
 
-  stop
-
 end program astr_mini_omp

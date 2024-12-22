@@ -9,17 +9,17 @@ module solver
   
   subroutine mainloop
   
-    use comvardef, only: time,nstep,deltat,ctime
+    use comvardef, only: time,nstep,deltat,ctime,maxstep
     use utility, only: progress_bar
   
-    do while(nstep<100)
+    do while(nstep<maxstep)
       
       call rk3(ctime(2))
       
       nstep=nstep+1
       time =time + deltat
 
-      call progress_bar(nstep,100,'  ** solving ',50)
+      call progress_bar(nstep,maxstep,'     ',50)
       
     enddo
   
@@ -168,146 +168,129 @@ module solver
   end subroutine rhscal
 
   subroutine gradcal(comptime)
-    !
+    !$acc routine(diff6ec) vector
+
     use comvardef,only: im,jm,km,hm,vel,dvel,tmp,dtmp,dx,dy,dz,ctime
     use numerics, only: diff6ec
-    !
+
     integer :: i,j,k,n
-    !
-    real(8),allocatable,dimension(:,:) :: f,df
+
+    real(8) :: fi(-hm:im+hm,4),dfi(0:im,4), &
+               fj(-hm:im+hm,4),dfj(0:im,4), &
+               fk(-hm:im+hm,4),dfk(0:im,4)
     real,intent(inout),optional :: comptime
-    !
+
     real :: tstart,tfinish
-    !
-    !$ save f,df
-    !$OMP THREADPRIVATE(f,df)
-    !
-    !
+    
     if(present(comptime)) then
       tstart=time_in_second()
     endif
-    !
-    !
-    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
 
-    allocate(f(-hm:im+hm,4),df(0:im,4))
+    !$acc data copyin(vel,tmp), copyout(dvel,dtmp)
 
-    !$OMP DO
+    !$acc parallel loop collapse(2) private(i, fi, dfi)
     do k=0,km
     do j=0,jm
       !
+      !$acc loop
       do i=-hm,im+hm
-        f(i,1)=vel(i,j,k,1)
-        f(i,2)=vel(i,j,k,2)
-        f(i,3)=vel(i,j,k,3)
-        f(i,4)=tmp(i,j,k)
+        fi(i,1)=vel(i,j,k,1)
+        fi(i,2)=vel(i,j,k,2)
+        fi(i,3)=vel(i,j,k,3)
+        fi(i,4)=tmp(i,j,k)
       enddo
       !
-      call diff6ec(f(:,1),im,hm,df(:,1))
-      call diff6ec(f(:,2),im,hm,df(:,2))
-      call diff6ec(f(:,3),im,hm,df(:,3))
-      call diff6ec(f(:,4),im,hm,df(:,4))
+      call diff6ec(fi(:,1),im,hm,dfi(:,1))
+      call diff6ec(fi(:,2),im,hm,dfi(:,2))
+      call diff6ec(fi(:,3),im,hm,dfi(:,3))
+      call diff6ec(fi(:,4),im,hm,dfi(:,4))
       !
+      !$acc loop
       do i=0,im
         !
-        dvel(i,j,k,1,1)=df(i,1)/dx
-        dvel(i,j,k,2,1)=df(i,2)/dx
-        dvel(i,j,k,3,1)=df(i,3)/dx
-        dtmp(i,j,k,1)  =df(i,4)/dx
+        dvel(i,j,k,1,1)=dfi(i,1)/dx
+        dvel(i,j,k,2,1)=dfi(i,2)/dx
+        dvel(i,j,k,3,1)=dfi(i,3)/dx
+        dtmp(i,j,k,1)  =dfi(i,4)/dx
         !
       enddo
       !
     enddo
     enddo
-    !$OMP END DO
 
-    deallocate(f,df)
-    !
-    !call progress_bar(1,3,'  ** temperature and velocity gradient ',10)
-    !
-    allocate(f(-hm:jm+hm,4),df(0:jm,4))
-
-    !$OMP DO
+    !$acc parallel loop collapse(2) private(j, fj, dfj)
     do k=0,km
     do i=0,im
       !
+      !$acc loop
       do j=-hm,jm+hm
-        f(j,1)=vel(i,j,k,1)
-        f(j,2)=vel(i,j,k,2)
-        f(j,3)=vel(i,j,k,3)
-        f(j,4)=tmp(i,j,k)
+        fj(j,1)=vel(i,j,k,1)
+        fj(j,2)=vel(i,j,k,2)
+        fj(j,3)=vel(i,j,k,3)
+        fj(j,4)=tmp(i,j,k)
       enddo
       !
-      call diff6ec(f(:,1),jm,hm,df(:,1))
-      call diff6ec(f(:,2),jm,hm,df(:,2))
-      call diff6ec(f(:,3),jm,hm,df(:,3))
-      call diff6ec(f(:,4),jm,hm,df(:,4))
+      call diff6ec(fj(:,1),jm,hm,dfj(:,1))
+      call diff6ec(fj(:,2),jm,hm,dfj(:,2))
+      call diff6ec(fj(:,3),jm,hm,dfj(:,3))
+      call diff6ec(fj(:,4),jm,hm,dfj(:,4))
       !
+      !$acc loop
       do j=0,jm
         !
-        dvel(i,j,k,1,2)=df(j,1)/dy
-        dvel(i,j,k,2,2)=df(j,2)/dy
-        dvel(i,j,k,3,2)=df(j,3)/dy
-        dtmp(i,j,k,2)  =df(j,4)/dy
+        dvel(i,j,k,1,2)=dfj(j,1)/dy
+        dvel(i,j,k,2,2)=dfj(j,2)/dy
+        dvel(i,j,k,3,2)=dfj(j,3)/dy
+        dtmp(i,j,k,2)  =dfj(j,4)/dy
         !
       enddo
       !
       !
     enddo
     enddo
-    !$OMP END DO
 
-    deallocate(f,df)
-    !
-    !call progress_bar(2,3,'  ** temperature and velocity gradient ',10)
-    !
-    allocate(f(-hm:km+hm,4),df(0:km,4))
-
-    !$OMP DO
+    !$acc parallel loop collapse(2) private(k, fk, dfk)
     do j=0,jm
     do i=0,im
       !
+      !$acc loop
       do k=-hm,km+hm
-        f(k,1)=vel(i,j,k,1)
-        f(k,2)=vel(i,j,k,2)
-        f(k,3)=vel(i,j,k,3)
-        f(k,4)=tmp(i,j,k)
+        fk(k,1)=vel(i,j,k,1)
+        fk(k,2)=vel(i,j,k,2)
+        fk(k,3)=vel(i,j,k,3)
+        fk(k,4)=tmp(i,j,k)
       enddo
       !
-      call diff6ec(f(:,1),km,hm,df(:,1))
-      call diff6ec(f(:,2),km,hm,df(:,2))
-      call diff6ec(f(:,3),km,hm,df(:,3))
-      call diff6ec(f(:,4),km,hm,df(:,4))
+      call diff6ec(fk(:,1),km,hm,dfk(:,1))
+      call diff6ec(fk(:,2),km,hm,dfk(:,2))
+      call diff6ec(fk(:,3),km,hm,dfk(:,3))
+      call diff6ec(fk(:,4),km,hm,dfk(:,4))
       !
+      !$acc loop
       do k=0,km
         !
-        dvel(i,j,k,1,3)=df(k,1)/dz
-        dvel(i,j,k,2,3)=df(k,2)/dz
-        dvel(i,j,k,3,3)=df(k,3)/dz
-        dtmp(i,j,k,3)  =df(k,4)/dz
+        dvel(i,j,k,1,3)=dfk(k,1)/dz
+        dvel(i,j,k,2,3)=dfk(k,2)/dz
+        dvel(i,j,k,3,3)=dfk(k,3)/dz
+        dtmp(i,j,k,3)  =dfk(k,4)/dz
         !
       enddo
-      !
-      !
+
     enddo
     enddo
-    !$OMP END DO
 
-    deallocate(f,df)
-
-    !$OMP END PARALLEL
+    !$acc end data
 
     if(present(comptime)) then
       tfinish=time_in_second()
       !
       comptime=comptime+tfinish-tstart
     endif
-    !
-    !call progress_bar(3,3,'  ** temperature and velocity gradient ',10)
-    !
+
   end subroutine gradcal
   !
   subroutine convection(comptime)
+    !$acc routine(diff6ec) vector
     !
     use comvardef, only: im,jm,km,hm,numq,rho,prs,tmp,vel,q,qrhs,dx,dy,dz,ctime
     use fluidynamcs,  only: var2q
@@ -315,45 +298,46 @@ module solver
     !
     real,intent(inout),optional :: comptime
     !
-    real(8),allocatable,dimension(:,:) :: fcs,dfcs
+    real(8) :: fi(-hm:im+hm,5),dfi(0:im,5), &
+               fj(-hm:im+hm,5),dfj(0:im,5), &
+               fk(-hm:im+hm,5),dfk(0:im,5)
+
     integer :: i,j,k,n
     !
     real :: tstart,tfinish
-
-    !$ save fcs,dfcs
-    !$OMP THREADPRIVATE(fcs,dfcs)
     
     if(present(comptime)) then
       tstart=time_in_second()
     endif
-    !
-    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+    
+    !$acc data copyin(q,vel,prs), copyout(qrhs)
 
     !call progress_bar(0,3,'  ** convection terms ',10)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    allocate(fcs(-hm:im+hm,1:numq),dfcs(0:im,1:numq))
     !
-    !$OMP DO
+    !$acc parallel loop collapse(2) private(i, fi, dfi)
     do k=0,km
     do j=0,jm
       !
+      !$acc loop
       do i=-hm,im+hm
-        fcs(i,1)=q(i,j,k,1)*vel(i,j,k,1)
-        fcs(i,2)=q(i,j,k,2)*vel(i,j,k,1) + prs(i,j,k)
-        fcs(i,3)=q(i,j,k,3)*vel(i,j,k,1)
-        fcs(i,4)=q(i,j,k,4)*vel(i,j,k,1)
-        fcs(i,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,1)
+        fi(i,1)=q(i,j,k,1)*vel(i,j,k,1)
+        fi(i,2)=q(i,j,k,2)*vel(i,j,k,1) + prs(i,j,k)
+        fi(i,3)=q(i,j,k,3)*vel(i,j,k,1)
+        fi(i,4)=q(i,j,k,4)*vel(i,j,k,1)
+        fi(i,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,1)
       enddo
       !
       do n=1,numq
         !
-        call diff6ec(fcs(:,n),im,hm,dfcs(:,n))
+        call diff6ec(fi(:,n),im,hm,dfi(:,n))
         !
+        !$acc loop
         do i=0,im
           !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfcs(i,n)/dx
+          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfi(i,n)/dx
           !
         enddo
         !
@@ -361,9 +345,7 @@ module solver
       !
     enddo
     enddo
-    !$OMP END DO
     !
-    deallocate(fcs,dfcs)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end calculating along i direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -373,27 +355,28 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along j direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
     !
-    !$OMP DO
+    !$acc parallel loop collapse(2) private(j, fj, dfj)
     do k=0,km
     do i=0,im
       !
+      !$acc loop
       do j=-hm,jm+hm
-        fcs(j,1)=q(i,j,k,1)*vel(i,j,k,2)
-        fcs(j,2)=q(i,j,k,2)*vel(i,j,k,2)
-        fcs(j,3)=q(i,j,k,3)*vel(i,j,k,2) + prs(i,j,k)
-        fcs(j,4)=q(i,j,k,4)*vel(i,j,k,2)
-        fcs(j,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,2)
+        fj(j,1)=q(i,j,k,1)*vel(i,j,k,2)
+        fj(j,2)=q(i,j,k,2)*vel(i,j,k,2)
+        fj(j,3)=q(i,j,k,3)*vel(i,j,k,2) + prs(i,j,k)
+        fj(j,4)=q(i,j,k,4)*vel(i,j,k,2)
+        fj(j,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,2)
       enddo
       !
       do n=1,numq
         !
-        call diff6ec(fcs(:,n),jm,hm,dfcs(:,n))
+        call diff6ec(fj(:,n),jm,hm,dfj(:,n))
         !
+        !$acc loop
         do j=0,jm
           !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfcs(j,n)/dy
+          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfj(j,n)/dy
           !
         enddo
         !
@@ -401,9 +384,7 @@ module solver
       !
     enddo
     enddo
-    !$OMP END DO
     !
-    deallocate(fcs,dfcs)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end calculating along j direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -413,27 +394,28 @@ module solver
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! calculating along k direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
     !
-    !$OMP DO
+    !$acc parallel loop collapse(2) private(k, fk, dfk)
     do j=0,jm
     do i=0,im
       !
+      !$acc loop
       do k=-hm,im+hm
-        fcs(k,1)=q(i,j,k,1)*vel(i,j,k,3)
-        fcs(k,2)=q(i,j,k,2)*vel(i,j,k,3)
-        fcs(k,3)=q(i,j,k,3)*vel(i,j,k,3)
-        fcs(k,4)=q(i,j,k,4)*vel(i,j,k,3) + prs(i,j,k)
-        fcs(k,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
+        fk(k,1)=q(i,j,k,1)*vel(i,j,k,3)
+        fk(k,2)=q(i,j,k,2)*vel(i,j,k,3)
+        fk(k,3)=q(i,j,k,3)*vel(i,j,k,3)
+        fk(k,4)=q(i,j,k,4)*vel(i,j,k,3) + prs(i,j,k)
+        fk(k,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
       enddo
       !
       do n=1,numq
         !
-        call diff6ec(fcs(:,n),km,hm,dfcs(:,n))
+        call diff6ec(fk(:,n),km,hm,dfk(:,n))
         !
+        !$acc loop
         do k=0,km
           !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfcs(k,n)/dz
+          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfk(k,n)/dz
           !
         enddo
         !
@@ -441,14 +423,12 @@ module solver
       !
     enddo
     enddo
-    !$OMP END DO
     !
-    deallocate(fcs,dfcs)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end calculating along k direction
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !$OMP END PARALLEL
+    !$acc end data
 
     if(present(comptime)) then
       tfinish=time_in_second()
@@ -478,11 +458,7 @@ module solver
     integer :: i,j,k
     real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
     logical,save :: firstcall=.true.
-    !
-    !$ save f,df
-    !$OMP THREADPRIVATE(f,df)
-
-
+    
     if(present(comptime)) then
       tstart=time_in_second()
     endif
@@ -496,8 +472,6 @@ module solver
     !
     !call progress_bar(0,4,'  ** diffusion terms ',10)
     !
-    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc)
-    !$OMP DO
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -536,8 +510,6 @@ module solver
     enddo
     enddo
     enddo
-    !$OMP END DO
-    !$OMP END PARALLEL
     !
     call bchomovec(sigma)
     !
@@ -545,11 +517,8 @@ module solver
     !
     !call progress_bar(1,4,'  ** diffusion terms ',10)
     !
-    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
-
     allocate(f(-hm:im+hm,1:4),df(0:im,1:4))
     !
-    !$OMP DO
     do k=0,km
     do j=0,jm
       !
@@ -574,7 +543,6 @@ module solver
       !
     enddo
     enddo
-    !$OMP END DO
     !
     deallocate(f,df)
     !
@@ -582,7 +550,6 @@ module solver
     !
     allocate(f(-hm:jm+hm,1:4),df(0:jm,1:4))
     !
-    !$OMP DO
     do k=0,km
     do i=0,im
       !
@@ -607,7 +574,6 @@ module solver
       !
     enddo
     enddo
-    !$OMP END DO
     !
     deallocate(f,df)
     !
@@ -615,7 +581,6 @@ module solver
     !
     allocate(f(-hm:km+hm,1:4),df(0:km,1:4))
     !
-    !$OMP DO
     do j=0,jm
     do i=0,im
       !
@@ -640,11 +605,9 @@ module solver
       !
     enddo
     enddo
-    !$OMP END DO
     !
     deallocate(f,df)
 
-    !$OMP END PARALLEL
     !
     if(present(comptime)) then
       tfinish=time_in_second()

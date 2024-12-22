@@ -31,12 +31,6 @@ module field_init
     integer :: i,j,k
     real(8) :: var1,pinf
     
-    ref_t=273.15d0
-    gamma=1.4d0
-    mach =0.1d0
-    reynolds=1600.d0
-    prandtl=0.72d0
-    
     const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
     const2=gamma*mach**2
     const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
@@ -82,7 +76,6 @@ module field_init
     
     nstep=0
     time =0.d0
-    deltat=1.d-3
     
     ctime=0.0
     

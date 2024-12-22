@@ -6,33 +6,23 @@ module numerics
   !
   contains
   !
-  subroutine diff6ec(vin,dim,n,vout,comptime)
-    !
+  subroutine diff6ec(vin,dim,n,vout)
+    !$acc routine vector
+
     integer,intent(in) :: dim,n
     real(8),intent(in) :: vin(-n:dim+n)
     real(8) :: vout(0:dim)
-    !
-    real,intent(inout),optional :: comptime
     
     ! local data
     integer :: i
     real :: tstart,tfinish
-
-    if(present(comptime)) then
-        call cpu_time(tstart)
-    endif
     !
+    !$acc loop
     do i=0,dim
       vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))- &
                 0.15d0 *(vin(i+2)-vin(i-2))+ &
                num1d60 *(vin(i+3)-vin(i-3))
     enddo
-    !
-    if(present(comptime)) then
-      call cpu_time(tfinish)
-      !
-      comptime=comptime+tfinish-tstart
-    endif
     !
   end subroutine diff6ec
     !

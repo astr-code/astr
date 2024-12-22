@@ -4,9 +4,9 @@ module comvardef
   !
   integer :: nthread,mthread,ncore
   
-  integer :: im=64,jm=64,km=64,hm=5,numq=5
+  integer :: im,jm,km,hm,numq
   !
-  integer :: nstep
+  integer :: nstep,maxstep
   real(8) :: time,deltat
   !
   real(8) :: gamma,mach,reynolds,prandtl,ref_t

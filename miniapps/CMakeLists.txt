@@ -35,7 +35,7 @@ endif (NOT CMAKE_BUILD_TYPE)
 if(${CMAKE_Fortran_COMPILER_ID} STREQUAL "PGI" OR
    ${CMAKE_Fortran_COMPILER_ID} STREQUAL "NVHPC")
  
-  set(CMAKE_Fortran_FLAGS "-cpp -cuda")
+  set(CMAKE_Fortran_FLAGS "-cpp")
   set(CMAKE_Fortran_FLAGS_DEBUG "-g -O0 -traceback -Mbounds -Mchkptr -Ktrap=fp")
   set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -fast")
 
@@ -43,7 +43,10 @@ elseif(${CMAKE_Fortran_COMPILER_ID} STREQUAL "GNU")
   set(CMAKE_Fortran_FLAGS "-cpp -std=f2018")
   set(CMAKE_Fortran_FLAGS_DEBUG "-g -Og -Wall -Wpedantic -Werror -Wimplicit-interface -Wimplicit-procedure -Wno-unused-dummy-argument")
   set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -ffast-math")
+
+  message(STATUS "CMAKE_Fortran_FLAGS: ${CMAKE_Fortran_FLAGS}")
 endif()
+
 
 if (CMAKE_BUILD_TYPE MATCHES "DEBUG")
   add_definitions("-DDEBG")
@@ -55,4 +58,3 @@ set(CMAKE_INSTALL_PREFIX ${ASTR_ROOT})
 
 # Create the ASTR executable
 add_subdirectory(tgv_solver_3d)
-
