@@ -118,71 +118,89 @@ module bc
 
   end subroutine bchomo
   !
-  subroutine bchomovec(var)
+  subroutine bchomovec(var,dir)
     !
     use comvardef, only: im,jm,km,hm
     !
     real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:)
+    character(len=*),intent(in),optional :: dir
     !
-    integer :: i,j,k,n,nd4
-    !
-    nd4=size(var,4)
+    integer :: i,j,k
+    character(len=1) :: direction
+
+    if(present(dir)) then
+      direction=dir
+    else
+      direction='a'
+    endif
     !
     !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+    
+    if(dir=='i' .or. dir=='a') then
 
-    ! b.c. at the i direction
-    !$OMP DO
-    do k=0,km
-    do j=0,jm
-      !
-      do i=-hm,-1
-        var(i,j,k,:)  =var(im+i,j,k,:)
+      ! b.c. at the i direction
+      !$OMP DO
+      do k=0,km
+      do j=0,jm
+        !
+        do i=-hm,-1
+          var(i,j,k,:)  =var(im+i,j,k,:)
+        enddo
+        !
+        do i=im+1,im+hm
+          var(i,j,k,:)=var(i-im,j,k,:)
+        enddo
+        !
       enddo
-      !
-      do i=im+1,im+hm
-        var(i,j,k,:)=var(i-im,j,k,:)
       enddo
-      !
-    enddo
-    enddo
-    !$OMP END DO
-    ! end of applying b.c. along i direction
+      !$OMP END DO
+      ! end of applying b.c. along i direction
+
+    endif
     !
-    ! b.c. at the j direction
-    !$OMP DO
-    do k=0,km
-    do i=0,im
-      !
-      do j=-hm,-1
-        var(i,j,k,:)=var(i,jm+j,k,:)
+    if(dir=='j' .or. dir=='a') then
+
+      ! b.c. at the j direction
+      !$OMP DO
+      do k=0,km
+      do i=0,im
+        !
+        do j=-hm,-1
+          var(i,j,k,:)=var(i,jm+j,k,:)
+        enddo
+        !
+        do j=jm+1,jm+hm
+          var(i,j,k,:)=var(i,j-jm,k,:)
+        enddo
+        !
       enddo
-      !
-      do j=jm+1,jm+hm
-        var(i,j,k,:)=var(i,j-jm,k,:)
       enddo
-      !
-    enddo
-    enddo
-    !$OMP END DO
-    ! end of applying b.c. along j direction
+      !$OMP END DO
+      ! end of applying b.c. along j direction
+
+    endif
     !
-    ! b.c. at the k direction
-    !$OMP DO
-    do j=0,jm
-    do i=0,im
-      !
-      do k=-hm,-1
-        var(i,j,k,:)=var(i,j,km+k,:)
+    if(dir=='k' .or. dir=='a') then
+
+      ! b.c. at the k direction
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
+        !
+        do k=-hm,-1
+          var(i,j,k,:)=var(i,j,km+k,:)
+        enddo
+        !
+        do k=km+1,km+hm
+          var(i,j,k,:)=var(i,j,k-km,:)
+        enddo
+        !
       enddo
-      !
-      do k=km+1,km+hm
-        var(i,j,k,:)=var(i,j,k-km,:)
       enddo
-      !
-    enddo
-    enddo
-    !$OMP END DO
-    ! end of applying b.c. along k direction
+      !$OMP END DO
+      ! end of applying b.c. along k direction
+
+    endif
     !
     !$OMP END PARALLEL
     

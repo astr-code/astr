@@ -74,7 +74,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -297,7 +296,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -524,7 +522,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -754,7 +751,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -986,7 +982,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -1310,7 +1305,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -1585,7 +1579,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -1801,7 +1794,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -2019,7 +2011,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -2238,7 +2229,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -2458,7 +2448,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -2683,7 +2672,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0
@@ -2910,7 +2898,6 @@ module tecio
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
-    character(40) :: zonename1
     character(256) :: ligne
     !
     solutiontime1=0.d0

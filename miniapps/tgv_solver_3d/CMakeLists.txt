@@ -33,22 +33,22 @@ add_executable(astr_omp
 #                     oacc/tgvsolver_oacc.f90)
 # 
 # 
-add_executable(astr_cpu
-                    com/constdef.f90
-                    com/xdmwrite.f90
-                    com/tecio.f90
-                    com/comvardef.f90
-                    com/utility.f90
-                    com/io.f90
-                    omp/fluidynamcs.f90
-                    omp/field_init.f90
-                    omp/bc.f90
-                    omp/numerics.f90
-                    omp/solver.f90
-                    omp/statistics.f90
-                    omp/tgvsolver_omp.f90)
-
-target_link_libraries(astr_cpu)
+# add_executable(astr_cpu
+#                     com/constdef.f90
+#                     com/xdmwrite.f90
+#                     com/tecio.f90
+#                     com/comvardef.f90
+#                     com/utility.f90
+#                     com/io.f90
+#                     omp/fluidynamcs.f90
+#                     omp/field_init.f90
+#                     omp/bc.f90
+#                     omp/numerics.f90
+#                     omp/solver.f90
+#                     omp/statistics.f90
+#                     omp/tgvsolver_omp.f90)
+# 
+# target_link_libraries(astr_cpu)
 
 find_package(OpenMP REQUIRED)
 target_link_libraries(astr_omp PRIVATE OpenMP::OpenMP_Fortran)

@@ -12,8 +12,6 @@ module fluidynamcs
     real(8) :: vout
     real(8),intent(in) ,optional :: density,pressure,temperature
     !
-    real(8) :: rloc
-    !
     if(present(density) .and. present(temperature)) then
       vout=density*temperature/const2
     elseif(present(density) .and. present(pressure)) then
@@ -35,8 +33,7 @@ module fluidynamcs
     real(8),intent(in),optional :: pressure,temperature
     !
     ! local data
-    integer :: jspec,j
-    real(8) :: var1,var2
+    real(8) :: var1
     !
     q(1)=density
     q(2)=density*velocity(1)

@@ -76,7 +76,7 @@ module utility
     character(len=*),intent(out),optional :: keyin
     !
     ! local data
-    integer :: ierr,cli_len,nlen,arg_count
+    integer :: ierr,cli_len
     integer,save :: nkey=0
     !
     nkey=nkey+1
@@ -522,7 +522,6 @@ module utility
 
       integer ::  i
       integer ::  ios
-      integer ::  iunit
       logical :: lopen
 
       get_unit = 0

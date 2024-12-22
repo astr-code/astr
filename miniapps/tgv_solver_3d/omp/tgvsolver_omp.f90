@@ -29,7 +29,7 @@ program astr_mini_omp
 
   call alloarray
 
-  call flowinit('tgv')
+  call flowinit
 
   call mainloop
 

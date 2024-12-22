@@ -7,7 +7,7 @@ module numerics
   real(8),allocatable :: cci(:,:),ccj(:,:),cck(:,:)
   real(8),allocatable :: cfi(:,:),cfj(:,:),cfk(:,:)
   real(8),allocatable :: alfa_fdm(:),coef10i(:)
-  real(8) :: compact_filer_coefficient=0.49
+  real(8) :: compact_filer_coefficient=0.49d0
 
   contains
 
@@ -30,7 +30,7 @@ module numerics
   ! this subroutine is a 1d finite-difference solver
   subroutine fdm_solver_1d(f,df,dir)
 
-    use comvardef, only : hm,im,jm,km
+    use comvardef, only : hm
     
     real(8),intent(in) :: f(:,:)
     character(len=1),intent(in) :: dir
@@ -137,14 +137,12 @@ module numerics
   
   subroutine low_pass_filter(f,ff,dir,dim)
 
-    use comvardef, only : hm,im,jm,km
+    use comvardef, only : hm
     
     integer,intent(in) :: dim
     real(8),intent(in) :: f(:)
     character(len=1),intent(in) :: dir
     real(8),intent(out) :: ff(:)
-
-    integer :: nclo,n
 
     ! call filter10ec(f,dim,hm,ff)
     call filter10cc(f,dim,hm,ff,dir)

@@ -12,6 +12,7 @@ module solver
     use comvardef, only: time,nstep,deltat,ctime,maxstep
     use utility, only: progress_bar
     use numerics, only: fdm_solver_init,filter_init
+    use io, only: write_field
 
     call fdm_solver_init
     call filter_init
@@ -28,7 +29,11 @@ module solver
       nstep=nstep+1
       time =time + deltat
 
-      call progress_bar(nstep,maxstep,'     ',50)
+      if(mod(nstep,100)==0) then
+        call write_field
+      endif
+
+      ! call progress_bar(nstep,maxstep,'     ',50)
       
     enddo
   
@@ -36,13 +41,13 @@ module solver
 
   subroutine solver_test
     
-    use comvardef, only: hm,im,jm,km,x,dx,dy,dz
+    use comvardef, only: hm,im,x,dx
     use numerics, only: fdm_solver_1d
 
     real(8) :: f(-hm:im+hm,1),df(0:im,1)
     real(8) :: dfref,error
 
-    integer :: i,j,k
+    integer :: i
 
     do i=0,im
       f(i,1)=cos(2.d0*x(i,0,0,1))
@@ -74,16 +79,16 @@ module solver
 
   subroutine filter_test
     
-    use comvardef, only: hm,im,jm,km,x
+    use comvardef, only: hm,im,x
     use numerics,  only: low_pass_filter
 
     real(8) :: f(-hm:im+hm),ff(0:im)
-    real(8) :: dfref,error
+    real(8) :: error
 
-    integer :: i,j,k
+    integer :: i
 
     do i=0,im
-      f(i)=cos(20.d0*x(i,0,0,1))
+      f(i)=cos(2.d0*x(i,0,0,1))+0.1d0*sin(48.d0*x(i,0,0,1))
     enddo
     f(-hm:-1)=f(im-hm:im-1)
     f(im+1:im+hm)=f(1:hm)
@@ -250,10 +255,10 @@ module solver
 
   subroutine gradcal(comptime)
     !
-    use comvardef,only: im,jm,km,hm,vel,dvel,tmp,dtmp,dx,dy,dz,ctime
+    use comvardef,only: im,jm,km,hm,vel,dvel,tmp,dtmp,dx,dy,dz,ndims
     use numerics, only: fdm_solver_1d
     !
-    integer :: i,j,k,n
+    integer :: i,j,k
     !
     real(8),allocatable,dimension(:,:) :: f,df
     real,intent(inout),optional :: comptime
@@ -336,36 +341,40 @@ module solver
     !
     !call progress_bar(2,3,'  ** temperature and velocity gradient ',10)
     !
-    allocate(f(-hm:km+hm,4),df(0:km,4))
+    if(ndims==3) then
 
-    !$OMP DO
-    do j=0,jm
-    do i=0,im
-      !
-      do k=-hm,km+hm
-        f(k,1)=vel(i,j,k,1)
-        f(k,2)=vel(i,j,k,2)
-        f(k,3)=vel(i,j,k,3)
-        f(k,4)=tmp(i,j,k)
-      enddo
-      !
-      call fdm_solver_1d(f,df,'k')
-      !
-      do k=0,km
+      allocate(f(-hm:km+hm,4),df(0:km,4))
+  
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
         !
-        dvel(i,j,k,1,3)=df(k,1)/dz
-        dvel(i,j,k,2,3)=df(k,2)/dz
-        dvel(i,j,k,3,3)=df(k,3)/dz
-        dtmp(i,j,k,3)  =df(k,4)/dz
+        do k=-hm,km+hm
+          f(k,1)=vel(i,j,k,1)
+          f(k,2)=vel(i,j,k,2)
+          f(k,3)=vel(i,j,k,3)
+          f(k,4)=tmp(i,j,k)
+        enddo
+        !
+        call fdm_solver_1d(f,df,'k')
+        !
+        do k=0,km
+          !
+          dvel(i,j,k,1,3)=df(k,1)/dz
+          dvel(i,j,k,2,3)=df(k,2)/dz
+          dvel(i,j,k,3,3)=df(k,3)/dz
+          dtmp(i,j,k,3)  =df(k,4)/dz
+          !
+        enddo
+        !
         !
       enddo
-      !
-      !
-    enddo
-    enddo
-    !$OMP END DO
+      enddo
+      !$OMP END DO
 
-    deallocate(f,df)
+      deallocate(f,df)
+
+    endif
 
     !$OMP END PARALLEL
 
@@ -381,7 +390,7 @@ module solver
   !
   subroutine convection(comptime)
     !
-    use comvardef, only: im,jm,km,hm,numq,rho,prs,tmp,vel,q,qrhs,dx,dy,dz,ctime
+    use comvardef, only: im,jm,km,hm,numq,prs,vel,q,qrhs,dx,dy,dz,ndims
     use fluidynamcs,  only: var2q
     use numerics,  only: fdm_solver_1d
     !
@@ -482,43 +491,45 @@ module solver
     !
     !call progress_bar(2,3,'  ** convection terms ',10)
     !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! calculating along k direction
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
-    !
-    !$OMP DO
-    do j=0,jm
-    do i=0,im
+    if(ndims==3) then
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! calculating along k direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
       !
-      do k=-hm,im+hm
-        fcs(k,1)=q(i,j,k,1)*vel(i,j,k,3)
-        fcs(k,2)=q(i,j,k,2)*vel(i,j,k,3)
-        fcs(k,3)=q(i,j,k,3)*vel(i,j,k,3)
-        fcs(k,4)=q(i,j,k,4)*vel(i,j,k,3) + prs(i,j,k)
-        fcs(k,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
-      enddo
-      
-      call fdm_solver_1d(fcs,dfcs,'k')
-
-      do n=1,numq
-
-        do k=0,km
-          !
-          qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfcs(k,n)/dz
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
+        !
+        do k=-hm,im+hm
+          fcs(k,1)=q(i,j,k,1)*vel(i,j,k,3)
+          fcs(k,2)=q(i,j,k,2)*vel(i,j,k,3)
+          fcs(k,3)=q(i,j,k,3)*vel(i,j,k,3)
+          fcs(k,4)=q(i,j,k,4)*vel(i,j,k,3) + prs(i,j,k)
+          fcs(k,5)=(q(i,j,k,5)+prs(i,j,k))*vel(i,j,k,3)
+        enddo
+        
+        call fdm_solver_1d(fcs,dfcs,'k')
+  
+        do n=1,numq
+  
+          do k=0,km
+            !
+            qrhs(i,j,k,n)=qrhs(i,j,k,n)+dfcs(k,n)/dz
+            !
+          enddo
           !
         enddo
         !
       enddo
+      enddo
+      !$OMP END DO
       !
-    enddo
-    enddo
-    !$OMP END DO
-    !
-    deallocate(fcs,dfcs)
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end calculating along k direction
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      deallocate(fcs,dfcs)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end calculating along k direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
     !
     !$OMP END PARALLEL
 
@@ -534,8 +545,8 @@ module solver
   subroutine diffusion(comptime)
     !
     use constdef, only: num1d3
-    use comvardef, only: reynolds,prandtl,const5,dx,dy,dz
-    use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp,ctime
+    use comvardef, only: reynolds,prandtl,const5,dx,dy,dz,ndims
+    use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp
     use fluidynamcs,  only: miucal
     use numerics,  only: fdm_solver_1d
     use bc, only: bchomovec
@@ -677,35 +688,38 @@ module solver
     !
     deallocate(f,df)
     !
-    !call progress_bar(3,4,'  ** diffusion terms ',10)
-    !
-    allocate(f(-hm:km+hm,1:4),df(0:km,1:4))
-    !
-    !$OMP DO
-    do j=0,jm
-    do i=0,im
+    
+    if(ndims==3) then
+
+      allocate(f(-hm:km+hm,1:4),df(0:km,1:4))
       !
-      do k=-hm,km+hm
-        f(k,1)=sigma(i,j,k,3)
-        f(k,2)=sigma(i,j,k,5)
-        f(k,3)=sigma(i,j,k,6)
-        f(k,4)=qflux(i,j,k,3)
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
+        !
+        do k=-hm,km+hm
+          f(k,1)=sigma(i,j,k,3)
+          f(k,2)=sigma(i,j,k,5)
+          f(k,3)=sigma(i,j,k,6)
+          f(k,4)=qflux(i,j,k,3)
+        enddo
+        !
+        call fdm_solver_1d(f,df,'k')
+        !
+        do k=0,km
+          qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(k,1)/dz
+          qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(k,2)/dz
+          qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(k,3)/dz
+          qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(k,4)/dz
+        enddo
+        !
       enddo
-      !
-      call fdm_solver_1d(f,df,'k')
-      !
-      do k=0,km
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(k,1)/dz
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(k,2)/dz
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(k,3)/dz
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(k,4)/dz
       enddo
+      !$OMP END DO
       !
-    enddo
-    enddo
-    !$OMP END DO
-    !
-    deallocate(f,df)
+      deallocate(f,df)
+
+    endif
 
     !$OMP END PARALLEL
     !
@@ -721,8 +735,9 @@ module solver
   !
   subroutine filterq(comptime)
     !
-    use comvardef, only: im,jm,km,hm,numq,q
+    use comvardef, only: im,jm,km,hm,numq,q,ndims
     use numerics,  only: low_pass_filter
+    use bc, only: bchomovec
     !
     real,intent(inout),optional :: comptime
     
@@ -738,9 +753,9 @@ module solver
     if(present(comptime)) then
       tstart=time_in_second()
     endif
-    !
-    !call progress_bar(0,3,'  ** spatial filter ',10)
-    !
+    
+    call bchomovec(q,dir='i')
+
     !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
 
     allocate(phi(-hm:im+hm),fph(0:im))
@@ -757,10 +772,11 @@ module solver
         !
         call low_pass_filter(phi,fph,'i',im)
         !
+        !
         do i=0,im
           q(i,j,k,n)=fph(i)
         enddo
-        !
+
       enddo
       !
     enddo
@@ -768,9 +784,13 @@ module solver
     !$OMP END DO
 
     deallocate(phi,fph)
-    !
-    !call progress_bar(1,3,'  ** spatial filter ',10)
-    !
+
+    !$OMP END PARALLEL
+
+    call bchomovec(q,dir='j')
+
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
     allocate(phi(-hm:jm+hm),fph(0:jm))
 
     !$OMP DO
@@ -796,36 +816,44 @@ module solver
     !$OMP END DO
 
     deallocate(phi,fph)
-    !
-    !call progress_bar(2,3,'  ** spatial filter ',10)
-    !
-    allocate(phi(-hm:km+hm),fph(0:km))
 
-    !$OMP DO
-    do j=0,jm
-    do i=0,im
-      !
-      do n=1,numq
+    !$OMP END PARALLEL
+    
+    if(ndims==3) then
+
+      call bchomovec(q,dir='k')
+
+      !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
+      allocate(phi(-hm:km+hm),fph(0:km))
+  
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
         !
-        do k=-hm,km+hm
-          phi(k)=q(i,j,k,n)
-        enddo
-        !
-        call low_pass_filter(phi,fph,'k',jm)
-        !
-        do k=0,km
-          q(i,j,k,n)=fph(k)
+        do n=1,numq
+          !
+          do k=-hm,km+hm
+            phi(k)=q(i,j,k,n)
+          enddo
+          !
+          call low_pass_filter(phi,fph,'k',km)
+          !
+          do k=0,km
+            q(i,j,k,n)=fph(k)
+          enddo
+          !
         enddo
         !
       enddo
-      !
-    enddo
-    enddo
-    !$OMP END DO
+      enddo
+      !$OMP END DO
+  
+      deallocate(phi,fph)
 
-    deallocate(phi,fph)
-    !
-    !$OMP END PARALLEL
+      !$OMP END PARALLEL
+
+    endif
 
     if(present(comptime)) then
       tfinish=time_in_second()
