@@ -9,7 +9,7 @@ module statistics
   subroutine stacal
     
     use comvardef, only: im,jm,km,rho,tmp,vel,dvel,nstep,time,ndims,reynolds
-    use fluidynamcs,  only: miucal
+    use fluids,  only: miucal
     
     integer :: i,j,k
     real(rtype) :: var1,omega(3),tke,rhom,enst,dissipation

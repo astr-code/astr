@@ -24,7 +24,7 @@ module field_init
     use constdef
     use comvardef, only: im,jm,km,dx,dy,dz,time,nstep,pinf, &
                          x,qrhs,q,vel,rho,prs,tmp,ctime,file_number
-    use fluidynamcs, only: var2q,thermal_scar
+    use fluids, only: var2q,thermal_scar
     use xdmwrite, only: xdmfwriter
     use tecio, only: tecbin
 
@@ -96,7 +96,7 @@ module field_init
     use constdef
     use comvardef, only: im,jm,km,dx,dy,dz,time,nstep,pinf,x,qrhs, &
                          q,vel,rho,prs,tmp,ctime,file_number
-    use fluidynamcs, only: var2q,thermal_scar
+    use fluids, only: var2q,thermal_scar
     use xdmwrite, only: xdmfwriter
     use tecio, only: tecbin
     !

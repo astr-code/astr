@@ -15,7 +15,7 @@ module bc
   subroutine bchomo
     !
     use comvardef, only: im,jm,km,hm,rho,prs,tmp,vel,q
-    use fluidynamcs,  only: var2q
+    use fluids,  only: var2q
     !
     integer :: i,j,k
     !

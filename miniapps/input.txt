@@ -1,0 +1,17 @@
+!===================
+&basicparam
+!===================
+flowtype='tgv'
+im=64
+jm=64
+km=64
+hm=5
+numq=5
+ref_t=273.15
+gamma=1.4
+mach =0.1
+reynolds=1600.0
+prandtl=0.72
+deltat=0.001
+maxstep=100
+/End

@@ -8,7 +8,7 @@ add_executable(astr_omp
                     com/comvardef.f90
                     com/utility.f90
                     com/io.f90
-                    omp/fluidynamcs.f90
+                    omp/fluids.f90
                     omp/field_init.f90
                     omp/bc.f90
                     omp/numerics.f90
@@ -24,7 +24,7 @@ add_executable(astr_omp
 #                     com/comvardef.f90
 #                     com/utility.f90
 #                     com/io.f90
-#                     oacc/fluidynamcs.f90
+#                     oacc/fluids.f90
 #                     oacc/field_init.f90
 #                     oacc/bc.f90
 #                     oacc/numerics.f90
@@ -40,7 +40,7 @@ add_executable(astr_omp
 #                     com/comvardef.f90
 #                     com/utility.f90
 #                     com/io.f90
-#                     omp/fluidynamcs.f90
+#                     omp/fluids.f90
 #                     omp/field_init.f90
 #                     omp/bc.f90
 #                     omp/numerics.f90

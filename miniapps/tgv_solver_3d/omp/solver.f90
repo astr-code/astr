@@ -114,7 +114,7 @@ module solver
   subroutine rk3(comptime)
   
     use comvardef, only: im,jm,km,numq,q,qrhs,deltat,rho,vel,tmp,prs,nstep,ctime
-    use fluidynamcs, only: q2fvar
+    use fluids, only: q2fvar
     use bc
     use statistics, only: stacal
   
@@ -391,7 +391,7 @@ module solver
   subroutine convection(comptime)
     !
     use comvardef, only: im,jm,km,hm,numq,prs,vel,q,qrhs,dx,dy,dz,ndims
-    use fluidynamcs,  only: var2q
+    use fluids,  only: var2q
     use numerics,  only: fdm_solver_1d
     !
     real,intent(inout),optional :: comptime
@@ -547,7 +547,7 @@ module solver
     use constdef, only: num1d3
     use comvardef, only: reynolds,prandtl,const5,dx,dy,dz,ndims
     use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp
-    use fluidynamcs,  only: miucal
+    use fluids,  only: miucal
     use numerics,  only: fdm_solver_1d
     use bc, only: bchomovec
     !

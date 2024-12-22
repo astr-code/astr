@@ -1,4 +1,4 @@
-module fluidynamcs
+module fluids
 
   use constdef
   
@@ -97,4 +97,4 @@ module fluidynamcs
     !
   end function miucal
   
-end module fluidynamcs
+end module fluids
