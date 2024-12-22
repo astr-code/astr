@@ -1,13 +1,13 @@
-
 module numerics
-  !
-  use constdef, only : num1d60
+
+  use constdef
+
   implicit none
 
-  real(8),allocatable :: cci(:,:),ccj(:,:),cck(:,:)
-  real(8),allocatable :: cfi(:,:),cfj(:,:),cfk(:,:)
-  real(8),allocatable :: alfa_fdm(:),coef10i(:)
-  real(8) :: compact_filer_coefficient=0.49d0
+  real(rtype),allocatable :: cci(:,:),ccj(:,:),cck(:,:)
+  real(rtype),allocatable :: cfi(:,:),cfj(:,:),cfk(:,:)
+  real(rtype),allocatable :: alfa_fdm(:),coef10i(:)
+  real(rtype) :: compact_filer_coefficient=0.49_rtype
 
   contains
 
@@ -32,9 +32,9 @@ module numerics
 
     use comvardef, only : hm
     
-    real(8),intent(in) :: f(:,:)
+    real(rtype),intent(in) :: f(:,:)
     character(len=1),intent(in) :: dir
-    real(8),intent(out) :: df(:,:)
+    real(rtype),intent(out) :: df(:,:)
 
     integer :: dim,nclo,n
 
@@ -56,22 +56,22 @@ module numerics
     use constdef
 
     integer,intent(in) :: dim
-    real(8),intent(in) :: vin(-hm:dim+hm)
+    real(rtype),intent(in) :: vin(-hm:dim+hm)
     character(len=1),intent(in) :: dir
-    real(8) :: vout(0:dim),b(1:dim)
+    real(rtype) :: vout(0:dim),b(1:dim)
 
     ! local data
     integer :: i
 
-    ! b(0)=0.75d0* (vin(1)-vin(-1)) -              &
-    !      0.15d0* (vin(2)-vin(-2))+               &
+    ! b(0)=0.75_rtype* (vin(1)-vin(-1)) -              &
+    !      0.15_rtype* (vin(2)-vin(-2))+               &
     !      num1d60*(vin(3)-vin(-3))
     do i=1,dim
       b(i)=num7d9* (vin(i+1)-vin(i-1))+          &
            num1d36*(vin(i+2)-vin(i-2))
     end do
-    ! b(dim)=0.75d0* (vin(dim+1)-vin(dim-1))-      &
-    !        0.15d0* (vin(dim+2)-vin(dim-2))+      &
+    ! b(dim)=0.75_rtype* (vin(dim+1)-vin(dim-1))-      &
+    !        0.15_rtype* (vin(dim+2)-vin(dim-2))+      &
     !       num1d60* (vin(dim+3)-vin(dim-3))
 
     if(dir=='i') then
@@ -89,8 +89,8 @@ module numerics
   subroutine diff6ec(vin,dim,n,vout,comptime)
     !
     integer,intent(in) :: dim,n
-    real(8),intent(in) :: vin(-n:dim+n)
-    real(8) :: vout(0:dim)
+    real(rtype),intent(in) :: vin(-n:dim+n)
+    real(rtype) :: vout(0:dim)
     !
     real,intent(inout),optional :: comptime
     
@@ -103,8 +103,8 @@ module numerics
     endif
     !
     do i=0,dim
-      vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))- &
-                0.15d0 *(vin(i+2)-vin(i-2))+ &
+      vout(i)  =0.75_rtype *(vin(i+1)-vin(i-1))- &
+                0.15_rtype *(vin(i+2)-vin(i-2))+ &
                num1d60 *(vin(i+3)-vin(i-3))
     enddo
     !
@@ -122,12 +122,12 @@ module numerics
 
     allocate(coef10i(0:5))
 
-    coef10i(0)=(193.d0 +126.d0*compact_filer_coefficient)/512.d0
-    coef10i(1)=(105.d0 +302.d0*compact_filer_coefficient)/512.d0
-    coef10i(2)=(-15.d0 + 30.d0*compact_filer_coefficient)/128.d0
-    coef10i(3)=( 45.d0 - 90.d0*compact_filer_coefficient)/1024.d0
-    coef10i(4)=( -5.d0 + 10.d0*compact_filer_coefficient)/512.d0
-    coef10i(5)=(  1.d0 -  2.d0*compact_filer_coefficient)/1024.d0
+    coef10i(0)=(193._rtype +126._rtype*compact_filer_coefficient)/512._rtype
+    coef10i(1)=(105._rtype +302._rtype*compact_filer_coefficient)/512._rtype
+    coef10i(2)=(-15._rtype + 30._rtype*compact_filer_coefficient)/128._rtype
+    coef10i(3)=( 45._rtype - 90._rtype*compact_filer_coefficient)/1024._rtype
+    coef10i(4)=( -5._rtype + 10._rtype*compact_filer_coefficient)/512._rtype
+    coef10i(5)=(  1._rtype -  2._rtype*compact_filer_coefficient)/1024._rtype
 
     call qtds_solver_init(cfi,'cf10',im)
     call qtds_solver_init(cfj,'cf10',jm)
@@ -140,9 +140,9 @@ module numerics
     use comvardef, only : hm
     
     integer,intent(in) :: dim
-    real(8),intent(in) :: f(:)
+    real(rtype),intent(in) :: f(:)
     character(len=1),intent(in) :: dir
-    real(8),intent(out) :: ff(:)
+    real(rtype),intent(out) :: ff(:)
 
     ! call filter10ec(f,dim,hm,ff)
     call filter10cc(f,dim,hm,ff,dir)
@@ -152,19 +152,19 @@ module numerics
   subroutine filter10ec(vin,dim,n,vout)
     !
     integer,intent(in) :: dim,n
-    real(8),intent(in) :: vin(-n:dim+n)
-    real(8) :: vout(0:dim)
+    real(rtype),intent(in) :: vin(-n:dim+n)
+    real(rtype) :: vout(0:dim)
     !
     integer :: i
     !
     do i=0,dim
       !
-      vout(i)=   0.376953125d0*(vin(i)  +vin(i))     &
-               + 0.205078125d0*(vin(i-1)+vin(i+1))   &
-               -   0.1171875d0*(vin(i-2)+vin(i+2))   &
-               +0.0439453125d0*(vin(i-3)+vin(i+3))   &
-               - 0.009765625d0*(vin(i-4)+vin(i+4))   &
-               +0.0009765625d0*(vin(i-5)+vin(i+5))
+      vout(i)=   0.376953125_rtype*(vin(i)  +vin(i))     &
+               + 0.205078125_rtype*(vin(i-1)+vin(i+1))   &
+               -   0.1171875_rtype*(vin(i-2)+vin(i+2))   &
+               +0.0439453125_rtype*(vin(i-3)+vin(i+3))   &
+               - 0.009765625_rtype*(vin(i-4)+vin(i+4))   &
+               +0.0009765625_rtype*(vin(i-5)+vin(i+5))
     enddo
     !
   end subroutine filter10ec
@@ -173,11 +173,11 @@ module numerics
     !
     integer,intent(in) :: dim,n
     character(len=1),intent(in) :: dir
-    real(8),intent(in) :: vin(-n:dim+n)
-    real(8),intent(inout) :: vout(0:dim)
+    real(rtype),intent(in) :: vin(-n:dim+n)
+    real(rtype),intent(inout) :: vout(0:dim)
     
-    real(8) :: b(1:dim)
-    real(8) :: var0,var1,var2,var3,var4,var5
+    real(rtype) :: b(1:dim)
+    real(rtype) :: var0,var1,var2,var3,var4,var5
 
     integer :: i
     !
@@ -211,16 +211,16 @@ module numerics
 
     character(len=*),intent(in) :: scheme
     integer,intent(in) :: m
-    real(8),intent(out) :: cc(1:m,1:6)
+    real(rtype),intent(out) :: cc(1:m,1:6)
 
     integer :: i
 
     call matrix_coef(cc(:,1),cc(:,2),scheme)
     !
-    cc(1,3)=1.d0
+    cc(1,3)=1._rtype
     do i=1,m-2
       cc(i,4)=cc(i,1)/cc(i,3)
-      cc(i+1,3)=1.d0-cc(i+1,2)*cc(i,4)
+      cc(i+1,3)=1._rtype-cc(i+1,2)*cc(i,4)
     enddo
     !
     cc(1,5)=cc(1,2)/cc(1,3)
@@ -235,7 +235,7 @@ module numerics
     enddo
     cc(m-1,6)=cc(m,2)-cc(m-2,6)*cc(m-2,4)
     !
-    cc(m,6)=1.d0
+    cc(m,6)=1._rtype
     do i=1,m-1
       cc(m,6)=cc(m,6)-cc(i,6)*cc(i,5)
     enddo
@@ -245,12 +245,12 @@ module numerics
   function qtds(b,cc) result(x)
     !
     ! arguments
-    real(8),intent(in) :: b(:),cc(:,:)
-    real(8) :: x(size(b))
+    real(rtype),intent(in) :: b(:),cc(:,:)
+    real(rtype) :: x(size(b))
     !
     ! local data
     integer :: m,i
-    real(8),allocatable :: y(:)
+    real(rtype),allocatable :: y(:)
     !
     m=size(b)
     !
@@ -287,12 +287,12 @@ module numerics
     use constdef
     !
     character(len=*),intent(in) :: scheme
-    real(8),intent(out) :: c(:),d(:)
+    real(rtype),intent(out) :: c(:),d(:)
     !
     !
     if(scheme=='cu5') then
       !
-      d(:)=0.5d0
+      d(:)=0.5_rtype
       c(:)=num1d6
       !
     elseif(scheme=='cc6') then
@@ -314,8 +314,8 @@ module numerics
   subroutine ptds_ini(cc,af,dim)
     !
     integer,intent(in) :: dim
-    real(8),intent(in) :: af(1:3)
-    real(8),allocatable,intent(out) :: cc(:,:)
+    real(rtype),intent(in) :: af(1:3)
+    real(rtype),allocatable,intent(out) :: cc(:,:)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! af(1),af2,af: input dat
     ! cc: output array
@@ -328,27 +328,27 @@ module numerics
     !
     allocate(cc(1:2,0:dim))
     !
-    cc(1,0)=1.d0
-    cc(2,0)=0.d0
+    cc(1,0)=1._rtype
+    cc(2,0)=0._rtype
     !
-    cc(1,1)=1.d0-af(3)*cc(2,0)
+    cc(1,1)=1._rtype-af(3)*cc(2,0)
     cc(2,1)=af(3)/cc(1,1)
     !
-    cc(1,2)=1.d0-af(3)*cc(2,1)
+    cc(1,2)=1._rtype-af(3)*cc(2,1)
     !
     do l=2,dim-3
       cc(2,l)=af(3)/cc(1,l)
-      cc(1,l+1)=1.d0-af(3)*cc(2,l)
+      cc(1,l+1)=1._rtype-af(3)*cc(2,l)
       ! if(mpirank==0) print*,l,cc(2,l),cc(1,l+1)
     end do
     cc(2,dim-2)=af(3)/cc(1,dim-2)
     !
-    cc(1,dim-1)=1.d0-af(3)*cc(2,dim-2)
+    cc(1,dim-1)=1._rtype-af(3)*cc(2,dim-2)
     cc(2,dim-1)=af(3)/cc(1,dim-1)
     !
-    cc(1,dim)=1.d0
+    cc(1,dim)=1._rtype
 
-    cc(1,:)=1.d0/cc(1,:)
+    cc(1,:)=1._rtype/cc(1,:)
     !
     return
     !
@@ -357,12 +357,12 @@ module numerics
   function ptds_cal(bd,af,cc,dim) result(xd)
     !
     integer,intent(in) :: dim
-    real(8),intent(in) :: af(3),bd(0:dim),cc(1:2,0:dim)
-    real(8) :: xd(0:dim)
+    real(rtype),intent(in) :: af(3),bd(0:dim),cc(1:2,0:dim)
+    real(rtype) :: xd(0:dim)
     
     ! local data
     integer :: l
-    real(8),allocatable,dimension(:) :: yd
+    real(rtype),allocatable,dimension(:) :: yd
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! af(3): input dat
@@ -404,13 +404,13 @@ module numerics
     use constdef
     
     character(len=*),intent(in) :: scheme
-    real(8),allocatable :: alfa(:)
+    real(rtype),allocatable :: alfa(:)
     !
     if(scheme=='cc6') then
       allocate(alfa(3))
       alfa(3)=num1d3
-      alfa(2)=0.25d0
-      alfa(1)=1.d0
+      alfa(2)=0.25_rtype
+      alfa(1)=1._rtype
     else
       stop ' !! scheme not defined @ coef_diffcompac'
     endif
@@ -431,8 +431,8 @@ module numerics
     character(len=*),intent(in) :: scheme
     integer,intent(in) :: n
 
-    real(8),intent(out),allocatable :: cc(:,:)
-    real(8) :: fac
+    real(rtype),intent(out),allocatable :: cc(:,:)
+    real(rtype) :: fac
 
     integer :: i,ii
 
@@ -450,30 +450,30 @@ module numerics
 
 
     cc(1,1) = -cc(1,3)
-    cc(1,2) = 1.d0
+    cc(1,2) = 1._rtype
     do i = 2, n - 1, 1
         ii = i - 1
         fac = cc(i,3) / cc(ii,2)
-        cc(i,2) = 1.d0 - (fac * cc(ii,4))
+        cc(i,2) = 1._rtype - (fac * cc(ii,4))
         cc(i,1) = -fac * cc(ii,1)
     end do
-    cc(n,2) = 1.d0
+    cc(n,2) = 1._rtype
 
   end subroutine qtds_solver_init
 
   subroutine qtds_solver(b,x,cc,n)
 
     integer, intent(in) :: n
-    real(8), intent(in) :: b(:)    ! b vector
-    real(8), intent(inout) :: x(:) ! output
-    real(8), intent(in) :: cc(:,:)   ! prestored matrix
+    real(rtype), intent(in) :: b(:)    ! b vector
+    real(rtype), intent(inout) :: x(:) ! output
+    real(rtype), intent(in) :: cc(:,:)   ! prestored matrix
 
-    real(8), dimension(n) :: dl      ! lower-diagonal
-    real(8), dimension(n) :: du      ! upper-diagonal
-    real(8), dimension(n) :: maind,w ! work array
+    real(rtype), dimension(n) :: dl      ! lower-diagonal
+    real(rtype), dimension(n) :: du      ! upper-diagonal
+    real(rtype), dimension(n) :: maind,w ! work array
 
     integer :: i, ii
-    real(8) :: fac
+    real(rtype) :: fac
 
     w(1:n)    =cc(1:n,1)
     maind(1:n)=cc(1:n,2)

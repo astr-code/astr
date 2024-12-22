@@ -50,6 +50,11 @@ add_executable(astr_omp
 # 
 # target_link_libraries(astr_cpu)
 
+option(SINGLE_PRECISION "Build with single precision" OFF)
+if (SINGLE_PRECISION)
+  target_compile_definitions(astr_omp PUBLIC -DSINGLE_PRECISION)
+endif()
+
 find_package(OpenMP REQUIRED)
 target_link_libraries(astr_omp PRIVATE OpenMP::OpenMP_Fortran)
 

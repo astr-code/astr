@@ -29,30 +29,30 @@ module field_init
     use tecio, only: tecbin
 
     integer :: i,j,k
-    real(8) :: var1
+    real(rtype) :: var1
     character(len=4) :: file_name
     
     
-    dx=2.d0*pi/dble(im)
-    dy=2.d0*pi/dble(jm)
-    dz=2.d0*pi/dble(km)
+    dx=2._rtype*pi/real(im,rtype)
+    dy=2._rtype*pi/real(jm,rtype)
+    dz=2._rtype*pi/real(km,rtype)
     
-    var1=0.d0
+    var1=0._rtype
 
     !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
     !$OMP DO
     do k=0,km
     do j=0,jm
     do i=0,im
-      x(i,j,k,1)  =2.d0*pi/dble(im)*dble(i)
-      x(i,j,k,2)  =2.d0*pi/dble(jm)*dble(j)
-      x(i,j,k,3)  =2.d0*pi/dble(km)*dble(k)
+      x(i,j,k,1)  =2._rtype*pi/real(im,rtype)*real(i,rtype)
+      x(i,j,k,2)  =2._rtype*pi/real(jm,rtype)*real(j,rtype)
+      x(i,j,k,3)  =2._rtype*pi/real(km,rtype)*real(k,rtype)
       
-      rho(i,j,k)  =1.d0
+      rho(i,j,k)  =1._rtype
       vel(i,j,k,1)= sin(x(i,j,k,1))*cos(x(i,j,k,2))*cos(x(i,j,k,3))
       vel(i,j,k,2)=-cos(x(i,j,k,1))*sin(x(i,j,k,2))*cos(x(i,j,k,3))
-      vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf+1.d0/16.d0*(cos(2.d0*x(i,j,k,1))+cos(2.d0*x(i,j,k,2)))*(cos(2.d0*x(i,j,k,3))+2.d0)
+      vel(i,j,k,3)=0._rtype
+      prs(i,j,k)  =pinf+1._rtype/16._rtype*(cos(2._rtype*x(i,j,k,1))+cos(2._rtype*x(i,j,k,2)))*(cos(2._rtype*x(i,j,k,3))+2._rtype)
       
       tmp(i,j,k)  =thermal_scar(density=rho(i,j,k),pressure=prs(i,j,k))
       
@@ -64,10 +64,10 @@ module field_init
     !$OMP END DO
     !$OMP END PARALLEL
     
-    qrhs=0.d0
+    qrhs=0._rtype
     
     nstep=0
-    time =0.d0
+    time =0._rtype
     
     ctime=0.0
     
@@ -102,30 +102,30 @@ module field_init
     !
     ! local data
     integer :: i,j,k
-    real(8) :: xc,yc,radi2,rvor,cvor,var1
+    real(rtype) :: xc,yc,radi2,rvor,cvor,var1
     character(len=4) :: file_name
     !
-    xc=5.d0
-    yc=5.d0
-    rvor=0.7d0 
-    cvor=0.1d0*rvor
+    xc=5._rtype
+    yc=5._rtype
+    rvor=0.7_rtype 
+    cvor=0.1_rtype*rvor
     !
     k=0
     do j=0,jm
     do i=0,im
-      x(i,j,k,1)  =10.d0/dble(im)*dble(i)
-      x(i,j,k,2)  =10.d0/dble(jm)*dble(j)
-      x(i,j,k,3)  =0.d0
+      x(i,j,k,1)  =10._rtype/real(im,rtype)*real(i,rtype)
+      x(i,j,k,2)  =10._rtype/real(jm,rtype)*real(j,rtype)
+      x(i,j,k,3)  =0._rtype
 
       radi2=((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2)/rvor/rvor
-      var1=cvor/rvor/rvor*exp(-0.5d0*radi2)
+      var1=cvor/rvor/rvor*exp(-0.5_rtype*radi2)
       !
-      rho(i,j,k)  =1.d0
-      vel(i,j,k,1)=1.d0-var1*(x(i,j,k,2)-yc)
+      rho(i,j,k)  =1._rtype
+      vel(i,j,k,1)=1._rtype-var1*(x(i,j,k,2)-yc)
       vel(i,j,k,2)=     var1*(x(i,j,k,1)-xc)
-      vel(i,j,k,3)=0.d0
+      vel(i,j,k,3)=0._rtype
 
-      prs(i,j,k)  =pinf-0.5d0*1.d0*cvor**2/rvor**2*exp(-radi2)
+      prs(i,j,k)  =pinf-0.5_rtype*1._rtype*cvor**2/rvor**2*exp(-radi2)
       !
       tmp(i,j,k)  =thermal_scar(density=rho(i,j,k),pressure=prs(i,j,k))
       
@@ -136,12 +136,12 @@ module field_init
 
     dx=x(1,0,0,1)-x(0,0,0,1)
     dy=x(0,1,0,2)-x(0,0,0,2)
-    dz=0.d0
+    dz=0._rtype
     !
-    qrhs=0.d0
+    qrhs=0._rtype
     
     nstep=0
-    time =0.d0
+    time =0._rtype
     
     ctime=0.0
 

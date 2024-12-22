@@ -1,4 +1,6 @@
 module fluidynamcs
+
+  use constdef
   
   implicit none
   
@@ -9,8 +11,8 @@ module fluidynamcs
     use comvardef,only : const2
     !
     ! arguments
-    real(8) :: vout
-    real(8),intent(in) ,optional :: density,pressure,temperature
+    real(rtype) :: vout
+    real(rtype),intent(in) ,optional :: density,pressure,temperature
     !
     if(present(density) .and. present(temperature)) then
       vout=density*temperature/const2
@@ -28,19 +30,19 @@ module fluidynamcs
     !
     use comvardef, only: const1,const6,numq
     !
-    real(8) :: q(1:numq)
-    real(8),intent(in) :: density,velocity(3)
-    real(8),intent(in),optional :: pressure,temperature
+    real(rtype) :: q(1:numq)
+    real(rtype),intent(in) :: density,velocity(3)
+    real(rtype),intent(in),optional :: pressure,temperature
     !
     ! local data
-    real(8) :: var1
+    real(rtype) :: var1
     !
     q(1)=density
     q(2)=density*velocity(1)
     q(3)=density*velocity(2)
     q(4)=density*velocity(3)
     !
-    var1=0.5d0*sum(velocity(:)*velocity(:))
+    var1=0.5_rtype*sum(velocity(:)*velocity(:))
     if(present(temperature)) then
       q(5)=density*(temperature*const1+var1)
     elseif(present(pressure)) then
@@ -53,9 +55,9 @@ module fluidynamcs
     !
     use comvardef, only: const6
     !
-    real(8),intent(in) :: q(:)
-    real(8),intent(out) :: density
-    real(8),intent(out),optional :: velocity(:),pressure,temperature
+    real(rtype),intent(in) :: q(:)
+    real(rtype),intent(out) :: density
+    real(rtype),intent(out),optional :: velocity(:),pressure,temperature
     !
     density   =q(1)
     !
@@ -66,7 +68,7 @@ module fluidynamcs
     endif
     !
     if(present(pressure) .or. present(temperature)) then
-      pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+  &
+      pressure  =( q(5)-0.5_rtype*density*(velocity(1)**2+velocity(2)**2+  &
                                        velocity(3)**2) )/const6
     endif
     !
@@ -76,18 +78,18 @@ module fluidynamcs
 
   end subroutine q2fvar
   
-  pure real(8) function miucal(temper)
+  pure real(rtype) function miucal(temper)
     !
     use comvardef, only :  ref_t
     !
-    real(8),intent(in) :: temper
+    real(rtype),intent(in) :: temper
     ! temper represent temperature, dimensionless
     ! below calculate miucal using sutherland's law
     !
-    real(8) :: tempconst,tempconst1
+    real(rtype) :: tempconst,tempconst1
     ! 
-    tempconst=110.4d0/ref_t
-    tempconst1=1.d0+tempconst
+    tempconst=110.4_rtype/ref_t
+    tempconst1=1._rtype+tempconst
     !
     miucal=temper*sqrt(temper)*tempconst1/(temper+tempconst)
     !

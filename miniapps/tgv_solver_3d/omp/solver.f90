@@ -44,13 +44,13 @@ module solver
     use comvardef, only: hm,im,x,dx
     use numerics, only: fdm_solver_1d
 
-    real(8) :: f(-hm:im+hm,1),df(0:im,1)
-    real(8) :: dfref,error
+    real(rtype) :: f(-hm:im+hm,1),df(0:im,1)
+    real(rtype) :: dfref,error
 
     integer :: i
 
     do i=0,im
-      f(i,1)=cos(2.d0*x(i,0,0,1))
+      f(i,1)=cos(2._rtype*x(i,0,0,1))
     enddo
     f(-hm:-1,1)=f(im-hm:im-1,1)
     f(im+1:im+hm,1)=f(1:hm,1)
@@ -67,12 +67,12 @@ module solver
     print*,' << data.dat'
 
 
-    error=0.d0
+    error=0._rtype
     do i=1,im
-      dfref=-2.d0*sin(2.d0*x(i,0,0,1))
+      dfref=-2._rtype*sin(2._rtype*x(i,0,0,1))
       error=error+(dfref-df(i,1))**2
     enddo
-    error=error/dble(im)
+    error=error/real(im,rtype)
     print*,' ** error: ',error
 
   end subroutine solver_test
@@ -82,13 +82,13 @@ module solver
     use comvardef, only: hm,im,x
     use numerics,  only: low_pass_filter
 
-    real(8) :: f(-hm:im+hm),ff(0:im)
-    real(8) :: error
+    real(rtype) :: f(-hm:im+hm),ff(0:im)
+    real(rtype) :: error
 
     integer :: i
 
     do i=0,im
-      f(i)=cos(2.d0*x(i,0,0,1))+0.1d0*sin(48.d0*x(i,0,0,1))
+      f(i)=cos(2._rtype*x(i,0,0,1))+0.1_rtype*sin(48._rtype*x(i,0,0,1))
     enddo
     f(-hm:-1)=f(im-hm:im-1)
     f(im+1:im+hm)=f(1:hm)
@@ -102,11 +102,11 @@ module solver
     close(12)
     print*,'<< data_filter.dat'
 
-    error=0.d0
+    error=0._rtype
     do i=1,im
       error=error+(f(i)-ff(i))**2
     enddo
-    error=error/dble(im)
+    error=error/real(im,rtype)
     print*,' ** error: ',error
 
   end subroutine filter_test
@@ -122,8 +122,8 @@ module solver
 
     ! local data
     logical,save :: firstcall = .true.
-    real(8),save :: rkcoe(3,3)
-    real(8),allocatable,save :: qsave(:,:,:,:)
+    real(rtype),save :: rkcoe(3,3)
+    real(rtype),allocatable,save :: qsave(:,:,:,:)
     integer :: rkstep,i,j,k,m
   
     real :: tstart,tfinish
@@ -134,13 +134,13 @@ module solver
   
     if(firstcall) then
       
-      rkcoe(1,1)=1.d0
-      rkcoe(2,1)=0.d0
-      rkcoe(3,1)=1.d0
+      rkcoe(1,1)=1._rtype
+      rkcoe(2,1)=0._rtype
+      rkcoe(3,1)=1._rtype
       
-      rkcoe(1,2)=0.75d0
-      rkcoe(2,2)=0.25d0
-      rkcoe(3,2)=0.25d0
+      rkcoe(1,2)=0.75_rtype
+      rkcoe(2,2)=0.25_rtype
+      rkcoe(3,2)=0.25_rtype
       
       rkcoe(1,3)=num1d3
       rkcoe(2,3)=num2d3
@@ -154,7 +154,7 @@ module solver
   
     do rkstep=1,3
       
-      qrhs=0.d0
+      qrhs=0._rtype
       
       call boundarycondition
       
@@ -260,7 +260,7 @@ module solver
     !
     integer :: i,j,k
     !
-    real(8),allocatable,dimension(:,:) :: f,df
+    real(rtype),allocatable,dimension(:,:) :: f,df
     real,intent(inout),optional :: comptime
     !
     real :: tstart,tfinish
@@ -396,7 +396,7 @@ module solver
     !
     real,intent(inout),optional :: comptime
     !
-    real(8),allocatable,dimension(:,:) :: fcs,dfcs
+    real(rtype),allocatable,dimension(:,:) :: fcs,dfcs
     integer :: i,j,k,n
     !
     real :: tstart,tfinish
@@ -553,13 +553,13 @@ module solver
     !
     real,intent(inout),optional :: comptime
     !
-    real(8),allocatable,dimension(:,:,:,:),save :: sigma,qflux
-    real(8),allocatable :: f(:,:),df(:,:)
+    real(rtype),allocatable,dimension(:,:,:,:),save :: sigma,qflux
+    real(rtype),allocatable :: f(:,:),df(:,:)
     !
     real :: tstart,tfinish
     !
     integer :: i,j,k
-    real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
+    real(rtype) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
     logical,save :: firstcall=.true.
     !
     !$ save f,df
@@ -588,13 +588,13 @@ module solver
       miu=miucal(tmp(i,j,k))/reynolds
       hcc=(miu/prandtl)/const5
       !
-      miu2=2.d0*miu
+      miu2=2._rtype*miu
       !
       s11=dvel(i,j,k,1,1)
-      s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
-      s13=0.5d0*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
+      s12=0.5_rtype*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
+      s13=0.5_rtype*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
       s22=dvel(i,j,k,2,2)
-      s23=0.5d0*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
+      s23=0.5_rtype*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
       s33=dvel(i,j,k,3,3)
       !
       skk=num1d3*(s11+s22+s33)
@@ -743,7 +743,7 @@ module solver
     
     real :: tstart,tfinish
 
-    real(8),allocatable :: phi(:),fph(:)
+    real(rtype),allocatable :: phi(:),fph(:)
     !
     integer :: i,j,k,n
     !

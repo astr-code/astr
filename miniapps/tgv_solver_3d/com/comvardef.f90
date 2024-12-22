@@ -1,5 +1,7 @@
 module comvardef
   
+  use constdef
+  
   implicit none
   
   integer :: nthread,mthread,ncore
@@ -7,19 +9,19 @@ module comvardef
   integer :: im,jm,km,hm,numq,ndims
   
   integer :: nstep,maxstep,file_number
-  real(8) :: time,deltat
+  real(rtype) :: time,deltat
   
-  real(8) :: gamma,mach,reynolds,prandtl,ref_t,pinf
-  real(8) :: const1,const2,const3,const4,const5,const6,const7
-  real(8) :: dx,dy,dz
+  real(rtype) :: gamma,mach,reynolds,prandtl,ref_t,pinf
+  real(rtype) :: const1,const2,const3,const4,const5,const6,const7
+  real(rtype) :: dx,dy,dz
   
   real :: ctime(12)
 
   character(len=64) :: flowtype
   
-  real(8),allocatable,dimension(:,:,:) :: rho,prs,tmp
-  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,dtmp
-  real(8),allocatable,dimension(:,:,:,:,:) :: dvel
+  real(rtype),allocatable,dimension(:,:,:) :: rho,prs,tmp
+  real(rtype),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,dtmp
+  real(rtype),allocatable,dimension(:,:,:,:,:) :: dvel
   
   contains
   
@@ -35,15 +37,15 @@ module comvardef
       ndims=0
     endif
 
-    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+    const1=1._rtype/(gamma*(gamma-1._rtype)*mach**2)
     const2=gamma*mach**2
-    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
-    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
-    const5=(gamma-1.d0)*mach**2
-    const6=1.d0/(gamma-1.d0)
-    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+    const3=(gamma-1._rtype)/3._rtype*prandtl*(mach**2)
+    const4=(gamma-1._rtype)*mach**2*reynolds*prandtl
+    const5=(gamma-1._rtype)*mach**2
+    const6=1._rtype/(gamma-1._rtype)
+    const7=(gamma-1._rtype)*mach**2*Reynolds*prandtl
     
-    pinf=1.d0/const2
+    pinf=1._rtype/const2
 
     allocate( x(0:im,0:jm,0:km,1:3))
     allocate(   q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))

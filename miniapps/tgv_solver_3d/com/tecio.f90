@@ -54,14 +54,14 @@ module tecio
                                         var5,var5name  )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5
+    real(rtype),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name
     !
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -69,14 +69,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -89,11 +89,11 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,1)=real(var1(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,2)=real(var2(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,3)=real(var3(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,4)=real(var4(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,5)=real(var5(1:imax,1:jmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -274,7 +274,7 @@ module tecio
                                         var7,var7name  )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                          var6,var7
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name,         &
@@ -283,7 +283,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -291,14 +291,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -311,13 +311,13 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,6)=sngl(var6(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,7)=sngl(var7(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,1)=real(var1(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,2)=real(var2(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,3)=real(var3(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,4)=real(var4(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,5)=real(var5(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,6)=real(var6(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,7)=real(var7(1:imax,1:jmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -500,7 +500,7 @@ module tecio
                                         var7,var7name,var8,var8name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                          var6,var7,var8
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name,         &
@@ -509,7 +509,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -517,14 +517,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -537,14 +537,14 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,6)=sngl(var6(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,7)=sngl(var7(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,8)=sngl(var8(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,1)=real(var1(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,2)=real(var2(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,3)=real(var3(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,4)=real(var4(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,5)=real(var5(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,6)=real(var6(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,7)=real(var7(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,8)=real(var8(1:imax,1:jmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -729,7 +729,7 @@ module tecio
                                         var9,var9name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                          var6,var7,var8,var9
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name,         &
@@ -738,7 +738,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -746,14 +746,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -766,15 +766,15 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,6)=sngl(var6(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,7)=sngl(var7(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,8)=sngl(var8(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,9)=sngl(var9(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,1)=real(var1(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,2)=real(var2(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,3)=real(var3(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,4)=real(var4(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,5)=real(var5(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,6)=real(var6(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,7)=real(var7(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,8)=real(var8(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,9)=real(var9(1:imax,1:jmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -960,7 +960,7 @@ module tecio
                                         var9,var9name,var10,var10name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                          var6,var7,var8,var9,var10
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name,         &
@@ -969,7 +969,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -977,14 +977,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -997,16 +997,16 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,6)=sngl(var6(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,7)=sngl(var7(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,8)=sngl(var8(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,9)=sngl(var9(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,10)=sngl(var10(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,1)=real(var1(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,2)=real(var2(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,3)=real(var3(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,4)=real(var4(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,5)=real(var5(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,6)=real(var6(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,7)=real(var7(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,8)=real(var8(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,9)=real(var9(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,10)=real(var10(1:imax,1:jmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -1194,7 +1194,7 @@ module tecio
                                         var11,var11name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                          var6,var7,var8,var9,var10,  &
                                          var11
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
@@ -1210,7 +1210,7 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
@@ -1224,17 +1224,17 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,6)=sngl(var6(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,7)=sngl(var7(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,8)=sngl(var8(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,9)=sngl(var9(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,10)=sngl(var10(1:imax,1:jmax))
-    var(1:imax,1:jmax,1,11)=sngl(var11(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,1)=real(var1(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,2)=real(var2(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,3)=real(var3(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,4)=real(var4(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,5)=real(var5(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,6)=real(var6(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,7)=real(var7(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,8)=real(var8(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,9)=real(var9(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,10)=real(var10(1:imax,1:jmax),rtype)
+    var(1:imax,1:jmax,1,11)=real(var11(1:imax,1:jmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -1286,12 +1286,12 @@ module tecio
     character(len=*),intent(in) :: filename
     integer,intent(in) :: var1(:,:,:)
     character(len=*),intent(in) :: var1name
-    real(8),intent(in),optional :: x(:,:,:),y(:,:,:),z(:,:,:)
+    real(rtype),intent(in),optional :: x(:,:,:),y(:,:,:),z(:,:,:)
     !
     ! local data
     !
     integer :: imax,jmax,kmax,i,j,k
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -1299,7 +1299,7 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:) :: xvar,yvar,zvar
     real(4),allocatable,dimension(:,:,:,:) :: var
@@ -1307,7 +1307,7 @@ module tecio
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -1324,9 +1324,9 @@ module tecio
     allocate(vname(nbrvar))
     !
     if(present(x) .and. present(x) .and. present(z)) then
-      xvar=sngl(x)
-      yvar=sngl(y)
-      zvar=sngl(z)
+      xvar=real(x,rtype)
+      yvar=real(y,rtype)
+      zvar=real(z,rtype)
     else
       do k=1,kmax
       do j=1,jmax
@@ -1560,13 +1560,13 @@ module tecio
                                                       var3,var3name)
     ! 
     character(len=*),intent(in) :: filename
-    real(8),intent(in) :: var1(:,:,:),var2(:,:,:),var3(:,:,:)
+    real(rtype),intent(in) :: var1(:,:,:),var2(:,:,:),var3(:,:,:)
     character(len=*),intent(in) :: var1name,var2name,var3name
     !
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -1574,14 +1574,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -1594,9 +1594,9 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -1773,7 +1773,7 @@ module tecio
                                         var3,var3name,var4,var4name )
 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:,:),intent(in) :: var1,var2,var3
+    real(rtype),dimension(:,:,:),intent(in) :: var1,var2,var3
     integer,dimension(:,:,:),intent(in) :: var4
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name
@@ -1781,7 +1781,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -1789,14 +1789,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -1810,10 +1810,10 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     ! !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -1991,14 +1991,14 @@ module tecio
                                         var3,var3name,var4,var4name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:,:),intent(in) :: var1,var2,var3,var4
+    real(rtype),dimension(:,:,:),intent(in) :: var1,var2,var3,var4
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name
     !
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -2006,14 +2006,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -2027,10 +2027,10 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     ! !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,4)=sngl(var4(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -2209,14 +2209,14 @@ module tecio
                                         var5,var5name  )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5
+    real(rtype),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name
     !
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -2224,14 +2224,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -2244,11 +2244,11 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,4)=sngl(var4(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,5)=sngl(var5(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,5)=real(var5(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -2428,14 +2428,14 @@ module tecio
                                         var5,var5name,var6,var6name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5,var6
+    real(rtype),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5,var6
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name
     !
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -2443,14 +2443,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -2463,12 +2463,12 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,4)=sngl(var4(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,5)=sngl(var5(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,6)=sngl(var6(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,5)=real(var5(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,6)=real(var6(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -2650,7 +2650,7 @@ module tecio
                                         var7,var7name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                            var6,var7
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name,         &
@@ -2659,7 +2659,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -2667,14 +2667,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -2687,13 +2687,13 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,4)=sngl(var4(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,5)=sngl(var5(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,6)=sngl(var6(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,7)=sngl(var7(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,5)=real(var5(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,6)=real(var6(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,7)=real(var7(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -2876,7 +2876,7 @@ module tecio
                                         var7,var7name,var8,var8name )
     ! 
     character(len=*),intent(in) :: filename
-    real(8),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+    real(rtype),dimension(:,:,:),intent(in) :: var1,var2,var3,var4,var5,   &
                                            var6,var7,var8
     character(len=*),intent(in) :: var1name,var2name,var3name,         &
                                    var4name,var5name,var6name,         &
@@ -2885,7 +2885,7 @@ module tecio
     ! local data
     !
     integer :: imax,jmax,kmax
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1
     !
@@ -2893,14 +2893,14 @@ module tecio
     ! ip : le point actuel
     !
     real(4) :: float32
-    real(8) :: float64
+    real(rtype) :: float64
     !
     real(4),allocatable,dimension(:,:,:,:) :: var
     character(256),allocatable,dimension(:) :: vname
     !
     character(256) :: ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     title1="Bin field for tecplot"
     !
@@ -2913,14 +2913,14 @@ module tecio
     allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
     allocate(vname(nbrvar))
     !
-    var(1:imax,1:jmax,1:kmax,1)=sngl(var1(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,2)=sngl(var2(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,3)=sngl(var3(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,4)=sngl(var4(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,5)=sngl(var5(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,6)=sngl(var6(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,7)=sngl(var7(1:imax,1:jmax,1:kmax))
-    var(1:imax,1:jmax,1:kmax,8)=sngl(var8(1:imax,1:jmax,1:kmax))
+    var(1:imax,1:jmax,1:kmax,1)=real(var1(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,2)=real(var2(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,3)=real(var3(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,4)=real(var4(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,5)=real(var5(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,6)=real(var6(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,7)=real(var7(1:imax,1:jmax,1:kmax),rtype)
+    var(1:imax,1:jmax,1:kmax,8)=real(var8(1:imax,1:jmax,1:kmax),rtype)
     !
     vname(1)=var1name
     vname(2)=var2name
@@ -3121,11 +3121,11 @@ module tecio
     character(*), intent(in) :: vname(:)
     !
     integer :: n,int32
-    real(8) :: solutiontime1
+    real(rtype) :: solutiontime1
     integer :: zonenumber1
     character(256) :: title1,ligne
     !
-    solutiontime1=0.d0
+    solutiontime1=0._rtype
     zonenumber1=1
     !
     title1="Bin field for tecplot"

@@ -1,4 +1,6 @@
 module bc
+
+  use constdef
    
   implicit none
 
@@ -122,7 +124,7 @@ module bc
     !
     use comvardef, only: im,jm,km,hm
     !
-    real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:)
+    real(rtype),intent(inout) :: var(-hm:,-hm:,-hm:,1:)
     character(len=*),intent(in),optional :: dir
     !
     integer :: i,j,k

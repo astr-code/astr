@@ -282,8 +282,8 @@ module utility
       integer :: rantime(8)
       !
       integer :: n
-      real(8) :: variates(2)
-      real(8) :: u(2), factor, arg
+      real(rtype) :: variates(2)
+      real(rtype) :: u(2), factor, arg
       !
       logical, save :: firstcall = .true.
       !
@@ -315,10 +315,10 @@ module utility
       !
       do
          call random_number(u)
-         if (u(1) > 0.d0) exit
+         if (u(1) > 0._rtype) exit
       end do
       factor = sqrt(-2*log(u(1)))
-      arg = 2.d0*pi*u(2)
+      arg = 2._rtype*pi*u(2)
       variates = factor*[cos(arg), sin(arg)]
       !
    end function rnorm_box_muller

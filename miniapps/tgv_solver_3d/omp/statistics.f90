@@ -12,8 +12,8 @@ module statistics
     use fluidynamcs,  only: miucal
     
     integer :: i,j,k
-    real(8) :: var1,omega(3),tke,rhom,enst,dissipation
-    real(8) :: s11,s12,s13,s22,s23,s33,miu
+    real(rtype) :: var1,omega(3),tke,rhom,enst,dissipation
+    real(rtype) :: s11,s12,s13,s22,s23,s33,miu
     
     logical,save :: firstcall = .true.
     integer,save :: filehand
@@ -28,10 +28,10 @@ module statistics
       firstcall=.false.
     endif
     
-    rhom=0.d0
-    tke =0.d0
-    enst=0.d0
-    dissipation = 0.d0
+    rhom=0._rtype
+    tke =0._rtype
+    enst=0._rtype
+    dissipation = 0._rtype
 
     if(ndims==3) then
 
@@ -55,15 +55,15 @@ module statistics
         enst=enst+rho(i,j,k)*(omega(1)**2+omega(2)**2+omega(3)**2)
         
         s11=dvel(i,j,k,1,1)
-        s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
-        s13=0.5d0*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
+        s12=0.5_rtype*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
+        s13=0.5_rtype*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
         s22=dvel(i,j,k,2,2)
-        s23=0.5d0*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
+        s23=0.5_rtype*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
         s33=dvel(i,j,k,3,3)
  
         miu=miucal(tmp(i,j,k))/reynolds
 
-        var1=2.d0*miu*(s11**2+s22**2+s33**2+2.d0*(s12**2+s13**2+s23**2)-num1d3*(s11+s22+s33)**2)
+        var1=2._rtype*miu*(s11**2+s22**2+s33**2+2._rtype*(s12**2+s13**2+s23**2)-num1d3*(s11+s22+s33)**2)
 
         dissipation = dissipation + var1
 
@@ -73,10 +73,10 @@ module statistics
       !$OMP END DO
       !$OMP END PARALLEL
   
-      rhom        = rhom/dble(im*jm*km)
-      tke         = 0.5d0*tke/dble(im*jm*km)
-      enst        = 0.5d0*enst/dble(im*jm*km)
-      dissipation = dissipation/dble(im*jm*km)
+      rhom        = rhom/real(im*jm*km,rtype)
+      tke         = 0.5_rtype*tke/real(im*jm*km,rtype)
+      enst        = 0.5_rtype*enst/real(im*jm*km,rtype)
+      dissipation = dissipation/real(im*jm*km,rtype)
 
     elseif(ndims==2) then
       k=0
@@ -103,9 +103,9 @@ module statistics
       !$OMP END DO
       !$OMP END PARALLEL
   
-      rhom=rhom/dble(im*jm)
-      tke =0.5d0*tke/dble(im*jm)
-      enst=0.5d0*enst/dble(im*jm)
+      rhom=rhom/real(im*jm,rtype)
+      tke =0.5_rtype*tke/real(im*jm,rtype)
+      enst=0.5_rtype*enst/real(im*jm,rtype)
 
     endif
     

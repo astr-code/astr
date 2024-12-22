@@ -47,7 +47,6 @@ elseif(${CMAKE_Fortran_COMPILER_ID} STREQUAL "GNU")
   message(STATUS "CMAKE_Fortran_FLAGS: ${CMAKE_Fortran_FLAGS}")
 endif()
 
-
 if (CMAKE_BUILD_TYPE MATCHES "DEBUG")
   add_definitions("-DDEBG")
 endif (CMAKE_BUILD_TYPE MATCHES "DEBUG")
