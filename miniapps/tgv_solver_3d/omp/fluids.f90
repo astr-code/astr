@@ -69,7 +69,7 @@ module fluids
     !
     if(present(pressure) .or. present(temperature)) then
       pressure  =( q(5)-0.5_rtype*density*(velocity(1)**2+velocity(2)**2+  &
-                                       velocity(3)**2) )/const6
+                                                          velocity(3)**2) )/const6
     endif
     !
     if(present(temperature)) then

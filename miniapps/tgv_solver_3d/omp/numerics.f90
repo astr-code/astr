@@ -5,6 +5,7 @@ module numerics
   implicit none
 
   real(rtype),allocatable :: cci(:,:),ccj(:,:),cck(:,:)
+  real(rtype),allocatable :: cdi(:,:),cdj(:,:),cdk(:,:)
   real(rtype),allocatable :: cfi(:,:),cfj(:,:),cfk(:,:)
   real(rtype),allocatable :: alfa_fdm(:),coef10i(:)
   real(rtype) :: compact_filer_coefficient=0.49_rtype
@@ -21,9 +22,13 @@ module numerics
     ! call ptds_ini(ccj,alfa_fdm,jm)
     ! call ptds_ini(cck,alfa_fdm,km)
 
-    call qtds_solver_init(cci,'cc6',im)
-    call qtds_solver_init(ccj,'cc6',jm)
-    call qtds_solver_init(cck,'cc6',km)
+    call qtds_solver_init(cci,'cflux4',im)
+    call qtds_solver_init(ccj,'cflux4',jm)
+    call qtds_solver_init(cck,'cflux4',km)
+
+    call qtds_solver_init(cdi,'cc6',im)
+    call qtds_solver_init(cdj,'cc6',jm)
+    call qtds_solver_init(cdk,'cc6',km)
 
   end subroutine fdm_solver_init
   
@@ -42,8 +47,10 @@ module numerics
     nclo=size(f,2)
 
     do n=1,nclo
+      ! call diff2ec(f(:,n),dim,hm,df(:,n))
       ! call diff6ec(f(:,n),dim,hm,df(:,n))
-      call diff6cc(f(:,n),dim,df(:,n),dir)
+      ! call diff6cc(f(:,n),dim,df(:,n),dir)
+      call diff4ec(f(:,n),dim,hm,df(:,n))
     enddo
 
     return
@@ -75,11 +82,11 @@ module numerics
     !       num1d60* (vin(dim+3)-vin(dim-3))
 
     if(dir=='i') then
-      call qtds_solver(b,vout(1:dim),cci,dim)
+      call qtds_solver(b,vout(1:dim),cdi,dim)
     elseif(dir=='j') then
-      call qtds_solver(b,vout(1:dim),ccj,dim)
+      call qtds_solver(b,vout(1:dim),cdj,dim)
     elseif(dir=='k') then
-      call qtds_solver(b,vout(1:dim),cck,dim)
+      call qtds_solver(b,vout(1:dim),cdk,dim)
     endif
 
     vout(0)=vout(dim)
@@ -116,6 +123,39 @@ module numerics
     !
   end subroutine diff6ec
 
+  subroutine diff2ec(vin,dim,n,vout)
+
+    integer,intent(in) :: dim,n
+    real(rtype),intent(in) :: vin(-n:dim+n)
+    real(rtype) :: vout(0:dim)
+    
+    ! local data
+    integer :: i
+
+
+    do i=0,dim
+      vout(i)  =0.5_rtype *(vin(i+1)-vin(i-1))
+    enddo
+
+  end subroutine diff2ec
+
+  subroutine diff4ec(vin,dim,n,vout)
+
+    integer,intent(in) :: dim,n
+    real(rtype),intent(in) :: vin(-n:dim+n)
+    real(rtype) :: vout(0:dim)
+    
+    ! local data
+    integer :: i
+
+
+    do i=0,dim
+      vout(i)  =num2d3 *(vin(i+1)-vin(i-1)) - &
+                num1d12*(vin(i+2)-vin(i-2))
+    enddo
+
+  end subroutine diff4ec
+
   subroutine filter_init
 
     use comvardef, only : im,jm,km
@@ -144,8 +184,8 @@ module numerics
     character(len=1),intent(in) :: dir
     real(rtype),intent(out) :: ff(:)
 
-    ! call filter10ec(f,dim,hm,ff)
-    call filter10cc(f,dim,hm,ff,dir)
+    call filter10ec(f,dim,hm,ff)
+    ! call filter10cc(f,dim,hm,ff,dir)
 
   end subroutine low_pass_filter
 
@@ -441,6 +481,11 @@ module numerics
     if(scheme=='cc6') then
       cc(:,3)=num1d3
       cc(:,4)=num1d3
+    endif
+
+    if(scheme=='cflux4') then
+      cc(:,3)=0.25_rtype
+      cc(:,4)=0.25_rtype
     endif
 
     if(scheme=='cf10') then

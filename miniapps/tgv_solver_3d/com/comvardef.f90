@@ -12,8 +12,10 @@ module comvardef
   real(rtype) :: time,deltat
   
   real(rtype) :: gamma,mach,reynolds,prandtl,ref_t,pinf
-  real(rtype) :: const1,const2,const3,const4,const5,const6,const7
+  real(rtype) :: const1,const2,const3,const4,const5,const6,const7,const8
   real(rtype) :: dx,dy,dz
+
+  logical :: ldiffusion=.true.
   
   real :: ctime(12)
 
@@ -44,6 +46,7 @@ module comvardef
     const5=(gamma-1._rtype)*mach**2
     const6=1._rtype/(gamma-1._rtype)
     const7=(gamma-1._rtype)*mach**2*Reynolds*prandtl
+    const8=gamma*const6
     
     pinf=1._rtype/const2
 

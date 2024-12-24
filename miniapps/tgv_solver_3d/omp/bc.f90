@@ -25,7 +25,7 @@ module bc
     do k=0,km
     do j=0,jm
       !
-      do i=-hm,-1
+      do i=-hm,0
         rho(i,j,k)  =rho(im+i,j,k)
         vel(i,j,k,:)=vel(im+i,j,k,:)
         tmp(i,j,k)  =tmp(im+i,j,k)
@@ -57,7 +57,7 @@ module bc
     do k=0,km
     do i=0,im
       !
-      do j=-hm,-1
+      do j=-hm,0
         rho(i,j,k)  =rho(i,jm+j,k)
         vel(i,j,k,:)=vel(i,jm+j,k,:)
         tmp(i,j,k)  =tmp(i,jm+j,k)
@@ -89,7 +89,7 @@ module bc
     do j=0,jm
     do i=0,im
       !
-      do k=-hm,-1
+      do k=-hm,0
         rho(i,j,k)  =rho(i,j,km+k)
         vel(i,j,k,:)=vel(i,j,km+k,:)
         tmp(i,j,k)  =tmp(i,j,km+k)

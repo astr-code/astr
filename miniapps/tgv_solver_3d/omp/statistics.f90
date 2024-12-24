@@ -109,7 +109,7 @@ module statistics
 
     endif
     
-    print*,' ** rho=',rhom,', tke=',tke,', enstrophy=',enst
+    ! print*,' ** rho=',rhom,', tke=',tke,', enstrophy=',enst
     
     write(filehand,"(1X,I20,4(1X,E20.13E2))")nstep,time,tke,enst,dissipation
     

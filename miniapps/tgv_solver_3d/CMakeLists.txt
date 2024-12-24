@@ -12,43 +12,28 @@ add_executable(astr_omp
                     omp/field_init.f90
                     omp/bc.f90
                     omp/numerics.f90
+                    omp/numericalflux.f90
                     omp/solver.f90
                     omp/statistics.f90
                     omp/tgvsolver_omp.f90)
 
+add_executable(astr_cpu
+                    com/constdef.f90
+                    com/xdmwrite.f90
+                    com/tecio.f90
+                    com/comvardef.f90
+                    com/utility.f90
+                    com/io.f90
+                    omp/fluids.f90
+                    omp/field_init.f90
+                    omp/bc.f90
+                    omp/numerics.f90
+                    omp/numericalflux.f90
+                    omp/solver.f90
+                    omp/statistics.f90
+                    omp/tgvsolver_omp.f90)
 
-# add_executable(astr_oacc
-#                     com/constdef.f90
-#                     com/xdmwrite.f90
-#                     com/tecio.f90
-#                     com/comvardef.f90
-#                     com/utility.f90
-#                     com/io.f90
-#                     oacc/fluids.f90
-#                     oacc/field_init.f90
-#                     oacc/bc.f90
-#                     oacc/numerics.f90
-#                     oacc/solver.f90
-#                     oacc/statistics.f90
-#                     oacc/tgvsolver_oacc.f90)
-# 
-# 
-# add_executable(astr_cpu
-#                     com/constdef.f90
-#                     com/xdmwrite.f90
-#                     com/tecio.f90
-#                     com/comvardef.f90
-#                     com/utility.f90
-#                     com/io.f90
-#                     omp/fluids.f90
-#                     omp/field_init.f90
-#                     omp/bc.f90
-#                     omp/numerics.f90
-#                     omp/solver.f90
-#                     omp/statistics.f90
-#                     omp/tgvsolver_omp.f90)
-# 
-# target_link_libraries(astr_cpu)
+target_link_libraries(astr_cpu)
 
 option(SINGLE_PRECISION "Build with single precision" OFF)
 if (SINGLE_PRECISION)

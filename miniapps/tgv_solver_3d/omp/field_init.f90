@@ -91,43 +91,48 @@ module field_init
 
   end subroutine tgvinit
 
+  ! Pirozzoli, S., Stabilized non-dissipative approximations of Euler equations in generalized curvilinear coordinates. Journal of Computational Physics, 2011. 230(8): p. 2997-3014.
   subroutine vortini
     !
     use constdef
     use comvardef, only: im,jm,km,dx,dy,dz,time,nstep,pinf,x,qrhs, &
-                         q,vel,rho,prs,tmp,ctime,file_number
+                         q,vel,rho,prs,tmp,ctime,file_number,mach,const8,gamma
     use fluids, only: var2q,thermal_scar
+    use solver, only: gradcal
     use xdmwrite, only: xdmfwriter
     use tecio, only: tecbin
+    use io, only: write_field
     !
     ! local data
     integer :: i,j,k
-    real(rtype) :: xc,yc,radi2,rvor,cvor,var1
+    real(rtype) :: xc,yc,radi2,rvor,mv
     character(len=4) :: file_name
     !
-    xc=5._rtype
+    xc=10._rtype
     yc=5._rtype
-    rvor=0.7_rtype 
-    cvor=0.1_rtype*rvor
-    !
+    
+    rvor=20._rtype/24._rtype
+    
+    mv=mach
+
     k=0
     do j=0,jm
     do i=0,im
-      x(i,j,k,1)  =10._rtype/real(im,rtype)*real(i,rtype)
+      x(i,j,k,1)  =20._rtype/real(im,rtype)*real(i,rtype)
       x(i,j,k,2)  =10._rtype/real(jm,rtype)*real(j,rtype)
       x(i,j,k,3)  =0._rtype
 
       radi2=((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2)/rvor/rvor
-      var1=cvor/rvor/rvor*exp(-0.5_rtype*radi2)
-      !
-      rho(i,j,k)  =1._rtype
-      vel(i,j,k,1)=1._rtype-var1*(x(i,j,k,2)-yc)
-      vel(i,j,k,2)=     var1*(x(i,j,k,1)-xc)
+
+      tmp(i,j,k)  =1._rtype
+
+      vel(i,j,k,1)=1._rtype-mv/mach*(x(i,j,k,2)-yc)/rvor*exp(0.5_rtype*(1._rtype-radi2))
+      vel(i,j,k,2)=         mv/mach*(x(i,j,k,1)-xc)/rvor*exp(0.5_rtype*(1._rtype-radi2))
       vel(i,j,k,3)=0._rtype
 
-      prs(i,j,k)  =pinf-0.5_rtype*1._rtype*cvor**2/rvor**2*exp(-radi2)
-      !
-      tmp(i,j,k)  =thermal_scar(density=rho(i,j,k),pressure=prs(i,j,k))
+      prs(i,j,k)  =pinf*(1._rtype-0.5_rtype*(gamma-1._rtype)*mv*mv*exp(1._rtype-radi2))**const8
+
+      rho(i,j,k)  =thermal_scar(temperature=tmp(i,j,k),pressure=prs(i,j,k))
       
       q(i,j,k,:)=var2q(density=rho(i,j,k),velocity=vel(i,j,k,:), pressure=prs(i,j,k))
       !
@@ -145,16 +150,20 @@ module field_init
     
     ctime=0.0
 
-    file_number=0
+    file_number=-1
 
-    write(file_name,'(i4.4)')file_number
+    call gradcal
 
-    call tecbin(filename='flow'//file_name//'.plt',var1=x(0:im,0:jm,0:km,1),  var1name='x', &
-                                       var2=x(0:im,0:jm,0:km,2),  var2name='y', &
-                                       var3=x(0:im,0:jm,0:km,3),  var3name='z', &
-                                       var4=vel(0:im,0:jm,0:km,1),var4name='u', &
-                                       var5=vel(0:im,0:jm,0:km,2),var5name='v', &
-                                       var6=prs(0:im,0:jm,0:km),  var6name='p')
+    call write_field
+
+    ! write(file_name,'(i4.4)')file_number
+
+    ! call tecbin(filename='flow'//file_name//'.plt',var1=x(0:im,0:jm,0:km,1),  var1name='x', &
+    !                                    var2=x(0:im,0:jm,0:km,2),  var2name='y', &
+    !                                    var3=x(0:im,0:jm,0:km,3),  var3name='z', &
+    !                                    var4=vel(0:im,0:jm,0:km,1),var4name='u', &
+    !                                    var5=vel(0:im,0:jm,0:km,2),var5name='v', &
+    !                                    var6=prs(0:im,0:jm,0:km),  var6name='p')
 
     write(*,'(A,I1,A)')'  ** 2-D vortical field initialised.'
     !

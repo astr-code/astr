@@ -8,13 +8,13 @@ module io
 
      use utility
      use comvardef, only: im,jm,km,hm,numq,ref_t,gamma,mach,reynolds, &
-                          prandtl,deltat,maxstep,flowtype
+                          prandtl,deltat,maxstep,flowtype,ldiffusion
 
      character(len=128) :: input_file_name
      integer :: file_handle
 
      namelist /basicparam/ im,jm,km,hm,numq,ref_t,gamma,mach,reynolds, &
-                           prandtl,deltat,maxstep,flowtype
+                           prandtl,deltat,maxstep,flowtype,ldiffusion
 
      call readkeyboad(input_file_name)
 
@@ -39,12 +39,14 @@ module io
 
      !$ print*,' !! OpenMP Activated !!'
 
-     !$ write(*,'(A,I0)')'  ** number of omp threads:',omp_get_num_threads()
-        write(*,'(3(A,I0))')  '  ** number of equations:',numq
-        write(*,'(3(A,I0))')  '  ** dimesion           :',im,'x',jm,'x',km
-        write(*,'(3(A,I0))')  '  ** halo level         :',hm
-        write(*,'(3(A,I0))')  '  ** maxstep            :',maxstep
-     write(*,'(3(A,F10.5))')  '  ** reynolds           :',reynolds
+     write(*,'(3(A,I0))')     '  ** number of equations:',numq
+     write(*,'(3(A,I0))')     '  ** dimesion           :',im,'x',jm,'x',km
+     write(*,'(3(A,I0))')     '  ** halo level         :',hm
+     write(*,'(3(A,I0))')     '  ** maxstep            :',maxstep
+     if(ldiffusion) then
+        write(*,'((A))')     '  ** diffusion term  activated'
+        write(*,'(3(A,F10.5))')  '  ** reynolds           :',reynolds
+     endif
      write(*,'(3(A,F10.5))')  '  ** mach               :',mach
      write(*,'(3(A,F10.5))')  '  ** prandtl            :',prandtl
      write(*,'(3(A,F10.5))')  '  ** gamma              :',gamma
@@ -55,10 +57,13 @@ module io
 
    subroutine write_field
 
-    use comvardef, only: x,vel,prs,file_number,im,jm,km
+    use comvardef, only: x,vel,dvel,prs,file_number,im,jm,km
     use tecio, only: tecbin
 
     character(len=4) :: file_name
+
+    integer :: i
+    real(8) :: omega
 
     file_number=file_number+1
 
@@ -70,6 +75,14 @@ module io
                                        var4=vel(0:im,0:jm,0:km,1),var4name='u', &
                                        var5=vel(0:im,0:jm,0:km,2),var5name='v', &
                                        var6=prs(0:im,0:jm,0:km),  var6name='p')
+
+    open(18,file='xprofile'//file_name//'.dat')
+    do i=0,im
+      omega=dvel(i,jm/2,0,2,1)-dvel(i,jm/2,0,1,2)
+      write(18,*)x(i,jm/2,0,1),vel(i,jm/2,0,1),vel(i,jm/2,0,2),prs(i,jm/2,0),omega
+    enddo
+    close(18)
+    print*,' << '//'xprofile'//file_name//'.dat'
 
    end subroutine write_field
 

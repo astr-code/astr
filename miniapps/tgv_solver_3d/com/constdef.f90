@@ -11,9 +11,9 @@ module constdef
 
    implicit none
    
-   integer, parameter, public :: rtype = KIND(0._real32)
+   ! integer, parameter, public :: rtype = KIND(0._real32)
 
-   ! integer, parameter, public :: rtype = KIND(0._real64)
+   integer, parameter, public :: rtype = KIND(0._real64)
 
    real(rtype), parameter :: pi = 4._rtype*atan(1.0_rtype), &
                        num1d35  = 1._rtype/35._rtype,  num1d3  = 1._rtype/3._rtype,     &

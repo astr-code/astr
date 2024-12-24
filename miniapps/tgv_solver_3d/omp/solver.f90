@@ -1,6 +1,7 @@
 module solver
    
   use constdef
+
   use utility, only: time_in_second
 
   implicit none
@@ -13,9 +14,11 @@ module solver
     use utility, only: progress_bar
     use numerics, only: fdm_solver_init,filter_init
     use io, only: write_field
+    use numericalflux, only: flux_solver_init
 
     call fdm_solver_init
     call filter_init
+    call flux_solver_init
 
     ! call solver_test
     ! call filter_test
@@ -25,15 +28,17 @@ module solver
     do while(nstep<maxstep)
       
       call rk3(ctime(2))
+
+      call crashcheck
       
       nstep=nstep+1
       time =time + deltat
 
-      if(mod(nstep,100)==0) then
+      if(mod(nstep,1000)==0) then
         call write_field
       endif
 
-      ! call progress_bar(nstep,maxstep,'     ',50)
+      call progress_bar(nstep,maxstep,'     ',50)
       
     enddo
   
@@ -197,7 +202,7 @@ module solver
       !$OMP END DO
       !$OMP END PARALLEL
       
-      call filterq(ctime(6))
+      ! call filterq(ctime(6))
       
       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
       !$OMP DO
@@ -225,9 +230,35 @@ module solver
   
   end subroutine rk3
 
+  subroutine crashcheck
+
+      use comvardef, only: im,jm,km,q,x
+      use utility, only: isnan
+
+      integer :: i,j,k
+
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        if( isnan(q(i,j,k,1)) .or. &
+            isnan(q(i,j,k,2)) .or. &
+            isnan(q(i,j,k,3)) .or. &
+            isnan(q(i,j,k,4)) .or. &
+            isnan(q(i,j,k,5)) ) then
+          print*,' !! computation crash !!'
+          print*,' x:',x(i,j,k,:)
+          print*,' q:',q(i,j,k,:)
+          stop 
+        endif
+      enddo
+      enddo
+      enddo
+
+  end subroutine crashcheck
+
   subroutine rhscal(comptime)
     !
-    use comvardef, only: qrhs,ctime
+    use comvardef, only: qrhs,ctime,ldiffusion
     !
     real,intent(inout),optional :: comptime
     
@@ -239,11 +270,14 @@ module solver
     !
     call gradcal(ctime(3))
     !
-    call convection(ctime(4))
+    ! call convection
+    call convection_flux
     !
     qrhs=-qrhs
     !
-    call diffusion(ctime(5))
+    if(ldiffusion) then
+      call diffusion(ctime(5))
+    endif
     !
     if(present(comptime)) then
       tfinish=time_in_second()
@@ -388,6 +422,171 @@ module solver
     !
   end subroutine gradcal
   !
+  subroutine convection_flux(comptime)
+
+    use comvardef, only: im,jm,km,hm,numq,prs,vel,q,qrhs,rho,prs,vel,dx,dy,dz,ndims
+    use fluids,  only: var2q
+    use numerics,  only: fdm_solver_1d
+    use numericalflux, only: flux_sp,flux_div
+    !
+    real,intent(inout),optional :: comptime
+    !
+    real(rtype),allocatable,dimension(:,:) :: qflux,qflu2
+    real(rtype),allocatable,dimension(:) :: r,h,p
+    real(rtype),allocatable :: u(:,:)
+
+    integer :: i,j,k
+    
+    real :: tstart,tfinish
+
+    !$ save qflux,qflu2,r,u,p,h
+    !$OMP THREADPRIVATE(qflux,qflu2,r,u,p,h)
+    
+    if(present(comptime)) then
+      tstart=time_in_second()
+    endif
+
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+
+    !call progress_bar(0,3,'  ** convection terms ',10)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(r(-hm:im+hm),u(-hm:im+hm,1:3),p(-hm:im+hm),h(-hm:im+hm))
+    allocate(qflux(-1:im,1:numq),qflu2(-1:im,1:numq))
+
+    !$OMP DO
+    do k=0,km
+    do j=0,jm
+      !
+      do i=-hm,im+hm
+        r(i)  =rho(i,j,k)
+        u(i,:)=vel(i,j,k,:)
+        p(i)  =prs(i,j,k)
+        h(i)  =(q(i,j,k,5)+p(i))/r(i)
+      enddo
+
+      qflux=flux_sp(dens=r,velo=u,pres=p,enth=h,dim=im,dir='i')
+      ! qflux=flux_div(q=q(:,j,k,:),velo=u,pres=p,dim=im,dir='i')
+
+      ! if(j==jm/2 .and. k==km/2) then
+      !   qflu2=flux_div(q=q(:,j,k,:),velo=u,pres=p,dim=im,dir='i')
+      !   do i=0,im
+      !     print*,i,abs((qflux(i,1)-qflu2(i,1))/qflux(i,1))
+      !     ! print*,i,qflu2(0,1),qflu2(im,1)
+      !   enddo
+      ! endif
+       
+      do i=0,im
+        qrhs(i,j,k,1)=qrhs(i,j,k,1)+(qflux(i,1)-qflux(i-1,1))/dx
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+(qflux(i,2)-qflux(i-1,2))/dx
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+(qflux(i,3)-qflux(i-1,3))/dx
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+(qflux(i,4)-qflux(i-1,4))/dx
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+(qflux(i,5)-qflux(i-1,5))/dx
+      enddo
+      !
+    enddo
+    enddo
+    !$OMP END DO
+    
+    deallocate(r,u,p,h,qflux,qflu2)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !call progress_bar(1,3,'  ** convection terms ',10)
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(r(-hm:jm+hm),u(-hm:jm+hm,1:3),p(-hm:jm+hm),h(-hm:jm+hm))
+    allocate(qflux(-1:jm,1:numq))
+    allocate(qflu2(-1:jm,1:numq))
+    !
+    !$OMP DO
+    do k=0,km
+    do i=0,im
+
+      do j=-hm,jm+hm
+        r(j)  =rho(i,j,k)
+        u(j,:)=vel(i,j,k,:)
+        p(j)  =prs(i,j,k)
+        h(j)  =(q(i,j,k,5)+p(j))/r(j)
+      enddo
+
+      qflux=flux_sp(dens=r,velo=u,pres=p,enth=h,dim=jm,dir='j')
+      ! qflux=flux_div(q=q(i,:,k,:),velo=u,pres=p,dim=jm,dir='j')
+
+      do j=0,jm
+        qrhs(i,j,k,1)=qrhs(i,j,k,1)+(qflux(j,1)-qflux(j-1,1))/dy
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+(qflux(j,2)-qflux(j-1,2))/dy
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+(qflux(j,3)-qflux(j-1,3))/dy
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+(qflux(j,4)-qflux(j-1,4))/dy
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+(qflux(j,5)-qflux(j-1,5))/dy
+      enddo
+
+    enddo
+    enddo
+    !$OMP END DO
+    !
+    deallocate(r,u,p,h,qflux,qflu2)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    !call progress_bar(2,3,'  ** convection terms ',10)
+    !
+    if(ndims==3) then
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! calculating along k direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate(r(-hm:km+hm),u(-hm:km+hm,1:3),p(-hm:km+hm),h(-hm:km+hm))
+      allocate(qflux(-1:km,1:numq))
+      allocate(qflu2(-1:km,1:numq))
+
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
+        !
+        do k=-hm,km+hm
+          r(k)  =rho(i,j,k)
+          u(k,:)=vel(i,j,k,:)
+          p(k)  =prs(i,j,k)
+          h(k)  =(q(i,j,k,5)+p(k))/r(k)
+        enddo
+        
+        qflux=flux_sp(dens=r,velo=u,pres=p,enth=h,dim=km,dir='k')
+        ! qflux=flux_div(q=q(i,j,:,:),velo=u,pres=p,dim=km,dir='k')
+
+        do k=0,km 
+          qrhs(i,j,k,1)=qrhs(i,j,k,1)+(qflux(k,1)-qflux(k-1,1))/dz
+          qrhs(i,j,k,2)=qrhs(i,j,k,2)+(qflux(k,2)-qflux(k-1,2))/dz
+          qrhs(i,j,k,3)=qrhs(i,j,k,3)+(qflux(k,3)-qflux(k-1,3))/dz
+          qrhs(i,j,k,4)=qrhs(i,j,k,4)+(qflux(k,4)-qflux(k-1,4))/dz
+          qrhs(i,j,k,5)=qrhs(i,j,k,5)+(qflux(k,5)-qflux(k-1,5))/dz
+        enddo
+        !
+      enddo
+      enddo
+      !$OMP END DO
+
+      deallocate(r,u,p,h,qflux,qflu2)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end calculating along k direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    !$OMP END PARALLEL
+
+    if(present(comptime)) then
+      tfinish=time_in_second()
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !call progress_bar(3,3,'  ** convection terms ',10)
+    !
+  end subroutine convection_flux
+
   subroutine convection(comptime)
     !
     use comvardef, only: im,jm,km,hm,numq,prs,vel,q,qrhs,dx,dy,dz,ndims

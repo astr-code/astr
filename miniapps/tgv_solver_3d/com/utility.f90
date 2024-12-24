@@ -550,6 +550,22 @@ module utility
    !+-------------------------------------------------------------------+
    !| The end of the function get_unit.                                 |
    !+-------------------------------------------------------------------+
+
+   logical function isnan(var)
+
+     use constdef
+
+     real(rtype) :: var
+
+     if(var>=0._rtype .or. var<=0._rtype  ) then
+       isnan=.false.
+     else
+       isnan=.true.
+     endif
+
+     return
+
+   end function isnan
   !!
 end module utility
 !+---------------------------------------------------------------------+
