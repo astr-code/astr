@@ -16,14 +16,6 @@ module solver
     use io, only: write_field
     use numericalflux, only: flux_solver_init
 
-    call fdm_solver_init
-    call filter_init
-    call flux_solver_init
-
-    ! call solver_test
-    ! call filter_test
-
-    ! stop
   
     do while(nstep<maxstep)
       
@@ -202,7 +194,7 @@ module solver
       !$OMP END DO
       !$OMP END PARALLEL
       
-      ! call filterq(ctime(6))
+      call filterq(ctime(6))
       
       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
       !$OMP DO
@@ -270,8 +262,8 @@ module solver
     !
     call gradcal(ctime(3))
     !
-    ! call convection
-    call convection_flux
+    call convection
+    ! call convection_flux
     !
     qrhs=-qrhs
     !

@@ -16,12 +16,6 @@ module numerics
 
     use comvardef, only : im,jm,km
 
-    ! alfa_fdm=coeffcompac('cc6')
-
-    ! call ptds_ini(cci,alfa_fdm,im)
-    ! call ptds_ini(ccj,alfa_fdm,jm)
-    ! call ptds_ini(cck,alfa_fdm,km)
-
     call qtds_solver_init(cci,'cflux4',im)
     call qtds_solver_init(ccj,'cflux4',jm)
     call qtds_solver_init(cck,'cflux4',km)
@@ -46,11 +40,12 @@ module numerics
     dim =size(f,1)-2*hm-1
     nclo=size(f,2)
 
+
     do n=1,nclo
       ! call diff2ec(f(:,n),dim,hm,df(:,n))
       ! call diff6ec(f(:,n),dim,hm,df(:,n))
-      ! call diff6cc(f(:,n),dim,df(:,n),dir)
-      call diff4ec(f(:,n),dim,hm,df(:,n))
+      call diff6cc(f(:,n),dim,df(:,n),dir)
+      ! call diff4ec(f(:,n),dim,hm,df(:,n))
     enddo
 
     return
@@ -184,8 +179,8 @@ module numerics
     character(len=1),intent(in) :: dir
     real(rtype),intent(out) :: ff(:)
 
-    call filter10ec(f,dim,hm,ff)
-    ! call filter10cc(f,dim,hm,ff,dir)
+    ! call filter10ec(f,dim,hm,ff)
+    call filter10cc(f,dim,hm,ff,dir)
 
   end subroutine low_pass_filter
 

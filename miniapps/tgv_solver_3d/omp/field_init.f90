@@ -7,7 +7,13 @@ module field_init
   subroutine flowinit
     
     use comvardef, only: flowtype
+    use numerics, only: fdm_solver_init,filter_init
+    use numericalflux, only: flux_solver_init
 
+    call fdm_solver_init
+    call filter_init
+    call flux_solver_init
+    
     if(trim(flowtype)=='tgv') then
       call tgvinit
     elseif(trim(flowtype)=='2dvortex') then
@@ -110,7 +116,7 @@ module field_init
     !
     xc=10._rtype
     yc=5._rtype
-    
+
     rvor=20._rtype/24._rtype
     
     mv=mach
