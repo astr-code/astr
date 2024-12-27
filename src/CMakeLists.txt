@@ -1,48 +1,24 @@
-
 message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
 
-add_executable(astr 
-                    astr.F90
-                    bc.F90
-                    CMakeLists.txt
-                    cmdefne.F90
-                    commarray.F90
-                    comsolver.F90
-                    commcal.F90
-                    commfunc.F90
-                    commtype.F90
-                    commvar.F90
-                    constdef.F90
-                    fdnn.F90
-                    fludyna.F90
-                    geom.F90
-                    gridgeneration.F90
-                    hdf5io.F90
-                    ibmethod.F90
-                    initialisation.F90
-                    interp.F90
-                    mainloop.F90
-                    models.F90
-                    parallel.F90
-                    pp.F90
-                    readwrite.F90
-                    riemann.F90
-                    singleton.F90
-                    solver.F90
-                    statistic.F90
-                    stlaio.F90
-                    strings.F90
-                    tecio.F90
-                    test.F90
-                    thermchem.F90
-                    userdefine.F90
-                    utility.F90
-                    vtkio.F90)
+# Set the root directory for the source files
+set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
+
+# Collect all Fortran source files recursively
+file(GLOB_RECURSE Fortran_SOURCES
+    ${SRC_DIR}/*.f90
+    ${SRC_DIR}/*.F90
+    ${SRC_DIR}/*.f
+    ${SRC_DIR}/*.F 
+)
+
+add_executable(astr ${Fortran_SOURCES})
+
 target_link_libraries(astr)
 if (MPI_FOUND)
   target_link_libraries(astr PRIVATE MPI::MPI_Fortran)
 endif (MPI_FOUND)
+
 if (CHEMISTRY)
   message(STATUS "CANTERA library: ${CTRDIR}/lib")
   target_link_libraries(astr PRIVATE -L${CTRDIR}/lib -lcantera_fortran -lcantera -lstdc++ -pthread)

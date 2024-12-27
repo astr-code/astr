@@ -110,7 +110,8 @@ module solver
 
   subroutine rk3(comptime)
   
-    use comvardef, only: im,jm,km,numq,q,qrhs,deltat,rho,vel,tmp,prs,nstep,ctime
+    use comvardef, only: im,jm,km,numq,q,qrhs,deltat,rho,vel,tmp, &
+                         prs,nstep,ctime,lfilter
     use fluids, only: q2fvar
     use bc
     use statistics, only: stacal
@@ -194,7 +195,7 @@ module solver
       !$OMP END DO
       !$OMP END PARALLEL
       
-      call filterq(ctime(6))
+      if(lfilter) call filterq(ctime(6))
       
       !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
       !$OMP DO
@@ -250,7 +251,7 @@ module solver
 
   subroutine rhscal(comptime)
     !
-    use comvardef, only: qrhs,ctime,ldiffusion
+    use comvardef, only: qrhs,ctime,ldiffusion,fdmform
     !
     real,intent(inout),optional :: comptime
     
@@ -262,9 +263,12 @@ module solver
     !
     call gradcal(ctime(3))
     !
-    call convection
-    ! call convection_flux
-    !
+    if(fdmform=='flux') then
+      call convection_flux
+    elseif(fdmform=='deri') then
+      call convection
+    endif
+
     qrhs=-qrhs
     !
     if(ldiffusion) then
@@ -419,7 +423,7 @@ module solver
     use comvardef, only: im,jm,km,hm,numq,prs,vel,q,qrhs,rho,prs,vel,dx,dy,dz,ndims
     use fluids,  only: var2q
     use numerics,  only: fdm_solver_1d
-    use numericalflux, only: flux_sp,flux_div
+    use numericalflux, only: flux_stable,flux_div
     !
     real,intent(inout),optional :: comptime
     !
@@ -458,16 +462,10 @@ module solver
         h(i)  =(q(i,j,k,5)+p(i))/r(i)
       enddo
 
-      qflux=flux_sp(dens=r,velo=u,pres=p,enth=h,dim=im,dir='i')
-      ! qflux=flux_div(q=q(:,j,k,:),velo=u,pres=p,dim=im,dir='i')
+      qflux=flux_stable(dens=r,velo=u,pres=p,enth=h,dim=im,dir='i')
+      ! qflu2=flux_div(q=q(:,j,k,:),velo=u,pres=p,dim=im,dir='i')
 
-      ! if(j==jm/2 .and. k==km/2) then
-      !   qflu2=flux_div(q=q(:,j,k,:),velo=u,pres=p,dim=im,dir='i')
-      !   do i=0,im
-      !     print*,i,abs((qflux(i,1)-qflu2(i,1))/qflux(i,1))
-      !     ! print*,i,qflu2(0,1),qflu2(im,1)
-      !   enddo
-      ! endif
+      ! qflux=0.5_rtype*(qflux+qflu2)
        
       do i=0,im
         qrhs(i,j,k,1)=qrhs(i,j,k,1)+(qflux(i,1)-qflux(i-1,1))/dx
@@ -506,8 +504,10 @@ module solver
         h(j)  =(q(i,j,k,5)+p(j))/r(j)
       enddo
 
-      qflux=flux_sp(dens=r,velo=u,pres=p,enth=h,dim=jm,dir='j')
-      ! qflux=flux_div(q=q(i,:,k,:),velo=u,pres=p,dim=jm,dir='j')
+      qflux=flux_stable(dens=r,velo=u,pres=p,enth=h,dim=jm,dir='j')
+      ! qflu2=flux_div(q=q(i,:,k,:),velo=u,pres=p,dim=jm,dir='j')
+
+      ! qflux=0.5_rtype*(qflux+qflu2)
 
       do j=0,jm
         qrhs(i,j,k,1)=qrhs(i,j,k,1)+(qflux(j,1)-qflux(j-1,1))/dy
@@ -547,8 +547,10 @@ module solver
           h(k)  =(q(i,j,k,5)+p(k))/r(k)
         enddo
         
-        qflux=flux_sp(dens=r,velo=u,pres=p,enth=h,dim=km,dir='k')
-        ! qflux=flux_div(q=q(i,j,:,:),velo=u,pres=p,dim=km,dir='k')
+        qflux=flux_stable(dens=r,velo=u,pres=p,enth=h,dim=km,dir='k')
+        ! qflu2=flux_div(q=q(i,j,:,:),velo=u,pres=p,dim=km,dir='k')
+
+        ! qflux=0.5_rtype*(qflux+qflu2)
 
         do k=0,km 
           qrhs(i,j,k,1)=qrhs(i,j,k,1)+(qflux(k,1)-qflux(k-1,1))/dz

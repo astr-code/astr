@@ -8,13 +8,15 @@ module io
 
      use utility
      use comvardef, only: im,jm,km,hm,numq,ref_t,gamma,mach,reynolds, &
-                          prandtl,deltat,maxstep,flowtype,ldiffusion
+                          prandtl,deltat,maxstep,flowtype,ldiffusion, &
+                          lfilter,fdmform,len_sten_max
 
      character(len=128) :: input_file_name
      integer :: file_handle
 
      namelist /basicparam/ im,jm,km,hm,numq,ref_t,gamma,mach,reynolds, &
-                           prandtl,deltat,maxstep,flowtype,ldiffusion
+                           prandtl,deltat,maxstep,flowtype,ldiffusion, &
+                           lfilter,fdmform,len_sten_max
 
      call readkeyboad(input_file_name)
 
@@ -47,6 +49,11 @@ module io
         write(*,'((A))')     '  ** diffusion term  activated'
         write(*,'(3(A,F10.5))')  '  ** reynolds           :',reynolds
      endif
+     if(lfilter) then
+        write(*,'((A))')     '  ** filter activated'
+     endif
+     write(*,'(3(A,I0))')     '  ** length of stencil  :',len_sten_max
+     write(*,'(2(A))')        '  ** finite-difference  :',fdmform
      write(*,'(3(A,F10.5))')  '  ** mach               :',mach
      write(*,'(3(A,F10.5))')  '  ** prandtl            :',prandtl
      write(*,'(3(A,F10.5))')  '  ** gamma              :',gamma

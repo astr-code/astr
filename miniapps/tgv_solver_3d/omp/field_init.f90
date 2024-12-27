@@ -119,7 +119,7 @@ module field_init
 
     rvor=20._rtype/24._rtype
     
-    mv=mach
+    mv=1._rtype*mach
 
     k=0
     do j=0,jm

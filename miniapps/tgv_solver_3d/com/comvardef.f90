@@ -15,7 +15,10 @@ module comvardef
   real(rtype) :: const1,const2,const3,const4,const5,const6,const7,const8
   real(rtype) :: dx,dy,dz
 
-  logical :: ldiffusion=.true.
+  integer :: len_sten_max
+
+  logical :: ldiffusion=.true.,lfilter=.true.
+  character(len=4) :: fdmform='flux'
   
   real :: ctime(12)
 

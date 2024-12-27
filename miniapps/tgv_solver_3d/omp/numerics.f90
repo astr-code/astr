@@ -4,7 +4,6 @@ module numerics
 
   implicit none
 
-  real(rtype),allocatable :: cci(:,:),ccj(:,:),cck(:,:)
   real(rtype),allocatable :: cdi(:,:),cdj(:,:),cdk(:,:)
   real(rtype),allocatable :: cfi(:,:),cfj(:,:),cfk(:,:)
   real(rtype),allocatable :: alfa_fdm(:),coef10i(:)
@@ -15,10 +14,6 @@ module numerics
   subroutine fdm_solver_init
 
     use comvardef, only : im,jm,km
-
-    call qtds_solver_init(cci,'cflux4',im)
-    call qtds_solver_init(ccj,'cflux4',jm)
-    call qtds_solver_init(cck,'cflux4',km)
 
     call qtds_solver_init(cdi,'cc6',im)
     call qtds_solver_init(cdj,'cc6',jm)
@@ -43,9 +38,11 @@ module numerics
 
     do n=1,nclo
       ! call diff2ec(f(:,n),dim,hm,df(:,n))
+      ! call diff4ec(f(:,n),dim,hm,df(:,n))
       ! call diff6ec(f(:,n),dim,hm,df(:,n))
       call diff6cc(f(:,n),dim,df(:,n),dir)
-      ! call diff4ec(f(:,n),dim,hm,df(:,n))
+
+      ! call diff8ec(f(:,n),dim,hm,df(:,n))
     enddo
 
     return
@@ -87,6 +84,24 @@ module numerics
     vout(0)=vout(dim)
 
   end subroutine diff6cc
+
+  subroutine diff8ec(vin,dim,n,vout)
+    !
+    integer,intent(in) :: dim,n
+    real(rtype),intent(in) :: vin(-n:dim+n)
+    real(rtype) :: vout(0:dim)
+    
+    ! local data
+    integer :: i
+
+    do i=0,dim
+      vout(i)  =0.8_rtype*(vin(i+1)-vin(i-1))- &
+                0.2_rtype*(vin(i+2)-vin(i-2))+ &
+                num4d105 *(vin(i+3)-vin(i-3))- &
+                num1d280 *(vin(i+4)-vin(i-4))
+    enddo
+    !
+  end subroutine diff8ec
 
   subroutine diff6ec(vin,dim,n,vout,comptime)
     !
@@ -473,19 +488,24 @@ module numerics
 
     allocate(cc(n,4))
 
-    if(scheme=='cc6') then
-      cc(:,3)=num1d3
-      cc(:,4)=num1d3
-    endif
 
-    if(scheme=='cflux4') then
+    if(scheme=='cc4' .or. scheme=='cflux4') then
       cc(:,3)=0.25_rtype
       cc(:,4)=0.25_rtype
-    endif
-
-    if(scheme=='cf10') then
+    elseif(scheme=='cc6' ) then
+      cc(:,3)=num1d3
+      cc(:,4)=num1d3
+    elseif(scheme=='cflux6') then
+      cc(:,3)=num1d3
+      cc(:,4)=num1d3
+    elseif(scheme=='cflux8') then
+      cc(:,3)=3._rtype/8._rtype
+      cc(:,4)=3._rtype/8._rtype
+    elseif(scheme=='cf10') then
       cc(:,3)=compact_filer_coefficient
       cc(:,4)=compact_filer_coefficient
+    else
+      stop ' !! scheme not defined !!'
     endif
 
 
