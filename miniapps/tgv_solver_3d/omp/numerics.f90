@@ -5,6 +5,7 @@ module numerics
   implicit none
 
   real(rtype),allocatable :: cdi(:,:),cdj(:,:),cdk(:,:)
+  real(rtype),allocatable :: c2i(:,:),c2j(:,:),c2k(:,:)
   real(rtype),allocatable :: cfi(:,:),cfj(:,:),cfk(:,:)
   real(rtype),allocatable :: alfa_fdm(:),coef10i(:)
   real(rtype) :: compact_filer_coefficient=0.49_rtype
@@ -18,6 +19,10 @@ module numerics
     call qtds_solver_init(cdi,'cc6',im)
     call qtds_solver_init(cdj,'cc6',jm)
     call qtds_solver_init(cdk,'cc6',km)
+
+    call qtds_solver_init(c2i,'cc6_2nd',im)
+    call qtds_solver_init(c2j,'cc6_2nd',jm)
+    call qtds_solver_init(c2k,'cc6_2nd',km)
 
   end subroutine fdm_solver_init
   
@@ -48,6 +53,30 @@ module numerics
     return
 
   end subroutine fdm_solver_1d
+
+
+  ! this subroutine is a 1d finite-difference solver
+  subroutine fdm2nd_solver(f,df,dir)
+
+    use comvardef, only : hm
+    
+    real(rtype),intent(in) :: f(:,:)
+    character(len=1),intent(in) :: dir
+    real(rtype),intent(out) :: df(:,:)
+
+    integer :: dim,nclo,n
+
+    dim =size(f,1)-2*hm-1
+    nclo=size(f,2)
+
+
+    do n=1,nclo
+      call dif2nd_6cc(f(:,n),dim,df(:,n),dir)
+    enddo
+
+    return
+
+  end subroutine fdm2nd_solver
 
   subroutine diff6cc(vin,dim,vout,dir)
 
@@ -84,6 +113,36 @@ module numerics
     vout(0)=vout(dim)
 
   end subroutine diff6cc
+
+  subroutine dif2nd_6cc(vin,dim,vout,dir)
+
+    use comvardef, only : hm
+    use constdef
+
+    integer,intent(in) :: dim
+    real(rtype),intent(in) :: vin(-hm:dim+hm)
+    character(len=1),intent(in) :: dir
+    real(rtype) :: vout(0:dim),b(1:dim)
+
+    ! local data
+    integer :: i
+
+    do i=1,dim
+      b(i)=num12d11*(vin(i+1)-2.d0*vin(i)+vin(i-1))+          &
+           num3d44 *(vin(i+2)-2.d0*vin(i)+vin(i-2))
+    end do
+
+    if(dir=='i') then
+      call qtds_solver(b,vout(1:dim),c2i,dim)
+    elseif(dir=='j') then
+      call qtds_solver(b,vout(1:dim),c2j,dim)
+    elseif(dir=='k') then
+      call qtds_solver(b,vout(1:dim),c2k,dim)
+    endif
+
+    vout(0)=vout(dim)
+
+  end subroutine dif2nd_6cc
 
   subroutine diff8ec(vin,dim,n,vout)
     !
@@ -504,6 +563,9 @@ module numerics
     elseif(scheme=='cf10') then
       cc(:,3)=compact_filer_coefficient
       cc(:,4)=compact_filer_coefficient
+    elseif(scheme=='cc6_2nd') then
+      cc(:,3)=num2d11
+      cc(:,4)=num2d11
     else
       stop ' !! scheme not defined !!'
     endif

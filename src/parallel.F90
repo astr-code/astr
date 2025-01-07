@@ -1270,6 +1270,18 @@ module parallel
     stop
     !
   end subroutine mpistop
+
+  subroutine mpiend
+    !
+    integer :: ierr
+    !
+    call mpi_barrier(mpi_comm_world,ierr)
+    !
+    call mpi_finalize(ierr)
+    !
+    if(lio) print*,' ** The job is done!'
+    !
+  end subroutine mpiend
   !+-------------------------------------------------------------------+
   !| The end of the subroutine mpistop.                                |
   !+-------------------------------------------------------------------+

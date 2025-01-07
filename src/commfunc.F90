@@ -191,6 +191,131 @@ module commfunc
   !+-------------------------------------------------------------------+
   !| The end of the function recons.                                   |
   !+-------------------------------------------------------------------+
+  
+  !+-------------------------------------------------------------------+
+  !| The function is to calcualte the approximation of derivatives     |
+  !| based on the reconstruction of flux, in a skew-symmetrical form   |
+  !+-------------------------------------------------------------------+
+  !| ref: Pirozzoli, S., Stabilized non-dissipative approximations of  |
+  !|      Euler equations in generalized curvilinear coordinates.      |
+  !|      Journal of Computational Physics, 2011. 230(8): p. 2997-3014 |
+  !|                                                                   |
+  !|      Bernardini, M., et al., STREAmS: A high-fidelity accelerated |
+  !|      solver for direct numerical simulation of compressible       |
+  !|      turbulent flows. Computer Physics Communications, 2021.      |
+  !|      263(107906).                                                 |
+  !+-------------------------------------------------------------------+
+  function ddfc_ss_flux(f,stype,ntype,nterm,dim,cc) result(df)
+    
+    use commvar, only: numq
+    use schemes, only: len_sten_max
+
+    character(len=4),intent(in) :: stype
+    integer,intent(in) :: ntype,dim,nterm
+    real(8),intent(in) :: f(0:nterm,-hm:dim+hm)
+    real(8),intent(in) :: cc(:,:)
+    real(8) :: df(0:dim,1:numq)
+    
+    ! local data
+    integer :: i,l,n
+    real(8) :: rhom,ucov,prsm,jacm
+    real(8) :: uv(1:numq,0:len_sten_max,-hm:dim+hm),uvf(-1:dim)
+
+
+    ! f1 =dxi(1)*vel(1)+dxi(2)*vel(2)+dxi(3)*vel(3)
+    ! f2 =rho
+    ! f3 =vel(1)
+    ! f4 =vel(2)
+    ! f5 =vel(3)
+    ! f6 =(q(5)+prs)/rho
+    ! f7 =prs
+    ! f8 =dxi(1)
+    ! f9 =dxi(2)
+    ! f10=dxi(3)
+    ! f(11-nterm)=spc(1-numq)
+    ! ...
+
+    do i=-hm,dim
+
+      do l=0,len_sten_max
+
+         jacm = f(0,i)+f(0,i+l)
+         ucov = f(1,i)+f(1,i+l)
+         rhom = f(2,i)+f(2,i+l)
+         prsm = f(7,i)+f(7,i+l)
+
+         uv(1,l,i) = 2.d0*rhom*ucov
+         uv(2,l,i) = rhom*(f(3,i)+f(3,i+l))*ucov + 2.d0*prsm*(f(8,i) +f(8,i+l))
+         uv(3,l,i) = rhom*(f(4,i)+f(4,i+l))*ucov + 2.d0*prsm*(f(9,i) +f(9,i+l))
+         uv(4,l,i) = rhom*(f(5,i)+f(5,i+l))*ucov + 2.d0*prsm*(f(10,i)+f(10,i+l))
+         uv(5,l,i) = rhom*(f(6,i)+f(6,i+l))*ucov
+
+         do n=6,numq
+           uv(n,l,i) = rhom*(f(5+n,i)+f(5+n,i+l))*ucov
+         enddo
+
+      enddo
+      
+
+    enddo
+
+    do n=1,numq
+
+      uvf=flux_recon_subs(uv(n,:,:),stype,ntype,dim,cc)
+      
+      do i=0,dim
+        df(i,n)=f(0,i)*(uvf(i)-uvf(i-1))
+      enddo
+
+      if(n==1) then
+        print*,i,uvf(i)
+      endif
+
+    enddo
+
+    stop
+
+    return
+
+  end function ddfc_ss_flux
+  !+-------------------------------------------------------------------+
+  !| The end of the function ddfc_ss_flux.                             |
+  !+-------------------------------------------------------------------+
+
+  function flux_recon_subs(vin,stype,ntype,dim,cc) result(vout)
+    
+    use schemes, only: len_sten_max,flux_rhs_642c,flux_rhs_642e,  &
+                       flux_rhs_442e,flux_rhs_442c
+    use tridiagonal,only: ptds_cal_com
+
+    character(len=4),intent(in) :: stype
+    integer,intent(in) :: ntype,dim
+    real(8),intent(in) :: vin(0:len_sten_max,-hm:dim+hm)
+    real(8),intent(in) :: cc(:,:)
+    real(8) :: vout(-1:dim)
+
+
+    ! local data
+    integer :: i,l,n
+    real(8) :: b(-1:dim),var1
+
+    if(stype=='642c') then
+      b   =flux_rhs_642c(vin,dim,hm,ntype)
+      vout=ptds_cal_com(b,cc)
+    elseif(stype=='442c') then
+      b   =flux_rhs_442c(vin,dim,hm,ntype)
+      vout=ptds_cal_com(b,cc)
+    elseif(stype=='642e') then
+      vout=flux_rhs_642e(vin,dim,hm,ntype)
+    elseif(stype=='442e') then
+      vout=flux_rhs_442e(vin,dim,hm,ntype)
+    endif
+
+    vout=0.125d0*vout
+
+    return
+
+  end function flux_recon_subs
   !
   !+-------------------------------------------------------------------+
   !| This function is to apply the MP limiter to reconstructured       |
@@ -232,6 +357,7 @@ module commfunc
   function ddfc_basic(f,stype,ntype,dim,af,cc,lfft) result(ddfc)
     !
     use singleton
+    use schemes,     only: diff2ec,diff4ec,diff6ec,diff8ec
     !
     ! arguments
     character(len=4),intent(in) :: stype
@@ -242,9 +368,11 @@ module commfunc
     real(8) :: ddfc(0:dim)
     !
     ! local data
-    integer :: nscheme,k
+    integer :: k
     real(8) :: b(0:dim)
     logical :: ffton
+    integer,save :: nscheme
+    logical,save :: firstcall=.true.
     ! integer(8),save :: plan_f,plan_b
     !
     complex(8),allocatable :: cf(:)
@@ -258,7 +386,10 @@ module commfunc
     !
     ! print*,mpirank,'|',dim,im
     !
-    read(stype(1:3),*) nscheme
+    if(firstcall) then
+      read(stype(1:3),*) nscheme
+      firstcall=.false.
+    endif
     !
     if(dim==0) then
       ddfc=f(1)-f(0)
@@ -349,6 +480,46 @@ module commfunc
     !
   end function ddfc_basic
   !
+  function ddfc_com(f,stype,ntype,m,hm,cc) result(ddfc)
+    !
+    use tridiagonal, only: ptds_cal_com
+    use schemes,     only: compact_scheme_rhs,diff2ec,diff4ec,diff6ec,diff8ec
+    !
+    ! arguments
+    character(len=4),intent(in) :: stype
+    integer,intent(in) :: ntype,m,hm
+    real(8),intent(in) :: f(-hm:m+hm)
+    real(8),intent(in) :: cc(:,:)
+    real(8) :: ddfc(0:m)
+    !
+    ! local data
+    real(8) :: b(0:m)
+    logical :: ffton
+    integer,save :: nscheme
+    logical,save :: firstcall=.true.
+    ! integer(8),save :: plan_f,plan_b
+    !
+    complex(8),allocatable :: cf(:)
+    real(8),allocatable :: kama(:)
+    !
+    ! print*,mpirank,'|',m,im
+    !
+    if(firstcall) then
+      read(stype(1:3),*) nscheme
+      firstcall=.false.
+    endif
+    !
+    if(stype(4:4)=='c') then
+      b   =compact_scheme_rhs(f,m,hm,ntype,stype)
+      ddfc=ptds_cal_com(b,cc)
+    elseif(stype(4:4)=='e') then
+      ddfc=diff4ec(f,m,nscheme,ntype)
+    endif
+
+    return
+    !
+  end function ddfc_com
+
   function ddfc_2d_lastcolum(f,stype,ntype,dim,af,cc) result(ddfc)
     !
     ! arguments
@@ -502,226 +673,7 @@ module commfunc
     return
     !
   end function ddfc_4d
-  !+-------------------------------------------------------------------+
-  !| This function is to return the finit difference value of 6th-order|
-  !| central scheme, inculding boundary closure.                       |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 19-02-2021  | Created by J. Fang @ Warrington.                    |
-  !+-------------------------------------------------------------------+
-  function diff8ec(vin,dim,ns,ntype) result(vout)
-    !
-    integer,intent(in) :: dim,ns,ntype
-    real(8),intent(in) :: vin(-hm:dim+hm)
-    real(8) :: vout(0:dim)
-    !
-    ! local data
-    integer :: i
-    !
-    if(ntype==1) then
-      !
-      if(ns==642) then
-        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
-        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
-        vout(1)=0.5d0*(vin(2)-vin(0))
-        vout(2)=num2d3*(vin(3)-vin(1))-num1d12*(vin(4)-vin(0))
-      else
-        print*,' !! ns=',ns
-        stop ' error 1 @ diff6c'
-      endif
-      !
-      do i=3,dim
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-      !
-    elseif(ntype==2) then
-      !
-      do i=0,dim-3
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-      !
-      if(ns==642) then
-        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
-        vout(dim-2) =num2d3*(vin(dim-1)-vin(dim-3))-                   &
-                    num1d12*(vin(dim)  -vin(dim-4))
-        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
-        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
-      else
-        print*,' !! ns=',ns
-        stop ' error 2 @ diff6c'
-      endif
-      !
-    elseif(ntype==3) then
-      do i=0,dim
-        vout(i)  =(672.d0*(vin(i+1)-vin(i-1))-                         &
-                   168.d0*(vin(i+2)-vin(i-2))+                         &
-                    32.d0*(vin(i+3)-vin(i-3))-                         &
-                     3.d0*(vin(i+4)-vin(i-4)))*num1d840
-      enddo
-    else
-      print*,' !! ntype=',ntype
-      stop ' !! errpr 3 @ diff6c'
-    endif
-    !
-  end function diff8ec
-  !
-  function diff6ec(vin,dim,ns,ntype) result(vout)
-    !
-    integer,intent(in) :: dim,ns,ntype
-    real(8),intent(in) :: vin(-hm:dim+hm)
-    real(8) :: vout(0:dim)
-    !
-    ! local data
-    integer :: i
-    !
-    if(ntype==1) then
-      !
-      if(ns==642) then
-        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
-        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
-        vout(1)=0.5d0*(vin(2)-vin(0))
-        vout(2)=num2d3*(vin(3)-vin(1))-num1d12*(vin(4)-vin(0))
-      else
-        print*,' !! ns=',ns
-        stop ' error 1 @ diff6c'
-      endif
-      !
-      do i=3,dim
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-      !
-    elseif(ntype==2) then
-      !
-      do i=0,dim-3
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-      !
-      if(ns==642) then
-        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
-        vout(dim-2) =num2d3*(vin(dim-1)-vin(dim-3))-                   &
-                    num1d12*(vin(dim)  -vin(dim-4))
-        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
-        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
-      else
-        print*,' !! ns=',ns
-        stop ' error 2 @ diff6c'
-      endif
-      !
-    elseif(ntype==3) then
-      do i=0,dim
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-    else
-      print*,' !! ntype=',ntype
-      stop ' !! errpr 3 @ diff6c'
-    endif
-    !
-  end function diff6ec
-  !
-  function diff4ec(vin,dim,ns,ntype) result(vout)
-    !
-    integer,intent(in) :: dim,ns,ntype
-    real(8),intent(in) :: vin(-hm:dim+hm)
-    real(8) :: vout(0:dim)
-    !
-    ! local data
-    integer :: i
-    !
-    if(ntype==1) then
-      !
-      if(ns==422) then
-        ! ns==422: 2-4-4-...-4-4-2
-        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
-        vout(1)=0.5d0*(vin(2)-vin(0))
-      else
-        print*,' !! ns=',ns
-        stop ' error 1 @ diff6c'
-      endif
-      !
-      do i=2,dim
-        vout(i)  =num2d3*(vin(i+1)-vin(i-1))-                         &
-                  num1d12*(vin(i+2)-vin(i-2))
-      enddo
-      !
-    elseif(ntype==2) then
-      !
-      do i=0,dim-2
-        vout(i)  =num2d3*(vin(i+1)-vin(i-1))-                         &
-                  num1d12*(vin(i+2)-vin(i-2))
-      enddo
-      !
-      if(ns==422) then
-        ! ns==422: 2-2-4-...-4-2-2
-        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
-        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
-      else
-        print*,' !! ns=',ns
-        stop ' error 2 @ diff6c'
-      endif
-      !
-    elseif(ntype==3) then
-      do i=0,dim
-        vout(i)  =num2d3*(vin(i+1)-vin(i-1))-                         &
-                  num1d12*(vin(i+2)-vin(i-2))
-      enddo
-    else
-      print*,' !! ntype=',ntype
-      stop ' !! errpr 3 @ diff6c'
-    endif
-    !
-  end function diff4ec
-  !
-  function diff2ec(vin,dim,ns,ntype) result(vout)
-    !
-    integer,intent(in) :: dim,ns,ntype
-    real(8),intent(in) :: vin(-hm:dim+hm)
-    real(8) :: vout(0:dim)
-    !
-    ! local data
-    integer :: i
-    !
-    if(ntype==1) then
-      !
-      ! vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
-      vout(0)=vin(1)-vin(0)
-      !
-      do i=1,dim
-        vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
-      enddo
-      !
-    elseif(ntype==2) then
-      !
-      do i=0,dim-1
-        vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
-      enddo
-      !
-      ! vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
-      vout(dim)  =-vin(dim-1)+vin(dim)
-      !
-    elseif(ntype==3) then
-      do i=0,dim
-        vout(i)  =0.5d0*(vin(i+1)-vin(i-1))
-      enddo
-    else
-      print*,' !! ntype=',ntype
-      stop ' !! errpr 3 @ diff6c'
-    endif
-    !
-  end function diff2ec
-  !+-------------------------------------------------------------------+
-  !| The end of the diffcen ddf.                                       |
-  !+-------------------------------------------------------------------+
+
   !
   !+-------------------------------------------------------------------+
   !| This function is to return the coefficients of a compact scheme.  |
@@ -2813,6 +2765,127 @@ module commfunc
   ! end of the subroutine ptds_ini.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
+  subroutine ptds_flux_ini(cc,af,dim,ntype)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(1:3)
+    real(8),allocatable,intent(out) :: cc(:,:)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(1),af2,af: input dat
+    ! cc: output array
+    ! dim: input dat
+    ! l: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    ! local data
+    integer :: l
+    !
+    allocate(cc(1:2,-1:dim))
+    !
+    if(dim==0) then
+      cc=0.d0
+      return
+    endif
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      cc(1,-1)=1.d0
+      cc(2,-1)=af(1)/cc(1,-1)
+      !
+      cc(1,0)=1.d0-af(2)*cc(2,-1)
+      cc(2,0)=af(2)/cc(1,0)
+      !
+      cc(1,1)=1.d0-af(3)*cc(2,0)
+      !
+      do l=1,dim-3
+        cc(2,l)=af(3)/cc(1,l)
+        cc(1,l+1)=1.d0-af(3)*cc(2,l)
+      end do
+      cc(2,dim-2)=af(3)/cc(1,dim-2)
+      !
+      cc(1,dim-1)=1.d0-af(3)*cc(2,dim-2)
+      cc(2,dim-1)=af(3)/cc(1,dim-1)
+      !
+      cc(1,dim)=1.d0
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      cc(1,-1)=1.d0
+      cc(2,-1)=0.d0
+      !
+      cc(1,0)=1.d0-af(3)*cc(2,-1)
+      cc(2,0)=af(3)/cc(1,0)
+      !
+      cc(1,1)=1.d0-af(3)*cc(2,0)
+      !
+      do l=1,dim-3
+        cc(2,l)=af(3)/cc(1,l)
+        cc(1,l+1)=1.d0-af(3)*cc(2,l)
+      end do
+      cc(2,dim-2)=af(3)/cc(1,dim-2)
+      !
+      cc(1,dim-1)=1.d0-af(2)*cc(2,dim-2)
+      cc(2,dim-1)=af(2)/cc(1,dim-1)
+      !
+      cc(1,dim)=1.d0-af(1)*cc(2,dim-1)
+    elseif(ntype==3) then
+      ! inner block
+      !
+      cc(1,-1)=1.d0
+      cc(2,-1)=0.d0
+      !
+      cc(1,0)=1.d0-af(3)*cc(2,-1)
+      cc(2,0)=af(3)/cc(1,0)
+      !
+      cc(1,1)=1.d0-af(3)*cc(2,0)
+      !
+      do l=1,dim-3
+        cc(2,l)=af(3)/cc(1,l)
+        cc(1,l+1)=1.d0-af(3)*cc(2,l)
+        ! if(mpirank==0) print*,l,cc(2,l),cc(1,l+1)
+      end do
+      cc(2,dim-2)=af(3)/cc(1,dim-2)
+      !
+      cc(1,dim-1)=1.d0-af(3)*cc(2,dim-2)
+      cc(2,dim-1)=af(3)/cc(1,dim-1)
+      !
+      cc(1,dim)=1.d0
+    elseif(ntype==4) then
+      ! the block with boundary at i==0 .and. i==im
+
+      cc(1,-1)=1.d0
+      cc(2,-1)=af(1)/cc(1,-1)
+      !
+      cc(1,0)=1.d0-af(2)*cc(2,-1)
+      cc(2,0)=af(2)/cc(1,0)
+      !
+      cc(1,1)=1.d0-af(3)*cc(2,0)
+      !
+      do l=1,dim-3
+        cc(2,l)=af(3)/cc(1,l)
+        cc(1,l+1)=1.d0-af(3)*cc(2,l)
+      end do
+      cc(2,dim-2)=af(3)/cc(1,dim-2)
+      !
+      cc(1,dim-1)=1.d0-af(2)*cc(2,dim-2)
+      cc(2,dim-1)=af(2)/cc(1,dim-1)
+      !
+      cc(1,dim)=1.d0-af(1)*cc(2,dim-1)
+      !
+    else
+      print*,'ntype=',ntype
+      print*, ' !! error in subroutine ptds_ini !'
+      stop
+    end if
+    !
+    cc(1,:)=1.d0/cc(1,:)
+    !
+    return
+    !
+  end subroutine ptds_flux_ini
+
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the RHS of tridiagonal martix 
   ! for A*x=b.
@@ -2955,7 +3028,7 @@ module commfunc
     return
     !
   end function ptds_rhs
-  !
+
   function ptds2d_rhs_lastcolum(vin,dim,ns,ntype,ncolm1,timerept) result(vout)
     !
     integer,intent(in) :: dim,ns,ntype,ncolm1
@@ -3571,7 +3644,78 @@ module commfunc
     return
     !
   end function ptds_cal
-  !!
+
+  function ptds_flux_cal(bd,af,cc,dim,ntype) result(xd)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(3),bd(-1:dim),cc(1:2,-1:dim)
+    real(8) :: xd(-1:dim)
+    !
+    ! local data
+    integer :: l
+    real(8),allocatable,dimension(:) :: yd
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(3): input dat
+    ! bd: input array
+    ! xd: output array
+    ! cc: input array
+    ! dim: input dat
+    ! l, yd: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate ( yd(-1:dim) )
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==-1
+      !
+      yd(-1)=bd(-1)*cc(1,-1)
+      yd(0)=(bd(0)-af(2)*yd(-1))*cc(1,0)
+      do l=1,dim-1
+        yd(l)=(bd(l)-af(3)*yd(l-1))*cc(1,l)
+      end do
+      yd(dim)=bd(dim)*cc(1,dim)
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      yd(-1)=bd(-1)*cc(1,-1)
+      do l=0,dim-2
+        yd(l)=(bd(l)-af(3)*yd(l-1))*cc(1,l)
+      end do
+      yd(dim-1)=(bd(dim-1)-af(2)*yd(dim-2))*cc(1,dim-1)
+      yd(dim)=(bd(dim)-af(1)*yd(dim-1))*cc(1,dim)
+      !
+    elseif(ntype==3) then
+      ! inner block
+      yd(-1)=bd(-1)*cc(1,-1)
+      do l=0,dim-1
+        yd(l)=(bd(l)-af(3)*yd(l-1))*cc(1,l)
+      end do
+      yd(dim)=bd(dim)*cc(1,dim)
+
+    elseif(ntype==4) then
+      ! the block with boundary at i=-1 and i=im
+      !
+      yd(-1)=bd(-1)*cc(1,-1)
+      yd(0)=(bd(0)-af(2)*yd(-1))*cc(1,0)
+      do l=1,dim-2
+        yd(l)=(bd(l)-af(3)*yd(l-1))*cc(1,l)
+      end do
+      yd(dim-1)=(bd(dim-1)-af(2)*yd(dim-2))*cc(1,dim-1)
+      yd(dim)=(bd(dim)-af(1)*yd(dim-1))*cc(1,dim)
+    else
+      print*, ' !! error in subroutine ptds_cal !'
+      stop
+    end if
+    !
+    xd(dim)=yd(dim)
+    do l=dim-1,-1,-1
+      xd(l)=yd(l)-cc(2,l)*xd(l+1)
+    end do
+    !
+    deallocate( yd )
+    !
+  end function ptds_flux_cal
+
   function ptds2d_cal_lastcolum(bd,af,cc,dim,ntype,ncolm1,timerept) result(xd)
     !
     integer,intent(in) :: dim,ntype,ncolm1
@@ -3993,7 +4137,7 @@ module commfunc
       end do
       !
     else
-      print*, ' !! error in subroutine ptds_cal !'
+      print*, ' !! error in subroutine ptdsfilter_cal !'
       stop
     end if
     !
@@ -4005,7 +4149,7 @@ module commfunc
     !
   end function ptdsfilter_cal
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! End of the function ptds_cal.
+  ! End of the function ptdsfilter_cal.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

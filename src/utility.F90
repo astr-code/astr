@@ -298,7 +298,20 @@ module utility
   !+-------------------------------------------------------------------+
   !| The end of the subroutine timerept.                               |
   !+-------------------------------------------------------------------+
-  !
+  
+  real function time_in_second()
+
+    integer :: start_values(8)
+
+    ! Record the start time
+    call date_and_time(values=start_values)
+
+    time_in_second = real(start_values(5) * 3600 + start_values(6) * 60 + start_values(7)) + real(start_values(8))*0.001
+
+    return
+
+  end function time_in_second
+
   !+-------------------------------------------------------------------+
   !| This subroutine is to init a text file, either create a new file  |
   !| to resume an old file.                                            |

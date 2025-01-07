@@ -116,13 +116,13 @@ module test
   !
   subroutine accuracytest
     !
-    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie,ia
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,difschm,      &
+                          alfa_filter,numq,is,ie,ia,hm
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp,ddfc_com
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,psum,pmax
-    use comsolver, only : alfa_con,cci,ccj,cck
+    use comsolver, only : alfa_con,cci,ccj,cck,dci,dcj,dck
     !
     ! local data
     integer :: i,j,k,n
@@ -137,27 +137,36 @@ module test
     do j=0,jm
     do i=0,im
       !
-      q(i,j,k,1)=sin(4.d0*x(i,j,k,1))
+      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))
       !
     enddo
     enddo
     enddo
     !
-    allocate(dqref(0:im))
-    do i=0,im
-      dqref(i)=4.d0*cos(4.d0*x(i,0,0,1))
+    allocate(dqref(0:jm))
+    do j=0,jm
+      dqref(j)=0.5d0*pi*cos(0.5d0*pi*x(0,j,0,2))
     enddo
     !
     call dataswap(q)
     !
-    allocate(dq(0:im))
+    allocate(dq(0:jm))
     !
-    dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(:,0,0,1,1)
+    ! dq(:)=ddfc_com(q(:,0,0,1),conschm,npdci,im,hm,cci)*dxi(0:im,0,0,1,1)
+    dq(:)=ddfc_com(q(0,:,0,1),difschm,npdcj,jm,hm,dcj)*dxi(0,0:jm,0,2,2)
+    ! ddfc_com(ff(:),difschm,npdcj,jm,hm,dcj)
+    ! dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(0:im,0,0,1,1)
     !
+    open(18,file='testout/ddx'//mpirankname//'.dat')
+    write(18,'(3(1X,A15))')'x','dqdx','cosx'
+    write(18,'(3(1X,E15.7E3))')(x(0,i,0,2),dq(i),dqref(i),i=0,jm)
+    close(18)
+    print*,' << testout/ddx'//mpirankname//'.dat'
+    ! !
     error1=0.d0
     error2=0.d0
     errorinf=0.d0
-    do i=1,im
+    do i=1,jm
       error1=error1+abs(dq(i)-dqref(i))
       error2=error2+(dq(i)-dqref(i))**2
       errorinf=max(errorinf,abs(dq(i)-dqref(i)))
@@ -294,95 +303,97 @@ module test
     ! print*,x(:,0,0,1)
     !
     ! testing ddx
-    ncolm=50
-    allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:ncolm))
-    allocate(dvtes(0:im,0:jm,0:km,1:ncolm,1:3))
-    dvtes=0.d0
-    !
-    time_beg=ptime() 
-    counter=0
-    do while(counter<10)
-    !  
-    counter=counter+1
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      do n=1,ncolm
-        call random_number(var1)
-        vtest(i,j,k,n)=var1
-      enddo
-      !
-    enddo
-    enddo
-    enddo
-    !
-    call dataswap(vtest)
-    !
-    ! allocate(ff(0:jm,0:km,ncolm,-hm:im+hm),dff(0:jm,0:km,ncolm,0:im))
-    ! do k=0,km
-    ! do j=0,jm
-    !   !
-    !   do n=1,ncolm
-    !     ff(j,k,n,:)=vtest(:,j,k,n)
-    !   enddo
-    !   !
-    ! enddo
-    ! enddo
-    ! dff=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+    ! ncolm=50
+    ! allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:ncolm))
+    ! allocate(dvtes(0:im,0:jm,0:km,1:ncolm,1:3))
+    ! dvtes=0.d0
+    ! !
+    ! time_beg=ptime() 
+    ! counter=0
+    ! do while(counter<10)
+    ! !  
+    ! counter=counter+1
     ! !
     ! do k=0,km
     ! do j=0,jm
+    ! do i=0,im
     !   !
     !   do n=1,ncolm
-    !     dvtes(:,j,k,n,1)=dvtes(:,j,k,n,1)+dff(j,k,n,:)*dxi(0:im,j,k,1,1)
-    !     dvtes(:,j,k,n,2)=dvtes(:,j,k,n,2)+dff(j,k,n,:)*dxi(0:im,j,k,1,2)
-    !     dvtes(:,j,k,n,3)=dvtes(:,j,k,n,3)+dff(j,k,n,:)*dxi(0:im,j,k,1,3)
+    !     call random_number(var1)
+    !     vtest(i,j,k,n)=var1
     !   enddo
     !   !
     ! enddo
     ! enddo
-    ! deallocate(ff,dff)
-    !
-    asize=(jm+1)*(km+1)*ncolm
-    allocate(f1(asize,-hm:im+hm),df1(asize,0:im))
-    s=0
-    do k=0,km
-    do j=0,jm
-      !
-      do n=1,ncolm
-        s=s+1
-        f1(s,:)=vtest(:,j,k,n)
-      enddo
-      !
-    enddo
-    enddo
-    !
-    df1=ddfc(f1,difschm,npdci,im,alfa_dif,dci)
-    !
-    s=0
-    do k=0,km
-    do j=0,jm
-      !
-      do n=1,ncolm
-        s=s+1
-        dvtes(:,j,k,n,1)=dvtes(:,j,k,n,1)+df1(s,:)*dxi(0:im,j,k,1,1)
-        dvtes(:,j,k,n,2)=dvtes(:,j,k,n,2)+df1(s,:)*dxi(0:im,j,k,1,2)
-        dvtes(:,j,k,n,3)=dvtes(:,j,k,n,3)+df1(s,:)*dxi(0:im,j,k,1,3)
-      enddo
-      !
-    enddo
-    enddo
-    deallocate(f1,df1)
-    !
-    print*,' ** counter: ',counter
-    !
-    enddo
-    !
-    subtime=subtime+ptime()-time_beg
-    !
-    print*,' ** time cost:',subtime
+    ! enddo
+    ! !
+    ! call dataswap(vtest)
+    ! !
+    ! ! allocate(ff(0:jm,0:km,ncolm,-hm:im+hm),dff(0:jm,0:km,ncolm,0:im))
+    ! ! do k=0,km
+    ! ! do j=0,jm
+    ! !   !
+    ! !   do n=1,ncolm
+    ! !     ff(j,k,n,:)=vtest(:,j,k,n)
+    ! !   enddo
+    ! !   !
+    ! ! enddo
+    ! ! enddo
+    ! ! dff=ddfc(ff,difschm,npdci,im,alfa_dif,dci)
+    ! ! !
+    ! ! do k=0,km
+    ! ! do j=0,jm
+    ! !   !
+    ! !   do n=1,ncolm
+    ! !     dvtes(:,j,k,n,1)=dvtes(:,j,k,n,1)+dff(j,k,n,:)*dxi(0:im,j,k,1,1)
+    ! !     dvtes(:,j,k,n,2)=dvtes(:,j,k,n,2)+dff(j,k,n,:)*dxi(0:im,j,k,1,2)
+    ! !     dvtes(:,j,k,n,3)=dvtes(:,j,k,n,3)+dff(j,k,n,:)*dxi(0:im,j,k,1,3)
+    ! !   enddo
+    ! !   !
+    ! ! enddo
+    ! ! enddo
+    ! ! deallocate(ff,dff)
+    ! !
+    ! asize=(jm+1)*(km+1)*ncolm
+    ! allocate(f1(asize,-hm:im+hm),df1(asize,0:im))
+    ! s=0
+    ! do k=0,km
+    ! do j=0,jm
+    !   !
+    !   do n=1,ncolm
+    !     s=s+1
+    !     f1(s,:)=vtest(:,j,k,n)
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+    ! !
+    ! df1=ddfc(f1,difschm,npdci,im,alfa_dif,dci)
+    ! !
+    ! s=0
+    ! do k=0,km
+    ! do j=0,jm
+    !   !
+    !   do n=1,ncolm
+    !     s=s+1
+    !     dvtes(:,j,k,n,1)=dvtes(:,j,k,n,1)+df1(s,:)*dxi(0:im,j,k,1,1)
+    !     dvtes(:,j,k,n,2)=dvtes(:,j,k,n,2)+df1(s,:)*dxi(0:im,j,k,1,2)
+    !     dvtes(:,j,k,n,3)=dvtes(:,j,k,n,3)+df1(s,:)*dxi(0:im,j,k,1,3)
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+    ! deallocate(f1,df1)
+    ! !
+    ! print*,' ** counter: ',counter
+    ! !
+    ! enddo
+    ! !
+    ! subtime=subtime+ptime()-time_beg
+    ! !
+    ! print*,' ** time cost:',subtime
+
+
     ! allocate(dq(0:im))
     ! !
     ! dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(:,0,0,1,1)

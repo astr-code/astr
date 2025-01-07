@@ -34,8 +34,11 @@ module comsolver
     use commvar, only : numq,npdci,npdcj,npdck,               &
                         conschm,difschm,lfilter,alfa_filter,hm,turbmode
     use commfunc,only : coeffcompac,ptds_ini,ptdsfilter_ini,           &
-                        ptds_aym_ini,genfilt10coef
+                        ptds_flux_ini,ptds_aym_ini,genfilt10coef
+    use tridiagonal, only: ptds_ini_com
     use models,  only : init_komegasst
+    use schemes, only: compact_scheme_lhs_init,compact_flux_lhs_init
+
     !
     ! local data
     integer :: nscheme,i
@@ -46,13 +49,19 @@ module comsolver
       !
       read(conschm(1:3),*) nscheme
       !
-      alfa_con=coeffcompac(nscheme)
+      ! alfa_con=coeffcompac(nscheme)
       !
       if(mod(nscheme/100,2)==0) then
         ! symmetrical central scheme
-        call ptds_ini(cci,alfa_con,im,npdci)
-        call ptds_ini(ccj,alfa_con,jm,npdcj)
-        call ptds_ini(cck,alfa_con,km,npdck)
+         
+        cci=compact_flux_lhs_init(m=im,ntype=npdci,scheme=conschm)
+        cck=compact_flux_lhs_init(m=km,ntype=npdck,scheme=conschm)
+        ccj=compact_flux_lhs_init(m=jm,ntype=npdcj,scheme=conschm)
+
+        call ptds_ini_com(cci)
+        call ptds_ini_com(ccj)
+        call ptds_ini_com(cck)
+
       else
         ! asymmetrical reconstruction upwind scheme
         call ptds_aym_ini(uci,alfa_con,im,npdci,windir='+')
@@ -72,12 +81,20 @@ module comsolver
       !
       read(difschm(1:3),*) nscheme
       !
-      alfa_dif=coeffcompac(nscheme)
+      ! alfa_dif=coeffcompac(nscheme)
       !
-      call ptds_ini(dci,alfa_dif,im,npdci)
-      call ptds_ini(dcj,alfa_dif,jm,npdcj)
-      call ptds_ini(dck,alfa_dif,km,npdck)
+      ! call ptds_ini(dci,alfa_dif,im,npdci)
+      ! call ptds_ini(dcj,alfa_dif,jm,npdcj)
+      ! call ptds_ini(dck,alfa_dif,km,npdck)
       !
+      dci=compact_scheme_lhs_init(m=im,ntype=npdci,scheme=difschm)
+      dcj=compact_scheme_lhs_init(m=jm,ntype=npdcj,scheme=difschm)
+      dck=compact_scheme_lhs_init(m=km,ntype=npdck,scheme=difschm)
+
+      call ptds_ini_com(dci)
+      call ptds_ini_com(dcj)
+      call ptds_ini_com(dck)
+
     endif
     !
     if(lfilter) then
@@ -114,7 +131,7 @@ module comsolver
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims
     use commarray, only : dxi
-    use commfunc,  only : ddfc
+    use commfunc,  only : ddfc,ddfc_com
     !
     ! arguments
     real(8),intent(in) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
@@ -133,7 +150,8 @@ module comsolver
       !
       ff(:)=var(:,j,k)
       !
-      df(:)=ddfc(ff(:),difschm,npdci,im,alfa_dif,dci)
+      ! df(:)=ddfc(ff(:),difschm,npdci,im,alfa_dif,dci)
+      df(:)=ddfc_com(ff(:),difschm,npdci,im,hm,dci)
       !
       dvar(:,j,k,1)=dvar(:,j,k,1)+df(:)*dxi(0:im,j,k,1,1)
       dvar(:,j,k,2)=dvar(:,j,k,2)+df(:)*dxi(0:im,j,k,1,2)
@@ -150,7 +168,8 @@ module comsolver
       !
       ff(:)=var(i,:,k)
       !
-      df(:)=ddfc(ff(:),difschm,npdcj,jm,alfa_dif,dcj)
+      ! df(:)=ddfc(ff(:),difschm,npdcj,jm,alfa_dif,dcj)
+      df(:)=ddfc_com(ff(:),difschm,npdcj,jm,hm,dcj)
       !
       dvar(i,:,k,1)=dvar(i,:,k,1)+df(:)*dxi(i,0:jm,k,2,1)
       dvar(i,:,k,2)=dvar(i,:,k,2)+df(:)*dxi(i,0:jm,k,2,2)
@@ -168,7 +187,8 @@ module comsolver
         !
         ff(:)=var(i,j,:)
         !
-        df(:)=ddfc(ff(:),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+        ! df(:)=ddfc(ff(:),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+        df(:)=ddfc_com(ff(:),difschm,npdck,km,hm,dck)
         !
         dvar(i,j,:,1)=dvar(i,j,:,1)+df(:)*dxi(i,j,0:km,3,1)
         dvar(i,j,:,2)=dvar(i,j,:,2)+df(:)*dxi(i,j,0:km,3,2)
@@ -201,7 +221,7 @@ module comsolver
                           turbmode
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,omg,tke,dtke, &
                           domg
-    use commfunc,  only : ddfc
+    use commfunc,  only : ddfc,ddfc_com
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -252,7 +272,8 @@ module comsolver
       endif
       !
       do n=1,ncolm
-        df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+        ! df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+        df(:,n)=ddfc_com(ff(:,n),difschm,npdci,im,hm,dci)
       enddo
       !
       dvel(:,j,k,1,1)=dvel(:,j,k,1,1)+df(:,1)*dxi(0:im,j,k,1,1)
@@ -321,7 +342,8 @@ module comsolver
         endif
         !
         do n=1,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+          ! df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+          df(:,n)=ddfc_com(ff(:,n),difschm,npdcj,jm,hm,dcj)
         enddo
         !
         dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
@@ -392,7 +414,8 @@ module comsolver
         endif
         !
         do n=1,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+          ! df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+          df(:,n)=ddfc_com(ff(:,n),difschm,npdck,km,hm,dck)
         enddo
         !
         dvel(i,j,:,1,1)=dvel(i,j,:,1,1)+df(:,1)*dxi(i,j,0:km,3,1)

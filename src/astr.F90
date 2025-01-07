@@ -74,7 +74,7 @@ program astr
     !
     call steploop
     !
-    call mpistop
+    call mpiend
     !
   else
     if(mpirank==0) print*,' ** all jobs done. **'

@@ -6465,7 +6465,89 @@ module bc
           !
         enddo
         enddo
-        !
+
+        j=-1
+        do k=0,km
+        do i=0,im
+          !
+          pe=prs(i,1,k)
+          !
+          vel(i,j,k,1)=-vel(i,1,k,1)
+          vel(i,j,k,2)=-vel(i,1,k,1)
+          vel(i,j,k,3)=-vel(i,1,k,1)
+          prs(i,j,k)  =  pe
+          tmp(i,j,k)  =2.d0*tw-tmp(i,1,k)
+          !
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=spc(i,1,k,jspec)
+          enddo
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+
+        enddo
+        enddo
+
+        j=-2
+        do k=0,km
+        do i=0,im
+          !
+          pe=prs(i,2,k)
+          !
+          vel(i,j,k,1)=-vel(i,2,k,1)
+          vel(i,j,k,2)=-vel(i,2,k,1)
+          vel(i,j,k,3)=-vel(i,2,k,1)
+          prs(i,j,k)  =  pe
+          tmp(i,j,k)  =2.d0*tw-tmp(i,2,k)
+          !
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=spc(i,2,k,jspec)
+          enddo
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          
+        enddo
+        enddo
+
       endif
       !
     elseif(ndir==4) then
@@ -6524,6 +6606,88 @@ module bc
         enddo
         enddo
         !
+        j=jm+1
+        do k=0,km
+        do i=0,im
+          !
+          pe=prs(i,jm-1,k)
+          !
+          vel(i,j,k,1)=-vel(i,jm-1,k,1)
+          vel(i,j,k,2)=-vel(i,jm-1,k,1)
+          vel(i,j,k,3)=-vel(i,jm-1,k,1)
+          prs(i,j,k)  =  pe
+          tmp(i,j,k)  =2.d0*tw-tmp(i,jm-1,k)
+          !
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=spc(i,jm-1,k,jspec)
+          enddo
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+
+        enddo
+        enddo
+
+        j=jm+2
+        do k=0,km
+        do i=0,im
+          !
+          pe=prs(i,jm-2,k)
+          !
+          vel(i,j,k,1)=-vel(i,jm-2,k,1)
+          vel(i,j,k,2)=-vel(i,jm-2,k,1)
+          vel(i,j,k,3)=-vel(i,jm-2,k,1)
+          prs(i,j,k)  =  pe
+          tmp(i,j,k)  =2.d0*tw-tmp(i,jm-2,k)
+          !
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=spc(i,jm-2,k,jspec)
+          enddo
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+
+        enddo
+        enddo
+        
       endif
       !
     else

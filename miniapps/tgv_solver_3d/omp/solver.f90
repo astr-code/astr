@@ -16,7 +16,13 @@ module solver
     use io, only: write_field
     use numericalflux, only: flux_solver_init
 
-  
+    
+    ! call fdm_solver_init
+
+    ! call solver_test
+
+    ! stop
+
     do while(nstep<maxstep)
       
       call rk3(ctime(2))
@@ -39,7 +45,7 @@ module solver
   subroutine solver_test
     
     use comvardef, only: hm,im,x,dx
-    use numerics, only: fdm_solver_1d
+    use numerics, only: fdm_solver_1d,fdm2nd_solver
 
     real(rtype) :: f(-hm:im+hm,1),df(0:im,1)
     real(rtype) :: dfref,error
@@ -52,9 +58,9 @@ module solver
     f(-hm:-1,1)=f(im-hm:im-1,1)
     f(im+1:im+hm,1)=f(1:hm,1)
 
-    call fdm_solver_1d(f,df,'i')
+    call fdm2nd_solver(f,df,'i')
 
-    df=df/dx
+    df=df/dx/dx
 
     open(12,file='data.dat')
     do i=0,im
@@ -66,7 +72,7 @@ module solver
 
     error=0._rtype
     do i=1,im
-      dfref=-2._rtype*sin(2._rtype*x(i,0,0,1))
+      dfref=-4._rtype*cos(2._rtype*x(i,0,0,1))
       error=error+(dfref-df(i,1))**2
     enddo
     error=error/real(im,rtype)
@@ -741,22 +747,22 @@ module solver
     use comvardef, only: reynolds,prandtl,const5,dx,dy,dz,ndims
     use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp
     use fluids,  only: miucal
-    use numerics,  only: fdm_solver_1d
+    use numerics,  only: fdm_solver_1d,fdm2nd_solver
     use bc, only: bchomovec
     !
     real,intent(inout),optional :: comptime
     !
-    real(rtype),allocatable,dimension(:,:,:,:),save :: sigma,qflux
-    real(rtype),allocatable :: f(:,:),df(:,:)
+    real(rtype),allocatable,dimension(:,:,:,:),save :: sigma,qflux,miu2,hcc2,stemp
+    real(rtype),allocatable :: f(:,:),df(:,:),f2(:,:),df2(:,:)
     !
     real :: tstart,tfinish
     !
     integer :: i,j,k
-    real(rtype) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
+    real(rtype) :: s11,s12,s13,s22,s23,s33,skk,miu
     logical,save :: firstcall=.true.
     !
-    !$ save f,df
-    !$OMP THREADPRIVATE(f,df)
+    !$ save f,df,f2,df2
+    !$OMP THREADPRIVATE(f,df,f2,df2)
 
 
     if(present(comptime)) then
@@ -765,23 +771,26 @@ module solver
     !
     if(firstcall) then
       allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
-                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),              &
+                 miu2(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:1),              &
+                 hcc2(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:1),              &
+                stemp(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:9) )
       !
       firstcall=.false.
     endif
     !
     !call progress_bar(0,4,'  ** diffusion terms ',10)
     !
-    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc)
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,s11,s12,s13,s22,s23,s33,skk,miu)
     !$OMP DO
     do k=0,km
     do j=0,jm
     do i=0,im
       !
       miu=miucal(tmp(i,j,k))/reynolds
-      hcc=(miu/prandtl)/const5
       !
-      miu2=2._rtype*miu
+      miu2(i,j,k,1)=2._rtype*miu
+      hcc2(i,j,k,1)=(miu/prandtl)/const5
       !
       s11=dvel(i,j,k,1,1)
       s12=0.5_rtype*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
@@ -792,22 +801,22 @@ module solver
       !
       skk=num1d3*(s11+s22+s33)
       !
-      sigma(i,j,k,1)=miu2*(s11-skk) !s11   
-      sigma(i,j,k,2)=miu2* s12      !s12  
-      sigma(i,j,k,3)=miu2* s13      !s13   
-      sigma(i,j,k,4)=miu2*(s22-skk) !s22   
-      sigma(i,j,k,5)=miu2* s23      !s23  
-      sigma(i,j,k,6)=miu2*(s33-skk) !s33 
+      sigma(i,j,k,1)=miu2(i,j,k,1)*(s11-skk) !s11   
+      sigma(i,j,k,2)=miu2(i,j,k,1)* s12      !s12  
+      sigma(i,j,k,3)=miu2(i,j,k,1)* s13      !s13   
+      sigma(i,j,k,4)=miu2(i,j,k,1)*(s22-skk) !s22   
+      sigma(i,j,k,5)=miu2(i,j,k,1)* s23      !s23  
+      sigma(i,j,k,6)=miu2(i,j,k,1)*(s33-skk) !s33 
       !
-      qflux(i,j,k,1)=hcc*dtmp(i,j,k,1)+sigma(i,j,k,1)*vel(i,j,k,1) +   &
-                                       sigma(i,j,k,2)*vel(i,j,k,2) +   &
-                                       sigma(i,j,k,3)*vel(i,j,k,3)
-      qflux(i,j,k,2)=hcc*dtmp(i,j,k,2)+sigma(i,j,k,2)*vel(i,j,k,1) +   &
-                                       sigma(i,j,k,4)*vel(i,j,k,2) +   &
-                                       sigma(i,j,k,5)*vel(i,j,k,3)
-      qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
-                                       sigma(i,j,k,5)*vel(i,j,k,2) +   &
-                                       sigma(i,j,k,6)*vel(i,j,k,3)
+      qflux(i,j,k,1)=sigma(i,j,k,1)*vel(i,j,k,1) +   &
+                     sigma(i,j,k,2)*vel(i,j,k,2) +   &
+                     sigma(i,j,k,3)*vel(i,j,k,3)
+      qflux(i,j,k,2)=sigma(i,j,k,2)*vel(i,j,k,1) +   &
+                     sigma(i,j,k,4)*vel(i,j,k,2) +   &
+                     sigma(i,j,k,5)*vel(i,j,k,3)
+      qflux(i,j,k,3)=sigma(i,j,k,3)*vel(i,j,k,1) +   &
+                     sigma(i,j,k,5)*vel(i,j,k,2) +   &
+                     sigma(i,j,k,6)*vel(i,j,k,3)
       ! 
     enddo
     enddo
@@ -820,97 +829,155 @@ module solver
     call bchomovec(qflux)
     !
     !call progress_bar(1,4,'  ** diffusion terms ',10)
-    !
+    
+    call bchomovec(miu2)
+    call bchomovec(hcc2)
+
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      stemp(i,j,k,1)=sigma(i,j,k,1)-num2d3*miu2(i,j,k,1)*(dvel(i,j,k,1,1))
+      stemp(i,j,k,2)=sigma(i,j,k,2)- 0.5d0*miu2(i,j,k,1)*(dvel(i,j,k,2,1))
+      stemp(i,j,k,3)=sigma(i,j,k,3)- 0.5d0*miu2(i,j,k,1)*(dvel(i,j,k,3,1))
+
+      stemp(i,j,k,4)=sigma(i,j,k,2)- 0.5d0*miu2(i,j,k,1)*(dvel(i,j,k,1,2))
+      stemp(i,j,k,5)=sigma(i,j,k,4)-num2d3*miu2(i,j,k,1)*(dvel(i,j,k,2,2))
+      stemp(i,j,k,6)=sigma(i,j,k,5)- 0.5d0*miu2(i,j,k,1)*(dvel(i,j,k,3,2))
+      
+      stemp(i,j,k,7)=sigma(i,j,k,3)- 0.5d0*miu2(i,j,k,1)*(dvel(i,j,k,1,3))
+      stemp(i,j,k,8)=sigma(i,j,k,5)- 0.5d0*miu2(i,j,k,1)*(dvel(i,j,k,2,3))
+      stemp(i,j,k,9)=sigma(i,j,k,6)-num2d3*miu2(i,j,k,1)*(dvel(i,j,k,3,3))
+    enddo
+    enddo
+    enddo
+
+    call bchomovec(stemp)
+
     !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
 
-    allocate(f(-hm:im+hm,1:4),df(0:im,1:4))
+    allocate(f(-hm:im+hm,1:6),df(0:im,1:6),f2(-hm:im+hm,1:4),df2(0:im,1:4))
     !
     !$OMP DO
     do k=0,km
     do j=0,jm
       !
       do i=-hm,im+hm
-        f(i,1)=sigma(i,j,k,1)
-        f(i,2)=sigma(i,j,k,2)
-        f(i,3)=sigma(i,j,k,3)
+        f(i,1)=stemp(i,j,k,1)
+        f(i,2)=stemp(i,j,k,2)
+        f(i,3)=stemp(i,j,k,3)
         f(i,4)=qflux(i,j,k,1)
+
+        f(i,5)=miu2(i,j,k,1)
+        f(i,6)=hcc2(i,j,k,1)
       enddo
-      !
+
       call fdm_solver_1d(f,df,'i')
-      !
+
+      do i=-hm,im+hm
+        f2(i,1)=vel(i,j,k,1)
+        f2(i,2)=vel(i,j,k,2)
+        f2(i,3)=vel(i,j,k,3)
+        f2(i,4)=tmp(i,j,k)
+      enddo
+
+      call fdm2nd_solver(f2,df2,'i')
+
       do i=0,im
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(i,1)/dx
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(i,2)/dx
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(i,3)/dx
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(i,4)/dx
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(i,1)/dx + num2d3*f(i,5)*df2(i,1)/dx/dx + num2d3*dvel(i,j,k,1,1)*df(i,5)/dx
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(i,2)/dx + 0.5d0* f(i,5)*df2(i,2)/dx/dx + 0.5d0* dvel(i,j,k,2,1)*df(i,5)/dx
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(i,3)/dx + 0.5d0* f(i,5)*df2(i,3)/dx/dx + 0.5d0* dvel(i,j,k,3,1)*df(i,5)/dx
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(i,4)/dx +        f(i,6)*df2(i,4)/dx/dx +        dtmp(i,j,k,1)  *df(i,6)/dx
       enddo
       !
     enddo
     enddo
     !$OMP END DO
     !
-    deallocate(f,df)
-    !
-    !call progress_bar(2,4,'  ** diffusion terms ',10)
-    !
-    allocate(f(-hm:jm+hm,1:4),df(0:jm,1:4))
+    deallocate(f,df,f2,df2)
+    
+
+    allocate(f(-hm:jm+hm,1:6),df(0:jm,1:6),f2(-hm:jm+hm,1:4),df2(0:jm,1:4))
     !
     !$OMP DO
     do k=0,km
     do i=0,im
       !
       do j=-hm,jm+hm
-        f(j,1)=sigma(i,j,k,2)
-        f(j,2)=sigma(i,j,k,4)
-        f(j,3)=sigma(i,j,k,5)
+        f(j,1)=stemp(i,j,k,4)
+        f(j,2)=stemp(i,j,k,5)
+        f(j,3)=stemp(i,j,k,6)
         f(j,4)=qflux(i,j,k,2)
+
+        f(j,5)= miu2(i,j,k,1)
+        f(j,6)= hcc2(i,j,k,1)
       enddo
       !
       call fdm_solver_1d(f,df,'j')
-      !
-      do j=0,jm
-        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(j,1)/dy
-        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(j,2)/dy
-        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(j,3)/dy
-        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(j,4)/dy
+
+      do j=-hm,jm+hm
+        f2(j,1)=vel(i,j,k,1)
+        f2(j,2)=vel(i,j,k,2)
+        f2(j,3)=vel(i,j,k,3)
+        f2(j,4)=tmp(i,j,k)
       enddo
-      !
+
+      call fdm2nd_solver(f2,df2,'j')
+
+      do j=0,jm
+        qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(j,1)/dy +  0.5d0*f(j,5)*df2(j,1)/dy/dy+ 0.5d0* dvel(i,j,k,1,2)*df(j,5)/dy
+        qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(j,2)/dy + num2d3*f(j,5)*df2(j,2)/dy/dy+ num2d3*dvel(i,j,k,2,2)*df(j,5)/dy
+        qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(j,3)/dy +  0.5d0*f(j,5)*df2(j,3)/dy/dy+ 0.5d0* dvel(i,j,k,3,2)*df(j,5)/dy
+        qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(j,4)/dy +        f(j,6)*df2(j,4)/dy/dy+        dtmp(i,j,k,2)  *df(j,6)/dy
+      enddo
+    !   !
     enddo
     enddo
     !$OMP END DO
+
+    deallocate(f,df,f2,df2)
     !
-    deallocate(f,df)
-    !
-    
+
     if(ndims==3) then
 
-      allocate(f(-hm:km+hm,1:4),df(0:km,1:4))
+      allocate(f(-hm:km+hm,1:6),df(0:km,1:6),f2(-hm:km+hm,1:4),df2(0:km,1:4))
       !
       !$OMP DO
       do j=0,jm
       do i=0,im
         !
         do k=-hm,km+hm
-          f(k,1)=sigma(i,j,k,3)
-          f(k,2)=sigma(i,j,k,5)
-          f(k,3)=sigma(i,j,k,6)
+          f(k,1)=stemp(i,j,k,7)
+          f(k,2)=stemp(i,j,k,8)
+          f(k,3)=stemp(i,j,k,9)
           f(k,4)=qflux(i,j,k,3)
+
+          f(k,5)=miu2(i,j,k,1)
+          f(k,6)=hcc2(i,j,k,1)
         enddo
-        !
+
         call fdm_solver_1d(f,df,'k')
-        !
+
+        do k=-hm,km+hm
+          f2(k,1)=vel(i,j,k,1)
+          f2(k,2)=vel(i,j,k,2)
+          f2(k,3)=vel(i,j,k,3)
+          f2(k,4)=tmp(i,j,k)
+        enddo
+
+        call fdm2nd_solver(f2,df2,'k')
+
         do k=0,km
-          qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(k,1)/dz
-          qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(k,2)/dz
-          qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(k,3)/dz
-          qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(k,4)/dz
+          qrhs(i,j,k,2)=qrhs(i,j,k,2)+df(k,1)/dz+ 0.5d0*f(k,5)*df2(k,1)/dz/dz+ 0.5d0*dvel(i,j,k,1,3)*df(k,5)/dz
+          qrhs(i,j,k,3)=qrhs(i,j,k,3)+df(k,2)/dz+ 0.5d0*f(k,5)*df2(k,2)/dz/dz+ 0.5d0*dvel(i,j,k,2,3)*df(k,5)/dz
+          qrhs(i,j,k,4)=qrhs(i,j,k,4)+df(k,3)/dz+num2d3*f(k,5)*df2(k,3)/dz/dz+num2d3*dvel(i,j,k,3,3)*df(k,5)/dz
+          qrhs(i,j,k,5)=qrhs(i,j,k,5)+df(k,4)/dz+       f(k,6)*df2(k,4)/dz/dz+       dtmp(i,j,k,3)  *df(k,6)/dz
         enddo
         !
       enddo
       enddo
       !$OMP END DO
       !
-      deallocate(f,df)
+      deallocate(f,df,f2,df2)
 
     endif
 

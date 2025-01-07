@@ -218,7 +218,8 @@ module solver
       call gradcal(timerept=ltimrpt)
       !
       if(mod(nconv,2)==0) then
-        call convrsdcal6(timerept=ltimrpt)
+        call convrsdflux(timerept=ltimrpt)
+        ! call convrsdcal6(timerept=ltimrpt)
       else
         !
         if(conschm(4:4)=='e') then
@@ -2171,6 +2172,168 @@ module solver
   !| The end of the subroutine chardecomp.                             |
   !+-------------------------------------------------------------------+
   !!
+  subroutine convrsdflux(timerept)
+    !
+    use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
+                        conschm,npdci,npdcj,npdck,is,ie,js,je,ks,ke
+    use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+    use commfunc, only: ddfc,ddfc_ss_flux
+    use comsolver, only : alfa_con,cci,ccj,cck
+    !
+    ! arguments
+    logical,intent(in),optional :: timerept
+    !
+    ! local data
+    integer :: i,j,k,jspc,jmod,n,nterm
+    real(8),allocatable :: fcs(:,:),dfcs(:,:),uu(:)
+    !
+    ! real(8) :: time_beg
+    ! real(8),save :: subtime=0.d0
+    !
+    nterm=numq+5
+
+    ! if(present(timerept) .and. timerept) time_beg=ptime() 
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(fcs(0:nterm,-hm:im+hm),dfcs(0:im,1:numq))
+    do k=ks,ke
+    do j=js,je
+      !
+      fcs(0,:) =jacob(:,j,k)
+      fcs(1,:) =dxi(:,j,k,1,1)*vel(:,j,k,1)+dxi(:,j,k,1,2)*vel(:,j,k,2) +  &
+                dxi(:,j,k,1,3)*vel(:,j,k,3)
+      fcs(2,:) =rho(:,j,k)
+      fcs(3,:) =vel(:,j,k,1)
+      fcs(4,:) =vel(:,j,k,2)
+      fcs(5,:) =vel(:,j,k,3)
+      fcs(6,:) =(q(:,j,k,5)+prs(:,j,k))/rho(:,j,k)
+      fcs(7,:) =prs(:,j,k)
+      fcs(8,:) =dxi(:,j,k,1,1)
+      fcs(9,:) =dxi(:,j,k,1,2)
+      fcs(10,:)=dxi(:,j,k,1,3)
+
+      if(num_species>0) then
+        do jspc=1,num_species
+          fcs(11+jspc,:)=spc(:,j,k,jspc)
+        enddo
+      endif
+      
+      dfcs(:,:)=ddfc_ss_flux(fcs,conschm,npdci,nterm,im,cci)
+
+      do i=is,ie
+        qrhs(i,j,k,:)=qrhs(i,j,k,:)+dfcs(i,:)
+      enddo
+
+    enddo
+    enddo
+    deallocate(fcs,dfcs)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    !
+    if(ndims>=2) then
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! calculating along j direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate(fcs(0:nterm,-hm:jm+hm),dfcs(0:jm,1:numq))
+
+      do k=ks,ke
+      do i=is,ie
+        
+        fcs(0,:) =jacob(i,:,k)
+        fcs(1,:) =dxi(i,:,k,2,1)*vel(i,:,k,1)+dxi(i,:,k,2,2)*vel(i,:,k,2) +  &
+                  dxi(i,:,k,2,3)*vel(i,:,k,3)
+        fcs(2,:) =rho(i,:,k)
+        fcs(3,:) =vel(i,:,k,1)
+        fcs(4,:) =vel(i,:,k,2)
+        fcs(5,:) =vel(i,:,k,3)
+        fcs(6,:) =(q(i,:,k,5)+prs(i,:,k))/rho(i,:,k)
+        fcs(7,:) =prs(i,:,k)
+        fcs(8,:) =dxi(i,:,k,2,1)
+        fcs(9,:) =dxi(i,:,k,2,2)
+        fcs(10,:)=dxi(i,:,k,2,3)
+
+        if(num_species>0) then
+          do jspc=1,num_species
+            fcs(11+jspc,:)=spc(i,:,k,jspc)
+          enddo
+        endif
+
+        ! dfcs(:,:)=ddfc_ss_flux(fcs,npdcj,nterm,jm)
+        dfcs(:,:)=ddfc_ss_flux(fcs,conschm,npdcj,nterm,jm,ccj)
+
+        do j=js,je
+          qrhs(i,j,k,:)=qrhs(i,j,k,:)+dfcs(j,:)
+        enddo
+
+      enddo
+      enddo
+      deallocate(fcs,dfcs)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end calculating along j direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    if(ndims==3) then
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! calculating along j direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate(fcs(0:nterm,-hm:km+hm),dfcs(0:km,1:numq))
+      do j=js,je
+      do i=is,ie
+
+        fcs(0,:) =jacob(i,j,:)
+        fcs(1,:) =dxi(i,j,:,3,1)*vel(i,j,:,1)+dxi(i,j,:,3,2)*vel(i,j,:,2) +  &
+                  dxi(i,j,:,3,3)*vel(i,j,:,3)
+        fcs(2,:) =rho(i,j,:)
+        fcs(3,:) =vel(i,j,:,1)
+        fcs(4,:) =vel(i,j,:,2)
+        fcs(5,:) =vel(i,j,:,3)
+        fcs(6,:) =(q(i,j,:,5)+prs(i,j,:))/rho(i,j,:)
+        fcs(7,:) =prs(i,j,:)
+        fcs(8,:) =dxi(i,j,:,3,1)
+        fcs(9,:) =dxi(i,j,:,3,2)
+        fcs(10,:)=dxi(i,j,:,3,3)
+
+        if(num_species>0) then
+          do jspc=1,num_species
+            fcs(11+jspc,:)=spc(i,j,:,jspc)
+          enddo
+        endif
+
+        ! dfcs(:,:)=ddfc_ss_flux(fcs,npdck,nterm,km)
+        dfcs(:,:)=ddfc_ss_flux(fcs,conschm,npdck,nterm,km,cck)
+
+        do k=ks,ke
+          qrhs(i,j,k,:)=qrhs(i,j,k,:)+dfcs(k,:)
+        enddo
+        !
+      enddo
+      enddo
+      deallocate(fcs,dfcs)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end calculating along j direction
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+    endif
+    !
+    ! if(present(timerept) .and. timerept) then
+    !   !
+    !   subtime=subtime+ptime()-time_beg
+    !   !
+    !   if(lio .and. lreport .and. ltimrpt) call timereporter(routine='convrsdflux', &
+    !                                          timecost=subtime, &
+    !                                           message='diffusion term with central scheme')
+    ! endif
+    !
+    return
+    !
+  end subroutine convrsdflux
+
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the convectional residual
   ! terms with compact six-order central scheme.
@@ -2367,12 +2530,13 @@ module solver
                           cp,flowtype
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
-    use commfunc,  only : ddfc
+    use commfunc,  only : ddfc,ddfc_com
     use comsolver, only : alfa_dif,dci,dcj,dck
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
     use tecio
     use parallel,  only : yflux_sendrecv
+
 #ifdef COMB
     use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
 #endif
@@ -2667,7 +2831,8 @@ module solver
       !|    calculate derivative      |
       !+------------------------------+
       do n=2,ncolm
-        df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+        ! df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+        df(:,n)=ddfc_com(ff(:,n),difschm,npdci,im,hm,dci)
       enddo
       !
       !+------------------------------+
@@ -2744,7 +2909,8 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+          ! df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+          df(:,n)=ddfc_com(ff(:,n),difschm,npdcj,jm,hm,dcj)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |
@@ -2823,7 +2989,8 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+          ! df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+          df(:,n)=ddfc_com(ff(:,n),difschm,npdck,km,hm,dck)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |

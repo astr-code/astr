@@ -788,7 +788,7 @@ module initialisation
   !| 2D vortex transport problem.                                      |
   !| ref: Visbal & Gaitonde, On the Use of Higher-Order Finite-        |
   !|      Difference Schemes on Curvilinear and Deforming Meshes.      |
-  !|     Journal of Computational Physics, 2002, 181: 155–185.         |                                      |
+  !|     Journal of Computational Physics, 2002, 181: 155–185.         |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |

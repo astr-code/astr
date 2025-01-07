@@ -42,6 +42,7 @@ module mainloop
     use commcal,  only: cflcal
     use ibmethod, only: ibforce
     use userdefine,only: udf_eom_set
+    use utility, only: time_in_second
     !
     ! local data
     real(8) :: time_beg,time_next_step
@@ -49,6 +50,7 @@ module mainloop
     logical,save :: firstcall = .true.
     integer,dimension(8) :: value
     real(8) :: time_total,time_dowhile
+    real :: time_loop_beg,time_loop_end
     !
     time_start=ptime()
     time_total  =0.d0
@@ -74,7 +76,8 @@ module mainloop
     !
     if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
                               message='init file')
-    !
+
+    time_loop_beg=time_in_second()
     do while(nstep<=maxstep)
       !
       time_beg=ptime()
@@ -176,7 +179,10 @@ module mainloop
       time=time+deltat
       !
     enddo
-    !
+    time_loop_end=time_in_second()
+    
+    if(mpirank==0) print*,' ** time cost on loops:',time_loop_end-time_loop_beg
+
     ! if(limmbou) call timerept
     !
     ! call ibforce

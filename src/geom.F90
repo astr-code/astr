@@ -104,15 +104,17 @@ module geom
     use commarray, only : x,jacob,dxi,cell,dgrid,dis2wall,bnorm_i0,    &
                           bnorm_im,bnorm_j0,bnorm_jm,bnorm_k0,bnorm_km
     use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
-    use commfunc,  only : coeffcompac,ptds_ini,ddfc,volhex,arquad
+    use commfunc,  only : coeffcompac,ptds_ini,ddfc_com,volhex,arquad
     use tecio
     use bc,       only : geombc,xyzbc
+    use schemes, only: compact_scheme_lhs_init
+    use tridiagonal, only: ptds_ini_com
     !
     ! local data
     character(len=4) :: cscheme
     integer :: nscheme
     integer :: i,j,k,m
-    real(8) :: alfa(3)
+    ! real(8) :: alfa(3)
     real(8), allocatable, dimension(:,:) :: gci,gcj,gck
     real(8), allocatable :: dx(:,:,:,:,:)
     real(8),allocatable :: phi(:),can(:,:,:,:)
@@ -133,12 +135,20 @@ module geom
     if(cscheme(4:4)=='c') then
       ! a compact scheme is used
       !
-      alfa=coeffcompac(nscheme)
+      ! alfa=coeffcompac(nscheme)
+      ! !
+      ! call ptds_ini(gci,alfa,im,npdci)
+      ! call ptds_ini(gcj,alfa,jm,npdcj)
+      ! call ptds_ini(gck,alfa,km,npdck)
       !
-      call ptds_ini(gci,alfa,im,npdci)
-      call ptds_ini(gcj,alfa,jm,npdcj)
-      call ptds_ini(gck,alfa,km,npdck)
-      !
+      gci=compact_scheme_lhs_init(m=im,ntype=npdci,scheme=cscheme)
+      gcj=compact_scheme_lhs_init(m=jm,ntype=npdcj,scheme=cscheme)
+      gck=compact_scheme_lhs_init(m=km,ntype=npdck,scheme=cscheme)
+
+      call ptds_ini_com(gci)
+      call ptds_ini_com(gcj)
+      call ptds_ini_com(gck)
+
     endif
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -147,7 +157,7 @@ module geom
     do k=0,km
     do j=0,jm
       do m=1,3
-        dx(0:im,j,k,m,1)=ddfc(x(:,j,k,m),cscheme,npdci,im,alfa,gci)
+        dx(0:im,j,k,m,1)=ddfc_com(x(:,j,k,m),cscheme,npdci,im,hm,gci)
       enddo
     enddo
     enddo
@@ -156,7 +166,7 @@ module geom
     do i=0,im
       !
       do m=1,3
-        dx(i,0:jm,k,m,2)=ddfc(x(i,:,k,m),cscheme,npdcj,jm,alfa,gcj)
+        dx(i,0:jm,k,m,2)=ddfc_com(x(i,:,k,m),cscheme,npdcj,jm,hm,gcj)
       enddo
       !
     enddo
@@ -165,17 +175,9 @@ module geom
     do j=0,jm
     do i=0,im
       !
-      if(lfftk) then
-        !
-        do m=1,2
-          dx(i,j,0:km,m,3)=ddfc(x(i,j,:,m),cscheme,npdck,km,alfa,gck,lfft=lfftk)
-        enddo
-        dx(i,j,0:km,3,3)=x(i,j,1,3)-x(i,j,0,3)
-      else
-        do m=1,3
-          dx(i,j,0:km,m,3)=ddfc(x(i,j,:,m),cscheme,npdck,km,alfa,gck)
-        enddo
-      endif
+      do m=1,3
+        dx(i,j,0:km,m,3)=ddfc_com(x(i,j,:,m),cscheme,npdck,km,hm,gck)
+      enddo
       !
     enddo
     enddo
@@ -421,27 +423,27 @@ module geom
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,3)-           &
                       dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,2))
-        dxi(0:im,j,k,2,1)=dxi(0:im,j,k,2,1)+ddfc(phi,cscheme,npdci,im,alfa,gci)
+        dxi(0:im,j,k,2,1)=dxi(0:im,j,k,2,1)+ddfc_com(phi,cscheme,npdci,im,hm,gci)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,1)-           &
                       dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,3))
-        dxi(0:im,j,k,2,2)=dxi(0:im,j,k,2,2)+ddfc(phi,cscheme,npdci,im,alfa,gci)
+        dxi(0:im,j,k,2,2)=dxi(0:im,j,k,2,2)+ddfc_com(phi,cscheme,npdci,im,hm,gci)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,2)-           &
                       dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,1))
-        dxi(0:im,j,k,2,3)=dxi(0:im,j,k,2,3)+ddfc(phi,cscheme,npdci,im,alfa,gci)
+        dxi(0:im,j,k,2,3)=dxi(0:im,j,k,2,3)+ddfc_com(phi,cscheme,npdci,im,hm,gci)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,2)-           &
                       dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,3))
-        dxi(0:im,j,k,3,1)=dxi(0:im,j,k,3,1)+ddfc(phi,cscheme,npdci,im,alfa,gci)
+        dxi(0:im,j,k,3,1)=dxi(0:im,j,k,3,1)+ddfc_com(phi,cscheme,npdci,im,hm,gci)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,3)-           &
                       dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,1))
-        dxi(0:im,j,k,3,2)=dxi(0:im,j,k,3,2)+ddfc(phi,cscheme,npdci,im,alfa,gci)
+        dxi(0:im,j,k,3,2)=dxi(0:im,j,k,3,2)+ddfc_com(phi,cscheme,npdci,im,hm,gci)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,1)-           &
                       dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,2))
-        dxi(0:im,j,k,3,3)=dxi(0:im,j,k,3,3)+ddfc(phi,cscheme,npdci,im,alfa,gci)
+        dxi(0:im,j,k,3,3)=dxi(0:im,j,k,3,3)+ddfc_com(phi,cscheme,npdci,im,hm,gci)
         !
       enddo
       enddo
@@ -453,27 +455,27 @@ module geom
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,2)-           &
                       dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,3))
-        dxi(i,0:jm,k,1,1)=dxi(i,0:jm,k,1,1)+ddfc(phi,cscheme,npdcj,jm,alfa,gcj)
+        dxi(i,0:jm,k,1,1)=dxi(i,0:jm,k,1,1)+ddfc_com(phi,cscheme,npdcj,jm,hm,gcj)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,3)-           &
                       dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,1))
-        dxi(i,0:jm,k,1,2)=dxi(i,0:jm,k,1,2)+ddfc(phi,cscheme,npdcj,jm,alfa,gcj)
+        dxi(i,0:jm,k,1,2)=dxi(i,0:jm,k,1,2)+ddfc_com(phi,cscheme,npdcj,jm,hm,gcj)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,1)-           &
                       dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,2))
-        dxi(i,0:jm,k,1,3)=dxi(i,0:jm,k,1,3)+ddfc(phi,cscheme,npdcj,jm,alfa,gcj)
+        dxi(i,0:jm,k,1,3)=dxi(i,0:jm,k,1,3)+ddfc_com(phi,cscheme,npdcj,jm,hm,gcj)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,3)-           &
                       dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,2))
-        dxi(i,0:jm,k,3,1)=dxi(i,0:jm,k,3,1)+ddfc(phi,cscheme,npdcj,jm,alfa,gcj)
+        dxi(i,0:jm,k,3,1)=dxi(i,0:jm,k,3,1)+ddfc_com(phi,cscheme,npdcj,jm,hm,gcj)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,1)-           &
                       dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,3))
-        dxi(i,0:jm,k,3,2)=dxi(i,0:jm,k,3,2)+ddfc(phi,cscheme,npdcj,jm,alfa,gcj)
+        dxi(i,0:jm,k,3,2)=dxi(i,0:jm,k,3,2)+ddfc_com(phi,cscheme,npdcj,jm,hm,gcj)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,2)-           &
                       dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,1))
-        dxi(i,0:jm,k,3,3)=dxi(i,0:jm,k,3,3)+ddfc(phi,cscheme,npdcj,jm,alfa,gcj)
+        dxi(i,0:jm,k,3,3)=dxi(i,0:jm,k,3,3)+ddfc_com(phi,cscheme,npdcj,jm,hm,gcj)
       enddo
       enddo
       deallocate( phi )
@@ -487,7 +489,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+          dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+ddfc_com(phi,cscheme,npdck,km,hm,gck)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,1)-           &
@@ -495,7 +497,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+          dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+ddfc_com(phi,cscheme,npdck,km,hm,gck)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,2)-           &
@@ -503,7 +505,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+          dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+ddfc_com(phi,cscheme,npdck,km,hm,gck)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,2)-           &
@@ -511,7 +513,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+          dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+ddfc_com(phi,cscheme,npdck,km,hm,gck)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,3)-           &
@@ -519,7 +521,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+          dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+ddfc_com(phi,cscheme,npdck,km,hm,gck)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,1)-           &
@@ -527,7 +529,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+ddfc(phi,cscheme,npdck,km,alfa,gck,lfft=lfftk)
+          dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+ddfc_com(phi,cscheme,npdck,km,hm,gck)
         endif
         !
       enddo
@@ -570,25 +572,25 @@ module geom
     !
     do k=0,km
     do j=0,jm
-      can(:,j,k,1)=can(:,j,k,1)+ddfc(dxi(:,j,k,1,1),cscheme,npdci,im,alfa,gci)
-      can(:,j,k,2)=can(:,j,k,2)+ddfc(dxi(:,j,k,1,2),cscheme,npdci,im,alfa,gci)
-      can(:,j,k,3)=can(:,j,k,3)+ddfc(dxi(:,j,k,1,3),cscheme,npdci,im,alfa,gci)
+      can(:,j,k,1)=can(:,j,k,1)+ddfc_com(dxi(:,j,k,1,1),cscheme,npdci,im,hm,gci)
+      can(:,j,k,2)=can(:,j,k,2)+ddfc_com(dxi(:,j,k,1,2),cscheme,npdci,im,hm,gci)
+      can(:,j,k,3)=can(:,j,k,3)+ddfc_com(dxi(:,j,k,1,3),cscheme,npdci,im,hm,gci)
     enddo
     enddo
     !
     do k=0,km
     do i=0,im
-      can(i,:,k,1)=can(i,:,k,1)+ddfc(dxi(i,:,k,2,1),cscheme,npdcj,jm,alfa,gcj)
-      can(i,:,k,2)=can(i,:,k,2)+ddfc(dxi(i,:,k,2,2),cscheme,npdcj,jm,alfa,gcj)
-      can(i,:,k,3)=can(i,:,k,3)+ddfc(dxi(i,:,k,2,3),cscheme,npdcj,jm,alfa,gcj)
+      can(i,:,k,1)=can(i,:,k,1)+ddfc_com(dxi(i,:,k,2,1),cscheme,npdcj,jm,hm,gcj)
+      can(i,:,k,2)=can(i,:,k,2)+ddfc_com(dxi(i,:,k,2,2),cscheme,npdcj,jm,hm,gcj)
+      can(i,:,k,3)=can(i,:,k,3)+ddfc_com(dxi(i,:,k,2,3),cscheme,npdcj,jm,hm,gcj)
     enddo
     enddo
     !
     do j=0,jm
     do i=0,im
-      can(i,j,:,1)=can(i,j,:,1)+ddfc(dxi(i,j,:,3,1),cscheme,npdck,km,alfa,gck,lfft=lfftk)
-      can(i,j,:,2)=can(i,j,:,2)+ddfc(dxi(i,j,:,3,2),cscheme,npdck,km,alfa,gck,lfft=lfftk)
-      can(i,j,:,3)=can(i,j,:,3)+ddfc(dxi(i,j,:,3,3),cscheme,npdck,km,alfa,gck,lfft=lfftk)
+      can(i,j,:,1)=can(i,j,:,1)+ddfc_com(dxi(i,j,:,3,1),cscheme,npdck,km,hm,gck)
+      can(i,j,:,2)=can(i,j,:,2)+ddfc_com(dxi(i,j,:,3,2),cscheme,npdck,km,hm,gck)
+      can(i,j,:,3)=can(i,j,:,3)+ddfc_com(dxi(i,j,:,3,3),cscheme,npdck,km,hm,gck)
       !
     enddo
     enddo
