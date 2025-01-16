@@ -1,0 +1,62 @@
+module vars
+    use cudafor
+    ! 
+    type(dim3) :: grids1, blocks1
+    integer :: istat
+    character(len=100) :: error_string
+    integer,allocatable,dimension(:,:,:) :: a, b
+    integer,allocatable,dimension(:,:,:), device :: a_dev, b_dev
+    integer :: d = 3, n = 3
+    integer, device :: d_dev = 3, n_dev = 3
+end module vars
+
+module kernels
+    use cudafor
+    use vars
+    ! 
+    implicit none
+    ! 
+    contains
+    attributes(global) subroutine kernel1
+    use cudafor
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1 - d_dev
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1 - d_dev 
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1 - d_dev
+    ! 
+    if (      kx>=-d_dev .and. kx<=n_dev+d_dev .and. &
+              jx>=-d_dev .and. jx<=n_dev+d_dev .and. &
+              ix>=-d_dev .and. ix<=n_dev+d_dev) then
+      b_dev(ix, jx, kx) = a_dev(ix, jx, kx)
+    end if
+    return
+  end subroutine kernel1
+end module kernels
+
+program testing
+    use vars
+    use kernels
+    ! 
+    implicit none
+    ! 
+    blocks1 = dim3(8, 8, 8)
+    grids1 = dim3(3, 3, 3)
+    ! 
+    allocate(a(-d:n+d, -d:n+d, -d:n+d), a_dev(-d:n+d, -d:n+d, -d:n+d))
+    allocate(b(-d:n+d, -d:n+d, -d:n+d), b_dev(-d:n+d, -d:n+d, -d:n+d))
+    !
+    a = 10
+    a_dev = a
+    b_dev = 0
+    ! 
+    call kernel1<<<grids1, blocks1>>>
+    ! 
+    b = b_dev
+    ! 
+    print *, a(:, 0, 0)
+    print *, b(:, 0, 0)
+    ! 
+end program testing

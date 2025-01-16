@@ -1,0 +1,127 @@
+module vars
+  use cudafor
+  ! 
+  implicit none
+  ! 
+  integer :: im=320,jm=320,km=320,hm=5
+  integer, device :: im_dev=320,jm_dev=320,km_dev=320,hm_dev=5
+  ! 
+  real(8),parameter :: pi=4.d0*atan(1.0_8), &
+                       num1d60 =1.d0/60.d0
+  ! 
+  type(dim3) :: grids, blocks
+  integer :: istat
+  character(len=100) :: error_string
+  real :: tstart,tfinish,ctime(12)
+  ! 
+  real(8) :: dx,dy,dz
+  real(8),allocatable,dimension(:,:,:,:) :: x, vel
+  real(8),allocatable,dimension(:,:,:,:,:) :: dvel
+  ! 
+  real(8),allocatable,dimension(:,:,:,:),device :: vel_dev
+  real(8),allocatable,dimension(:,:,:,:,:),device :: dvel_dev
+  real(8), device :: dx_dev,dy_dev,dz_dev
+  ! 
+  integer, device :: ind
+  ! 
+end module vars
+
+module kernels
+  use cudafor
+  use vars
+  ! 
+  implicit none
+  ! 
+  contains
+  attributes(global) subroutine gradcal_kernel(ind)
+    use cudafor
+    use vars, only: im_dev, jm_dev, km_dev, num1d60, &
+                    dx_dev, &
+                    vel_dev, dvel_dev
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx, iter
+    integer, device :: ind
+    real(8), device :: vout, d_dev
+    ! 
+    d_dev = 1.0
+    ! 
+    if (ind == 1) then
+      d_dev = dx_dev
+    end if
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      do iter = 1,3
+        vout =0.75d0 *(vel_dev(ix+1, jx, kx, iter)-vel_dev(ix-1, jx, kx, iter))- &
+              0.15d0 *(vel_dev(ix+2, jx, kx, iter)-vel_dev(ix-2, jx, kx, iter))+ &
+              num1d60 *(vel_dev(ix+3, jx, kx, iter)-vel_dev(ix-3, jx, kx, iter))
+
+        dvel_dev(ix, jx, kx, iter, ind) = vout/d_dev
+      end do
+    end if
+    return
+  end subroutine gradcal_kernel
+end module kernels
+
+program gpu_comp
+  use vars
+  use kernels
+  ! 
+  implicit none
+  ! 
+  integer :: i,j,k
+  ! 
+  allocate( x(0:im,0:jm,0:km,1:3))
+  allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+  allocate( vel_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+  allocate( dvel(0:im,0:jm,0:km,1:3,1:3))
+  allocate( dvel_dev(0:im,0:jm,0:km,1:3,1:3))
+  ! 
+  dx=2.d0*pi/dble(im)
+  dy=2.d0*pi/dble(jm)
+  dz=2.d0*pi/dble(km)
+  ! 
+  do k=0,km
+  do j=0,jm
+  do i=0,im
+    x(i,j,k,1)  =2.d0*pi/dble(im)*dble(i)
+    x(i,j,k,2)  =2.d0*pi/dble(jm)*dble(j)
+    x(i,j,k,3)  =2.d0*pi/dble(km)*dble(k)
+    !
+    vel(i,j,k,1)= sin(x(i,j,k,1))*cos(x(i,j,k,2))*cos(x(i,j,k,3))
+    vel(i,j,k,2)=-cos(x(i,j,k,1))*sin(x(i,j,k,2))*cos(x(i,j,k,3))
+    vel(i,j,k,3)=0.d0
+  end do
+  end do
+  end do
+  ! 
+  vel_dev = vel
+  dx_dev = dx; dy_dev = dy; dz_dev = dz
+  ! 
+  blocks = dim3(8, 8, 8)
+  ! grids = dim3(17, 17, 17)
+  grids = dim3(65, 65, 65)
+  !
+  ind = 1
+  ! 
+  call cpu_time(tstart)
+  ! 
+  call gradcal_kernel<<<grids, blocks>>>(ind)
+  !
+  istat = cudaGetLastError()
+  ! 
+  dvel = dvel_dev
+  ! 
+  call cpu_time(tfinish)
+  ! 
+  ctime(1) = tfinish - tstart
+  ! 
+  print *, "Time Taken : ", ctime(1) 
+  print *, "vel  : ", vel(0:1,0:1,0:1, 1)
+  print *, "dvel : ", dvel(0:1,0:1,0:1,1,1)
+  ! 
+end program gpu_comp
