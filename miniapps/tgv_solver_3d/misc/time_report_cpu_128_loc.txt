@@ -1,0 +1,16 @@
+-----------cpu time cost---------
+---------------------------------
+     total time |      284.893 s 
+            rk3 |      284.444 s 
+                                 
+    write (rk3) |        0.000 s 
+ intermed steps |        6.648 s 
+         bchomo |        9.431 s 
+         rhscal |      200.674 s 
+        gradcal |       38.011 s 
+     convection |       76.157 s 
+      diffusion |       83.600 s 
+        filterq |       54.556 s 
+        diff6ec |        0.000 s 
+         q2fvar |       10.693 s 
+---------------------------------

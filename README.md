@@ -1,57 +1,51 @@
 # ASTR code 
 Version 2.0 
 
-ASTR code is a high-order finite-difference flow solver for compressible turbulence research.
+ASTR code is a high-order finite-difference flow solver for compressible turbulence research. This project explores the usage of CUDA-Fortran to parallelise the ASTR code. The tgv solver for a 3D case has been parallelised using CUDA.
 
 # Download, Installation and Compilation
-Required dependencies: Fortran 90, MPI, HDF5
+Required dependencies: Fortran 90, NVIDIA HPC SDK, CMAKE
 
-## Download the astr code:
+The installation guide for NVIDIA HPC SDK can be found at [Installation Guide](https://docs.nvidia.com/hpc-sdk/hpc-sdk-install-guide/index.html)
 
-git clone git@github.com:astr-code/astr.git
+## Download the gpu accelerated astr code:
 
-## Compilation and installation:
-ASTR 2.0 supports both gnu make and cmake.
-For the use of gnu make, do:
-make 
-in the directory containing src folder, and the executable will be found as ./bin/astr 
+Clone the git repository:
+```
+$ git clone https://github.com/terencel411/astr.git
+```
+## Compilation:
+The `Makefile` gives a complete and safe way of compiling the code.
 
-The cmake gives a more complete and safe way of compiling and installing the code.
-By default ASTR solves equations under non-dimensional form, unless the chemstry is included.
+Go to the directory where the miniapps code is present
 
-create a case folder, e.g.
-mkdir test_case
-sh path_to_the_source/script/astr.case.creater #create a new case
+```
+$ cd astr/miniapps/tgv_solver_3d
+```
 
-cmake path_to_the_source
-cmake --build 
-cmake --install 
-ctest -L nondim
+The cpu and the gpu accelerated codes (`tgvsolver_cpu.f90` and `tgvsolver_gpu.cuf`) are present in the same directory, which can be compiled using the following cmake commands
 
-The code will be installed in test_case and excutable can be found at test_case/bin/astr
+Compile and execute the cpu & gpu code
 
-If you want to use the chemstry function, you need first to install cantera. After download and unpack the cantera, you can use the following script to install:
-python scons/scripts/scons.py build python_package=none FORTRAN=<your fortran compiler> f90_interface=y prefix=<the directory of centera to install> boost_inc_dir=<to boost directory>
+```
+$ cmake all
+```
 
-python scons/scripts/scons.py test
+The cpu and gpu code can also be compiled and executed separately
 
-python scons/scripts/scons.py install
+```
+$ cmake cpu
+$ cmake gpu
+```
 
-you may need to make and test ASTR with chemstry with following cmake commands:
+## Acceleration Comparison
+The time acceleration statistics can be obtained by running the following command. 
 
-cmake -DCHEMISTRY=TRUE -DCANTERA_DIR=path_to_cantera path_to_the_source
+```
+$ cmake compare
+```
 
-cmake --build 
-
-cmake --install 
-
-ctest -L combustion
-
-
-## Run the solver:
-
-Once the excutable is built, a typical simulation can be run as,
-mpirun -np 8 ./astr run ./datin/input_file
+A text file `time_report.txt` will be generated with the accelerations statistics.
 
 
 
