@@ -42,6 +42,7 @@ module parallel
   !
   interface datasync
     module procedure array3d_sync
+    module procedure interface_sync
   end interface
   !
   interface pmerg
@@ -3823,6 +3824,80 @@ module parallel
   !+-------------------------------------------------------------------+
   !| The end of the subroutine array3d_sync.                           |
   !+-------------------------------------------------------------------+
+
+  !!+------------------------------------------------------------------+
+  !| This subroutine is used to synchronise the interface.             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 08-Feb-2021 | Created by J. Fang @ Warringon.                     |
+  !+-------------------------------------------------------------------+
+  subroutine interface_sync(var,nvar)
+
+    integer,intent(in) :: nvar
+    real(8),intent(inout) :: var(0:im,0:jm,0:km,1:nvar)
+
+
+    integer :: req(2), err(2 ), ierr, n_data
+    real(8),allocatable,dimension(:,:,:) :: dsend,drecv
+
+    mpitag=mpitag+1
+
+    ! send from righ to left
+    allocate(dsend(0:jm-1,0:km-1,1:nvar),drecv(0:jm-1,0:km-1,1:nvar))
+    n_data=jm*km*nvar
+
+    dsend(0:jm-1,0:km-1,1:nvar)=var(0,0:jm-1,0:km-1,1:nvar)
+
+    call mpi_isend(dsend, n_data, mpi_real8, mpileft, mpitag, mpi_comm_world, req(1), err(1))
+    call mpi_irecv(drecv, n_data, mpi_real8, mpiright,mpitag, mpi_comm_world, req(2), err(2))
+
+    call mpi_waitall(2, req, mpi_statuses_ignore, ierr)
+    
+    var(im,0:jm-1,0:km-1,1:nvar)=drecv(0:jm-1,0:km-1,1:nvar)
+
+    deallocate(dsend,drecv)
+
+    ! send up to down
+    allocate(dsend(0:im,0:km-1,1:nvar),drecv(0:im,0:km-1,1:nvar))
+    n_data=(im+1)*km*nvar
+
+    dsend(0:im,0:km-1,1:nvar)=var(0:im,0,0:km-1,1:nvar)
+
+    call mpi_isend(dsend, n_data, mpi_real8, mpidown, mpitag, mpi_comm_world, req(1), err(1))
+    call mpi_irecv(drecv, n_data, mpi_real8, mpiup,   mpitag, mpi_comm_world, req(2), err(2))
+
+    call mpi_waitall(2, req, mpi_statuses_ignore, ierr)
+
+    var(0:im,jm,0:km-1,1:nvar)=drecv(0:im,0:km-1,1:nvar)
+
+    deallocate(dsend,drecv)
+
+    ! send back to front
+    if(ksize==1) then
+      var(0:im,0:jm,km,1:nvar)=var(0:im,0:jm,0,1:nvar)
+    else
+      allocate(dsend(0:im,0:jm,1:nvar),drecv(0:im,0:jm,1:nvar))
+      n_data=(im+1)*(jm+1)*nvar
+  
+      dsend(0:im,0:jm,1:nvar)=var(0:im,0:jm,0,1:nvar)
+  
+      call mpi_isend(dsend, n_data, mpi_real8, mpiback, mpitag, mpi_comm_world, req(1), err(1))
+      call mpi_irecv(drecv, n_data, mpi_real8, mpifront,mpitag, mpi_comm_world, req(2), err(2))
+  
+      call mpi_waitall(2, req, mpi_statuses_ignore, ierr)
+  
+      var(0:im,0:jm,km,1:nvar)=drecv(0:im,0:jm,1:nvar)
+  
+      deallocate(dsend,drecv)
+  
+      call mpi_waitall(2, req, mpi_statuses_ignore, ierr)
+    endif
+
+  end subroutine interface_sync
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine interface_sync.                         |
+  !+-------------------------------------------------------------------+
   !!
   !!+------------------------------------------------------------------+
   !| This subroutine is used to swap a 4-D tensor.                     |
@@ -5697,7 +5772,47 @@ module parallel
   !+-------------------------------------------------------------------+
   !| The end of the subroutine psend_rel2d_array.                      |
   !+-------------------------------------------------------------------+
-  !
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to send and recive data with non-block send    |
+  !| and receive.                                                      | 
+  !| The source:  https://github.com/xcompact3d/x3d2                   |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 14-04-2025  | Created by J. Fang @ Liverpool                      |
+  !+-------------------------------------------------------------------+
+  subroutine sendrecv_fields(f_recv_s, f_recv_e, f_send_s, f_send_e, &
+                             n_data, prev, next)
+    use commvar, only: dp
+
+    implicit none
+
+    real(dp), dimension(:, :, :), intent(out) :: f_recv_s, f_recv_e
+    real(dp), dimension(:, :, :), intent(in) :: f_send_s, f_send_e
+    integer, intent(in) :: n_data, prev, next
+
+    integer :: req(4), err(4), ierr
+
+    mpitag=mpitag+1
+
+    call MPI_Isend(f_send_s, n_data, mpi_real8, &
+                   prev, mpitag, MPI_COMM_WORLD, req(1), err(1))
+    call MPI_Irecv(f_recv_e, n_data, mpi_real8, &
+                   next, mpitag, MPI_COMM_WORLD, req(2), err(2))
+    call MPI_Isend(f_send_e, n_data, mpi_real8, &
+                   next, mpitag, MPI_COMM_WORLD, req(3), err(3))
+    call MPI_Irecv(f_recv_s, n_data, mpi_real8, &
+                   prev, mpitag, MPI_COMM_WORLD, req(4), err(4))
+
+    call MPI_Waitall(4, req, MPI_STATUSES_IGNORE, ierr)
+
+
+  end subroutine sendrecv_fields
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine sendrecv_fields.                        |
+  !+-------------------------------------------------------------------+
+
 end module parallel
 !+---------------------------------------------------------------------+
 !| The end of the module parallel.                                     |

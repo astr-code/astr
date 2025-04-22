@@ -189,7 +189,7 @@ module solver
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
                           recon_schem,limmbou,lchardecomp,lihomo
     use commcal,   only : ShockSolid,ducrossensor
-    use comsolver, only : gradcal
+    use comsolver, only : gradcal,gradcal_x3d2
     use userdefine,only : udf_src
     use tecio
     !
@@ -215,10 +215,12 @@ module solver
         firstcall=.false.
       endif
       !
-      call gradcal(timerept=ltimrpt)
+      ! call gradcal(timerept=ltimrpt)
+      call gradcal_x3d2
       !
       if(mod(nconv,2)==0) then
-        call convrsdcal6(timerept=ltimrpt)
+        ! call convrsdcal6(timerept=ltimrpt)
+        call convrsdcal6_x3d2
       else
         !
         if(conschm(4:4)=='e') then
@@ -2170,7 +2172,109 @@ module solver
   !+-------------------------------------------------------------------+
   !| The end of the subroutine chardecomp.                             |
   !+-------------------------------------------------------------------+
-  !!
+  
+  subroutine convrsdcal6_x3d2
+
+    use commvar,  only : im,jm,km,hm,numq
+    use commarray,only : x,q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
+    use x3d2,     only : ddf_x3d2,exec_dist_tds_compact
+    use tecio
+
+    ! local data
+    real(8),allocatable :: fcs(:,:,:,:),dfcs(:,:,:,:),uu(:)
+    integer :: i,j,k
+
+    allocate(dfcs(0:im,0:jm,0:km,1:numq))
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate(fcs(-hm:im+hm,0:jm,0:km,1:numq),uu(-hm:im+hm))
+
+    do k=0,km
+    do j=0,jm
+      
+      uu(:)=dxi(:,j,k,1,1)*vel(:,j,k,1)+dxi(:,j,k,1,2)*vel(:,j,k,2) +  &
+            dxi(:,j,k,1,3)*vel(:,j,k,3)
+      fcs(:,j,k,1)=jacob(:,j,k)*  q(:,j,k,1)*uu
+      fcs(:,j,k,2)=jacob(:,j,k)*( q(:,j,k,2)*uu+dxi(:,j,k,1,1)*prs(:,j,k) )
+      fcs(:,j,k,3)=jacob(:,j,k)*( q(:,j,k,3)*uu+dxi(:,j,k,1,2)*prs(:,j,k) )
+      fcs(:,j,k,4)=jacob(:,j,k)*( q(:,j,k,4)*uu+dxi(:,j,k,1,3)*prs(:,j,k) )
+      fcs(:,j,k,5)=jacob(:,j,k)*( q(:,j,k,5)+prs(:,j,k) )*uu
+      
+    enddo
+    enddo
+
+    dfcs=ddf_x3d2(u=fcs,nvar=numq,dir=1)
+
+    qrhs(0:im,0:jm,0:km,1:numq)=qrhs(0:im,0:jm,0:km,1:numq)+dfcs(0:im,0:jm,0:km,1:numq) 
+
+    deallocate(fcs,uu)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along i direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    allocate(fcs(0:im,-hm:jm+hm,0:km,1:numq),uu(-hm:jm+hm))
+
+    do k=0,km
+    do i=0,im   
+      uu(:)=dxi(i,:,k,2,1)*vel(i,:,k,1)+dxi(i,:,k,2,2)*vel(i,:,k,2) +  &
+            dxi(i,:,k,2,3)*vel(i,:,k,3)
+      fcs(i,:,k,1)=jacob(i,:,k)*  q(i,:,k,1)*uu
+      fcs(i,:,k,2)=jacob(i,:,k)*( q(i,:,k,2)*uu+dxi(i,:,k,2,1)*prs(i,:,k) )
+      fcs(i,:,k,3)=jacob(i,:,k)*( q(i,:,k,3)*uu+dxi(i,:,k,2,2)*prs(i,:,k) )
+      fcs(i,:,k,4)=jacob(i,:,k)*( q(i,:,k,4)*uu+dxi(i,:,k,2,3)*prs(i,:,k) )
+      fcs(i,:,k,5)=jacob(i,:,k)*( q(i,:,k,5)+prs(i,:,k) )*uu
+    enddo
+    enddo
+
+    dfcs=ddf_x3d2(u=fcs,nvar=numq,dir=2)
+
+    qrhs(0:im,0:jm,0:km,1:numq)=qrhs(0:im,0:jm,0:km,1:numq)+dfcs(0:im,0:jm,0:km,1:numq) 
+
+    deallocate(fcs,uu)
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along j direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! calculating along k direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    allocate(fcs(0:im,0:jm,-hm:km+hm,1:numq),uu(-hm:km+hm))
+
+    do j=0,jm
+    do i=0,im
+      
+      uu(:)=dxi(i,j,:,3,1)*vel(i,j,:,1)+dxi(i,j,:,3,2)*vel(i,j,:,2) +  &
+            dxi(i,j,:,3,3)*vel(i,j,:,3)
+      fcs(i,j,:,1)=jacob(i,j,:)*  q(i,j,:,1)*uu
+      fcs(i,j,:,2)=jacob(i,j,:)*( q(i,j,:,2)*uu+dxi(i,j,:,3,1)*prs(i,j,:) )
+      fcs(i,j,:,3)=jacob(i,j,:)*( q(i,j,:,3)*uu+dxi(i,j,:,3,2)*prs(i,j,:) )
+      fcs(i,j,:,4)=jacob(i,j,:)*( q(i,j,:,4)*uu+dxi(i,j,:,3,3)*prs(i,j,:) )
+      fcs(i,j,:,5)=jacob(i,j,:)*( q(i,j,:,5)+prs(i,j,:) )*uu
+
+    enddo
+    enddo
+
+    dfcs=ddf_x3d2(u=fcs,nvar=numq,dir=3)
+
+    qrhs(0:im,0:jm,0:km,1:numq)=qrhs(0:im,0:jm,0:km,1:numq)+dfcs(0:im,0:jm,0:km,1:numq) 
+
+    deallocate(fcs,dfcs,uu)
+    
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! end calculating along k direction
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! call mpistop
+
+  end subroutine convrsdcal6_x3d2
+
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the convectional residual
   ! terms with compact six-order central scheme.

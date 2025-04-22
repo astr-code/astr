@@ -36,6 +36,7 @@ module comsolver
     use commfunc,only : coeffcompac,ptds_ini,ptdsfilter_ini,           &
                         ptds_aym_ini,genfilt10coef
     use models,  only : init_komegasst
+    use x3d2,    only : x3d2init
     !
     ! local data
     integer :: nscheme,i
@@ -93,7 +94,9 @@ module comsolver
     if(trim(turbmode)=='k-omega') then
       call init_komegasst
     endif
-    !
+
+    call x3d2init(im,jm,km)
+
     if(lio) print*,' ** numerical solver initilised.'
     !
   end subroutine solvrinit
@@ -450,6 +453,277 @@ module comsolver
   end subroutine gradcal
   !+-------------------------------------------------------------------+
   !| The end of the subroutine gradcal.                                |
+  !+-------------------------------------------------------------------+
+  !!
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to calculate gradients of flow variables using |
+  !| x3d2.                                                             |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 21-04-2025  | created by J. Fang @ CAS                            |
+  !+-------------------------------------------------------------------+
+  subroutine gradcal_x3d2(timerept)
+    !
+    use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims,    &
+                          num_species,num_modequ,is,ie,js,je,ks,ke,    &
+                          turbmode
+    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,omg,tke,dtke, &
+                          domg
+    use commfunc,  only : ddfc
+    use x3d2,     only : ddf_x3d2,exec_dist_tds_compact
+    !
+    ! arguments
+    logical,intent(in),optional :: timerept
+    !
+    ! local data
+    integer :: i,j,k,n,ncolm
+    real(8),allocatable :: df(:,:,:,:),ff(:,:,:,:)
+    !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
+    !
+    ncolm=4+num_species+num_modequ
+
+    allocate(df(0:im,0:jm,0:km,ncolm))
+    !
+    ! calculate velocity and temperature gradient
+    !
+    allocate(ff(-hm:im+hm,0:jm,0:km,ncolm))
+    !
+    do k=0,km
+    do j=0,jm
+      !
+      ff(:,j,k,1)=vel(:,j,k,1)
+      ff(:,j,k,2)=vel(:,j,k,2)
+      ff(:,j,k,3)=vel(:,j,k,3)
+      ff(:,j,k,4)=tmp(:,j,k)
+      !
+      if(num_species>0) then
+        do n=1,num_species
+          ff(:,j,k,4+n)=spc(:,j,k,n)
+        enddo
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        n=4+num_species
+        !
+        ff(:,j,k,n+1)=tke(:,j,k)
+        ff(:,j,k,n+2)=omg(:,j,k)
+      endif
+      !
+    enddo
+    enddo
+
+    df=ddf_x3d2(u=ff,nvar=ncolm,dir=1)
+
+    do k=0,km
+    do j=0,jm
+      dvel(:,j,k,1,1)=df(:,j,k,1)*dxi(0:im,j,k,1,1)
+      dvel(:,j,k,1,2)=df(:,j,k,1)*dxi(0:im,j,k,1,2)
+      dvel(:,j,k,1,3)=df(:,j,k,1)*dxi(0:im,j,k,1,3)
+      !
+      dvel(:,j,k,2,1)=df(:,j,k,2)*dxi(0:im,j,k,1,1)
+      dvel(:,j,k,2,2)=df(:,j,k,2)*dxi(0:im,j,k,1,2)
+      dvel(:,j,k,2,3)=df(:,j,k,2)*dxi(0:im,j,k,1,3)
+      !
+      dvel(:,j,k,3,1)=df(:,j,k,3)*dxi(0:im,j,k,1,1)
+      dvel(:,j,k,3,2)=df(:,j,k,3)*dxi(0:im,j,k,1,2)
+      dvel(:,j,k,3,3)=df(:,j,k,3)*dxi(0:im,j,k,1,3)
+      !
+      dtmp(:,j,k,1)=df(:,j,k,4)*dxi(0:im,j,k,1,1)
+      dtmp(:,j,k,2)=df(:,j,k,4)*dxi(0:im,j,k,1,2)
+      dtmp(:,j,k,3)=df(:,j,k,4)*dxi(0:im,j,k,1,3)
+      !
+      if(num_species>0) then
+        do n=1,num_species
+          dspc(:,j,k,n,1)=df(:,j,k,4+n)*dxi(0:im,j,k,1,1)
+          dspc(:,j,k,n,2)=df(:,j,k,4+n)*dxi(0:im,j,k,1,2)
+          dspc(:,j,k,n,3)=df(:,j,k,4+n)*dxi(0:im,j,k,1,3)
+        enddo
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        n=4+num_species
+        !
+        dtke(:,j,k,1)=df(:,j,k,1+n)*dxi(0:im,j,k,1,1)
+        dtke(:,j,k,2)=df(:,j,k,1+n)*dxi(0:im,j,k,1,2)
+        dtke(:,j,k,3)=df(:,j,k,1+n)*dxi(0:im,j,k,1,3)
+        !
+        domg(:,j,k,1)=df(:,j,k,2+n)*dxi(0:im,j,k,1,1)
+        domg(:,j,k,2)=df(:,j,k,2+n)*dxi(0:im,j,k,1,2)
+        domg(:,j,k,3)=df(:,j,k,2+n)*dxi(0:im,j,k,1,3)
+      endif
+      !
+    enddo
+    enddo
+    !
+    deallocate(ff)
+    !
+    if(ndims>=2) then
+      !
+      allocate(ff(0:im,-hm:jm+hm,0:km,ncolm))
+      do k=0,km
+      do i=0,im
+        !
+        ff(i,:,k,1)=vel(i,:,k,1)
+        ff(i,:,k,2)=vel(i,:,k,2)
+        ff(i,:,k,3)=vel(i,:,k,3)
+        ff(i,:,k,4)=tmp(i,:,k)
+        !
+        if(num_species>0) then
+          do n=1,num_species
+            ff(i,:,k,4+n)=spc(i,:,k,n)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          ff(i,:,k,n+1)=tke(i,:,k)
+          ff(i,:,k,n+2)=omg(i,:,k)
+        endif
+        !
+      enddo
+      enddo
+
+      df=ddf_x3d2(u=ff,nvar=ncolm,dir=2)
+
+      do k=0,km
+      do i=0,im
+        !
+        dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(i,:,k,1)*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,1,2)=dvel(i,:,k,1,2)+df(i,:,k,1)*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,1,3)=dvel(i,:,k,1,3)+df(i,:,k,1)*dxi(i,0:jm,k,2,3)
+        !
+        dvel(i,:,k,2,1)=dvel(i,:,k,2,1)+df(i,:,k,2)*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,2,2)=dvel(i,:,k,2,2)+df(i,:,k,2)*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,2,3)=dvel(i,:,k,2,3)+df(i,:,k,2)*dxi(i,0:jm,k,2,3)
+        !
+        dvel(i,:,k,3,1)=dvel(i,:,k,3,1)+df(i,:,k,3)*dxi(i,0:jm,k,2,1)
+        dvel(i,:,k,3,2)=dvel(i,:,k,3,2)+df(i,:,k,3)*dxi(i,0:jm,k,2,2)
+        dvel(i,:,k,3,3)=dvel(i,:,k,3,3)+df(i,:,k,3)*dxi(i,0:jm,k,2,3)
+        !
+        dtmp(i,:,k,1)=dtmp(i,:,k,1)+df(i,:,k,4)*dxi(i,0:jm,k,2,1)
+        dtmp(i,:,k,2)=dtmp(i,:,k,2)+df(i,:,k,4)*dxi(i,0:jm,k,2,2)
+        dtmp(i,:,k,3)=dtmp(i,:,k,3)+df(i,:,k,4)*dxi(i,0:jm,k,2,3)
+        !
+        if(num_species>0) then
+          do n=1,num_species
+            dspc(i,:,k,n,1)=dspc(i,:,k,n,1)+df(i,:,k,4+n)*dxi(i,0:jm,k,2,1)
+            dspc(i,:,k,n,2)=dspc(i,:,k,n,2)+df(i,:,k,4+n)*dxi(i,0:jm,k,2,2)
+            dspc(i,:,k,n,3)=dspc(i,:,k,n,3)+df(i,:,k,4+n)*dxi(i,0:jm,k,2,3)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          dtke(i,:,k,1)=dtke(i,:,k,1)+df(i,:,k,1+n)*dxi(i,0:jm,k,2,1)
+          dtke(i,:,k,2)=dtke(i,:,k,2)+df(i,:,k,1+n)*dxi(i,0:jm,k,2,2)
+          dtke(i,:,k,3)=dtke(i,:,k,3)+df(i,:,k,1+n)*dxi(i,0:jm,k,2,3)
+          !
+          domg(i,:,k,1)=domg(i,:,k,1)+df(i,:,k,2+n)*dxi(i,0:jm,k,2,1)
+          domg(i,:,k,2)=domg(i,:,k,2)+df(i,:,k,2+n)*dxi(i,0:jm,k,2,2)
+          domg(i,:,k,3)=domg(i,:,k,3)+df(i,:,k,2+n)*dxi(i,0:jm,k,2,3)
+          !
+        endif
+        !
+      enddo
+      enddo
+      deallocate(ff)
+      !
+    endif
+    !
+    if(ndims==3) then
+      allocate(ff(0:im,0:jm,-hm:km+hm,ncolm))
+      do j=0,jm
+      do i=0,im
+        !
+        ff(i,j,:,1)=vel(i,j,:,1)
+        ff(i,j,:,2)=vel(i,j,:,2)
+        ff(i,j,:,3)=vel(i,j,:,3)
+        ff(i,j,:,4)=tmp(i,j,:)
+        !
+        if(num_species>0) then
+          do n=1,num_species
+            ff(i,j,:,4+n)=spc(i,j,:,n)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          ff(i,j,:,n+1)=tke(i,j,:)
+          ff(i,j,:,n+2)=omg(i,j,:)
+        endif
+        !
+      enddo
+      enddo
+
+      df=ddf_x3d2(u=ff,nvar=ncolm,dir=3)
+
+      do j=0,jm
+      do i=0,im
+        dvel(i,j,:,1,1)=dvel(i,j,:,1,1)+df(i,j,:,1)*dxi(i,j,0:km,3,1)
+        dvel(i,j,:,1,2)=dvel(i,j,:,1,2)+df(i,j,:,1)*dxi(i,j,0:km,3,2)
+        dvel(i,j,:,1,3)=dvel(i,j,:,1,3)+df(i,j,:,1)*dxi(i,j,0:km,3,3)
+        !
+        dvel(i,j,:,2,1)=dvel(i,j,:,2,1)+df(i,j,:,2)*dxi(i,j,0:km,3,1)
+        dvel(i,j,:,2,2)=dvel(i,j,:,2,2)+df(i,j,:,2)*dxi(i,j,0:km,3,2)
+        dvel(i,j,:,2,3)=dvel(i,j,:,2,3)+df(i,j,:,2)*dxi(i,j,0:km,3,3)
+        !
+        dvel(i,j,:,3,1)=dvel(i,j,:,3,1)+df(i,j,:,3)*dxi(i,j,0:km,3,1)
+        dvel(i,j,:,3,2)=dvel(i,j,:,3,2)+df(i,j,:,3)*dxi(i,j,0:km,3,2)
+        dvel(i,j,:,3,3)=dvel(i,j,:,3,3)+df(i,j,:,3)*dxi(i,j,0:km,3,3)
+        !
+        dtmp(i,j,:,1)=dtmp(i,j,:,1)+df(i,j,:,4)*dxi(i,j,0:km,3,1)
+        dtmp(i,j,:,2)=dtmp(i,j,:,2)+df(i,j,:,4)*dxi(i,j,0:km,3,2)
+        dtmp(i,j,:,3)=dtmp(i,j,:,3)+df(i,j,:,4)*dxi(i,j,0:km,3,3)
+        !
+        if(num_species>0) then
+          do n=1,num_species
+            dspc(i,j,:,n,1)=dspc(i,j,:,n,1)+df(i,j,:,4+n)*dxi(i,j,0:km,3,1)
+            dspc(i,j,:,n,2)=dspc(i,j,:,n,2)+df(i,j,:,4+n)*dxi(i,j,0:km,3,2)
+            dspc(i,j,:,n,3)=dspc(i,j,:,n,3)+df(i,j,:,4+n)*dxi(i,j,0:km,3,3)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          dtke(i,j,:,1)=dtke(i,j,:,1)+df(i,j,:,1+n)*dxi(i,j,0:km,3,1)
+          dtke(i,j,:,2)=dtke(i,j,:,2)+df(i,j,:,1+n)*dxi(i,j,0:km,3,2)
+          dtke(i,j,:,3)=dtke(i,j,:,3)+df(i,j,:,1+n)*dxi(i,j,0:km,3,3)
+          !
+          domg(i,j,:,1)=domg(i,j,:,1)+df(i,j,:,2+n)*dxi(i,j,0:km,3,1)
+          domg(i,j,:,2)=domg(i,j,:,2)+df(i,j,:,2+n)*dxi(i,j,0:km,3,2)
+          domg(i,j,:,3)=domg(i,j,:,3)+df(i,j,:,2+n)*dxi(i,j,0:km,3,3)
+        endif
+        !
+      enddo
+      enddo
+      deallocate(ff)
+    endif
+    !
+    deallocate(df)
+
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='gradcal', &
+                                             timecost=subtime,  &
+                                              message='calculation of gradients')
+    endif
+    !
+    return
+    !
+  end subroutine gradcal_x3d2
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine gradcal_x3d2.                           |
   !+-------------------------------------------------------------------+
   !!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

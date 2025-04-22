@@ -183,7 +183,7 @@ module mainloop
     !
     time_total=ptime()-time_start
     !
-    if(lio .and. lreport .and. ltimrpt) call timereporter(timecost=time_total,mode='final')
+    call timereporter(timecost=time_total,mode='final')
     !
     ! call errest
     !

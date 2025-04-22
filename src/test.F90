@@ -280,6 +280,8 @@ module test
     use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,ptime
+    use x3d2,      only : x3d2init,ddf_x3d2
+    use tecio
     !
     ! local data
     integer :: i,j,k,n,s,asize,ncolm,counter
@@ -291,28 +293,28 @@ module test
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
     !
+    call x3d2init(im,jm,km)
     ! print*,x(:,0,0,1)
     !
     ! testing ddx
-    ncolm=50
+    ncolm=2
     allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:ncolm))
     allocate(dvtes(0:im,0:jm,0:km,1:ncolm,1:3))
     dvtes=0.d0
     !
     time_beg=ptime() 
     counter=0
-    do while(counter<10)
-    !  
-    counter=counter+1
     !
     do k=0,km
     do j=0,jm
     do i=0,im
       !
-      do n=1,ncolm
-        call random_number(var1)
-        vtest(i,j,k,n)=var1
-      enddo
+      ! do n=1,ncolm
+      !   call random_number(var1)
+      !   vtest(i,j,k,n)=var1
+      ! enddo
+      vtest(i,j,k,1)=sin(x(i,j,k,1))*cos(x(i,j,k,2))*cos(x(i,j,k,3))
+      vtest(i,j,k,2)=cos(x(i,j,k,1))*sin(x(i,j,k,2))*cos(x(i,j,k,3))
       !
     enddo
     enddo
@@ -320,6 +322,35 @@ module test
     !
     call dataswap(vtest)
     !
+    allocate(dff(0:im,0:jm,0:km,ncolm))
+
+    allocate(ff(-hm:im+hm,0:jm,0:km,ncolm))
+
+    ff(:,0:jm,0:km,1:ncolm)=vtest(:,0:jm,0:km,1:ncolm)
+    
+    dff=ddf_x3d2(u=ff,nvar=ncolm,dir=1)
+
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      do n=1,ncolm
+        dvtes(i,j,k,n,1)=dff(i,j,k,n)*dxi(i,j,k,1,1)
+        dvtes(i,j,k,n,2)=dff(i,j,k,n)*dxi(i,j,k,1,2)
+        dvtes(i,j,k,n,3)=dff(i,j,k,n)*dxi(i,j,k,1,3)
+      enddo
+    enddo
+    enddo
+    enddo
+
+    call tecbin('testout/tectest'//mpirankname//'.plt',            &
+                                      x(0:im,0:jm,0:km,1),'x',     &
+                                      x(0:im,0:jm,0:km,2),'y',     &
+                                      x(0:im,0:jm,0:km,3),'z',     &
+                                  vtest(0:im,0:jm,0:km,1),'v1',    &
+                                    dff(0:im,0:jm,0:km,1),'dv1dx' )
+                                  ! dvtes(0:im,0:jm,0:km,1,1),'dv1dx' )
+
+
     ! allocate(ff(0:jm,0:km,ncolm,-hm:im+hm),dff(0:jm,0:km,ncolm,0:im))
     ! do k=0,km
     ! do j=0,jm
@@ -345,40 +376,40 @@ module test
     ! enddo
     ! deallocate(ff,dff)
     !
-    asize=(jm+1)*(km+1)*ncolm
-    allocate(f1(asize,-hm:im+hm),df1(asize,0:im))
-    s=0
-    do k=0,km
-    do j=0,jm
-      !
-      do n=1,ncolm
-        s=s+1
-        f1(s,:)=vtest(:,j,k,n)
-      enddo
-      !
-    enddo
-    enddo
-    !
-    df1=ddfc(f1,difschm,npdci,im,alfa_dif,dci)
-    !
-    s=0
-    do k=0,km
-    do j=0,jm
-      !
-      do n=1,ncolm
-        s=s+1
-        dvtes(:,j,k,n,1)=dvtes(:,j,k,n,1)+df1(s,:)*dxi(0:im,j,k,1,1)
-        dvtes(:,j,k,n,2)=dvtes(:,j,k,n,2)+df1(s,:)*dxi(0:im,j,k,1,2)
-        dvtes(:,j,k,n,3)=dvtes(:,j,k,n,3)+df1(s,:)*dxi(0:im,j,k,1,3)
-      enddo
-      !
-    enddo
-    enddo
-    deallocate(f1,df1)
-    !
-    print*,' ** counter: ',counter
-    !
-    enddo
+    ! asize=(jm+1)*(km+1)*ncolm
+    ! allocate(f1(asize,-hm:im+hm),df1(asize,0:im))
+    ! s=0
+    ! do k=0,km
+    ! do j=0,jm
+    !   !
+    !   do n=1,ncolm
+    !     s=s+1
+    !     f1(s,:)=vtest(:,j,k,n)
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+    ! !
+    ! df1=ddfc(f1,difschm,npdci,im,alfa_dif,dci)
+    ! !
+    ! s=0
+    ! do k=0,km
+    ! do j=0,jm
+    !   !
+    !   do n=1,ncolm
+    !     s=s+1
+    !     dvtes(:,j,k,n,1)=dvtes(:,j,k,n,1)+df1(s,:)*dxi(0:im,j,k,1,1)
+    !     dvtes(:,j,k,n,2)=dvtes(:,j,k,n,2)+df1(s,:)*dxi(0:im,j,k,1,2)
+    !     dvtes(:,j,k,n,3)=dvtes(:,j,k,n,3)+df1(s,:)*dxi(0:im,j,k,1,3)
+    !   enddo
+    !   !
+    ! enddo
+    ! enddo
+    ! deallocate(f1,df1)
+    ! !
+    ! print*,' ** counter: ',counter
+    ! !
+    ! enddo
     !
     subtime=subtime+ptime()-time_beg
     !

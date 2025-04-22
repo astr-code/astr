@@ -188,7 +188,9 @@ module commvar
 #endif 
   !
   parameter(hm=5)
-  !
+  
+  integer, parameter :: dp = kind(0.0d0)
+
 end module commvar
 !+---------------------------------------------------------------------+
 !| The end of the module commvar.                                      |
