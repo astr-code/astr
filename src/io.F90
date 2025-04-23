@@ -29,7 +29,7 @@ module io
                        num_species,im,jm,km,force,numq,turbmode,lwsequ, &
                        nondimen,moment,iomode
     use commarray, only : rho,vel,prs,tmp,spc,q,tke,omg,miut,sigma,qflux
-    use methodmoment, only: mijk, Rij
+    use methodmoment, only: mijk, Rij, delta
     use statistic, only : massflux,massflux_target,nsamples
     use hdf5io
     use bc,        only : ninflowslice
@@ -103,7 +103,7 @@ module io
         call h5read(varname='miut',  var=miut(0:im,0:jm,0:km),mode=modeio)
       endif
       !
-      if(moment=='r13' .or. moment == 'r26') then
+!      if(moment=='r13' .or. moment == 'r26') then
         !
         call h5read(varname='sigmaxx',var=sigma(0:im,0:jm,0:km,1),mode=modeio)
         call h5read(varname='sigmaxy',var=sigma(0:im,0:jm,0:km,2),mode=modeio)
@@ -116,6 +116,8 @@ module io
         call h5read(varname='qy',var=qflux(0:im,0:jm,0:km,2),mode=modeio)
         call h5read(varname='qz',var=qflux(0:im,0:jm,0:km,3),mode=modeio)
         !
+      if(moment=='r13' .or. moment == 'r26') then
+
         call h5read(varname='mxxx',var=mijk(0:im,0:jm,0:km,1),mode=modeio)
         call h5read(varname='mxxy',var=mijk(0:im,0:jm,0:km,2),mode=modeio)
         call h5read(varname='mxxz',var=mijk(0:im,0:jm,0:km,3),mode=modeio)
@@ -129,6 +131,8 @@ module io
         call h5read(varname='Rxz',var=Rij(0:im,0:jm,0:km,3),mode=modeio)
         call h5read(varname='Ryy',var=Rij(0:im,0:jm,0:km,4),mode=modeio)
         call h5read(varname='Ryz',var=Rij(0:im,0:jm,0:km,5),mode=modeio)
+        call h5read(varname='Delta',var=delta(0:im,0:jm,0:km),mode=modeio)
+
         !
       endif
       ! call h5io_init('checkpoint/qdata.'//modeio//'5',mode='read')
@@ -213,7 +217,7 @@ module io
                        km,lwsequ,turbmode,feqwsequ,force,ymin,ymax,moment,iomode
     use readwrite,only: nxtwsequ
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod,sigma,qflux
-    use methodmoment,only: mijk,Rij
+    use methodmoment,only: mijk,Rij,delta
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
     use bc,       only : ninflowslice
@@ -310,7 +314,7 @@ module io
       call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
     endif
     !
-    if(moment=='r13' .or. moment == 'r26') then
+!    if(moment=='r13' .or. moment == 'r26') then
       !
       call h5write(varname='sigmaxx',var=sigma(0:im,0:jm,0:km,1),mode=iomode)
       call h5write(varname='sigmaxy',var=sigma(0:im,0:jm,0:km,2),mode=iomode)
@@ -323,6 +327,8 @@ module io
       call h5write(varname='qy',var=qflux(0:im,0:jm,0:km,2),mode=iomode)
       call h5write(varname='qz',var=qflux(0:im,0:jm,0:km,3),mode=iomode)
       !
+    if(moment=='r13' .or. moment == 'r26') then
+
       call h5write(varname='mxxx',var=mijk(0:im,0:jm,0:km,1),mode=iomode)
       call h5write(varname='mxxy',var=mijk(0:im,0:jm,0:km,2),mode=iomode)
       call h5write(varname='mxxz',var=mijk(0:im,0:jm,0:km,3),mode=iomode)
@@ -336,6 +342,8 @@ module io
       call h5write(varname='Rxz',var=Rij(0:im,0:jm,0:km,3),mode=iomode)
       call h5write(varname='Ryy',var=Rij(0:im,0:jm,0:km,4),mode=iomode)
       call h5write(varname='Ryz',var=Rij(0:im,0:jm,0:km,5),mode=iomode)
+      call h5write(varname='Delta',var=delta(0:im,0:jm,0:km),mode=iomode)
+
       !
     endif
     !

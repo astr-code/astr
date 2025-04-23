@@ -23,6 +23,8 @@ module commvar
   character(len=4) :: conschm,difschm
   character(len=64) :: gridfile,solidfile
   character(len=3)  :: moment
+  integer :: bctype(6)
+
   !+---------------------+---------------------------------------------+
   !|            ia,ja,ka | the dimension of the entire domain          | 
   !|            im,jm,km | the dimension of the local domain           | 
@@ -98,6 +100,7 @@ module commvar
   real(8) :: const1,const2,const3,const4,const5,const6,const7
   real(8) :: tempconst,tempconst1
   real(8),allocatable :: spcinf(:)
+  real(8) :: total_mass0
   !+---------------------+---------------------------------------------+
   !|               nstep | the total time step number.                 |
   !|             maxstep | the max step to run.                        |

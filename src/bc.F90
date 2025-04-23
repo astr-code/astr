@@ -13,7 +13,7 @@ module bc
   use commvar, only: hm,im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims, &
                      num_species,flowtype,gamma,numq,npdci,npdcj,      &
                      npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
-                     zmin,zmax,time,num_modequ,ltimrpt,spcinf
+                     zmin,zmax,time,num_modequ,ltimrpt,spcinf, bctype
   use commarray, only : x,dxi,jacob,prs,vel,tmp,rho,spc,q,qrhs,        &
                         bnorm_i0,bnorm_im,bnorm_j0,bnorm_jm,           &
                         bnorm_k0,bnorm_km
@@ -25,7 +25,6 @@ module bc
   integer :: ninflowslice
   real(8) :: pout
   real(8) :: uinf_j0,uinf_jm
-  integer :: bctype(6)
   real(8) :: twall(6),xrhjump,angshk,xslip
   character(len=4) :: turbinf='none'
   !+---------------------+---------------------------------------------+
@@ -327,6 +326,8 @@ module bc
   subroutine boucon(subtime)
     !
     use commvar, only : limmbou
+    use methodmoment,  only : MOM_wall_boundary 
+
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -361,6 +362,10 @@ module bc
         call slipisotwall(n,twall(n))
       endif
       !
+      if(bctype(n)==413) then
+        call NSslip_wall_boundary(n)
+      endif
+
       if(bctype(n)==421) then
         call slipadibwall(n)
       endif
@@ -6187,7 +6192,7 @@ module bc
         do i=0,im
           pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
           !
-          vel(i,j,k,1)=0.d0
+          vel(i,j,k,1)=1.d0
           vel(i,j,k,2)=0.d0
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe
@@ -7752,6 +7757,389 @@ module bc
   !| The end of the subroutine gcnscbc.                                |
   !+-------------------------------------------------------------------+
   !!
+
+
+
+!+---------------------------------------------------------------------+
+   subroutine NSslip_wall_boundary(ndir)
+!  ==================================
+
+  !+-------------------------------------------------------------------+
+  !  first order slip boundary condition for NS equations              |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 19-June-2024  | Created by J. Fang & X.J.Gu                       |
+  !+-------------------------------------------------------------------+
+
+!+---------------------------------------------------------------------+
+    use parallel,only: irk,jrk,krk,irkm,jrkm,krkm
+    use commvar, only: nstep , deltat, moment
+    use commarray, only: q, vel, tmp, prs, rho,               &
+                         vel12_slip, vel34_slip, vel56_slip
+
+    use fludyna,   only : fvar2q, thermal
+    use methodmoment,  only : R13wbc_slip, R26wbc_slip
+
+
+    implicit none
+
+    integer,intent(in) :: ndir
+    !
+    ! local data
+      integer :: i,j,k,l ,ip, jp, kp
+      real(8) n1, n2, n3, uwall, vwall, wwall, twall, alpha
+    !
+    !
+      if (ndir==1) then
+      !
+         if (irk==0) then
+            !
+            i = 0 ;  ; ip = i + 1
+            !
+!       --------------------------------
+!       -- wall normal vector ------
+!       ---------------------------
+            n1 = 1.d0; n2=0.d0;  n3=0.d0
+!       ----------------------------
+!       -- wall velocity --
+!       ---------------------------
+            uwall = 0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+!       --------------------------------------------
+!       -- wall temperature --
+!       ---------------------
+           twall = 1.0d0   ! wall temperature is equal to the ref temperature
+!       -------------------------------------
+!       -- Accomodation coff
+!       ------------------------
+            alpha = 1.0d0   ! diffusive wall
+            do k=0,km
+               do j=0,jm
+                  jp = j ; kp = k
+                  if (moment == 'r05') then
+                  call R05wbc(ndir, n1, n2, n3, i, j, k, &
+                       uwall, vwall, wwall, twall, alpha)
+                  end if
+                  if (moment == 'r13') then
+                   call R13wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+                  if (moment == 'r26') then
+                   call R26wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+
+               end do
+            end do
+         end if
+      else if (ndir==2) then
+      !
+         if (irk==irkm) then
+            !
+            i = im ; ; ip = i - 1
+!       --------------------------------
+!       -- wall normal vector ------
+!       ---------------------------
+            n1 = -1.0d0; n2=0.d0;  n3=0.d0
+!       ----------------------------
+!       -- wall velocity --
+!       ---------------------------
+            uwall = 0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+!       --------------------------------------------
+!       -- wall temperature --
+!       ---------------------
+           twall = 1.0d0   ! wall temperature is equal to the ref temperature
+!       -------------------------------------
+!       -- Accomodation coff
+!       ------------------------
+            alpha = 1.0d0   ! diffusive wall
+            do k=0,km
+               do j=0,jm
+                  jp = j ; kp = k
+                  if (moment == 'r05') then
+                  call R05wbc(ndir, n1, n2, n3, i, j, k, &
+                       uwall, vwall, wwall, twall, alpha)
+                  end if
+                  if (moment == 'r13') then
+                   call R13wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+                  if (moment == 'r26') then
+                   call R26wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+               end do
+            end do
+         end if
+
+      else if (ndir==3) then
+      !
+         if (jrk==0) then
+            !
+            j = 0 ; ; jp = j + 1
+            !
+!       --------------------------------
+!       -- wall normal vector ------
+!       ---------------------------
+            n1 = 0.d0; n2=1.d0;  n3=0.d0
+!       ----------------------------
+!       -- wall velocity --
+!       ---------------------------
+            uwall = 0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+!       --------------------------------------------
+!       -- wall temperature --
+!       ---------------------
+           twall = 1.0d0   ! wall temperature is equal to the ref temperature
+!       -------------------------------------
+!       -- Accomodation coff
+!       ------------------------
+            alpha = 1.0d0   ! diffusive wall
+            do k=0,km
+               do i=0,im
+                  ip = i ; kp = k
+                  if (moment == 'r05') then
+                  call R05wbc(ndir, n1, n2, n3, i, j, k, &
+                       uwall, vwall, wwall, twall, alpha)
+                  end if
+                  if (moment == 'r13') then
+                   call R13wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,    &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+                  if (moment == 'r26') then
+                   call R26wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+
+               end do
+            end do
+!       ==========================
+!       == corner correlations ===
+!       ==========================
+        end if
+      !
+      else if(ndir==4) then
+      !
+         if (jrk==jrkm) then
+           j=jm ; ; jp = j - 1
+        !
+!       --------------------------------
+!       -- wall normal vector ------
+!       ---------------------------
+           n1 = 0.d0; n2=-1.d0;  n3=0.d0
+!       ----------------------------
+!       -- wall velocity --
+!       ---------------------------
+           uwall = 1.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+!       --------------------------------------------
+!       -- wall temperature --
+!       ---------------------
+           twall = 1.0d0   ! wall temperature is equal to the ref temperature
+!       -------------------------------------
+!       -- Accomodation coff
+!       ------------------------
+           alpha = 1.0d0   ! diffusive wall
+!
+           uwall = dble(nstep)*deltat
+           if (uwall > 1.0d0) uwall = 1.0d0
+           do k=0,km
+              do i=0,im
+                 ip = i ; kp = k
+                 uwall = dble(nstep)*deltat*10.0d0
+                 if (uwall > 1.0d0) uwall = 1.0d0
+!                 if ( (irk ==0 .and. i == 0)  .or.(irk == irkm .and. i == im) ) then
+!                    uwall = 0.0d0
+!                 end if
+                 if (moment == 'r05') then
+                  call R05wbc(ndir, n1, n2, n3, i, j, k, &
+                       uwall, vwall, wwall, twall, alpha)
+                 end if
+                 if (moment == 'r13') then
+                   call R13wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                 end if
+                  if (moment == 'r26') then
+                   call R26wbc_slip(ndir, n1, n2, n3, i, j, k, ip, jp, kp,   &
+                        uwall, vwall, wwall, twall, alpha)
+                  end if
+
+
+!                 if ( (irk ==0 .and. i == 0)  .or.(irk == irkm .and. i == im) ) then
+!                    vel(i,j,k,1:3) = 0.0d0
+!                    vel12_slip(j,k,1:3,ndir) = 0.0d0
+!                    vel34_slip(i,k,1:3,ndir) = 0.0d0
+!                    vel56_slip(i,j,1:3,ndir) = 0.0d0
+!                 end if
+                  
+              end do
+           end do
+        end if
+      !
+      else
+        stop ' !! ndir not defined @ NSslip_wall_boundary'
+      end if
+
+      return
+
+      end subroutine NSslip_wall_boundary
+
+!      =============================================================================
+       subroutine R05wbc(nface, n1, n2, n3, iw, jw, kw,   &
+                         uwall, vwall, wwall, twall, alpha)
+!      =============================================================================
+
+       use commarray, only : q, rho, vel, sigma, qflux, tmp, prs,     &
+                             vel12_slip, vel34_slip, vel56_slip,       &
+                             tmp12_jump,  tmp34_jump ,  tmp56_jump
+       use fludyna,   only : fvar2q,  thermal
+       use commvar,   only : const1, const2, deltat
+
+       implicit none
+       integer, intent(in) :: iw, jw, kw, nface
+       real(8), intent(in) :: n1, n2, n3, uwall, vwall, wwall, twall, alpha
+       real(8) tempw, presw, u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
+       real(8) n11, n22, n33, n12, n13, n23
+       real(8) sig_nn, qn, pwall, rhow
+       real(8) upb, vpb, wpb, t_jump, G, co1, co2
+       real(8) slip2, term1, term2, tr1, tempp, rhop, deltatp, deltatt
+ 
+
+       if (nface == 1)  pwall=num1d3*(4.d0*prs(iw+1,jw,kw)-prs(iw+2,jw,kw))
+       if (nface == 2)  pwall=num1d3*(4.d0*prs(iw-1,jw,kw)-prs(iw-2,jw,kw))
+       if (nface == 3)  pwall=num1d3*(4.d0*prs(iw,jw+1,kw)-prs(iw,jw+2,kw))
+       if (nface == 4)  pwall=num1d3*(4.d0*prs(iw,jw-1,kw)-prs(iw,jw-2,kw))
+       if (nface == 5)  pwall=num1d3*(4.d0*prs(iw,jw,kw+1)-prs(iw,jw,kw+2))
+       if (nface == 6)  pwall=num1d3*(4.d0*prs(iw,jw,kw-1)-prs(iw,jw,kw-2))
+
+
+       deltatp = deltat
+       deltatt = deltat
+
+       prs(iw, jw, kw) = pwall
+
+       G = (2.0d0 - alpha)/alpha*sqrt(0.5d0*pi)
+       n11 = n1*n1; n22 = n2*n2; n33 = n3*n3 ; n12 = n1*n2; &
+       n13 = n1*n3; n23 = n2*n3
+
+       tempw = tmp(iw, jw, kw)
+       presw = prs(iw, jw, kw)
+       rhow  = rho(iw, jw, kw)
+
+       u2w = sigma(iw, jw, kw, 1)
+       uvw = sigma(iw, jw, kw, 2)
+       uww = sigma(iw, jw, kw, 3)
+       v2w = sigma(iw, jw, kw, 4)
+       vww = sigma(iw, jw, kw, 5)
+
+       w2w = - u2w - v2w
+
+       qxw = qflux(iw, jw, kw, 1)
+       qyw = qflux(iw, jw, kw, 2)
+       qzw = qflux(iw, jw, kw, 3)
+
+       co2 = tempw/const2
+       co1 = G*sqrt(co2)
+       tr1 = twall/tempw
+
+!  =======================================
+!  ==          normal heat flux        ==
+!  =======================================
+       qn = n1*qxw + n2*qyw + n3*qzw
+
+       term2 = n11*u2w + n22*v2w + n33*w2w
+       sig_nn = term2 + 2.0d0*(uvw*n12 + uww*n13 + vww*n23)
+
+!  =======================================
+!               velocity slip
+!  =======================================
+
+       presw = presw + 0.5d0*sig_nn
+
+       upb = n1*(u2w - term2 - 2.0d0*n23*vww)         &
+           + (1.0d0 - 2.0d0*n11)*(n2*uvw + n3*uww)
+
+       vpb = n2*(v2w - term2 - 2.0d0*n13*uww)         &
+           + (1.0d0 - 2.0d0*n22)*(n1*uvw + n3*vww)
+
+       wpb = n3*(w2w - term2 - 2.0d0*n12*uvw)         &
+            + (1.0d0 - 2.0d0*n33)*(n1*uww + n2*vww)
+
+       upb = (-upb*co1 - 0.2d0*(qxw - qn*n1))/presw
+       vpb = (-vpb*co1 - 0.2d0*(qyw - qn*n2))/presw
+       wpb = (-wpb*co1 - 0.2d0*(qzw - qn*n3))/presw
+       slip2 = (upb*upb + vpb*vpb + wpb*wpb)
+
+
+!      ========================
+!      ==   temperature jump ==
+!      ========================
+       t_jump = -0.5d0*co1*qn
+       t_jump = t_jump*const2/presw + 0.25d0*(slip2*const2 - tempw*sig_nn/presw)
+
+    if (nface == 1 .or. nface == 2) then
+       vel12_slip(jw,kw,1,nface) = vel12_slip(jw,kw,1,nface)  &
+                            + (upb-vel12_slip(jw,kw,1,nface))*deltatp
+       vel12_slip(jw,kw,2,nface) = vel12_slip(jw,kw,2,nface)  &
+                            + (vpb-vel12_slip(jw,kw,2,nface))*deltatp
+       vel12_slip(jw,kw,3,nface) = vel12_slip(jw,kw,3,nface)  &
+                            + (wpb-vel12_slip(jw,kw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel12_slip(jw,kw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel12_slip(jw,kw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel12_slip(jw,kw,3,nface) + wwall
+
+       tmp12_jump(jw,kw,nface) = tmp12_jump(jw, kw, nface)                &
+                     + (t_jump - tmp12_jump(jw, kw, nface) )*deltatt
+
+       tmp(iw, jw, kw) = tmp12_jump(jw, kw, nface) + twall
+
+    end if
+    if (nface == 3 .or. nface == 4) then
+       vel34_slip(iw,kw,1,nface) = vel34_slip(iw,kw,1,nface)  &
+                            + (upb-vel34_slip(iw,kw,1,nface))*deltatp
+       vel34_slip(iw,kw,2,nface) = vel34_slip(iw,kw,2,nface)  &
+                            + (vpb-vel34_slip(iw,kw,2,nface))*deltatp
+       vel34_slip(iw,kw,3,nface) = vel34_slip(iw,kw,3,nface)  &
+                            + (wpb-vel34_slip(iw,kw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel34_slip(iw,kw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel34_slip(iw,kw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel34_slip(iw,kw,3,nface) + wwall
+
+       tmp34_jump(iw,kw,nface) = tmp34_jump(iw,kw,nface)                &
+                     + (t_jump - tmp34_jump(iw,kw,nface) )*deltatt
+
+       tmp(iw, jw, kw) = tmp34_jump(iw,kw,nface) + twall
+    end if
+
+    if (nface == 5 .or. nface == 6) then
+       vel56_slip(iw,jw,1,nface) = vel56_slip(iw,jw,1,nface)  &
+                      + (upb-vel56_slip(iw,jw,1,nface))*deltatp
+       vel56_slip(iw,jw,2,nface) = vel56_slip(iw,jw,2,nface)  &
+                      + (vpb-vel56_slip(iw,jw,2,nface))*deltatp
+       vel56_slip(iw,jw,3,nface) = vel56_slip(iw,jw,3,nface)  &
+                      + (wpb-vel56_slip(iw,jw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel56_slip(iw,jw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel56_slip(iw,jw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel56_slip(iw,jw,3,nface) + wwall
+
+       tmp56_jump(iw,jw,nface) = tmp56_jump(iw,jw,nface)                &
+                     + (t_jump - tmp56_jump(iw,jw,nface) )*deltatt
+
+       tmp(iw, jw, kw) = tmp56_jump(iw,jw,nface) + twall
+    end if
+    rhow = thermal(pressure=prs(iw,jw,kw),temperature=tmp(iw, jw, kw))
+    rho(iw,jw,kw) = rho(iw,jw,kw) + (rhow - rho(iw,jw,kw))*deltatt
+
+    call fvar2q(      q=  q(iw,jw,kw,:),                 &
+                   density=rho(iw,jw,kw),                &
+                  velocity=vel(iw,jw,kw,:),              &
+                  temperature=tmp(iw,jw,kw) )
+
+    qrhs(iw, jw, kw,1:5) = 0.0d0
+
+    return
+    end  subroutine R05wbc
+
   !+-------------------------------------------------------------------+
   !| This subroutine is a templet of designing b.c.                    |
   !+-------------------------------------------------------------------+

@@ -58,6 +58,8 @@ module gridgeneration
         call gridcube(0.25d0,1.d0,0.d0)
       elseif(trim(flowtype)=='ldcavity') then
         call gridcube(1.d0,1.d0,0.d0)
+!        call gridcavity(1.d0,1.d0,0.d0,1.00d0)
+
       else
         call udf_grid
         ! print*,trim(flowtype),' is not defined @ gridgen'
@@ -266,6 +268,50 @@ module gridgeneration
   !| The end of the subroutine gridcube.                               |
   !+-------------------------------------------------------------------+
   !
+  subroutine gridcavity(lx,ly,lz, ga)
+    !
+    use commvar,  only : im,jm,km,gridfile,ia,ja,ka
+    use parallel, only : ig0,jg0,kg0,lio
+    use commarray,only : x
+    use hdf5io
+    !
+    ! arguments
+    real(8),intent(in) :: lx,ly,lz
+    real(8), intent(in) ::  ga
+    !
+    ! local data
+    integer :: i,j,k
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      x(i,j,k,1) = 0.5d0*lx * (1.0d0 - tanh(ga*(1.0d0   &
+                 - 2.0d0*dble(i+ig0)/dble(ia)))/tanh(ga) )
+      if(ja==0) then
+        x(i,j,k,2)=ly
+      else
+        x(i,j,k,2) = 0.5d0*ly * (1.0d0 - tanh(ga*(1.0d0   &
+                 - 2.0d0*dble(j+jg0)/dble(ja)))/tanh(ga) )
+      endif
+      if(ka==0) then
+        x(i,j,k,3)=0.d0
+      else
+        x(i,j,k,3) = 0.5d0*lz * (1.0d0 - tanh(ga*(1.0d0   &
+                 - 2.0d0*dble(k+kg0)/dble(ka)))/tanh(ga) )
+
+      endif
+      !
+    enddo
+    enddo
+    enddo
+    !
+    if(lio) print*,' ** cubic grid generated',lx,ly,lz
+    !
+  end subroutine gridcavity
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine gridcube.                               |
+  !+-------------------------------------------------------------------+
+
   subroutine grichan(lx,ly,lz)
     !
     use commvar,  only : im,jm,km,gridfile,ia,ja,ka,ref_vel,ref_len

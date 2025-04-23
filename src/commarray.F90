@@ -12,7 +12,13 @@ module commarray
   implicit none
   !
   real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,spc,dtmp,     &
-                                            dgrid,vor
+                                            dgrid,vor, q00
+
+  real(8),allocatable,dimension(:,:,:,:) :: vel12_slip, vel34_slip, vel56_slip
+  real(8),allocatable,dimension(:,:,:) :: tmp12_jump, tmp34_jump, tmp56_jump
+
+  
+
   real(8),allocatable,dimension(:,:,:) :: jacob,rho,prs,tmp,miu
   real(8),allocatable,dimension(:,:,:,:,:) :: dxi,dvel,dspc
   real(8),allocatable,dimension(:,:,:) :: bnorm_i0,bnorm_im,bnorm_j0,  &
@@ -76,6 +82,11 @@ module commarray
     !
     allocate( q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating q'
+
+    allocate(q00(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating q00'
+
+
     !
     allocate( rho(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating rho'
@@ -116,10 +127,21 @@ module commarray
     allocate(miu(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating miu'
     !
-    allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
+    allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),  &
               qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
     sigma = 0.0d0 ; qflux = 0.0d0
     !
+    allocate(vel12_slip(-hm:jm+hm,-hm:km+hm,1:3,1:2), &
+             vel34_slip(-hm:im+hm,-hm:km+hm,1:3,3:4), &
+             vel56_slip(-hm:im+hm,-hm:jm+hm,1:3,5:6), &
+             source = 0.0d0) 
+
+    allocate(tmp12_jump(-hm:jm+hm,-hm:km+hm,1:2), &
+             tmp34_jump(-hm:im+hm,-hm:km+hm,3:4), &
+             tmp56_jump(-hm:im+hm,-hm:jm+hm,5:6), &
+             source = 0.0d0) 
+
+
   end subroutine allocommarray
   !+-------------------------------------------------------------------+
   !| The end of the subroutine allocommarray.                          |

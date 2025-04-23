@@ -363,7 +363,7 @@ module geom
     ! Calculating geometrical 
     ! Jacobian
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm) )
+    allocate( jacob(-hm:im+hm,-hm:jm+hm,-hm:km+hm), source = 0.0d0 )
     !
     if(ndims==3) then
       jacob(0:im,0:jm,0:km)=dx(0:im,0:jm,0:km,1,1)*                    &

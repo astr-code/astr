@@ -39,23 +39,42 @@ module initialisation
     use io,       only: readcheckpoint,writeflfed
     use fludyna,  only: updateq,miucomp
     use statistic,only: nsamples
-    use bc,       only: ninflowslice,turbinf
+    use bc,       only: ninflowslice,turbinf, bctype
     use userdefine,only: udf_flowinit
-    use methodmoment,only: allo_moment,updateqmom,mijkcal,Rijcal,deltacal
+    use methodmoment,only: allo_moment,updateqmom,mijkcal,Rijcal,deltacal,  MOM_wall_boun_init
+    integer n
     !
     call inletprofile
     !
     call readcont
     !
+
+    if(moment=='r13' .or. moment=='r26') then
+      call allo_moment()
+     end if  
+
+
     if(lrestart) then
       !
       call readcheckpoint(folder='outdat',mode='h')
+!     =======================
+!      call mijkcal
+      !
+!      call rijcal
+      !
+!      call deltacal
+!=============================
       !
       call updateq()
       !
       if(moment=='r13' .or. moment=='r26') then
         !
         call updateqmom()
+        do n = 1, 6
+           if (bctype(n)==413) then
+             call  MOM_wall_boun_init(n)
+           end if
+        end do   
         !
       endif
       !
@@ -141,8 +160,6 @@ module initialisation
       if(moment=='r13' .or. moment=='r26') then
         !
         call diffusion_flux()
-        !
-        call allo_moment()
         !
         if(moment=='r26') then
           !

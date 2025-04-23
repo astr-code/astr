@@ -2077,9 +2077,15 @@ module pp
     character(len=32) :: gridfile
     !
     real(8),allocatable,dimension(:,:) :: x,y,ro,u,v,w,p,t
+
+    real(8),allocatable,dimension(:,:) :: u2,v2,uv, uw,vw,ut,vt,wt
+    real(8) z(3)
     !
-    integer :: i,j
+    integer :: i,j, k
     !
+
+    real(8)   fsmach, alpha, re , time   
+
     open(11,file=inputfile,form='formatted',status='old')
     read(11,'(///////)')
     read(11,*)im,jm,km
@@ -2105,14 +2111,26 @@ module pp
     call h5_read2dfrom3d( w,im,jm,km,'u3',trim(flowfile),kslice=0)
     call h5_read2dfrom3d( p,im,jm,km, 'p',trim(flowfile),kslice=0)
     call h5_read2dfrom3d( t,im,jm,km, 't',trim(flowfile),kslice=0)
+
+    call h5_read2dfrom3d( u2,im,jm,km, 'sigmaxx',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( uv,im,jm,km, 'sigmaxy',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( v2,im,jm,km, 'sigmayy',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( uw,im,jm,km, 'sigmaxz',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( vw,im,jm,km, 'sigmayz',trim(flowfile),kslice=0)
+
+    call h5_read2dfrom3d( ut,im,jm,km, 'qx',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( vt,im,jm,km, 'qy',trim(flowfile),kslice=0)
+    call h5_read2dfrom3d( wt,im,jm,km, 'qz',trim(flowfile),kslice=0)
+
+
     !
     call tecbin('tecfield.plt',x,'x',y,'y',ro,'ro',u,'u',v,'v',p,'p',t,'T')
     !
     i=im/2
     print*,' ** profile extracted at x=',x(i,0)
     open(18,file='profile_verticle.dat')
-    write(18,"(6(1X,A15))")'y','ro','u','v','p','T'
-    write(18,"(6(1X,E15.7E3))")(y(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),j=0,jm)
+    write(18,"(7(1X,A15))")'y','ro','u','v','p','T','ut'
+    write(18,"(7(1X,E15.7E3))")(y(i,j),ro(i,j),u(i,j),uv(i,j),p(i,j),t(i,j),ut(i,j),j=0,jm)
     close(18)
     print*,' << profile_verticle.dat'
     !
@@ -2123,7 +2141,100 @@ module pp
     write(18,"(6(1X,E15.7E3))")(x(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),i=0,im)
     close(18)
     print*,' << profile_horizontal.dat'
-    !
+
+    j=jm
+    print*,' ** profile extracted at y=',y(0,j)
+    open(18,file='profile_top.dat')
+    write(18,"(7(1X,A15))")'x','ro','u','uv','p','T', 'ut'
+    write(18,"(7(1X,E15.7E3))")(x(i,j),ro(i,j),u(i,j),uv(i,j),p(i,j),t(i,j),ut(i,j),i=0,im)
+    close(18)
+    print*,' << profile_top.dat'
+
+    j=0
+    print*,' ** profile extracted at y=',y(0,j)
+    open(18,file='profile_bottom.dat')
+    write(18,"(6(1X,A15))")'x','ro','u','uv','p','T'
+    write(18,"(6(1X,E15.7E3))")(x(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),i=0,im)
+    close(18)
+    print*,' << profile_bottom.dat'
+
+
+
+    i=0
+    print*,' ** profile extracted at x=',x(i,0)
+    open(18,file='profile_left.dat')
+    write(18,"(6(1X,A15))")'y','ro','u','v','p','T'
+    write(18,"(6(1X,E15.7E3))")(y(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),j=0,jm)
+    close(18)
+    print*,' << profile_left.dat'
+
+    i=im
+    print*,' ** profile extracted at x=',x(i,0)
+    open(18,file='profile_right.dat')
+    write(18,"(6(1X,A15))")'y','ro','u','v','p','T'
+    write(18,"(6(1X,E15.7E3))")(y(i,j),ro(i,j),u(i,j),v(i,j),p(i,j),t(i,j),j=0,jm)
+    close(18)
+    print*,' << profile_right.dat'
+
+
+
+!   ========================fieldview grid file ================ 
+      z(1) = 0.0d0 ; z(2) = 0.5d0 ; z(3) = 1.0d0
+      open(12,file='FV_grid.dat',form='unformatted',status='unknown')
+      write(12)im+1,jm+1,1, 1
+      write(12)  ((sngl(x(i,j)),i=0,im),j=0,jm), &
+                 ((sngl(y(i,j)),i=0,im),j=0,jm), &
+                 ((( 1,i=0,im),j=0,jm),k=1,3)
+      close(12)
+
+!    =================== solution file ==============
+      fsmach = 0.001d0
+      alpha  = 1.0d0
+      re     = 10000.0d0
+      time   = 0.1d0
+
+      open(13,file='FV_r13_q.dat', form='unformatted',status='UNKNOWN')
+      write(13)im+1,jm+1,1, 1
+      write(13)sngl(fsmach), sngl(alpha),sngl(re),sngl(time)
+      write(13)((sngl(ro(i,j)),i=0,im),j=0,jm),     &
+                ((sngl(u(i,j)*ro(i,j)),i=0,im),j=0,jm),  &
+                ((sngl(v(i,j)*ro(i,j)),i=0,im),j=0,jm),  &
+                (((1.0d0),i=0,im),j=0,jm)
+      close(13)
+
+!     ================== F file =================
+      open(12,file='FV_r13_f.nam', status='UNKNOWN')
+      write(12,*)'pressure'
+      write(12,*)'Temp'
+      write(12,*)'sigmaxx'
+      write(12,*)'sigmaxy'
+      write(12,*)'sigmayy'
+      write(12,*)'sigmaxz'
+      write(12,*)'sigmayz'
+      write(12,*)'ut'
+      write(12,*)'vt'
+      write(12,*)'wt'
+      close(12)
+
+      open(14,file='FV_r13_f.dat',form='unformatted',status='UNKNOWN')
+      write(14)im+1,jm+1,10,1, 1
+      write(14)((sngl(p(i,j)),i=0,im),j=0,jm), &
+               ((sngl(t(i,j)),i=0,im),j=0,jm), &
+               ((sngl(u2(i,j)),i=0,im),j=0,jm), &
+               ((sngl(uv(i,j)),i=0,im),j=0,jm), & 
+               ((sngl(v2(i,j)),i=0,im),j=0,jm), &
+               ((sngl(uw(i,j)),i=0,im),j=0,jm), &
+               ((sngl(vw(i,j)),i=0,im),j=0,jm), &
+               ((sngl(ut(i,j)),i=0,im),j=0,jm), &
+               ((sngl(vt(i,j)),i=0,im),j=0,jm), &
+               ((sngl(wt(i,j)),i=0,im),j=0,jm)
+
+      close(14)
+
+
+
+
+   !
   end subroutine cavity_pp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine cavity_pp.                              |

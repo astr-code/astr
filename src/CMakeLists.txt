@@ -28,6 +28,7 @@ add_executable(astr
                     ibmethod.F90
                     initialisation.F90
                     interp.F90
+                    io.F90
                     mainloop.F90
                     methodmoment.F90
                     models.F90

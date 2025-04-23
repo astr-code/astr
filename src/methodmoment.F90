@@ -8,7 +8,7 @@
 module methodmoment
   !
   use constdef
-  use commvar,  only : im,jm,km,hm,ctime,lreport,ltimrpt
+  use commvar,  only : im,jm,km,hm,ctime,lreport,ltimrpt,moment
   use parallel, only : ptime,lio,mpirank,mpistop
   use utility,  only : timereporter
   !
@@ -38,6 +38,52 @@ module methodmoment
   real(8),allocatable,dimension(:,:,:,:) :: mijk,rij
   !
   real(8),allocatable,dimension(:,:,:,:) :: q_mom,qrhs_mom
+
+  real(8),allocatable,dimension(:,:,:) :: u2bc12, u2bc34, u2bc56,   &
+                                          uvbc12, uvbc34, uvbc56,   &
+                                          uwbc12, uwbc34, uwbc56,   &
+                                          v2bc12, v2bc34, v2bc56,   &
+                                          vwbc12, vwbc34, vwbc56,   &
+                                          qxbc12, qxbc34, qxbc56,   &
+                                          qybc12, qybc34, qybc56,   &
+                                          qzbc12, qzbc34, qzbc56
+
+  real(8),allocatable,dimension(:,:,:) :: sig_ttbc12, sig_nnbc12, sig_tsbc12, qtbc12, qsbc12
+  real(8),allocatable,dimension(:,:,:) :: sig_ttbc34, sig_nnbc34, sig_tsbc34, qtbc34, qsbc34
+  real(8),allocatable,dimension(:,:,:) :: sig_ttbc56, sig_nnbc56, sig_tsbc56, qtbc56, qsbc56
+
+  real(8),allocatable,dimension(:,:,:) :: sig_ntbc12, sig_nsbc12, qnbc12
+  real(8),allocatable,dimension(:,:,:) :: sig_ntbc34, sig_nsbc34, qnbc34
+  real(8),allocatable,dimension(:,:,:) :: sig_ntbc56, sig_nsbc56, qnbc56
+
+  real(8),allocatable,dimension(:,:,:) :: m_tttbc12, m_sssbc12, m_nntbc12, &
+                                          m_nnsbc12, m_ntsbc12
+  real(8),allocatable,dimension(:,:,:) :: m_tttbc34, m_sssbc34, m_nntbc34, &
+                                          m_nnsbc34, m_ntsbc34
+  real(8),allocatable,dimension(:,:,:) :: m_tttbc56, m_sssbc56, m_nntbc56, &
+                                          m_nnsbc56, m_ntsbc56
+                                
+
+  real(8),allocatable,dimension(:,:,:) :: m111bc12, m112bc12, m113bc12, &
+                                m122bc12, m222bc12, m223bc12, m123bc12
+  real(8),allocatable,dimension(:,:,:) :: m111bc34, m112bc34, m113bc34, &
+                                m122bc34, m222bc34, m223bc34, m123bc34
+  real(8),allocatable,dimension(:,:,:) :: m111bc56, m112bc56, m113bc56, &
+                                m122bc56, m222bc56, m223bc56, m123bc56
+
+  real(8),allocatable,dimension(:,:,:) :: r_ttbc12, r_nnbc12, r_tsbc12
+  real(8),allocatable,dimension(:,:,:) :: r_ttbc34, r_nnbc34, r_tsbc34
+  real(8),allocatable,dimension(:,:,:) :: r_ttbc56, r_nnbc56, r_tsbc56
+
+
+  real(8),allocatable,dimension(:,:,:) :: r11bc12, r12bc12, r13bc12, r22bc12, r23bc12
+  real(8),allocatable,dimension(:,:,:) :: r11bc34, r12bc34, r13bc34, r22bc34, r23bc34
+  real(8),allocatable,dimension(:,:,:) :: r11bc56, r12bc56, r13bc56, r22bc56, r23bc56
+
+  real(8),allocatable,dimension(:,:,:) :: delbc12, delbc34, delbc56
+
+ 
+
   !
   interface fvar2qmom
      module procedure sigma_flux2qmom_3da
@@ -83,12 +129,93 @@ module methodmoment
     allocate( dqy(0:im,0:jm,0:km,1:3),source=0.d0 )
     allocate( dqz(0:im,0:jm,0:km,1:3),source=0.d0 )
     !
+    allocate (u2bc12(-hm:jm+hm,-hm:km+hm,1:2), u2bc34(-hm:im+hm,-hm:km+hm,3:4), &
+              u2bc56(-hm:im+hm,-hm:jm+hm,5:6), uvbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              uvbc34(-hm:im+hm,-hm:km+hm,3:4), uvbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              uwbc12(-hm:jm+hm,-hm:km+hm,1:2), uwbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              uwbc56(-hm:im+hm,-hm:jm+hm,5:6), v2bc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              v2bc34(-hm:im+hm,-hm:km+hm,3:4), v2bc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              vwbc12(-hm:jm+hm,-hm:km+hm,1:2), vwbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              vwbc56(-hm:im+hm,-hm:jm+hm,5:6), qxbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              qxbc34(-hm:im+hm,-hm:km+hm,3:4), qxbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              qybc12(-hm:jm+hm,-hm:km+hm,1:2), qybc34(-hm:im+hm,-hm:km+hm,3:4), &
+              qybc56(-hm:im+hm,-hm:jm+hm,5:6), qzbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              qzbc34(-hm:im+hm,-hm:km+hm,3:4), qzbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              source = 0.0d0)
+
+    allocate (sig_ttbc12(-hm:jm+hm,-hm:km+hm,1:2), sig_nnbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              sig_tsbc12(-hm:jm+hm,-hm:km+hm,1:2), qtbc12(-hm:jm+hm,-hm:km+hm,1:2),    &
+              qsbc12(-hm:jm+hm,-hm:km+hm,1:2),source = 0.0d0)
+    allocate (sig_ttbc34(-hm:im+hm,-hm:km+hm,3:4), sig_nnbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              sig_tsbc34(-hm:im+hm,-hm:km+hm,3:4), qtbc34(-hm:im+hm,-hm:km+hm,3:4),    &
+              qsbc34(-hm:im+hm,-hm:km+hm,3:4), source = 0.0d0)
+    allocate (sig_ttbc56(-hm:im+hm,-hm:jm+hm,5:6), sig_nnbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              sig_tsbc56(-hm:im+hm,-hm:jm+hm,5:6), qtbc56(-hm:im+hm,-hm:jm+hm,5:6),    &
+              qsbc56(-hm:im+hm,-hm:jm+hm,5:6),source = 0.0d0)
+
+    allocate (sig_ntbc12(-hm:jm+hm,-hm:km+hm,1:2), sig_nsbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              qnbc12(-hm:jm+hm,-hm:km+hm,1:2),source = 0.0d0)
+    allocate (sig_ntbc34(-hm:im+hm,-hm:km+hm,3:4), sig_nsbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              qnbc34(-hm:im+hm,-hm:km+hm,3:4), source = 0.0d0)
+    allocate (sig_ntbc56(-hm:im+hm,-hm:jm+hm,5:6), sig_nsbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              qnbc56(-hm:im+hm,-hm:jm+hm,5:6),source = 0.0d0)
+  
+
+
+    if (moment == 'r26') then
     allocate(Eijkl(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:9),source=0.d0)
     allocate(psi(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:7),source=0.d0)
     allocate(omega(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:7),source=0.d0)
+
     allocate(dmijk(0:im,0:jm,0:km,1:3,1:7),source=0.d0)
     allocate(dRij(0:im,0:jm,0:km,1:3,1:6),source=0.d0)
     allocate(domega(0:im,0:jm,0:km,1:3,1:3),source=0.d0)
+
+    allocate (m111bc12(-hm:jm+hm,-hm:km+hm,1:2),m112bc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              m113bc12(-hm:jm+hm,-hm:km+hm,1:2),m122bc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              m222bc12(-hm:jm+hm,-hm:km+hm,1:2),m223bc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              m123bc12(-hm:jm+hm,-hm:km+hm,1:2), source = 0.0d0)
+    allocate (m111bc34(-hm:im+hm,-hm:km+hm,3:4),m112bc34(-hm:im+hm,-hm:km+hm,3:4), &
+              m113bc34(-hm:im+hm,-hm:km+hm,3:4),m122bc34(-hm:im+hm,-hm:km+hm,3:4), &
+              m222bc34(-hm:im+hm,-hm:km+hm,3:4),m223bc34(-hm:im+hm,-hm:km+hm,3:4), &
+              m123bc34(-hm:im+hm,-hm:km+hm,3:4), source = 0.0d0)
+    allocate (m111bc56(-hm:im+hm,-hm:jm+hm,5:6),m112bc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              m113bc56(-hm:im+hm,-hm:jm+hm,5:6),m122bc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              m222bc56(-hm:im+hm,-hm:jm+hm,5:6),m223bc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              m123bc56(-hm:im+hm,-hm:jm+hm,5:6), source = 0.0d0)
+
+    allocate (m_tttbc12(-hm:jm+hm,-hm:km+hm,1:2), m_sssbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              m_nntbc12(-hm:jm+hm,-hm:km+hm,1:2), m_nnsbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              m_ntsbc12(-hm:jm+hm,-hm:km+hm,1:2), source = 0.0d0)
+    allocate (m_tttbc34(-hm:im+hm,-hm:km+hm,3:4), m_sssbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              m_nntbc34(-hm:im+hm,-hm:km+hm,3:4), m_nnsbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              m_ntsbc34(-hm:im+hm,-hm:km+hm,3:4), source = 0.0d0)
+    allocate (m_tttbc56(-hm:im+hm,-hm:jm+hm,5:6), m_sssbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              m_nntbc56(-hm:im+hm,-hm:jm+hm,5:6), m_nnsbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              m_ntsbc56(-hm:im+hm,-hm:jm+hm,5:6), source = 0.0d0)
+      
+
+    allocate (r11bc12(-hm:jm+hm,-hm:km+hm,1:2), r12bc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              r13bc12(-hm:jm+hm,-hm:km+hm,1:2), r22bc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              r23bc12(-hm:jm+hm,-hm:km+hm,1:2), source = 0.0d0)
+    allocate (r11bc34(-hm:im+hm,-hm:km+hm,3:4), r12bc34(-hm:im+hm,-hm:km+hm,3:4), &
+              r13bc34(-hm:im+hm,-hm:km+hm,3:4), r22bc34(-hm:im+hm,-hm:km+hm,3:4), &
+              r23bc34(-hm:im+hm,-hm:km+hm,3:4), source = 0.0d0)
+    allocate (r11bc56(-hm:im+hm,-hm:jm+hm,5:6), r12bc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              r13bc56(-hm:im+hm,-hm:jm+hm,5:6), r22bc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              r23bc56(-hm:im+hm,-hm:jm+hm,5:6), source = 0.0d0)
+
+    allocate (r_ttbc12(-hm:jm+hm,-hm:km+hm,1:2), r_nnbc12(-hm:jm+hm,-hm:km+hm,1:2), &
+              r_tsbc12(-hm:jm+hm,-hm:km+hm,1:2), source = 0.0d0)
+    allocate (r_ttbc34(-hm:im+hm,-hm:km+hm,3:4), r_nnbc34(-hm:im+hm,-hm:km+hm,3:4), &
+              r_tsbc34(-hm:im+hm,-hm:km+hm,3:4), source = 0.0d0)
+    allocate (r_ttbc56(-hm:im+hm,-hm:jm+hm,5:6), r_nnbc56(-hm:im+hm,-hm:jm+hm,5:6), &
+              r_tsbc56(-hm:im+hm,-hm:jm+hm,5:6), source = 0.0d0)
+
+    allocate(delbc12(-hm:jm+hm,-hm:km+hm,1:2), delbc34(-hm:im+hm,-hm:km+hm,3:4), &
+             delbc56(-hm:im+hm,-hm:jm+hm,5:6), source = 0.0d0)
+    end if
+
   end subroutine allo_moment
   !+-------------------------------------------------------------------+
   !| The end of the subroutine allo_moment.                            |
@@ -107,9 +234,9 @@ module methodmoment
     !
     use commvar,  only : num_xtrmom,deltat,lfilter,feqchkpt,lavg,feqavg, &
                          limmbou,turbmode,feqslice,feqwsequ,lwslic,      &
-                         flowtype,num_species,maxstep,ltimrpt
+                         flowtype,num_species,maxstep,ltimrpt, nstep,   &
+                         bctype
     use commarray,only : x,jacob
-    use bc,       only : bctype
     use comsolver,only : filterq,spongefilter,filter2e
 
     implicit none
@@ -126,6 +253,7 @@ module methodmoment
     real(8) :: time_beg,time_beg_rhs,time_beg_sta,time_beg_io
     real(8),allocatable,save :: qsave(:,:,:,:)
     integer :: dt_ratio,jdnn,idnn
+    integer :: na, nb, nc
     real(8) :: hrr,time_beg_2
     real(8),save :: subtime=0.d0
     !
@@ -155,16 +283,16 @@ module methodmoment
       !
       call qmomswap(timerept=ltimrpt)
       !
+      call rhsmomcal(timerept=ltimrpt)
+
       !----------------------------
       !-- wall boundary condition -
       !----------------------------
-      do n = 1, 6
+      do n = 1,6 
          if(bctype(n)==413) then
            call MOM_wall_boundary(n)
          end if
       end do
-      !
-      call rhsmomcal(timerept=ltimrpt)
       !
       time_beg_2=ptime()
       !
@@ -565,8 +693,9 @@ module methodmoment
   subroutine diffu_mijk
     !
     use commvar,  only : im,jm,km,hm,Reynolds,npdci,npdcj,npdck,     &
-                         is,ie,js,je,ks,ke,moment,difschm,lfftk,ndims
-    use commarray,only : tmp,rho,dxi,jacob,miu
+                         is,ie,js,je,ks,ke,moment,difschm,lfftk,ndims, &
+                         const2
+    use commarray,only : tmp,rho,dxi,jacob,miu, prs, tmp
     use commfunc, only : ddfc
     use comsolver,only: dci,dcj,dck,alfa_dif,grad
     use parallel, only : dataswap
@@ -575,10 +704,10 @@ module methodmoment
     !
     integer :: i,j,k,n
     !
-    if (.not. allocated(dmijk)) then
-       allocate(dmijk(0:im,0:jm,0:km,1:3,1:7))
-       dmijk = 0.0d0
-    end if
+!    if (.not. allocated(dmijk)) then
+!       allocate(dmijk(0:im,0:jm,0:km,1:3,1:7))
+!       dmijk = 0.0d0
+!    end if
     !
     dmijk(:,:,:,:,1)=grad(mijk(:,:,:,1))
     dmijk(:,:,:,:,2)=grad(mijk(:,:,:,2))
@@ -629,7 +758,8 @@ module methodmoment
                            -  num6d7 * dmijk(:,:,:,1,7)+ num6d7 * dmijk(:,:,:,3,2)+ num6d7 * dmijk(:,:,:,3,5)
     !
     do n=1,9
-      Eijkl(0:im,0:jm,0:km,n)=-miu(0:im,0:jm,0:km)/rho(0:im,0:jm,0:km)/Aphi1*Eijkl(0:im,0:jm,0:km,n)
+      Eijkl(0:im,0:jm,0:km,n)=-miu(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)/prs(0:im,0:jm,0:km)   &
+                             /(Aphi1*const2)*Eijkl(0:im,0:jm,0:km,n)
     enddo
     !
     call dataswap(Eijkl)
@@ -788,9 +918,10 @@ module methodmoment
   !+-------------------------------------------------------------------+
   subroutine diffu_rij
     !
-    use commvar,   only: npdci,npdcj,npdck,is,ie,js,je,ks,ke,difschm,lfftk,ndims
+    use commvar,   only: npdci,npdcj,npdck,is,ie,js,je,ks,ke, &
+                         difschm,lfftk,ndims,const2
     use comsolver, only: grad,dci,dcj,dck,alfa_dif
-    use commarray, only: miu,rho,dxi,jacob
+    use commarray, only: miu,rho,dxi,jacob,tmp, prs
     use commfunc,  only: ddfc
     use parallel, only : dataswap
     !
@@ -798,10 +929,10 @@ module methodmoment
     real(8),allocatable :: df(:,:),ff(:,:)
     integer :: i,j,k,n
     !
-    if (.not. allocated(dRij)) then
-       allocate(dRij(0:im,0:jm,0:km,1:3,1:6))
-       dRij = 0.0d0
-    end if
+!    if (.not. allocated(dRij)) then
+!       allocate(dRij(0:im,0:jm,0:km,1:3,1:6))
+!       dRij = 0.0d0
+!    end if
     !
     dRij(:,:,:,:,1)=grad(Rij(:,:,:,1))  ! Rxx 
     dRij(:,:,:,:,2)=grad(Rij(:,:,:,2))  ! Rxy 
@@ -816,38 +947,46 @@ module methodmoment
     end if
     allocate(coef(0:im,0:jm,0:km))
     !
-    coef=miu(0:im,0:jm,0:km)/rho(0:im,0:jm,0:km)/Apsi1
+    coef(0:im,0:jm,0:km) = miu(0:im,0:jm,0:km)*tmp(0:im,0:jm,0:km)      &
+                          /prs(0:im,0:jm,0:km)/(Apsi1*const2)
     !
     ! psi_xxx
-    psi(0:im,0:jm,0:km,1)=-num27d35*coef*( 3.d0*dRij(0:im,0:jm,0:km,1,1) - & ! dRxx/dx
-                                          2.d0*(dRij(0:im,0:jm,0:km,2,2) + & ! dRxy/dy
-                                                dRij(0:im,0:jm,0:km,3,3)) )  ! dRxz/dz
+    psi(0:im,0:jm,0:km,1)=-num27d35*coef(0:im,0:jm,0:km)    &
+                         *( 3.d0*dRij(0:im,0:jm,0:km,1,1) - & ! dRxx/dx
+                           2.d0*(dRij(0:im,0:jm,0:km,2,2) + & ! dRxy/dy
+                                 dRij(0:im,0:jm,0:km,3,3)) )  ! dRxz/dz
     ! psi_xxy
-    psi(0:im,0:jm,0:km,2)=-num27d21*coef*(  dRij(0:im,0:jm,0:km,2,1) + & ! dRxx/dy 
+    psi(0:im,0:jm,0:km,2)=-num27d21*coef(0:im,0:jm,0:km)    &
+                                        *(  dRij(0:im,0:jm,0:km,2,1) + & ! dRxx/dy 
                                       1.6d0*dRij(0:im,0:jm,0:km,1,2) - & ! dRxy/dx
                                      0.4d0*(dRij(0:im,0:jm,0:km,2,4) + & ! dRyy/dy
                                             dRij(0:im,0:jm,0:km,3,5)) )  ! dRyz/dz
     ! psi_xxz
-    psi(0:im,0:jm,0:km,3)=-num27d21*coef*(  dRij(0:im,0:jm,0:km,3,1) + & ! dRxx/dz 
+    psi(0:im,0:jm,0:km,3)=-num27d21*coef(0:im,0:jm,0:km)    &
+                                        *(  dRij(0:im,0:jm,0:km,3,1) + & ! dRxx/dz 
                                       1.6d0*dRij(0:im,0:jm,0:km,1,3) - & ! dRxz/dx
                                      0.4d0*(dRij(0:im,0:jm,0:km,2,5) + & ! dRyz/dy
                                             dRij(0:im,0:jm,0:km,3,6)) )  ! dRzz/dz
     ! psi_xyy
-    psi(0:im,0:jm,0:km,4)=-num27d21*coef*(  dRij(0:im,0:jm,0:km,1,4) + & ! dRyy/dx 
+    psi(0:im,0:jm,0:km,4)=-num27d21*coef(0:im,0:jm,0:km)    &
+                                       *(  dRij(0:im,0:jm,0:km,1,4) + & ! dRyy/dx 
                                       1.6d0*dRij(0:im,0:jm,0:km,2,2) - & ! dRxy/dy
                                      0.4d0*(dRij(0:im,0:jm,0:km,1,1) + & ! dRxx/dx
                                             dRij(0:im,0:jm,0:km,3,3)) )  ! dRxz/dz
     ! psi_yyy
-    psi(0:im,0:jm,0:km,5)=-num27d35*coef*( 3.d0*dRij(0:im,0:jm,0:km,2,4) - & ! dRyy/dy
+    psi(0:im,0:jm,0:km,5)=-num27d35*coef(0:im,0:jm,0:km)    &
+                                        *( 3.d0*dRij(0:im,0:jm,0:km,2,4) - & ! dRyy/dy
                                           2.d0*(dRij(0:im,0:jm,0:km,1,2) + & ! dRxy/dx
                                                 dRij(0:im,0:jm,0:km,3,5)) )  ! dRyz/dz
     ! psi_yyz
-    psi(0:im,0:jm,0:km,6)=-num27d21*coef*(  dRij(0:im,0:jm,0:km,3,4) + & ! dRyy/dz 
+    psi(0:im,0:jm,0:km,6)=-num27d21*coef(0:im,0:jm,0:km)    &
+                                        *(  dRij(0:im,0:jm,0:km,3,4) + & ! dRyy/dz 
                                       1.6d0*dRij(0:im,0:jm,0:km,2,5) - & ! dRyz/dy
                                      0.4d0*(dRij(0:im,0:jm,0:km,1,3) + & ! dRxz/dx
                                             dRij(0:im,0:jm,0:km,3,6)) )  ! dRzz/dz
     ! psi_xyz
-    psi(0:im,0:jm,0:km,7)=-num27d21*coef*(  dRij(0:im,0:jm,0:km,3,2) + & ! dRxy/dz 
+    psi(0:im,0:jm,0:km,7)=-num27d21*coef(0:im,0:jm,0:km)    &
+                                        *(  dRij(0:im,0:jm,0:km,3,2) + & ! dRxy/dz 
                                             dRij(0:im,0:jm,0:km,2,3) + & ! dRxz/dy
                                             dRij(0:im,0:jm,0:km,1,5) )   ! dRyz/dx
     !
@@ -984,8 +1123,9 @@ module methodmoment
   !+-------------------------------------------------------------------+
   subroutine diffu_delta
     !
-    use commvar,   only: npdci,npdcj,npdck,is,ie,js,je,ks,ke,difschm,lfftk,ndims
-    use commarray, only: miu,rho,dxi,jacob
+    use commvar,   only: npdci,npdcj,npdck,is,ie,js,je,ks,ke, &
+                         difschm,lfftk,ndims,const2
+    use commarray, only: miu,rho,dxi,jacob, tmp, prs
     use comsolver, only: dci,dcj,dck,alfa_dif
     use commfunc,  only: ddfc
     use parallel,  only : dataswap
@@ -994,24 +1134,25 @@ module methodmoment
     integer :: i,j,k
     real(8),allocatable :: df(:),ff(:)
     !
-    if (.not. allocated(omega)) then
-       allocate(omega(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
-       omega = 0.0d0
-    end if
     !
     do k=0,km
     do j=0,jm
     do i=0,im
-      var1=miu(i,j,k)/rho(i,j,k)/Aomega1
+      var1=miu(i,j,k)*tmp(i,j,k)/prs(i,j,k)/(Aomega1*const2)
       !
-      omega(i,j,k,1)=-var1*(num7d3*ddelta(i,j,k,1) + &
-                      4.d0*(dRij(i,j,k,1,1)+dRij(i,j,k,2,2)+dRij(i,j,k,3,3)))
+      omega(i,j,k,1)=-var1*num7d3*ddelta(i,j,k,1) 
       !
-      omega(i,j,k,2)=-var1*(num7d3*ddelta(i,j,k,2) + &
-                      4.d0*(dRij(i,j,k,1,2)+dRij(i,j,k,2,4)+dRij(i,j,k,3,5)))
+      omega(i,j,k,2)=-var1*num7d3*ddelta(i,j,k,2)  
       !
-      omega(i,j,k,3)=-var1*(num7d3*ddelta(i,j,k,3) + &
-                      4.d0*(dRij(i,j,k,1,3)+dRij(i,j,k,2,5)+dRij(i,j,k,3,6)))
+      omega(i,j,k,3)=-var1*num7d3*ddelta(i,j,k,3)  
+
+      !
+      omega(i,j,k,1)= omega(i,j,k,1)-var1*(4.d0*(dRij(i,j,k,1,1)+dRij(i,j,k,2,2)+dRij(i,j,k,3,3)))*0.1d0
+      !
+      omega(i,j,k,2)= omega(i,j,k,2)-var1*(4.d0*(dRij(i,j,k,1,2)+dRij(i,j,k,2,4)+dRij(i,j,k,3,5)))*0.1d0
+      
+      omega(i,j,k,3)= omega(i,j,k,3)-var1*(4.d0*(dRij(i,j,k,1,3)+dRij(i,j,k,2,5)+dRij(i,j,k,3,6)))*0.1d0
+
     enddo
     enddo
     enddo
@@ -1112,6 +1253,13 @@ module methodmoment
     dTsigma(:,:,:,:,4)=grad(Tsigma(:,:,:,4))
     dTsigma(:,:,:,:,5)=grad(Tsigma(:,:,:,5))
     dTsigma(:,:,:,:,6)=-dTsigma(:,:,:,:,1)-dTsigma(:,:,:,:,4)
+
+    dsigmaxx=grad(sigma(:,:,:,1))
+    dsigmaxy=grad(sigma(:,:,:,2))
+    dsigmaxz=grad(sigma(:,:,:,3))
+    dsigmayy=grad(sigma(:,:,:,4))
+    dsigmayz=grad(sigma(:,:,:,5))
+
     !
     do k=0,km
     do j=0,jm
@@ -1149,6 +1297,7 @@ module methodmoment
     !
     use commvar,   only : const2
     use commarray, only : rho,tmp,prs,miu,jacob,sigma,qflux,dvel,dtmp
+    
 
     real(8) :: var1,var2,var3
     real(8) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz, &
@@ -1161,9 +1310,11 @@ module methodmoment
     do j=0,jm
     do i=0,im
       !
-      var1=-Adelta1*prs(i,j,k)*delta(i,j,k)/miu(i,j,k)
+      var1=-Adelta1*prs(i,j,k)*delta(i,j,k)/miu(i,j,k)         !           &
       var2=-8.d0/const2*tmp(i,j,k)*(dqx(i,j,k,1)+dqy(i,j,k,2)+dqz(i,j,k,3))
       !
+
+      if (.false.) then
       qx=qflux(i,j,k,1)
       qy=qflux(i,j,k,2)
       qz=qflux(i,j,k,3)
@@ -1211,7 +1362,9 @@ module methodmoment
                               qz*(dsigmaxz(i,j,k,1)+dsigmayz(i,j,k,2)+dsigmazz(i,j,k,3)) ) - &
             Adelta2*prs(i,j,k)/(rho(i,j,k)*miu(i,j,k))*( sigmaxx**2 + sigmayy**2 + sigmazz**2 + &
                                                   2.d0*( sigmaxy**2 + sigmaxz**2 + sigmayz**2) )
-
+      else
+       var3 = 0.0d0      
+      end if  
       !
       qrhs_mom(i,j,k,21)=qrhs_mom(i,j,k,21)+(var1+var2+var3)*jacob(i,j,k)
       !
@@ -1231,6 +1384,8 @@ module methodmoment
                dqydz,dqzdx,dqzdy,dqzdz
     real(8) :: var1,var2,srcterm(5)
     !
+    call dqfluxcal
+
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -1289,6 +1444,11 @@ module methodmoment
                dxx, dyy, dxy, dxz, dyz, exx, eyy, exy, exz, eyz, fxx, fyy, fxy, fxz, fyz, &
                gxx, gyy, gxy, gxz, gyz, hxx, hyy, hxy, hxz, hyz, kxx, kyy, kxy, kxz, kyz
 
+    real(8) :: linear_axx, linear_ayy, linear_axy, linear_axz, linear_ayz,  &
+               linear_bxx, linear_byy, linear_bxy, linear_bxz, linear_byz 
+    
+       
+
     real(8) :: qxxxx, qyyyy, qxxxy, qxxxz, qxxyy, qxyyy, qxxyz, qxyyz, qyyyz, &
                qxzzz, qyzzz, qxxzz, qyyzz, qxyzz, qzzzz
 
@@ -1298,10 +1458,9 @@ module methodmoment
 
     real(8) :: doxdx, doxdy, doxdz, doydx, doydy, doydz, dozdx, dozdy, dozdz 
 
-    if(.not. allocated(domega)) allocate(domega(0:im,0:jm,0:km,1:3,1:3))
-    domega(:,:,:,:,1)=grad(omega(:,:,:,1))  
-    domega(:,:,:,:,2)=grad(omega(:,:,:,2))  
-    domega(:,:,:,:,3)=grad(omega(:,:,:,3))  
+    domega(:,:,:,:,1)=grad(omega(:,:,:,1) )  
+    domega(:,:,:,:,2)=grad(omega(:,:,:,2) )  
+    domega(:,:,:,:,3)=grad(omega(:,:,:,3) )  
     !
     srcterm=0.d0
     !
@@ -1309,6 +1468,76 @@ module methodmoment
     do j=0,jm
     do i=0,im
 
+!      ===========================================
+!      == linear part ===========================
+!      =========================================      
+
+      if (.true.) then
+      dmxxxdx = dmijk(i,j,k,1,1)
+      dmxxydy = dmijk(i,j,k,2,2)
+      dmxxzdz = dmijk(i,j,k,3,3)
+
+      dmxyydx = dmijk(i,j,k,1,4)
+      dmyyydy = dmijk(i,j,k,2,5)
+      dmyyzdz = dmijk(i,j,k,3,6)
+
+      dmxxydx = dmijk(i,j,k,1,2)
+      dmxyydy = dmijk(i,j,k,2,4)
+      dmxyzdz = dmijk(i,j,k,3,7)
+
+      dmxxzdx = dmijk(i,j,k,1,3)
+      dmxyzdy = dmijk(i,j,k,2,7)
+      dmxzzdz = -dmijk(i,j,k,3,1) - dmijk(i,j,k,3,4)
+
+      dmxyzdx = dmijk(i,j,k,1,7)
+      dmyyzdy = dmijk(i,j,k,2,6)
+      dmyzzdz = -dmijk(i,j,k,3,2) - dmijk(i,j,k,3,5)
+
+      d = 2.0d0*Tmp(i,j,k)/const2
+
+      linear_axx =  - d*(dmxxxdx + dmxxydy + dmxxzdz)
+      linear_ayy =  - d*(dmxyydx + dmyyydy + dmyyzdz)
+      linear_axy =  - d*(dmxxydx + dmxyydy + dmxyzdz)
+      linear_axz =  - d*(dmxxzdx + dmxyzdy + dmxzzdz)
+      linear_ayz =  - d*(dmxyzdx + dmyyzdy + dmyzzdz)
+
+
+      doxdx = domega(i,j,k,1,1)
+      doxdy = domega(i,j,k,2,1)
+      doxdz = domega(i,j,k,3,1)
+      doydx = domega(i,j,k,1,2)
+      doydy = domega(i,j,k,2,2)
+      doydz = domega(i,j,k,3,2)
+      dozdx = domega(i,j,k,1,3)
+      dozdy = domega(i,j,k,2,3)
+      dozdz = domega(i,j,k,3,3)
+
+
+      
+      linear_bxx = -num2d15*( 2.0d0*doxdx - doydy - dozdz)
+      linear_byy = -num2d15*( 2.0d0*doydy - doxdx - dozdz)
+      linear_bxy = -0.2d0*(doydx + doxdy)
+      linear_bxz = -0.2d0*(dozdx + doxdz)
+      linear_byz = -0.2d0*(dozdy + doydz)
+! e
+!     Rxx
+      srcterm(1) = linear_axx + linear_bxx
+
+!     Rxy
+      srcterm(2) = linear_axy + linear_bxy
+
+!     Rxz
+      srcterm(3) = linear_axz + linear_bxz
+
+!     Ryy
+      srcterm(4) = linear_ayy + linear_byy
+
+!     Ryz
+      srcterm(5) = linear_ayz + linear_byz
+      end if
+!      ===========================================
+
+      if (.false.) then
       dudx = dvel(i,j,k,1,1)
       dudy = dvel(i,j,k,1,2)
       dudz = dvel(i,j,k,1,3)
@@ -1466,34 +1695,6 @@ module methodmoment
       exz = mxxz*a + mxyz*b + mxzz*c
       eyz = mxyz*a + myyz*b + myzz*c
          
-      dmxxxdx = dmijk(i,j,k,1,1)
-      dmxxydy = dmijk(i,j,k,2,2)
-      dmxxzdz = dmijk(i,j,k,3,3)
-      
-      dmxyydx = dmijk(i,j,k,1,4)
-      dmyyydy = dmijk(i,j,k,2,5)
-      dmyyzdz = dmijk(i,j,k,3,6)
-      
-      dmxxydx = dmijk(i,j,k,1,2)
-      dmxyydy = dmijk(i,j,k,2,4)
-      dmxyzdz = dmijk(i,j,k,3,7)
-      
-      dmxxzdx = dmijk(i,j,k,1,3)
-      dmxyzdy = dmijk(i,j,k,2,7)
-      dmxzzdz = -dmijk(i,j,k,3,1) - dmijk(i,j,k,3,4)
-      
-      dmxyzdx = dmijk(i,j,k,1,7)
-      dmyyzdy = dmijk(i,j,k,2,6)
-      dmyzzdz = -dmijk(i,j,k,3,2) - dmijk(i,j,k,3,5)
-      
-      d = 2.0d0*Tmp(i,j,k)/const2
-      
-      exx = exx - d*(dmxxxdx + dmxxydy + dmxxzdz)
-      eyy = eyy - d*(dmxyydx + dmyyydy + dmyyzdz)
-      exy = exy - d*(dmxxydx + dmxyydy + dmxyzdz)
-      exz = exz - d*(dmxxzdx + dmxyzdy + dmxzzdz)
-      eyz = eyz - d*(dmxyzdx + dmyyzdy + dmyzzdz)
-      
       a = (sigmaxx*dudx + sigmayy*dvdy + sigmazz*dwdz       &
          + sigmaxy*t12 + sigmaxz*t13  + sigmayz*t23         &
          + dqxdx + dqydy + dqzdz)*num14d3/rho(i,j,k)
@@ -1501,7 +1702,6 @@ module methodmoment
       fxx = sigmaxx*a ; fyy = sigmayy*a ; fxy = sigmaxy*a
       fxz = sigmaxz*a ; fyz = sigmayz*a
    
-      if (.false.) then
       qxxxx = Eijkl(i,j,k,1)
       qyyyy = Eijkl(i,j,k,8)
       qxxxy = Eijkl(i,j,k,2)
@@ -1535,23 +1735,12 @@ module methodmoment
           + qxyyz*t12 + qxyzz*t13 + qyyzz*t23)
            
 
-      doxdx = domega(i,j,k,1,1)
-      doxdy = domega(i,j,k,2,1)
-      doxdz = domega(i,j,k,3,1)
-      doydx = domega(i,j,k,1,2)
-      doydy = domega(i,j,k,2,2)
-      doydz = domega(i,j,k,3,2)
-      dozdx = domega(i,j,k,1,3)
-      dozdy = domega(i,j,k,2,3)
-      dozdz = domega(i,j,k,3,3)
-
-
       a = num7d3*delta(i,j,k)
-      hxx = -num2d15*(a*(2.0d0*dudx - dvdy - dwdz) + 2.0d0*doxdx - doydy - dozdz) 
-      hyy = -num2d15*(a*(2.0d0*dvdy - dudx - dwdz) + 2.0d0*doydy - doxdx - dozdz)  
-      hxy = -0.2d0*(a*t12 + doydx + doxdy)
-      hxz = -0.2d0*(a*t13 + dozdx + doxdz)
-      hyz = -0.2d0*(a*t23 + dozdy + doydz)
+      hxx = -num2d15*a*(2.0d0*dudx - dvdy - dwdz)  
+      hyy = -num2d15*a*(2.0d0*dvdy - dudx - dwdz)   
+      hxy = -0.2d0*a*t12
+      hxz = -0.2d0*a*t13
+      hyz = -0.2d0*a*t23
       
       term1 = sigmaxx*sigmaxx ; term2 = sigmayy*sigmayy ; term3 = sigmazz*sigmazz
       term4 = sigmaxy*sigmaxy ; term5 = sigmaxz*sigmaxz ; term6 = sigmayz*sigmayz 
@@ -1563,23 +1752,23 @@ module methodmoment
       kxy = a*( (sigmaxx + sigmayy)*sigmaxy + sigmaxz*sigmayz)
       kxz = a*( (sigmaxx + sigmazz)*sigmaxz + sigmaxy*sigmayz)
       kyz = a*( (sigmayy + sigmazz)*sigmayz + sigmaxy*sigmaxz)
-      end if
 
 ! e
 !     Rxx
-      srcterm(1) = axx + bxx + cxx + dxx + exx + fxx !+ gxx + hxx + kxx
+      srcterm(1) = srcterm(1) + axx + bxx + cxx + dxx + exx + fxx + gxx + hxx + kxx
       
 !     Rxy
-      srcterm(2) = axy + bxy + cxy + dxy + exy + fxy !+ gxy + hxy + kxy
+      srcterm(2) = srcterm(2) + axy + bxy + cxy + dxy + exy + fxy + gxy + hxy + kxy
 
 !     Rxz
-      srcterm(3) = axz + bxz + cxz + dxz + exz + fxz !+ gxz + hxz + kxz
+      srcterm(3) = srcterm(3) + axz + bxz + cxz + dxz + exz + fxz + gxz + hxz + kxz
       
 !     Ryy
-      srcterm(4) = ayy + byy + cyy + dyy + eyy + fyy !+ gyy + hyy + kyy
+      srcterm(4) = srcterm(4) + ayy + byy + cyy + dyy + eyy + fyy + gyy + hyy + kyy
 
 !     Ryz
-      srcterm(5) = ayz + byz + cyz + dyz + eyz + fyz !+ gyz + hyz + kyz
+      srcterm(5) = srcterm(5) + ayz + byz + cyz + dyz + eyz + fyz + gyz + hyz + kyz
+      end if
                     
       do n=1,5
         !
@@ -1616,6 +1805,31 @@ module methodmoment
     do k=0,km
     do j=0,jm
     do i=0,im
+!      ============================================
+!      ==          linear term                   ==
+!      ===========================================
+        if (.true.) then
+        srcterm(1) = -(num9d35*dRij(i,j,k,1,1) - num6d35*(dRij(i,j,k,2,2) + dRij(i,j,k,3,3)))
+        srcterm(2) = -(num1d7*dRij(i,j,k,2,1) + num8d35*dRij(i,j,k,1,2)  &
+                   - num2d35*(dRij(i,j,k,2,4) + dRij(i,j,k,3,5)))
+        srcterm(3) = -(num1d7*dRij(i,j,k,3,1) + num8d35*dRij(i,j,k,1,3)  & 
+                 - num2d35*(dRij(i,j,k,2,5) + dRij(i,j,k,3,6)))         
+        srcterm(4) = -(num1d7*dRij(i,j,k,1,4) + num8d35*dRij(i,j,k,2,2)  &
+                 - num2d35*(dRij(i,j,k,1,1) + dRij(i,j,k,3,3)))
+        srcterm(5) = -(num9d35*dRij(i,j,k,2,4) - num6d35*(dRij(i,j,k,1,2) + dRij(i,j,k,3,5)))
+
+        srcterm(6) = -(num1d7*dRij(i,j,k,3,4) + num8d35*dRij(i,j,k,2,5)  &
+                   - num2d35*(dRij(i,j,k,1,3) + dRij(i,j,k,3,6)))
+        srcterm(7) = -(num1d7*(dRij(i,j,k,1,5) + dRij(i,j,k,2,3) + dRij(i,j,k,3,2)))
+       end if 
+!      ==================================
+!      == nonlinear terms
+!      ======================
+
+
+       if (.false.) then
+
+    
       !
       rrho=1.d0/rho(i,j,k)
       !
@@ -1664,67 +1878,57 @@ module methodmoment
       t13 = dudz+dwdx
       t23 = dwdy+dvdz
       !
-      a = num9d35*dRij(i,j,k,1,1) - num6d35*(dRij(i,j,k,2,2) + dRij(i,j,k,3,3))
       b = 1.8d0*sigmaxx*terma - 1.2d0*(sigmaxy*termb + sigmaxz*termc)
       d = 0.48d0*(qx*(2.d0*dudx - t23) - qy*t12 - qz*t13)
       e = 1.8d0*mxxx*dudx + mxxy*(1.8d0*dudy - 1.2d0*dvdx)                                  & 
         + mxxz*(1.8d0*dudz - 1.2d0*dwdx) - 1.2d0*(mxyy*dvdy + mxyz*t23 + mxzz*dwdz)
       !
-      srcterm(1) = - a + rrho*b - d - e
+      srcterm(1) = srcterm(1) + rrho*b - d - e
       !
-      a = num1d7*dRij(i,j,k,2,1) + num8d35*dRij(i,j,k,1,2)                                  &
-        - num2d35*(dRij(i,j,k,2,4) + dRij(i,j,k,3,5))
       b = (sigmaxx  - 0.4d0*sigmayy)*termb + 1.6d0*sigmaxy*terma - 0.4d0*sigmayz*termc
       d = 0.64d0*qx*t12 + 0.16d0*(qy*(4.d0*dudx - 3.d0*dvdy - dwdz) - qz*t23)
       e = mxxx*dvdx +  (1.6d0*dudx+dvdy)*mxxy + mxxz*dvdz + 0.4d0*(mxyy*(4.d0*dudy - dvdx)  & 
         + mxyz*(4.d0*dudz - dwdx) - myyy*dvdy - myyz*t23 - myzz*dwdz)
       !
-      srcterm(2) = - a + rrho*b - d - e
+      srcterm(2) = srcterm(2) + rrho*b - d - e
       !
-      a = num1d7*dRij(i,j,k,3,1) + num8d35*dRij(i,j,k,1,3)                                  &
-        - num2d35*(dRij(i,j,k,2,5) + dRij(i,j,k,3,6))  
       b = (sigmaxx - 0.4d0*sigmazz)*termc  + 1.6d0*sigmaxz*terma - 0.4d0*sigmayz*termb  
       d = 0.64d0*qx*t13 - 0.16d0*qy*t23 + 0.16d0*qz*(4.d0*dudx-dvdy-3.d0*dwdz)
       e = mxxx*dwdx + mxxz*(1.6d0*dudx + dwdz) + mxxy*dwdy + 0.4d0*(mxyz*(4.d0*dudy - dvdx)  &
         + mxzz*(4.d0*dudz - dwdx) - myyz*dvdy - myzz*t23 - mzzz*dwdz)
 
-      srcterm(3) = - a + rrho*b - d - e
+      srcterm(3) = srcterm(3) + rrho*b - d - e
       !
-      a = num1d7*dRij(i,j,k,1,4) + num8d35*dRij(i,j,k,2,2)                                  &
-        - num2d35*(dRij(i,j,k,1,1) + dRij(i,j,k,3,3)) 
       b = (sigmayy - 0.4d0*sigmaxx)*terma + 1.6d0*sigmaxy*termb - 0.4d0*sigmaxz*termc 
       d = 0.16d0*qx*(4.d0*dvdy - 3.d0*dudx - dwdz)+ 0.64d0*qy*t12 - 0.16d0*qz*(dwdx - dudz)
       e = mxyy*(1.6d0*dvdy + dudx) + myyy*dudy + myyz*dudz                                  &
         + 0.4d0*(mxxy*(4.d0*dvdx - dudy) + mxyz*(4.d0*dvdz - dwdy) - mxxx*dudx              &
         - mxxz*t13 - mxzz*dwdz) 
 
-      srcterm(4) = - a + rrho*b - d - e
+      srcterm(4) =  srcterm(4) + rrho*b - d - e
       !
-      a = num9d35*dRij(i,j,k,2,4) - num6d35*(dRij(i,j,k,1,2) + dRij(i,j,k,3,5))
       b = - 1.2d0*sigmaxy*terma + 1.8d0*sigmayy*termb - 1.2d0*sigmayz*termc
       d = 0.48d0*(- qx*t12 + qy*(2.d0*dvdy - dudx - dwdz) - qz*t23 )
       e = 1.8d0*myyy*dvdy + mxyy*(1.8d0*dvdx - 1.2d0*dudy) + myyz*(1.8d0*dvdz - 1.2d0*dwdy) &
         - 1.2d0*(mxxy*dudx + mxyz*t13 + myzz*dwdy)
 
-      srcterm(5) = - a + rrho*b - d - e
+      srcterm(5) = srcterm(5) + rrho*b - d - e
       !
-      a = num1d7*dRij(i,j,k,3,4) + num8d35*dRij(i,j,k,2,5)                                  &
-        - num2d35*(dRij(i,j,k,1,3) + dRij(i,j,k,3,6)) 
       b = - 0.4d0*sigmaxz*terma + (sigmayy - 0.4d0*sigmazz)*termc + 1.6d0*sigmayz*termb 
       d = - 0.16d0*qx*t13 + 0.64d0*qy*t23 + 0.16d0*qz*(4.d0*dvdy - dudx - 3.d0*dwdz)
       e = myyy*dwdy + myyz*(1.6d0*dvdy + dwdz) + mxyy*dwdx + 0.4d0*(mxyz*(4.d0*dvdx - dudy)  &
         - mxxz*dudx - mxzz *t13 + myzz*(4.d0*dvdz - dwdy) - mzzz*dwdz)
 
-      srcterm(6) = - a + rrho*b - d - e
+      srcterm(6) = srcterm(6) + rrho*b - d - e
       !
-      a = num1d7*(dRij(i,j,k,1,5) + dRij(i,j,k,2,3) + dRij(i,j,k,3,2))
       b = sigmayz*terma + sigmaxy*termc + sigmaxz*termb
       d = 0.4d0*(qx*t23 + qy*t13 + qz * t12)
       e = mxxy*dwdx + mxxz*dvdx + mxyz*(dudx+dvdy+dwdz) + myzz*dudz + myyz*dudy + mxzz*dvdz  &
         + mxyy*dwdy
 
-      srcterm(7) = - a + rrho*b - d - e
+      srcterm(7) = srcterm(7) + rrho*b - d - e
       !
+      end if
       do n=1,7
         !
         qrhs_mom(i,j,k,8+n) = qrhs_mom(i,j,k,8+n) + srcterm(n)*jacob(i,j,k)
@@ -1830,41 +2034,64 @@ module methodmoment
       mzzz=-mijk(i,j,k,3)-mijk(i,j,k,6)
 
       pres = prs(i,j,k)
+
+
+!    linear part of the stress      
+      srcterm(1)= -pres*(sigmaxx/miup + num2d3*(2.d0*dudx-dvdy-dwdz))  
+      srcterm(2)= -pres*(sigmaxy/miup + (dvdx+dudy) )                  
+      srcterm(3)= -pres*(sigmaxz/miup + (dwdx+dudz) )                  
+      srcterm(4)= -pres*(sigmayy/miup + num2d3*(2.d0*dvdy-dudx-dwdz))  
+      srcterm(5)= -pres*(sigmayz/miup + (dwdy+dvdz) )                  
+
+
+      if (.true.) then  ! add nolinear terms
       !
       ! sigmaxx
-      srcterm(1)= -pres*(sigmaxx/miup + num2d3*(2.d0*dudx-dvdy-dwdz))  &
-                  -num4d15*(2.d0*dqxdx-dqydy-dqzdz)                    &
+      srcterm(1)= srcterm(1)                            &
+                  -num4d15*(2.d0*dqxdx-dqydy-dqzdz)     &
                   -num2d3*( sigmaxx*(2.d0*dudx+dwdz)    &
                            +sigmayy*(dwdz-dvdy)         &
                            +sigmaxy*(2.d0*dudy-dvdx)    &
                            +sigmaxz*(2.d0*dudz-dwdx)    &
                            -sigmayz*(dwdy+dvdz))
       ! sigmaxy
-      srcterm(2)= -pres*(sigmaxy/miup + (dvdx+dudy) )                  &
+      srcterm(2)= srcterm(2)                                           &
                   -0.4d0*(dqydx+dqxdy)                                 &
                   -( sigmaxx*dvdx + sigmayy*dudy + sigmaxy*(dudx+dvdy) &
                     +sigmaxz*dvdz + sigmayz*dudz )
       ! sigmaxz
-      srcterm(3)= -pres*(sigmaxz/miup + (dwdx+dudz) )                  &
+      srcterm(3)= srcterm(3)                                           &
                   -0.4d0*(dqzdx+dqxdz)                                 &
-                  -( sigmaxx*(dwdx-dudz) - sigmayy*dudz   &
+                  -( sigmaxx*(dwdx-dudz) - sigmayy*dudz                &
                     +sigmaxz*(dudx+dwdz) + sigmaxy*dwdy + sigmayz*dudy )
       ! sigmayy
-      srcterm(4)= -pres*(sigmayy/miup + num2d3*(2.d0*dvdy-dudx-dwdz))  &
-                  -num4d15*(2.d0*dqydy-dqxdx-dqzdz)                    &
+      srcterm(4)= srcterm(4)                            &
+                  -num4d15*(2.d0*dqydy-dqxdx-dqzdz)     &
                   -num2d3*( sigmaxx*(dwdz-dudx)         &
                            +sigmayy*(2.d0*dvdy+dwdz)    &
                            +sigmaxy*(2.d0*dvdx-dudy)    &
                            -sigmaxz*(dudz+dwdx)         &
                            +sigmayz*(2.d0*dvdz-dwdy))
       ! sigmayz
-      srcterm(5)= -pres*(sigmayz/miup + (dwdy+dvdz) )                  &
+      srcterm(5)=  srcterm(5)                                          &
                   -0.4d0*(dqydz+dqzdy)                                 &
-                  -(-sigmaxx*dvdz + sigmayy*(dwdy-dvdz)   &
+                  -(-sigmaxx*dvdz + sigmayy*(dwdy-dvdz)                &
                     +sigmaxy*dwdx + sigmaxz*dvdx + sigmayz*(dvdy+dwdz) )
+
+      end if
+
+
+
+!     linear part of heat flux            
+      srcterm(6)= -pres*(Aq*qx/miup + dtmp(i,j,k,1)/const5)
+      srcterm(7)= -pres*(Aq*qy/miup + dtmp(i,j,k,2)/const5)
+      srcterm(8)= -pres*(Aq*qz/miup + dtmp(i,j,k,3)/const5)
+
+
+      if (.true.) then ! add nolinear terms
       !
       ! qx
-      srcterm(6)= -pres*(Aq*qx/miup + dtmp(i,j,k,1)/const5)          &
+      srcterm(6)=  srcterm(6)                                        &
                   -( 3.5d0*(sigmaxx*dtdx+sigmaxy*dtdy+sigmaxz*dtdz)  &
                     + tmp(i,j,k)*pxx0 )/const2                       &
                   +(Pxx*sigmaxx+Pyy*sigmaxy+Pzz*sigmaxz)/rho(i,j,k)  &
@@ -1875,7 +2102,7 @@ module methodmoment
                    + mijk(i,j,k,7)*(dwdy+dvdz) ) - num1d6*ddelta(i,j,k,1)
 
       ! qy
-      srcterm(7)= -pres*(Aq*qy/miup + dtmp(i,j,k,2)/const5)           &
+      srcterm(7)=  srcterm(7)                                         &
                   -( 3.5d0*(sigmaxy*dtdx+sigmayy*dtdy+sigmayz*dtdz)   &
                     + tmp(i,j,k)*pyy0 )/const2                        &
                   +(Pxx*sigmaxy+Pyy*sigmayy+Pzz*sigmayz)/rho(i,j,k)   &
@@ -1886,7 +2113,7 @@ module methodmoment
                    + mijk(i,j,k,6)*(dwdy+dvdz) ) - num1d6*ddelta(i,j,k,2)
 
       ! qz
-      srcterm(8)= -pres*(Aq*qz/miup + dtmp(i,j,k,3)/const5)           &
+      srcterm(8)= srcterm(8)                                          &
                   -( 3.5d0*(sigmaxz*dtdx+sigmayz*dtdy+sigmazz*dtdz)   &
                     + tmp(i,j,k)*pzz0 )/const2                        &
                   +(Pxx*sigmaxz+Pyy*sigmayz+Pzz*sigmazz)/rho(i,j,k)   &
@@ -1895,6 +2122,7 @@ module methodmoment
                   -( mijk(i,j,k,3)*dudx + mijk(i,j,k,6)*dvdy + mzzz*dwdz  &
                    + mijk(i,j,k,7)*(dudy+dvdx) + mxzz*(dudz+dwdx)         &
                    + myzz*(dwdy+dvdz) ) - num1d6*ddelta(i,j,k,3)
+       end if     
 
       !
       qrhs_mom(i,j,k,1)=qrhs_mom(i,j,k,1)+srcterm(1)*jacob(i,j,k)
@@ -1933,8 +2161,9 @@ module methodmoment
   !+-------------------------------------------------------------------+
   subroutine rhsmomcal(timerept)
     !
-    use commvar,  only : flowtype,conschm,diffterm,recon_schem,limmbou,moment
-    use comsolver,only : gradcal
+    use commvar,  only : flowtype,conschm,diffterm,recon_schem, &
+                         limmbou,moment,nstep
+!    use comsolver,only : gradcal
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -1953,7 +2182,7 @@ module methodmoment
     !+-------------------------+
     if(present(timerept) .and. timerept) time_beg=ptime()
     !
-    call gradcal()
+!    call gradcal()
     !
     qrhs_mom=0.d0
     !
@@ -1974,7 +2203,7 @@ module methodmoment
     ! call heatflux
     ! call dqcal
     !
-    if(moment=='r13') then
+    if(moment=='r13' .or. nstep < 20) then
       !
       call mijkcal
       !
@@ -2877,22 +3106,23 @@ module methodmoment
   !| xx-xx-xxxx: Created by X. Gu.                                     |
   !+-------------------------------------------------------------------+
   subroutine MOM_wall_boundary(ndir)
-    !==================================
+    !=====================================
 
-    use parallel,only: lio,mpistop,mpirank,mpirankname,irk,jrk,krk,      &
-                        irkm,jrkm,krkm,pmax,ptime
-    use commvar, only: hm,im,jm,km,uinf,vinf,winf,pinf,roinf,tinf,ndims, &
-                     num_species,flowtype,gamma,numq,npdci,npdcj,      &
-                     npdck,is,ie,js,je,ks,ke,xmin,xmax,ymin,ymax,      &
-                     zmin,zmax,time,num_modequ,ltimrpt, moment
+    use parallel,only: irk,jrk,krk,irkm,jrkm,krkm
+    use commvar, only: nstep, deltat 
+    use commarray, only: q, vel, tmp, prs, rho, sigma, qflux
+    use fludyna,   only : fvar2q 
+
 
     integer,intent(in) :: ndir
     !
     ! local data
-    integer :: i,j,k,l,ip, jp, kp
+    integer :: i,j,k,l,ip, jp, kp , m
     real(8) n1, n2, n3, uwall, vwall, wwall, twall, alpha
     !
     !
+!    call boundary_grad
+
     if (ndir==1) then
       ! left wall
       !
@@ -2916,23 +3146,19 @@ module methodmoment
         !-- Accomodation coff
         !------------------------
         alpha = 1.0d0   ! diffusive wall
-        if (moment=='r13') then
-          do k=0,km
+        do k=0,km
           do j=0,jm
-            jp = j ; kp = k
-            call R13wbc(n1, n2, n3, i, j, k, ip, jp, kp, &
+             jp = j ; kp = k
+             if (moment=='r13') then
+                call R13wbc(ndir, n1, n2, n3, i, j, k, ip, jp, kp, &
                         uwall, vwall, wwall, twall, alpha)
-          end do
-          end do
-        elseif (moment=='r26') then
-          do k=0,km
-          do j=0,jm
-            jp = j ; kp = k
-            call R26wbc(n1, n2, n3, i, j, k,ip, jp, kp, &
+             end if    
+             if (moment=='r26') then
+                call R26wbc(ndir, n1, n2, n3, i, j, k,ip, jp, kp, &
                         uwall, vwall, wwall, twall, alpha)
+             end if
           end do
-          end do
-        end if
+        end do
         !
       end if
       !
@@ -2959,23 +3185,19 @@ module methodmoment
         !-- Accomodation coff
         !------------------------
         alpha = 1.0d0   ! diffusive wall
-        if (moment=='r13') then
-          do k=0,km
+        do k=0,km
           do j=0,jm
-            jp = j ; kp = k
-            call R13wbc(n1, n2, n3, i, j, k, ip, jp, kp, &
+             jp = j ; kp = k
+             if (moment=='r13') then
+                call R13wbc(ndir, n1, n2, n3, i, j, k, ip, jp, kp, &
                         uwall, vwall, wwall, twall, alpha)
-          end do
-          end do
-        elseif (moment=='r26') then
-          do k=0,km
-          do j=0,jm
-            jp = j ; kp = k
-            call R26wbc(n1, n2, n3, i, j, k,ip, jp, kp, &
+             end if   
+             if (moment=='r26') then
+                call R26wbc(ndir, n1, n2, n3, i, j, k,ip, jp, kp, &
                         uwall, vwall, wwall, twall, alpha)
+             end if   
           end do
-          end do
-        end if
+        end do
         !
       end if
       !
@@ -3002,23 +3224,19 @@ module methodmoment
         !-- Accomodation coff
         !------------------------
         alpha = 1.0d0   ! diffusive wall
-        if (moment=='r13') then
-          do k=0,km
+        do k=0,km
           do i=0,im
-            ip = i ; kp = k
-            call R13wbc(n1, n2, n3, i, j, k, ip, jp, kp, &
+             ip = i ; kp = k
+             if (moment=='r13') then
+                call R13wbc(ndir, n1, n2, n3, i, j, k, ip, jp, kp, &
                         uwall, vwall, wwall, twall, alpha)
-          end do
-          end do
-        elseif (moment=='r26') then
-          do k=0,km
-          do i=0,im
-            ip = i ; kp = k
-            call R26wbc(n1, n2, n3, i, j, k,ip, jp, kp, &
+             end if
+             if (moment=='r26') then
+                call R26wbc(ndir, n1, n2, n3, i, j, k,ip, jp, kp, &
                         uwall, vwall, wwall, twall, alpha)
+             end if
           end do
-          end do
-        end if
+        end do
         !
       end if
       !
@@ -3036,7 +3254,7 @@ module methodmoment
         !----------------------------
         !-- wall velocity --
         !---------------------------
-        uwall =  0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+        uwall =  1.0d0; vwall = 0.0d0 ; wwall = 0.0d0
         !--------------------------------------------
         !-- wall temperature --
         !---------------------
@@ -3046,23 +3264,24 @@ module methodmoment
         !------------------------
         alpha = 1.0d0   ! diffusive wall
         !
-        if (moment=='r13') then
-          do k=0,km
+        uwall = dble(nstep)*deltat
+        if (uwall > 1.0d0) uwall = 1.0d0
+        do k=0,km
           do i=0,im
-            ip = i ; kp = k
-            call R13wbc(n1, n2, n3, i, j, k, ip, jp, kp, &
-                        uwall, vwall, wwall, twall,alpha)
-          end do
-          end do
-        elseif(moment=='r26') then
-          do k=0,km
-          do i=0,im
-            ip = i ; kp = k
-            call R26wbc(n1, n2, n3, i, j, k, ip, jp, kp, &
+             ip = i ; kp = k
+             if (moment=='r13') then
+                call R13wbc(ndir, n1, n2, n3, i, j, k, ip, jp, kp, &
+                         uwall, vwall, wwall, twall,alpha)
+             end if
+             if (moment=='r26') then
+                call R26wbc(ndir, n1, n2, n3, i, j, k, ip, jp, kp, &
                         uwall, vwall, wwall,twall,alpha)
+             end if   
            end do
-           end do
-        end if
+        end do
+!       ==========================
+!       == corner correlations ===
+!       ==========================
         !
       end if
       !
@@ -3084,14 +3303,14 @@ module methodmoment
   !| -------------                                                     |
   !| xx-xx-xxxx: Created by X. Gu.                                     |
   !+-------------------------------------------------------------------+
-  subroutine R13wbc(n1, n2, n3, iw, jw, kw, ip, jp, kp,  &
-                         uwall, vwall, wwall, twall, alpha) 
+  subroutine R13wbc(nface, n1, n2, n3, iw, jw, kw, ip, jp, kp,  &
+                    uwall, vwall, wwall, twall, alpha) 
     !===================================================================
-    use commvar,   only : deltat,const2
-    use commarray, only : q,rho, vel, sigma, qflux,tmp, prs, miu, x
-    use fludyna,   only : fvar2q,thermal
+    use commvar,   only : const2, subdeltat, deltat
+    use commarray, only : vel, sigma, qflux,tmp, prs, x,  &
+                          vel12_slip, vel34_slip, vel56_slip
 
-    integer, intent(in) :: iw, jw, kw, ip, jp, kp
+    integer, intent(in) :: iw, jw, kw, ip, jp, kp, nface
     real(8), intent(in) :: n1, n2, n3, uwall, vwall, wwall, twall, alpha
     !
     real(8) tempw, presw, u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
@@ -3107,41 +3326,43 @@ module methodmoment
     real(8) r_nn, r_tt, r_ss, r_ts, r_nt, r_ns, qn, qt, qs
     real(8) m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn
     
-    real(8) upb, vpb, wpb, t_jump, slip_t, slip_s, slipnorm, G, co1, co2
-    real(8) slip2, term1, term2, tr1, tempp, rhop, presp, deltatp
+    real(8) upb, vpb, wpb, slip_t, slip_s, G, co1, co2
+    real(8) slip2, term1, tr1, deltatp, deltatt
 
     real(8) dx , dy , dz
 
     real(8) sig_nn_new, sig_tt_new, sig_ss_new, sig_ts_new
 
-    deltatp = deltat 
-    
+    deltatp = deltat
+    deltatt = deltat
 
     G = (2.0d0 - alpha)/alpha*sqrt(0.5d0*pi) 
     
-    n11 = n1*n1;  n22 = n2*n2; n33 = n3*n3; n12 = n1*n2; n13 = n1*n3; n23 = n2*n3
+    n11 = n1*n1; n22 = n2*n2; n33 = n3*n3; n12 = n1*n2
+    n13 = n1*n3; n23 = n2*n3
 
 
     dx = x(iw, jw, kw, 1) - x(ip, jp, kp, 1)
     dy = x(iw, jw, kw, 2) - x(ip, jp, kp, 2)
     dz = x(iw, jw, kw, 3) - x(ip, jp, kp, 3)
 
-
     tempw = tmp(iw, jw, kw)
-    presw  = prs(iw, jw, kw)
+    presw = prs(iw, jw, kw)
    
-    u2w = sigma(iw, jw, kw, 1) 
-    uvw = sigma(iw, jw, kw, 2) 
-    uww = sigma(iw, jw, kw, 3) 
-    v2w = sigma(iw, jw, kw, 4) 
-    vww = sigma(iw, jw, kw, 5) 
-    w2w = - u2w - v2w
+!    u2w = sigma(iw, jw, kw, 1) 
+!    uvw = sigma(iw, jw, kw, 2) 
+!    uww = sigma(iw, jw, kw, 3) 
+!    v2w = sigma(iw, jw, kw, 4) 
+!    vww = sigma(iw, jw, kw, 5) 
+!    w2w = - u2w - v2w
    
-    qxw = qflux(iw, jw, kw, 1) 
-    qyw = qflux(iw, jw, kw, 2) 
-    qzw = qflux(iw, jw, kw, 3) 
-
+!    qxw = qflux(iw, jw, kw, 1) 
+!    qyw = qflux(iw, jw, kw, 2) 
+!    qzw = qflux(iw, jw, kw, 3) 
    
+    call extraplotionR13(nface, iw, jw, kw, ip, jp, kp,          &
+                    u2w, uvw, uww, v2w, vww, w2w, qxw, qyw, qzw)
+    
     m111 = mijk(iw,jw,kw,1)
     m112 = mijk(iw,jw,kw,2)
     m113 = mijk(iw,jw,kw,3)
@@ -3166,17 +3387,29 @@ module methodmoment
     co1 = G*sqrt(co2)
     tr1 = twall/tempw
 
-    upb = vel(iw, jw, kw,1) - uwall
-    vpb = vel(iw, jw, kw,2) - vwall
-    wpb = vel(iw, jw, kw,3) - wwall
+    !=======================================
+    !             velocity slip
+    !======================================
+    if (nface == 1 .or. nface == 2) then
+       upb = vel12_slip(jw,kw,1,nface)
+       vpb = vel12_slip(jw,kw,2,nface)
+       wpb = vel12_slip(jw,kw,3,nface)
+    end if
+    if (nface == 3 .or. nface == 4) then
+       upb = vel34_slip(iw,kw,1,nface)
+       vpb = vel34_slip(iw,kw,2,nface)
+       wpb = vel34_slip(iw,kw,3,nface)
+    end if
 
+    if (nface == 5 .or. nface == 6) then
+       upb = vel56_slip(iw,jw,1,nface)
+       vpb = vel56_slip(iw,jw,2,nface)
+       wpb = vel56_slip(iw,jw,3,nface)
+    end if
+
+    !==========================================
     call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
                 t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
-
-    slip_t = (upb*t1 + vpb*t2 + wpb*t3)/sqrt(co2)
-    slip_s = (upb*s1 + vpb*s2 + wpb*s3)/sqrt(co2)
-
-    slip2 = slip_t*slip_t + slip_s*slip_s
 
     call trans_mijk_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,             &
                             n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
@@ -3197,72 +3430,18 @@ module methodmoment
                            r11, r22, r12, r13, r23, r33,                   &
                            r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
 
-    !=======================================
-    !==          normal heat flux        ==
-    !=======================================
+    !==============
+    !== stresses == 
+    !==============
     qn = n1*qxw + n2*qyw + n3*qzw
-    !=======================================
-    !             velocity slip
-    !=======================================
 
     presw = presw + 0.5d0*sig_nn                   &
           - (30.0d0*r_nn + 7.0d0*deltap)/(840.0d0*co2)
 
-    upb = n1*(u2w - term2 - 2.0d0*n23*vww)         &
-        + (1.0d0 - 2.0d0*n11)*(n2*uvw + n3*uww) 
-    
-    vpb = n2*(v2w - term2 - 2.0d0*n13*uww)         &
-        + (1.0d0 - 2.0d0*n22)*(n1*uvw + n3*vww)     
+    slip_t = (upb*t1 + vpb*t2 + wpb*t3)/sqrt(co2)
+    slip_s = (upb*s1 + vpb*s2 + wpb*s3)/sqrt(co2)
+    slip2 = slip_t*slip_t + slip_s*slip_s
 
-    wpb = n3*(w2w - term2 - 2.0d0*n12*uvw)         &
-         + (1.0d0 - 2.0d0*n33)*(n1*uww + n2*vww) 
-    
-    upb = -upb*co1 - 0.2d0*(qxw - qn*n1)  
-    vpb = -vpb*co1 - 0.2d0*(qyw - qn*n2)  
-    wpb = -wpb*co1 - 0.2d0*(qzw - qn*n3) 
-
-    !==========================================
-    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
-                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
-
-    upb = (upb - 0.5d0*(t1*m_nnt + s1*m_nns))/presw
-    vpb = (vpb - 0.5d0*(t2*m_nnt + s2*m_nns))/presw
-    wpb = (wpb - 0.5d0*(t3*m_nnt + s3*m_nns))/presw
-        
-    upb = uwall + upb
-    vpb = vwall + vpb
-    wpb = wwall + wpb
-
-    vel(iw, jw, kw, 1) = vel(iw,jw,kw,1) + (upb-vel(iw,jw,kw,1))*deltatp 
-    vel(iw, jw, kw, 2) = vel(iw,jw,kw,2) + (vpb-vel(iw,jw,kw,2))*deltatp
-    vel(iw, jw, kw, 3) = vel(iw,jw,kw,3) + (wpb-vel(iw,jw,kw,3))*deltatp
-   
-    !========================
-    !==   temperature jump ==
-    !========================
-    t_jump = -0.5d0*co1*qn - (deltap/30.d0 + 5.0d0/56.0d0*r_nn) 
-    t_jump = t_jump*const2/presw + 0.25d0*(slip2*const2 - tempw*sig_nn/presw)
-
-    tempp = twall + t_jump 
-    
-    tmp(iw, jw, kw) = tmp(iw, jw, kw) + (tempp - tmp(iw, jw, kw) )*deltatp  
-    !==================
-    !== pressure ======
-    !==================
-    prs(iw, jw, kw) = prs(iw, jw, kw) 
-
-    !==================
-    !== density =======
-    !==================
-    rho(iw,jw,kw) = thermal(pressure=prs(iw,jw,kw),temperature=tmp(iw,jw,kw))
-
-    call fvar2q(      q=  q(iw,jw,kw,:),                            &
-                   density=rho(iw,jw,kw),                              &
-                  velocity=vel(iw,jw,kw,:),                            &
-                  temperature=tmp(iw,jw,kw) )
-    !==============
-    !== stresses == 
-    !==============
     sig_tt_new = (-co1*(m_ntt + 0.4d0*qn) + r_ss/14.0d0 - deltap/30.0d0)/co2  & 
            + (tr1 - 1.0d0 + slip_t**2)*presw  
           
@@ -3280,29 +3459,73 @@ module methodmoment
     qt = - co1*(r_nt/co2 + 7.0d0*sig_nt)/3.6d0  - m_nnt/0.9d0 - slip_t*term1
     qs = - co1*(r_ns/co2 + 7.0d0*sig_ns)/3.6d0  - m_nns/0.9d0 - slip_s*term1
 
-    u2w = sigma(ip,jp,kp,1) + dx*dsigmaxx(ip,jp,kp,1) + dy*dsigmaxx(ip,jp,kp,2) &
-                            + dz*dsigmaxx(ip,jp,kp,3)
-    uvw = sigma(ip,jp,kp,2) + dx*dsigmaxy(ip,jp,kp,1) + dy*dsigmaxy(ip,jp,kp,2) &
-                            + dz*dsigmaxy(ip,jp,kp,3)
-    uww = sigma(ip,jp,kp,3) + dx*dsigmaxz(ip,jp,kp,1) + dy*dsigmaxz(ip,jp,kp,2) &
-                            + dz*dsigmaxz(ip,jp,kp,3)
-    v2w = sigma(ip,jp,kp,4) + dx*dsigmayy(ip,jp,kp,1) + dy*dsigmayy(ip,jp,kp,2) &
-                            + dz*dsigmayy(ip,jp,kp,3)
-    vww = sigma(ip,jp,kp,5) + dx*dsigmayz(ip,jp,kp,1) + dy*dsigmayz(ip,jp,kp,2) &
-                            + dz*dsigmayz(ip,jp,kp,3)
+    if (nface == 1 .or. nface == 2) then
+       sig_ttbc12(jw,kw,nface) = sig_ttbc12(jw,kw,nface)         &
+                 + (sig_tt_new - sig_ttbc12(jw,kw,nface))*deltatp
 
-    w2w = - u2w - v2w
+       sig_nnbc12(jw,kw,nface) = sig_nnbc12(jw,kw,nface)         &
+                 + (sig_nn_new - sig_nnbc12(jw,kw,nface))*deltatp
 
-    call trans_sigma_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3, &
-                             n11, n22, n33, n12, n13, n23, t11, t22, t33, &
-                             t12, t13, t23, s11, s22, s33, s12, s13, s23, &
-                             u2w, v2w, w2w, uvw, uww, vww,                 &
-                             sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
+       sig_tsbc12(jw,kw,nface) = sig_tsbc12(jw,kw,nface)         &
+                 + (sig_ts_new - sig_tsbc12(jw,kw,nface))*deltatp
+
+       qtbc12(jw,kw,nface) = qtbc12(jw,kw,nface) + (qt - qtbc12(jw,kw,nface))*deltatt
+       qsbc12(jw,kw,nface) = qsbc12(jw,kw,nface) + (qs - qsbc12(jw,kw,nface))*deltatt
+
+
+       sig_tt_new = sig_ttbc12(jw,kw,nface)
+       sig_nn_new = sig_nnbc12(jw,kw,nface)
+       sig_ts_new = sig_tsbc12(jw,kw,nface)
+       qt = qtbc12(jw,kw,nface)
+       qs = qsbc12(jw,kw,nface)
+    end if
+
+    if (nface == 3 .or. nface == 4) then
+       sig_ttbc34(iw,kw,nface) = sig_ttbc34(iw,kw,nface)         &
+                 + (sig_tt_new - sig_ttbc34(iw,kw,nface))*deltatp
+
+       sig_nnbc34(iw,kw,nface) = sig_nnbc34(iw,kw,nface)         &
+                 + (sig_nn_new - sig_nnbc34(iw,kw,nface))*deltatp
+
+       sig_tsbc34(iw,kw,nface) = sig_tsbc34(iw,kw,nface)         &
+                 + (sig_ts_new - sig_tsbc34(iw,kw,nface))*deltatp
+
+       qtbc34(iw,kw,nface) = qtbc34(iw,kw,nface) + (qt - qtbc34(iw,kw,nface))*deltatt
+       qsbc34(iw,kw,nface) = qsbc34(iw,kw,nface) + (qs - qsbc34(iw,kw,nface))*deltatt
+
+
+       sig_tt_new = sig_ttbc34(iw,kw,nface)
+       sig_nn_new = sig_nnbc34(iw,kw,nface)
+       sig_ts_new = sig_tsbc34(iw,kw,nface)
+       qt = qtbc34(iw,kw,nface)
+       qs = qsbc34(iw,kw,nface)
+    end if
+
+    if (nface == 5 .or. nface == 6) then
+       sig_ttbc56(iw,jw,nface) = sig_ttbc56(iw,jw,nface)         &
+                 + (sig_tt_new - sig_ttbc56(iw,jw,nface))*deltatp
+
+       sig_nnbc56(iw,jw,nface) = sig_nnbc56(iw,jw,nface)         &
+                 + (sig_nn_new - sig_nnbc56(iw,jw,nface))*deltatp
+
+       sig_tsbc56(iw,jw,nface) = sig_tsbc56(iw,jw,nface)         &
+                 + (sig_ts_new - sig_tsbc56(iw,jw,nface))*deltatp
+
+       qtbc56(iw,jw,nface) = qtbc56(iw,jw,nface) + (qt - qtbc56(iw,jw,nface))*deltatt
+       qsbc56(iw,jw,nface) = qsbc56(iw,jw,nface) + (qs - qsbc56(iw,jw,nface))*deltatt
+
+
+       sig_tt_new = sig_ttbc56(iw,jw,nface)
+       sig_nn_new = sig_nnbc56(iw,jw,nface)
+       sig_ts_new = sig_tsbc56(iw,jw,nface)
+       qt = qtbc56(iw,jw,nface)
+       qs = qsbc56(iw,jw,nface)
+    end if
 
 
     sig_tt = sig_tt_new
     sig_nn = sig_nn_new
-    sig_ss = sig_ss_new
+    sig_ss = - (sig_nn + sig_tt)
     sig_ts = sig_ts_new
 
     call trans_sigma_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,             &
@@ -3311,580 +3534,32 @@ module methodmoment
                                   u2w, v2w, w2w, uvw, uww, vww,                   &
                                   sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
                                   
-    sigma(iw,jw,kw,1) = sigma(iw,jw,kw,1) + (u2w-sigma(iw,jw,kw,1))*deltatp 
-    sigma(iw,jw,kw,2) = sigma(iw,jw,kw,2) + (uvw-sigma(iw,jw,kw,2))*deltatp
-    sigma(iw,jw,kw,3) = sigma(iw,jw,kw,3) + (uww-sigma(iw,jw,kw,3))*deltatp
-    sigma(iw,jw,kw,4) = sigma(iw,jw,kw,4) + (v2w-sigma(iw,jw,kw,4))*deltatp
-    sigma(iw,jw,kw,5) = sigma(iw,jw,kw,5) + (vww-sigma(iw,jw,kw,5))*deltatp 
     !==================================
-
-    qxw = qflux(ip,jp,kp,1) + dx*dqx(ip,jp,kp,1) + dy*dqx(ip,jp,kp,2) &
-                            + dz*dqx(ip,jp,kp,3)
-    qyw = qflux(ip,jp,kp,2) + dx*dqy(ip,jp,kp,1) + dy*dqy(ip,jp,kp,2) &
-                            + dz*dqy(ip,jp,kp,3)
-    qzw = qflux(ip,jp,kp,3) + dx*dqz(ip,jp,kp,1) + dy*dqz(ip,jp,kp,2) &
-                               + dz*dqz(ip,jp,kp, 3)
-
-    qn = n1*qxw + n2*qyw + n3*qzw
-      
     qxw = n1*qn + t1*qt + s1*qs
     qyw = n2*qn + t2*qt + s2*qs
     qzw = n3*qn + t3*qt + s3*qs
 
-    qflux(iw,jw,kw,1) = qflux(iw,jw,kw,1) + (qxw - qflux(iw,jw,kw,1))*deltatp
-    qflux(iw,jw,kw,2) = qflux(iw,jw,kw,2) + (qyw - qflux(iw,jw,kw,2))*deltatp
-    qflux(iw,jw,kw,3) = qflux(iw,jw,kw,3) + (qzw - qflux(iw,jw,kw,3))*deltatp 
+       sigma(iw,jw,kw,1) = u2w
+       sigma(iw,jw,kw,2) = uvw
+       sigma(iw,jw,kw,3) = uww
+       sigma(iw,jw,kw,4) = v2w
+       sigma(iw,jw,kw,5) = vww
+
+       qflux(iw,jw,kw,1) = qxw
+       qflux(iw,jw,kw,2) = qyw
+       qflux(iw,jw,kw,3) = qzw
+
+    qrhs_mom(iw,jw,kw,1:8) = 0.0d0 
 
     call fvar2qmom(       q=q_mom(iw, jw, kw, :),               &
                       stress=sigma(iw, jw, kw,:),               &
-                    heatflux=qflux(iw, jw, kw,:)                )
+                    heatflux=qflux(iw, jw, kw,:)  )   
 
-   
     return
 
   end  subroutine R13wbc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine R13wbc.                                 |
-  !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine is to b.c. for N-S with R26 moment.               |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| xx-xx-xxxx: Created by X. Gu.                                     |
-  !+-------------------------------------------------------------------+
-  subroutine R26wbc(n1, n2, n3, iw, jw, kw, ip, jp, kp,  &
-                  uwall, vwall, wwall, twall, alpha) 
-
-    !==================================================================
-       
-    use commvar,   only : deltat,const2
-    use commarray, only : q, rho, vel, sigma, qflux, tmp, prs, miu, spc, x
-    use fludyna,   only : fvar2q, thermal
-
-
-    integer, intent(in) :: iw, jw, kw, ip, jp, kp
-    real(8), intent(in) :: n1, n2, n3, uwall, vwall, wwall, twall, alpha
-    
-    real(8) tempw, presw, u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
-    real(8) m111, m112, m113, m122, m223, m123, m222, m133, m233, m333
-    real(8) r11, r22, r12, r13, r23, r33, deltap
-    real(8) q1111, q1112, q1122, q1222, q2222, q1113,  &
-            q1123, q1223, q2223, q1333, q2333, q1133,  &
-            q2233, q1233, q3333
-            
-    real(8) psi111, psi222, psi112, psi122, psi123,   &
-            psi113, psi223, psi133, psi233, psi333
-
-    real(8) omega_x, omega_y, omega_z
-
-    real(8) t1, t2, t3 , s1, s2 , s3
-    real(8) n11, n22, n33, n12, n13, n23
-    real(8) t11, t22, t33, t12, t13, t23
-    real(8) s11, s22, s33, s12, s13, s23
-    
-    real(8) sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts
-    real(8) r_nn, r_tt, r_ss, r_ts, r_nt, r_ns, qn, qt, qs
-    real(8) m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn
-    real(8) q_tttt, q_ttts, q_ttss, q_tsss, q_ssss,   &
-            q_nttt, q_ntts, q_ntss, q_nsss, q_nnnt,   &
-            q_nnns, q_nntt, q_nnss, q_nnts, q_nnnn
-
-    real(8) psi_ttt, psi_sss, psi_tts, psi_tss, psi_nts,   &
-            psi_ntt, psi_nss, psi_nnt, psi_nns, psi_nnn
-    
-    real(8) omega_n, omega_t, omega_s
-    
-    real(8) upb, vpb, wpb, t_jump, slip_t, slip_s, G, co1, co2, co3
-    real(8) slip2, term1, term2, tr1, tempp, rhop, presp, deltatp, deltatt
-
-    real(8) dx, dy , dz
-
-    real(8) qt_new, qs_new
-    real(8) sig_nn_new, sig_tt_new, sig_ss_new, sig_ts_new
-
-    real(8) r_nn_new, r_tt_new, r_ss_new, r_ts_new
-
-    real(8) m_ttt_new, m_sss_new, m_nnt_new, m_nns_new, m_nts_new,  &
-            m_tts_new, m_tss_new
-
-    deltatp = deltat*0.01d0 
-    deltatt = deltat*0.01d0
-    
-    G = (2.0d0 - alpha)/alpha*sqrt(0.5d0*pi) 
-    
-    n11 = n1*n1;  n22 = n2*n2; n33 = n3*n3; n12 = n1*n2; n13 = n1*n3; n23 = n2*n3
-
-    upb = vel(iw, jw, kw, 1) - uwall
-    vpb = vel(iw, jw, kw, 2) - vwall
-    wpb = vel(iw, jw, kw, 3) - wwall
- 
-    dx = x(iw, jw, kw, 1) - x(ip, jp, kp, 1)
-    dy = x(iw, jw, kw, 2) - x(ip, jp, kp, 2)
-    dz = x(iw, jw, kw, 3) - x(ip, jp, kp, 3)
-
-    tempw = tmp(iw, jw, kw)
-    presw = prs(iw, jw, kw)
-   
-    u2w = sigma(iw, jw, kw, 1) 
-    uvw = sigma(iw, jw, kw, 2) 
-    uww = sigma(iw, jw, kw, 3) 
-    v2w = sigma(iw, jw, kw, 4) 
-    vww = sigma(iw, jw, kw, 5) 
-    w2w = - u2w - v2w
-
-    qxw = qflux(iw, jw, kw, 1) 
-    qyw = qflux(iw, jw, kw, 2) 
-    qzw = qflux(iw, jw, kw, 3)
-
-    m111 = mijk(iw,jw,kw,1) 
-    m112 = mijk(iw,jw,kw,2) 
-    m113 = mijk(iw,jw,kw,3) 
-    m122 = mijk(iw,jw,kw,4) 
-    m222 = mijk(iw,jw,kw,5) 
-    m223 = mijk(iw,jw,kw,6) 
-    m123 = mijk(iw,jw,kw,7) 
-    m133 = - m111 - m122 
-    m233 = - m112 - m222
-    m333 = - m113 - m223 
-
-    r11 = rij(iw,jw,kw,1) 
-    r12 = rij(iw,jw,kw,2) 
-    r13 = rij(iw,jw,kw,3) 
-    r22 = rij(iw,jw,kw,4) 
-    r23 = rij(iw,jw,kw,5) 
-    r33 = - r11 - r22
-    
-    q1111 = Eijkl(iw,jw,kw,1)
-    q2222 = Eijkl(iw,jw,kw,8)
-    q1112 = Eijkl(iw,jw,kw,2)
-    q1113 = Eijkl(iw,jw,kw,3)
-    q1122 = Eijkl(iw,jw,kw,4)
-    q1222 = Eijkl(iw,jw,kw,6)
-    q1123 = Eijkl(iw,jw,kw,5)
-    q1223 = Eijkl(iw,jw,kw,7)
-    q2223 = Eijkl(iw,jw,kw,9)
-
-    q1333 = - q1113 - q1223
-    q2333 = - q1123 - q2223
-    q1133 = - q1111 - q1122
-    q2233 = - q1122 - q2222
-    q1233 = - q1112 - q1222
-    q3333 = - q1133 - q2233
-    
-    psi111 = psi(iw,jw,kw,1)
-    psi112 = psi(iw,jw,kw,2)
-    psi113 = psi(iw,jw,kw,3)
-    psi122 = psi(iw,jw,kw,4)
-    psi222 = psi(iw,jw,kw,5)
-    psi223 = psi(iw,jw,kw,6)
-    psi123 = psi(iw,jw,kw,7)
-    psi133 = - psi111 - psi122 
-    psi233 = - psi112 - psi222
-    psi333 = - psi113 - psi223 
-
-    omega_x = omega(iw,jw,kw,1)
-    omega_y = omega(iw,jw,kw,2)
-    omega_z = omega(iw,jw,kw,3)
-
-    deltap = delta(iw, jw, kw)
-   
-
-    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
-                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
-
-    co2 = tempw/const2
-    co1 = G*sqrt(co2)
-    tr1 = twall/tempw
-     
-    slip_t = (upb*t1 + vpb*t2 + wpb*t3)/sqrt(co2)
-    slip_s = (upb*s1 + vpb*s2 + wpb*s3)/sqrt(co2)
-    slip2 = slip_t*slip_t + slip_s*slip_s
-
-    call trans_sigma_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
-                             n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
-                             t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
-                             u2w, v2w, w2w, uvw, uww, vww,                 &
-                             sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
-
-    call trans_rij_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
-                           n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
-                           t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
-                           r11, r22, r12, r13, r23, r33,                 &
-                           r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
-
-    call trans_mijk_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,          &
-                            n11, n22, n33, n12, n13, n23, t11, t22, t33, &
-                            t12, t13, t23, s11, s22, s33, s12, s13, s23, &
-                m111, m112, m113, m122, m223, m123, m222, m133, m233, m333, &
-                m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn)
-
-    call trans_phi_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
-                         n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
-                         t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
-                         q1111, q1112, q1122, q1222, q2222, q1113,       &
-                         q1123, q1223, q2223, q1333, q2333, q1133,       &
-                         q2233, q1233, q3333,                            &
-                         q_tttt, q_ttts, q_ttss, q_tsss, q_ssss,         &
-                         q_nttt, q_ntts, q_ntss, q_nsss, q_nnnt,         &
-                         q_nnns, q_nntt, q_nnss, q_nnts, q_nnnn)
-
-    call trans_psi_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
-                         n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
-                         t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
-                         psi111, psi112, psi113, psi122, psi223, psi123, &
-                         psi222, psi133, psi233, psi333,                 &
-                         psi_ttt, psi_sss, psi_tts, psi_tss, psi_nts,    &
-                         psi_ntt, psi_nss, psi_nnt, psi_nns, psi_nnn)
-
-    omega_t = t1*omega_x + t2*omega_y + t3*omega_z
-    omega_s = s1*omega_x + s2*omega_y + s3*omega_z
-    omega_n = n1*omega_x + n2*omega_y + n3*omega_z
-
-    qt = t1*qxw + t2*qyw + t3*qzw
-    qs = s1*qxw + s2*qyw + s3*qzw
-    qn = n1*qxw + n2*qyw + n3*qzw
-       
-    !=======================================
-    !             velocity slip
-    !=======================================
-
-    presw = presw + 0.5d0*sig_nn                              &
-           - ( (30.0d0*r_nn + 7.0d0*deltap)/840.d0 + q_nnnn/24.0d0)/co2
-
-    upb = n1*(u2w - term2 - 2.0d0*n23*vww)         &
-        + (1.0d0 - 2.0d0*n11)*(n2*uvw + n3*uww) 
-    
-    vpb = n2*(v2w - term2 - 2.0d0*n13*uww)         &
-        + (1.0d0 - 2.0d0*n22)*(n1*uvw + n3*vww)     
-
-    wpb = n3*(w2w - term2 - 2.0d0*n12*uvw)         &
-         + (1.0d0 - 2.0d0*n33)*(n1*uww + n2*vww) 
-    
-    co3 = 9.0d0/2520.0d0/co2
-    upb = -upb*co1 - 0.2d0*(qxw - qn*n1) + co3*(omega_x - omega_n*n1)
-    vpb = -vpb*co1 - 0.2d0*(qyw - qn*n2) + co3*(omega_y - omega_n*n2)
-    wpb = -wpb*co1 - 0.2d0*(qzw - qn*n3) + co3*(omega_z - omega_n*n3)
-
-    !==========================================
-
-    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
-                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
-
-    co3 = 7.0d0/252.0d0/co2
-    upb = (upb - 0.5d0*(t1*m_nnt + s1*m_nns) + co3*(t1*psi_nnt + s1*psi_nns))/presw
-    vpb = (vpb - 0.5d0*(t2*m_nnt + s2*m_nns) + co3*(t2*psi_nnt + s2*psi_nns))/presw
-    wpb = (wpb - 0.5d0*(t3*m_nnt + s3*m_nns) + co3*(t3*psi_nnt + s3*psi_nns))/presw
-
-    upb = uwall + upb
-    vpb = vwall + vpb
-    wpb = wwall + wpb
-
-    vel(iw, jw, kw, 1) = vel(iw,jw,kw,1) + (upb-vel(iw,jw,kw,1))*deltatp 
-    vel(iw, jw, kw, 2) = vel(iw,jw,kw,2) + (vpb-vel(iw,jw,kw,2))*deltatp
-    vel(iw, jw, kw, 3) = vel(iw,jw,kw,3) + (wpb-vel(iw,jw,kw,3))*deltatp
-
-    !========================
-    !==   temperature jump ==
-    !========================
-    t_jump = -0.5d0*co1*qn - (deltap/30.d0 + 5.0d0/56.0d0*r_nn) + q_nnnn/24.0d0
-               
-    t_jump = t_jump*const2/presw + 0.25d0*(slip2*const2 - tempw*sig_nn/presw)
-
-    tempp = twall + t_jump 
-    
-    tmp(iw, jw, kw) = tmp(iw, jw, kw) + (tempp - tmp(iw, jw, kw) )*deltatt  
-
-    !==================
-    !== pressure ======
-    !==================
-    prs(iw,jw,kw) = prs(ip,jp,kp)
-
-    !==================
-    !== density =======
-    !==================
-    rho(iw,jw,kw) =thermal(pressure=prs(iw,jw,kw),temperature=tmp(iw,jw,kw))
-
-    call fvar2q(      q=  q(iw,jw,kw,:),         &
-                   density=rho(iw,jw,kw),        &
-                  velocity=vel(iw,jw,kw,:),      &
-                  temperature=tmp(iw,jw,kw)        ) 
-
-    !==============
-    !== stresses == 
-    !==============
-    sig_tt_new = (-co1*(m_ntt + 0.4d0*qn) + r_ss/14.0d0 - deltap/30.0d0 -0.5d0*q_nntt)/co2  & 
-           + (tr1 - 1.0d0 + slip_t**2)*presw  
-          
-    sig_nn_new =  (-co1*(0.5d0*m_nnn + 0.6d0*qn)               &
-           - (r_nn/7.0d0 + deltap/30.0d0 + q_nnnn/6.d0) )/co2  &
-           + (tr1 - 1.0d0)*presw
- 
-    sig_ss_new = - sig_nn_new - sig_tt_new
-
-    sig_ts_new = (-co1*m_nts - r_ts/14.d0 - 0.5d0*q_nnts)/co2 + slip_t*slip_s*presw
-
-    !====================
-    ! == heat fluxes =====
-    !====================
-    term1 = (tr1 + slip2/6.0d0 )*presw/0.6d0*sqrt(co2)
-    qt_new = - co1*(r_nt/co2 + 7.0d0*sig_nt)/3.6d0  - m_nnt/0.9d0  &
-           - slip_t*term1  - (psi_nnt/16.2d0 + omega_t/56.0d0)/co2
-    qs_new = - co1*(r_ns/co2 + 7.0d0*sig_ns)/3.6d0  - m_nns/0.9d0  &
-           - slip_s*term1  - (psi_nns/16.2d0 + omega_s/56.0d0)/co2
-
-    !===============
-    !==  mijk ======
-    !===============
-    term1 = (3.0d0*tr1 + slip2)*presw*sqrt(co2)
-
-    m_ttt_new = -co1*(3.0d0*sig_nt + (q_nttt + 3.0d0/7.0d0*r_nt)/co2) &
-      - slip_t*term1 - 1.8d0*qt - 1.5d0*m_nnt                      &
-      -(psi_nnt/12.0d0 + psi_ttt/18.0 + 9.0d0*omega_t/280.0d0)/co2
-
-    m_sss_new = -co1*(3.0d0*sig_ns + (q_nsss + 3.0d0/7.0d0*r_ns)/co2) &
-      - slip_s*term1 - 1.8d0*qs - 1.5d0*m_nns                      &
-      -(psi_nns/12.0d0 + psi_sss/18.0 + 9.0d0*omega_s/280.0d0)/co2
-
-    m_nnt_new = -co1*(sig_nt + (q_nnnt/3.0d0 + r_nt/7.0d0)/co2)       &
-      - slip_t*tr1*presw*sqrt(co2)/1.5d0 - 0.4d0*qt                &
-      -(omega_t/140.0d0 + psi_nnt/18.0d0)/co2
-
-    m_nns_new = -co1*(sig_ns + (q_nnns/3.0d0 + r_ns/7.0d0)/co2)       &
-      - tr1*slip_s*presw*sqrt(co2)/1.5d0 - 0.4d0*qs               &
-      -(omega_s/140.0d0 + psi_nns/18.0d0)/co2
-
-    m_nts_new = -0.5d0*co1*(sig_ts + (q_nnts + r_ts/7.0d0)/co2) - psi_nts/18.0d0/co2
-
-    m_tts_new = -(m_sss_new + m_nns_new)
-    m_tss_new = -(m_ttt_new + m_nnt_new)
-
-    !===============
-    !==  Rij ======
-    !===============
-    r_tt_new = -co1*(28.0d0/15.0d0*qn + 14.0d0/3.0d0*m_ntt    &
-         + (omega_n/15.0d0 +14.0d0/27.0d0*psi_ntt)/co2)   &
-         + (7.0d0*presw *(slip_t**4 + 6.0d0*tr1*slip_t**2  &
-         + 3.0d0*tr1**2 - 3.0d0)/9.0d0 - 14.0d0/3.0d0*sig_tt)*co2  &
-         - R_nn/3.0d0 - 14.0d0/45.0d0*deltap               &
-         - 7.0d0/9.0d0*(q_tttt + 3.0d0*q_nntt)
-
-
-    r_nn_new = -co1*(21.0d0/8.0d0*qn + 35.0d0/16.0d0*m_nnn               &
-         + (35.0d0/144.0d0*psi_nnn + 3.0d0/32.0d0*omega_n)/co2 )     &
-         + (7.0d0/4.0d0*presw*(tr1*tr1 - 1.0d0) - 3.5d0*sig_nn)*co2 &
-         - 7.0d0*deltap/30.0d0 - 7.0d0/6.0d0*q_nnnn
-
-
-    r_ts_new = - co1*(21.0d0*m_nts + 7.0d0/3.0d0*psi_nts/co2)/4.0d0      &
-        + 7.0d0/3.0d0*(slip_t*slip_s*(2.0d0*tr1 + 0.25*slip2)*presw  &
-        - 2.0d0*sig_ns)*co2 - 35.0d0/12.0d0*q_nnts
-
-
-    r_ss_new = - r_nn_new - r_tt_new
-
-    !============
-    !== Delta ==
-    !===========
-
-    deltap = -5.0d0/16.0d0*co1*(28.0d0*qn + Omega_n/co2)               &
-    + 1.25d0*co2*( (6.0d0*(tr1*tr1 - 1.0d0)                                 &
-    + slip2*(3.0d0*tr1*tr1 + 0.25d0*slip2) )*presw - 3.0d0*sig_nn)  &
-    - 1.875d0*r_nn + 35.0d0/48.0d0*q_nnnn
-
-    delta(iw, jw, kw) = delta(iw, jw, kw) + (deltap - delta(iw, jw, kw))*deltatt
-
-    !=====================
-    !== extrapolation ==
-    !=====================
-
-
-    u2w = sigma(ip, jp, kp, 1) + dx*dsigmaxx(ip, jp, kp, 1) &
-                               + dy*dsigmaxx(ip, jp, kp, 2) &
-                               + dz*dsigmaxx(ip, jp, kp, 3)
-    uvw = sigma(ip, jp, kp, 2) + dx*dsigmaxy(ip, jp, kp, 1) &
-                               + dy*dsigmaxy(ip, jp, kp, 2) &
-                               + dz*dsigmaxy(ip, jp, kp, 3)
-    uww = sigma(ip, jp, kp, 3) + dx*dsigmaxz(ip, jp, kp, 1) &
-                               + dy*dsigmaxz(ip, jp, kp, 2) &
-                               + dz*dsigmaxz(ip, jp, kp, 3)
-    v2w = sigma(ip, jp, kp, 4) + dx*dsigmayy(ip, jp, kp, 1) &
-                               + dy*dsigmayy(ip, jp, kp, 2) &
-                               + dz*dsigmayy(ip, jp, kp, 3)
-    vww = sigma(ip, jp, kp, 5) + dx*dsigmayz(ip, jp, kp, 1) &
-                               + dy*dsigmayz(ip, jp, kp, 2) &
-                               + dz*dsigmayz(ip, jp, kp, 3)
-
-    w2w = - u2w - v2w
-
-    call trans_sigma_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
-                             n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
-                             t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
-                             u2w, v2w, w2w, uvw, uww, vww,                 &
-                             sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
-
-
-    sig_tt = sig_tt_new 
-    sig_nn = sig_nn_new 
-    sig_ss = - (sig_nn + sig_tt)
-    sig_ts = sig_ts_new 
-
-    call trans_sigma_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,          &
-                                  n11, n22, n33, n12, n13, n23, t11, t22, t33, &
-                                  t12, t13, t23, s11, s22, s33, s12, s13, s23, &
-                                  u2w, v2w, w2w, uvw, uww, vww,                &
-                                  sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
-                                  
-    sigma(iw,jw,kw,1) = sigma(iw,jw,kw,1) + (u2w-sigma(iw,jw,kw,1))*deltatp 
-    sigma(iw,jw,kw,2) = sigma(iw,jw,kw,2) + (uvw-sigma(iw,jw,kw,2))*deltatp
-    sigma(iw,jw,kw,3) = sigma(iw,jw,kw,3) + (uww-sigma(iw,jw,kw,3))*deltatp
-    sigma(iw,jw,kw,4) = sigma(iw,jw,kw,4) + (v2w-sigma(iw,jw,kw,4))*deltatp
-    sigma(iw,jw,kw,5) = sigma(iw,jw,kw,5) + (vww-sigma(iw,jw,kw,5))*deltatp 
-    !==================================
-
-    qxw = qflux(ip, jp, kp, 1) + dx*dqx(ip, jp, kp, 1) &
-                               + dy*dqx(ip, jp, kp, 2) &
-                               + dz*dqx(ip, jp, kp, 3)
-
-    qyw = qflux(ip, jp, kp, 2) + dx*dqy(ip, jp, kp, 1) &
-                               + dy*dqy(ip, jp, kp, 2) &
-                               + dz*dqy(ip, jp, kp, 3)
-
-    qzw = qflux(ip, jp, kp, 3) + dx*dqz(ip, jp, kp, 1) &
-                               + dy*dqz(ip, jp, kp, 2) &
-                               + dz*dqz(ip, jp, kp, 3)
-
-    qn = n1*qxw + n2*qyw + n3*qzw
-    qt = qt_new
-    qs = qs_new
-
-    qxw = n1*qn + t1*qt + s1*qs
-    qyw = n2*qn + t2*qt + s2*qs
-    qzw = n3*qn + t3*qt + s3*qs
-
-    qflux(iw,jw,kw,1) = qflux(iw,jw,kw,1) + (qxw - qflux(iw,jw,kw,1))*deltatt
-    qflux(iw,jw,kw,2) = qflux(iw,jw,kw,2) + (qyw - qflux(iw,jw,kw,2))*deltatt
-    qflux(iw,jw,kw,3) = qflux(iw,jw,kw,3) + (qzw - qflux(iw,jw,kw,3))*deltatt 
-    
-    !===============
-    !==  mijk ======
-    !===============
-    m111 = mijk(ip,jp,kp,1) + dx*dmijk(ip,jp,kp,1,1)   &
-                            + dy*dmijk(ip,jp,kp,2,1)   &
-                            + dz*dmijk(ip,jp,kp,3,1)
-    m112 = mijk(ip,jp,kp,2) + dx*dmijk(ip,jp,kp,1,2)   &
-                            + dy*dmijk(ip,jp,kp,2,2)   &
-                            + dz*dmijk(ip,jp,kp,3,2)
-    m113 = mijk(ip,jp,kp,3) + dx*dmijk(ip,jp,kp,1,3)   &
-                            + dy*dmijk(ip,jp,kp,2,3)   &
-                            + dz*dmijk(ip,jp,kp,3,3)
-    m122 = mijk(ip,jp,kp,4) + dx*dmijk(ip,jp,kp,1,4)   &
-                            + dy*dmijk(ip,jp,kp,2,4)   &
-                            + dz*dmijk(ip,jp,kp,3,4)
-    m222 = mijk(ip,jp,kp,5) + dx*dmijk(ip,jp,kp,1,5)   &
-                            + dy*dmijk(ip,jp,kp,2,5)   &
-                            + dz*dmijk(ip,jp,kp,3,5)
-    m223 = mijk(ip,jp,kp,6) + dx*dmijk(ip,jp,kp,1,6)   &
-                            + dy*dmijk(ip,jp,kp,2,6)   &
-                            + dz*dmijk(ip,jp,kp,3,6)
-    m123 = mijk(ip,jp,kp,7) + dx*dmijk(ip,jp,kp,1,7)   &
-                            + dy*dmijk(ip,jp,kp,2,7)   &
-                            + dz*dmijk(ip,jp,kp,3,7)
-
-    m133 = - m111 - m122
-    m233 = - m112 - m222
-    m333 = - m113 - m223
-
-    call trans_mijk_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,          &
-                            n11, n22, n33, n12, n13, n23, t11, t22, t33, &
-                            t12, t13, t23, s11, s22, s33, s12, s13, s23, &
-                m111, m112, m113, m122, m223, m123, m222, m133, m233, m333, &
-                m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn)
-
-    m_ttt = m_ttt_new 
-    m_sss = m_sss_new 
-    m_nnt = m_nnt_new 
-    m_nns = m_nns_new 
-    m_nts = m_nts_new 
-    m_tts = -(m_sss + m_nns)
-    m_tss = -(m_ttt + m_nnt)
-
-    call trans_mijk_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,        &
-                            n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
-                            t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
-                m111, m112, m113, m122, m223, m123, m222, m133, m233, m333, &
-       m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn)
-       
-    mijk(iw,jw,kw,1) = mijk(iw,jw,kw,1) + (m111 - mijk(iw,jw,kw,1))*deltatp
-    mijk(iw,jw,kw,2) = mijk(iw,jw,kw,2) + (m112 - mijk(iw,jw,kw,2))*deltatp
-    mijk(iw,jw,kw,3) = mijk(iw,jw,kw,3) + (m113 - mijk(iw,jw,kw,3))*deltatp
-    mijk(iw,jw,kw,4) = mijk(iw,jw,kw,4) + (m122 - mijk(iw,jw,kw,4))*deltatp
-    mijk(iw,jw,kw,5) = mijk(iw,jw,kw,5) + (m222 - mijk(iw,jw,kw,5))*deltatp
-    mijk(iw,jw,kw,6) = mijk(iw,jw,kw,6) + (m223 - mijk(iw,jw,kw,6))*deltatp
-    mijk(iw,jw,kw,7) = mijk(iw,jw,kw,7) + (m123 - mijk(iw,jw,kw,7))*deltatp    
-       
-
-    r11 = rij(ip,jp,kp,1) + dx * dRij(ip,jp,kp,1,1)  &
-                          + dy * dRij(ip,jp,kp,2,1)  &
-                          + dz * dRij(ip,jp,kp,3,1)
-    r12 = rij(ip,jp,kp,2) + dx * dRij(ip,jp,kp,1,2)  &
-                          + dy * dRij(ip,jp,kp,2,2)  &
-                          + dz * dRij(ip,jp,kp,3,2)
-
-    r13 = rij(ip,jp,kp,3) + dx * dRij(ip,jp,kp,1,3)  &
-                          + dy * dRij(ip,jp,kp,2,3)  &
-                          + dz * dRij(ip,jp,kp,3,3)
-
-    r22 = rij(ip,jp,kp,4) + dx * dRij(ip,jp,kp,1,4)  &
-                          + dy * dRij(ip,jp,kp,2,4)  &
-                          + dz * dRij(ip,jp,kp,3,4)
-
-    r23 = rij(ip,jp,kp,5) + dx * dRij(ip,jp,kp,1,5)  &
-                          + dy * dRij(ip,jp,kp,2,5)  &
-                          + dz * dRij(ip,jp,kp,3,5)
-
-    r33 = - r11 - r22
-
-
-    call trans_rij_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
-                           n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
-                           t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
-                           r11, r22, r12, r13, r23, r33,                 &
-                           r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
-
-
-    r_tt = r_tt_new  
-    r_nn = r_nn_new 
-    r_ts = r_ts_new 
-    r_ss = r_ss_new 
-    
-    call trans_rij_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,    &
-                             n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
-                             t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
-                             r11, r22, r12, r13, r23, r33,                   &
-                             r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
-                             
-    rij(iw,jw,kw,1) = rij(iw,jw,kw,1) + (r11 - rij(iw,jw,kw,1))*deltatt
-    rij(iw,jw,kw,2) = rij(iw,jw,kw,2) + (r12 - rij(iw,jw,kw,2))*deltatt
-    rij(iw,jw,kw,3) = rij(iw,jw,kw,3) + (r13 - rij(iw,jw,kw,3))*deltatt
-    rij(iw,jw,kw,4) = rij(iw,jw,kw,4) + (r22 - rij(iw,jw,kw,4))*deltatt
-    rij(iw,jw,kw,5) = rij(iw,jw,kw,5) + (r23 - rij(iw,jw,kw,5))*deltatt      
-    
-    
-    call fvar2qmom(       q=q_mom(iw, jw, kw,:),                &
-                      stress=sigma(iw, jw, kw,:),               &
-                    heatflux=qflux(iw, jw, kw,:),               &
-                        mijk=mijk(iw, jw, kw,:),                &
-                         rij=rij(iw, jw, kw,:),                 &
-                     delta=delta(iw, jw, kw)                    )
-
-   
-    return
-
-  end  subroutine R26wbc
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine R26wbc.                                 |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -4589,6 +4264,1833 @@ module methodmoment
   !+-------------------------------------------------------------------+
   !| The end of the subroutine trans_phi_to_wall.                      |
   !+-------------------------------------------------------------------+
+
+   !+-------------------------------------------------------------------+
+  !| This subroutine is to call b.c. for N-S with moment.              |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| xx-xx-xxxx: Created by X. Gu.                                     |
+  !+-------------------------------------------------------------------+
+  subroutine MOM_wall_boun_init(ndir)
+    !==================================
+
+    use parallel,only: irk,jrk,krk,irkm,jrkm,krkm
+    use commvar, only: nstep, deltat
+
+    integer,intent(in) :: ndir
+    !
+    ! local data
+    integer :: i,j,k
+    real(8)  uwall, vwall, wwall, twall , n1, n2, n3
+    !
+    !
+    if (ndir==1) then
+      ! left wall
+      !
+      if (irk==0) then
+        !
+        i = 0
+        !
+        !---------------------------
+        uwall = 0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+        !--------------------------------------------
+        !-- wall temperature --
+        !---------------------
+        twall = 1.0d0   ! wall temperature is equal to the ref temperature
+        !-------------------------------------
+
+        !--------------------------------
+        !-- wall normal vector ------
+        !---------------------------
+        n1 = 1.d0; n2=0.d0;  n3=0.d0
+
+          do k=0,km
+          do j=0,jm
+             call wbc_init(ndir, n1, n2, n3, i, j, k, uwall, vwall, wwall, twall)
+          end do
+          end do
+        !
+      end if
+    elseif (ndir==2) then
+      ! right wall
+      !
+      if (irk==irkm) then
+        !
+        i=im
+        !
+        !--------------------------------
+        !-- wall normal vector ------
+        !---------------------------
+        n1 = -1.d0; n2=0.d0;  n3=0.d0
+
+        uwall = 0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+        !--------------------------------------------
+        !-- wall temperature --
+        !---------------------
+        twall = 1.0d0   ! wall temperature is equal to the ref temperature
+        !-------------------------------------
+          do k=0,km
+          do j=0,jm
+             call wbc_init(ndir, n1, n2, n3, i, j, k, uwall, vwall, wwall, twall)
+          end do
+          end do
+        !
+      end if
+      !
+    elseif (ndir==3) then
+      ! bottom wall
+      !
+      if (jrk==0) then
+        !
+        j = 0
+        !
+        !---------------------------
+        uwall = 0.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+        !--------------------------------------------
+        !-- wall temperature --
+        !---------------------
+        twall = 1.0d0   ! wall temperature is equal to the ref temperature
+        !-- wall normal vector ------
+        !---------------------------
+        n1 = 0.d0; n2=1.d0;  n3=0.d0
+
+          do k=0,km
+          do i=0,im
+             call wbc_init(ndir, n1, n2, n3, i, j, k, uwall, vwall, wwall, twall)
+          end do
+          end do
+      end if
+    else if(ndir==4) then
+      !
+      if (jrk==jrkm) then
+        ! upper wall
+        !
+        j=jm
+        !
+        !----------------------------
+        !-- wall velocity --
+        !---------------------------
+        uwall =  1.0d0; vwall = 0.0d0 ; wwall = 0.0d0
+        !--------------------------------------------
+        !-- wall temperature --
+        !---------------------
+        twall = 1.0d0   ! wall temperature is equal to the ref temperature
+        !-------------------------------------
+        !
+        !--------------------------------
+        !-- wall normal vector ------
+        !---------------------------
+        n1 = 0.d0; n2=-1.d0;  n3=0.d0
+
+        uwall = dble(nstep)*deltat
+        if (uwall > 1.0d0) uwall = 1.0d0
+
+          do k=0,km
+          do i=0,im
+             call wbc_init(ndir, n1, n2, n3, i, j, k, uwall, vwall, wwall, twall)
+          end do
+          end do
+        !
+      end if
+      !
+    else
+      stop ' !! ndir not defined @ MOM_wall_boundary'
+    end if
+
+    return
+
+  end subroutine MOM_wall_boun_init
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to b.c. for N-S with R13 moment.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| xx-xx-xxxx: Created by X. Gu.                                     |
+  !+-------------------------------------------------------------------+
+  subroutine wbc_init(nface, n1, n2, n3,iw, jw, kw, uwall, vwall, wwall, twall)
+    !===================================================================
+    use commarray, only : q,rho, vel, sigma, qflux,tmp,        &
+                          vel12_slip, vel34_slip, vel56_slip,  &
+                          tmp12_jump,  tmp34_jump, tmp56_jump
+
+    integer, intent(in) :: iw, jw, kw,  nface
+    real(8), intent(in) ::  n1, n2, n3, uwall, vwall, wwall, twall
+    !
+    real(8) t1, t2, t3 , s1, s2 , s3
+    real(8) n11, n22, n33, n12, n13, n23
+    real(8) t11, t22, t33, t12, t13, t23
+    real(8) s11, s22, s33, s12, s13, s23
+
+    real(8) u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
+    real(8) m111, m112, m113, m122, m223, m123, m222, m133, m233, m333
+    real(8) r11, r22, r12, r13, r23, r33
+
+    real(8) sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts
+    real(8) r_nn, r_tt, r_ss, r_ts, r_nt, r_ns, qn, qt, qs
+    real(8) m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn
+    real(8) upb, vpb, wpb
+
+    n11 = n1*n1; n22 = n2*n2; n33 = n3*n3
+    n12 = n1*n2; n13 = n1*n3; n23 = n2*n3
+    if (nface == 1 .or. nface == 2) then
+       vel12_slip(jw,kw,1,nface) = vel(iw, jw, kw, 1) - uwall
+       vel12_slip(jw,kw,2,nface) = vel(iw, jw, kw, 2) - vwall
+       vel12_slip(jw,kw,3,nface) = vel(iw, jw, kw, 3) - wwall
+       tmp12_jump(jw, kw, nface) = tmp(iw, jw, kw) - twall
+       upb = vel12_slip(jw,kw,1,nface)
+       vpb = vel12_slip(jw,kw,2,nface)
+       wpb = vel12_slip(jw,kw,3,nface)
+    end if
+
+
+    if (nface == 3 .or. nface == 4) then
+       vel34_slip(iw,kw,1,nface) = vel(iw, jw, kw, 1) - uwall
+       vel34_slip(iw,kw,2,nface) = vel(iw, jw, kw, 2) - vwall
+       vel34_slip(iw,kw,3,nface) = vel(iw, jw, kw, 3) - wwall
+       tmp34_jump(iw,kw,nface) = tmp(iw, jw, kw) - twall
+       upb = vel34_slip(iw,kw,1,nface)
+       vpb = vel34_slip(iw,kw,2,nface)
+       wpb = vel34_slip(iw,kw,3,nface)
+
+    end if
+   if (nface == 5 .or. nface == 6) then
+       vel56_slip(iw,jw,1,nface) = vel(iw, jw, kw, 1)
+       vel56_slip(iw,jw,2,nface) = vel(iw, jw, kw, 2)
+       vel56_slip(iw,jw,3,nface) = vel(iw, jw, kw, 3)
+       tmp56_jump(iw,jw,nface) = tmp(iw, jw, kw) - twall
+       upb = vel56_slip(iw,jw,1,nface)
+       vpb = vel56_slip(iw,jw,2,nface)
+       wpb = vel56_slip(iw,jw,3,nface)
+    end if
+
+    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
+                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
+
+    u2w = sigma(iw, jw, kw, 1)
+    uvw = sigma(iw, jw, kw, 2)
+    uww = sigma(iw, jw, kw, 3)
+    v2w = sigma(iw, jw, kw, 4)
+    vww = sigma(iw, jw, kw, 5)
+    w2w = - u2w - v2w
+
+    qxw = qflux(iw, jw, kw, 1)
+    qyw = qflux(iw, jw, kw, 2)
+    qzw = qflux(iw, jw, kw, 3)
+    call trans_sigma_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
+                             n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
+                             t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
+                             u2w, v2w, w2w, uvw, uww, vww,                 &
+                             sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
+
+    qt = t1*qxw + t2*qyw + t3*qzw
+    qs = s1*qxw + s2*qyw + s3*qzw
+
+    if (nface == 1 .or. nface == 2) then
+       sig_ttbc12(jw,kw,nface) = sig_tt
+       sig_nnbc12(jw,kw,nface) = sig_nn
+       sig_tsbc12(jw,kw,nface) = sig_ts
+       qtbc12(jw,kw,nface) = qt
+       qsbc12(jw,kw,nface) = qs
+    end if
+
+    if (nface == 3 .or. nface == 4) then
+       sig_ttbc34(iw,kw,nface) = sig_tt
+       sig_nnbc34(iw,kw,nface) = sig_nn
+       sig_tsbc34(iw,kw,nface) = sig_ts
+       qtbc34(iw,kw,nface) = qt
+       qsbc34(iw,kw,nface) = qs
+    end if
+    if (nface == 5 .or. nface == 6) then
+       sig_ttbc56(iw,jw,nface) = sig_tt
+       sig_nnbc56(iw,jw,nface) =  sig_nn
+       sig_tsbc56(iw,jw,nface) = sig_ts
+       qtbc56(iw,jw,nface) = qt
+       qsbc56(iw,jw,nface) = qs
+    end if
+   if (moment == 'r26') then
+    m111 = mijk(iw,jw,kw,1)
+    m112 = mijk(iw,jw,kw,2)
+    m113 = mijk(iw,jw,kw,3)
+    m122 = mijk(iw,jw,kw,4)
+    m222 = mijk(iw,jw,kw,5)
+    m223 = mijk(iw,jw,kw,6)
+    m123 = mijk(iw,jw,kw,7)
+    m133 = - m111 - m122
+    m233 = - m112 - m222
+    m333 = - m113 - m223
+
+    r11 = rij(iw,jw,kw,1)
+    r12 = rij(iw,jw,kw,2)
+    r13 = rij(iw,jw,kw,3)
+    r22 = rij(iw,jw,kw,4)
+    r23 = rij(iw,jw,kw,5)
+    r33 = - r11 - r22
+    call trans_mijk_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,          &
+                            n11, n22, n33, n12, n13, n23, t11, t22, t33, &
+                            t12, t13, t23, s11, s22, s33, s12, s13, s23, &
+                m111, m112, m113, m122, m223, m123, m222, m133, m233, m333, &
+                m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn)
+
+    call trans_rij_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
+                           n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
+                           t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
+                           r11, r22, r12, r13, r23, r33,                 &
+                           r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
+    if (nface == 1 .or. nface == 2) then
+       m_tttbc12(jw,kw,nface) = m_ttt
+       m_sssbc12(jw,kw,nface) = m_sss
+       m_nntbc12(jw,kw,nface) = m_nnt
+       m_nnsbc12(jw,kw,nface) = m_nns
+       m_ntsbc12(jw,kw,nface) = m_nts
+       r_ttbc12(jw,kw,nface) =  r_tt
+       r_nnbc12(jw,kw,nface) =  r_nn
+       r_tsbc12(jw,kw,nface) =  r_ts
+    end if
+    if (nface == 3 .or. nface == 4) then
+       m_tttbc34(iw,kw,nface) = m_ttt
+       m_sssbc34(iw,kw,nface) = m_sss
+       m_nntbc34(iw,kw,nface) = m_nnt
+       m_nnsbc34(iw,kw,nface) = m_nns
+       m_ntsbc34(iw,kw,nface) = m_nts
+       r_ttbc34(iw,kw,nface) = r_tt
+       r_nnbc34(iw,kw,nface) = r_nn
+       r_tsbc34(iw,kw,nface) = r_ts
+    end if
+
+    if (nface == 5 .or. nface == 6) then
+       m_tttbc56(iw,jw,nface) = m_ttt
+       m_sssbc56(iw,jw,nface) = m_sss
+       m_nntbc56(iw,jw,nface) = m_nnt
+       m_nnsbc56(iw,jw,nface) = m_nns
+       m_ntsbc56(iw,jw,nface) = m_nts
+       r_ttbc56(iw,jw,nface) = r_tt
+       r_nnbc56(iw,jw,nface) = r_nn
+       r_tsbc56(iw,jw,nface) = r_ts
+    end if
+
+    end if
+
+    return
+
+    end subroutine wbc_init
+
+  subroutine R13wbc_slip(nface, n1, n2, n3, iw, jw, kw,ip,jp,kp,  &
+                    uwall, vwall, wwall, twall, alpha)
+    !===================================================================
+    use commvar,   only : const1, const2, deltat  
+    use commarray, only : q,rho, vel, sigma, qflux,tmp, prs, qrhs, &
+                          vel12_slip, vel34_slip, vel56_slip,      &
+                          tmp12_jump,  tmp34_jump ,  tmp56_jump
+
+    use fludyna,   only : thermal, fvar2q
+
+    integer, intent(in) :: iw, jw, kw, nface, ip, jp, kp
+    real(8), intent(in) :: n1, n2, n3, uwall, vwall, wwall, twall, alpha
+    !
+    real(8) tempw, presw, u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
+    real(8) m111, m112, m113, m122, m223, m123, m222, m133, m233, m333
+    real(8) r11, r22, r12, r13, r23, r33, deltap
+
+    real(8) t1, t2, t3 , s1, s2 , s3
+    real(8) n11, n22, n33, n12, n13, n23
+    real(8) t11, t22, t33, t12, t13, t23
+    real(8) s11, s22, s33, s12, s13, s23
+
+    real(8) sig_nn, qn, r_nn, m_nns, m_nnt
+
+    real(8) upb, vpb, wpb, t_jump, slip_t, slip_s, G, co1, co2
+    real(8) slip2, term2, tr1, deltatp, deltatt
+
+    real(8) pwall, rhow
+
+    deltatp = deltat
+    deltatt = deltat
+    G = (2.0d0 - alpha)/alpha*sqrt(0.5d0*pi)
+
+    n11 = n1*n1;  n22 = n2*n2; n33 = n3*n3; n12 = n1*n2
+    n13 = n1*n3;  n23 = n2*n3
+
+    if (nface == 1)  pwall=num1d3*(4.d0*prs(iw+1,jw,kw)-prs(iw+2,jw,kw))
+    if (nface == 2)  pwall=num1d3*(4.d0*prs(iw-1,jw,kw)-prs(iw-2,jw,kw))
+    if (nface == 3)  pwall=num1d3*(4.d0*prs(iw,jw+1,kw)-prs(iw,jw+2,kw))
+    if (nface == 4)  pwall=num1d3*(4.d0*prs(iw,jw-1,kw)-prs(iw,jw-2,kw))
+    if (nface == 5)  pwall=num1d3*(4.d0*prs(iw,jw,kw+1)-prs(iw,jw,kw+2))
+    if (nface == 6)  pwall=num1d3*(4.d0*prs(iw,jw,kw-1)-prs(iw,jw,kw-2))
+    prs(iw, jw, kw) = pwall
+
+
+    tempw = tmp(iw, jw, kw)
+    presw = prs(iw, jw, kw)
+    rhow  = rho(iw, jw, kw)
+
+    u2w = sigma(iw, jw, kw, 1)
+    uvw = sigma(iw, jw, kw, 2)
+    uww = sigma(iw, jw, kw, 3)
+    v2w = sigma(iw, jw, kw, 4)
+    vww = sigma(iw, jw, kw, 5)
+    w2w = - u2w - v2w
+
+    qxw = qflux(iw, jw, kw, 1)
+    qyw = qflux(iw, jw, kw, 2)
+    qzw = qflux(iw, jw, kw, 3)
+
+    
+    m111 = mijk(iw,jw,kw,1)
+    m112 = mijk(iw,jw,kw,2)
+    m113 = mijk(iw,jw,kw,3)
+    m122 = mijk(iw,jw,kw,4)
+    m222 = mijk(iw,jw,kw,5)
+    m223 = mijk(iw,jw,kw,6)
+    m123 = mijk(iw,jw,kw,7)
+    m133 = - m111 - m122
+    m233 = - m112 - m222
+    m333 = - m113 - m223
+
+    r11 = rij(iw,jw,kw,1)
+    r12 = rij(iw,jw,kw,2)
+    r13 = rij(iw,jw,kw,3)
+    r22 = rij(iw,jw,kw,4)
+    r23 = rij(iw,jw,kw,5)
+    r33 = - r11 - r22
+
+    deltap = delta(iw, jw, kw)
+
+    co2 = tempw/const2
+    co1 = G*sqrt(co2)
+    tr1 = twall/tempw
+
+    !=======================================
+    !==          normal heat flux        ==
+    !=======================================
+    qn = n1*qxw + n2*qyw + n3*qzw
+    term2 = n11*u2w + n22*v2w + n33*w2w
+    sig_nn = term2 + 2.0d0*(uvw*n12 + uww*n13 + vww*n23)
+    r_nn = r11*n11 + r22*n22 + r33*n33   &
+         + 2.0d0*(r12*n12 + r13*n13 + r23*n23)
+    !=======================================
+    !             velocity slip
+    !=======================================
+
+    presw = presw + 0.5d0*sig_nn                   &
+          - (30.0d0*r_nn + 7.0d0*deltap)/(840.0d0*co2)
+
+    upb = n1*(u2w - term2 - 2.0d0*n23*vww)         &
+        + (1.0d0 - 2.0d0*n11)*(n2*uvw + n3*uww)
+
+    vpb = n2*(v2w - term2 - 2.0d0*n13*uww)         &
+        + (1.0d0 - 2.0d0*n22)*(n1*uvw + n3*vww)
+
+    wpb = n3*(w2w - term2 - 2.0d0*n12*uvw)         &
+         + (1.0d0 - 2.0d0*n33)*(n1*uww + n2*vww)
+
+    upb = -upb*co1 - 0.2d0*(qxw - qn*n1)
+    vpb = -vpb*co1 - 0.2d0*(qyw - qn*n2)
+    wpb = -wpb*co1 - 0.2d0*(qzw - qn*n3)
+    !==========================================
+    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
+                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
+
+    m_nnt = m111*n11*t1 + m222*n22*t2 + m333*n33*t3   &
+          + (n11*t2 + 2.0d0*n12*t1)*m112                &
+          + (n11*t3 + 2.0d0*n13*t1)*m113                &
+          + (n22*t1 + 2.0d0*n12*t2)*m122                &
+          + (n33*t1 + 2.0d0*n13*t3)*m133                &
+          + (n22*t3 + 2.0d0*n23*t2)*m223                &
+          + (n33*t2 + 2.0d0*n23*t3)*m233                &
+          + 2.0d0*(n12*t3 + n13*t2 + n23*t1)*m123
+
+    m_nns = m111*n11*s1 + m222*n22*s2 + m333*n33*s3    &
+          + (n11*s2 + 2.0d0*n12*s1)*m112                 &
+          + (n11*s3 + 2.0d0*n13*s1)*m113                 &
+          + (n22*s1 + 2.0d0*n12*s2)*m122                 &
+          + (n33*s1 + 2.0d0*n13*s3)*m133                 &
+          + (n22*s3 + 2.0d0*n23*s2)*m223                 &
+          + (n33*s2 + 2.0d0*n23*s3)*m233                 &
+          + 2.0d0*(n12*s3 + n13*s2 + n23*s1)*m123
+
+    !=======================================
+    !             velocity slip
+    !=======================================
+    upb = (upb - 0.5d0*(t1*m_nnt + s1*m_nns))/presw
+    vpb = (vpb - 0.5d0*(t2*m_nnt + s2*m_nns))/presw
+    wpb = (wpb - 0.5d0*(t3*m_nnt + s3*m_nns))/presw
+
+    slip_t = (upb*t1 + vpb*t2 + wpb*t3)/sqrt(co2)
+    slip_s = (upb*s1 + vpb*s2 + wpb*s3)/sqrt(co2)
+    slip2 = slip_t*slip_t + slip_s*slip_s
+
+    !========================
+    !==   temperature jump ==
+    !========================
+    t_jump = -0.5d0*co1*qn - (deltap/30.d0 + 5.0d0/56.0d0*r_nn)
+    t_jump = (t_jump + 0.25d0*co2*(slip2*presw - sig_nn))*const2/presw
+
+    if (nface == 1 .or. nface == 2) then
+       vel12_slip(jw,kw,1,nface) = vel12_slip(jw,kw,1,nface)  &
+                            + (upb-vel12_slip(jw,kw,1,nface))*deltatp
+       vel12_slip(jw,kw,2,nface) = vel12_slip(jw,kw,2,nface)  &
+                            + (vpb-vel12_slip(jw,kw,2,nface))*deltatp
+       vel12_slip(jw,kw,3,nface) = vel12_slip(jw,kw,3,nface)  &
+                            + (wpb-vel12_slip(jw,kw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel12_slip(jw,kw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel12_slip(jw,kw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel12_slip(jw,kw,3,nface) + wwall
+
+       tmp12_jump(jw,kw,nface) = tmp12_jump(jw, kw, nface)                &
+                     + (t_jump - tmp12_jump(jw, kw, nface) )*deltatp
+
+       tmp(iw, jw, kw) = tmp12_jump(jw, kw, nface) + twall
+
+    end if
+
+    if (nface == 3 .or. nface == 4) then
+       vel34_slip(iw,kw,1,nface) = vel34_slip(iw,kw,1,nface)  &
+                            + (upb-vel34_slip(iw,kw,1,nface))*deltatp
+       vel34_slip(iw,kw,2,nface) = vel34_slip(iw,kw,2,nface)  &
+                            + (vpb-vel34_slip(iw,kw,2,nface))*deltatp
+       vel34_slip(iw,kw,3,nface) = vel34_slip(iw,kw,3,nface)  &
+                            + (wpb-vel34_slip(iw,kw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel34_slip(iw,kw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel34_slip(iw,kw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel34_slip(iw,kw,3,nface) + wwall
+
+       tmp34_jump(iw,kw,nface) = tmp34_jump(iw,kw,nface)                &
+                     + (t_jump - tmp34_jump(iw,kw,nface) )*deltatp
+
+       tmp(iw, jw, kw) = tmp34_jump(iw,kw,nface) + twall
+    end if
+
+    if (nface == 5 .or. nface == 6) then
+       vel56_slip(iw,jw,1,nface) = vel56_slip(iw,jw,1,nface)  &
+                      + (upb-vel56_slip(iw,jw,1,nface))*deltatp
+       vel56_slip(iw,jw,2,nface) = vel56_slip(iw,jw,2,nface)  &
+                      + (vpb-vel56_slip(iw,jw,2,nface))*deltatp
+       vel56_slip(iw,jw,3,nface) = vel56_slip(iw,jw,3,nface)  &
+                      + (wpb-vel56_slip(iw,jw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel56_slip(iw,jw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel56_slip(iw,jw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel56_slip(iw,jw,3,nface) + wwall
+
+       tmp56_jump(iw,jw,nface) = tmp56_jump(iw,jw,nface)                &
+                     + (t_jump - tmp56_jump(iw,jw,nface) )*deltatp
+
+       tmp(iw, jw, kw) = tmp56_jump(iw,jw,nface) + twall
+    end if
+
+    rhow = thermal(pressure=prs(iw,jw,kw),temperature=tmp(iw, jw, kw))
+    rho(iw,jw,kw) = rho(iw,jw,kw) + (rhow - rho(iw,jw,kw))*deltatp
+
+    call fvar2q(      q=  q(iw,jw,kw,:),                 &
+                   density=rho(iw,jw,kw),                &
+                  velocity=vel(iw,jw,kw,:),              &
+                  temperature=tmp(iw,jw,kw) )
+
+    qrhs(iw, jw, kw,1:5) = 0.0d0
+
+
+     return
+  end  subroutine R13wbc_slip
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine R13wbc_slip.                                 |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to b.c. for N-S with R26 moment.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| xx-xx-xxxx: Created by X. Gu.                                     |
+  !+-------------------------------------------------------------------+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to b.c. for N-S with R26 moment.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| xx-xx-xxxx: Created by X. Gu.                                     |
+  !+-------------------------------------------------------------------+
+    subroutine R26wbc_slip(nface, n1, n2, n3, iw, jw, kw, ip, jp, kp,  &
+                  uwall, vwall, wwall, twall, alpha )
+    !===================================================================
+    use commvar,   only : const1, const2, deltat
+    use commarray, only : q,rho, vel, sigma, qflux,tmp, prs, qrhs,  &
+                          vel12_slip, vel34_slip, vel56_slip,       &          
+                          tmp12_jump,  tmp34_jump, tmp56_jump
+
+    use fludyna,   only : thermal, fvar2q
+
+    integer, intent(in) :: iw, jw, kw, nface, ip, jp, kp
+    real(8), intent(in) :: n1, n2, n3, uwall, vwall, wwall, twall, alpha
+    !
+    real(8) tempw, presw, u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
+    real(8) m111, m112, m113, m122, m223, m123, m222, m133, m233, m333
+    real(8) r11, r22, r12, r13, r23, r33, deltap
+    real(8) q1111, q1112, q1122, q1222, q2222, q1113,  &
+            q1123, q1223, q2223, q1333, q2333, q1133,  &
+            q2233, q1233, q3333
+
+    real(8) psi111, psi222, psi112, psi122, psi123,   &
+            psi113, psi223, psi133, psi233, psi333
+    real(8) omega_x, omega_y, omega_z
+
+
+    real(8) t1, t2, t3 , s1, s2 , s3
+    real(8) n11, n22, n33, n12, n13, n23
+    real(8) t11, t22, t33, t12, t13, t23
+    real(8) s11, s22, s33, s12, s13, s23
+
+    real(8) sig_nn, qn, r_nn, m_nns, m_nnt, q_nnnn, omega_n, psi_nnt, psi_nns
+
+    real(8) upb, vpb, wpb, t_jump, slip_t, slip_s, G, co1, co2, co3
+    real(8) slip2, term2, tr1, deltatp
+
+    real(8) pwall, rhow
+
+    deltatp = 0.1d0 ! deltat
+
+    G = (2.0d0 - alpha)/alpha*sqrt(0.5d0*pi)
+
+    n11 = n1*n1;  n22 = n2*n2; n33 = n3*n3; n12 = n1*n2
+    n13 = n1*n3;  n23 = n2*n3
+    if (nface == 1)  pwall=num1d3*(4.d0*prs(iw+1,jw,kw)-prs(iw+2,jw,kw))
+    if (nface == 2)  pwall=num1d3*(4.d0*prs(iw-1,jw,kw)-prs(iw-2,jw,kw))
+    if (nface == 3)  pwall=num1d3*(4.d0*prs(iw,jw+1,kw)-prs(iw,jw+2,kw))
+    if (nface == 4)  pwall=num1d3*(4.d0*prs(iw,jw-1,kw)-prs(iw,jw-2,kw))
+    if (nface == 5)  pwall=num1d3*(4.d0*prs(iw,jw,kw+1)-prs(iw,jw,kw+2))
+    if (nface == 6)  pwall=num1d3*(4.d0*prs(iw,jw,kw-1)-prs(iw,jw,kw-2))
+    prs(iw, jw, kw) = pwall
+    tempw = tmp(iw, jw, kw)
+    presw = prs(iw, jw, kw)
+    rhow  = rho(iw, jw, kw)
+
+    u2w = sigma(iw, jw, kw, 1)
+    uvw = sigma(iw, jw, kw, 2)
+    uww = sigma(iw, jw, kw, 3)
+    v2w = sigma(iw, jw, kw, 4)
+    vww = sigma(iw, jw, kw, 5)
+    w2w = - u2w - v2w
+
+    qxw = qflux(iw, jw, kw, 1)
+    qyw = qflux(iw, jw, kw, 2)
+    qzw = qflux(iw, jw, kw, 3)
+
+    m111 = mijk(iw,jw,kw,1)
+    m112 = mijk(iw,jw,kw,2)
+    m113 = mijk(iw,jw,kw,3)
+    m122 = mijk(iw,jw,kw,4)
+    m222 = mijk(iw,jw,kw,5)
+    m223 = mijk(iw,jw,kw,6)
+    m123 = mijk(iw,jw,kw,7)
+    m133 = - m111 - m122
+    m233 = - m112 - m222
+    m333 = - m113 - m223
+
+    r11 = rij(iw,jw,kw,1)
+    r12 = rij(iw,jw,kw,2)
+    r13 = rij(iw,jw,kw,3)
+    r22 = rij(iw,jw,kw,4)
+    r23 = rij(iw,jw,kw,5)
+    r33 = - r11 - r22
+
+    q1111 = Eijkl(iw,jw,kw,1)
+    q2222 = Eijkl(iw,jw,kw,8)
+    q1112 = Eijkl(iw,jw,kw,2)
+    q1113 = Eijkl(iw,jw,kw,3)
+    q1122 = Eijkl(iw,jw,kw,4)
+    q1222 = Eijkl(iw,jw,kw,6)
+    q1123 = Eijkl(iw,jw,kw,5)
+    q1223 = Eijkl(iw,jw,kw,7)
+    q2223 = Eijkl(iw,jw,kw,9)
+
+    q1333 = - q1113 - q1223
+    q2333 = - q1123 - q2223
+    q1133 = - q1111 - q1122
+    q2233 = - q1122 - q2222
+    q1233 = - q1112 - q1222
+    q3333 = - q1133 - q2233
+    psi111 = psi(iw,jw,kw,1)
+    psi112 = psi(iw,jw,kw,2)
+    psi113 = psi(iw,jw,kw,3)
+    psi122 = psi(iw,jw,kw,4)
+    psi222 = psi(iw,jw,kw,5)
+    psi223 = psi(iw,jw,kw,6)
+    psi123 = psi(iw,jw,kw,7)
+    psi133 = - psi111 - psi122
+    psi233 = - psi112 - psi222
+    psi333 = - psi113 - psi223
+
+    omega_x = omega(iw,jw,kw,1) 
+    omega_y = omega(iw,jw,kw,2) 
+    omega_z = omega(iw,jw,kw,3) 
+
+    deltap = delta(iw, jw, kw)
+
+    co2 = tempw/const2
+    co1 = G*sqrt(co2)
+    tr1 = twall/tempw
+
+    !=======================================
+    !==          normal heat flux        ==
+    !=======================================
+    qn = n1*qxw + n2*qyw + n3*qzw
+    omega_n =  n1*omega_x + n2*omega_y + n3*omega_z
+    term2 = n11*u2w + n22*v2w + n33*w2w
+    sig_nn = term2 + 2.0d0*(uvw*n12 + uww*n13 + vww*n23)
+    r_nn = r11*n11 + r22*n22 + r33*n33   &
+         + 2.0d0*(r12*n12 + r13*n13 + r23*n23)
+    q_nnnn = (      q1111*n11 +  4.0d0*q1112*n12             &
+             +  4.0d0*q1113*n13 +  6.0d0*q1122*n22           &
+             + 12.0d0*q1123*n23 +  6.0d0*q1133*n33)*n11      &
+             + (4.0d0*q1222*n12 + 12.0d0*q1223*n13           &
+             +        q2222*n22 +  4.0d0*q2223*n23)*n22      &
+             + (4.0d0*q1333*n13 +  6.0d0*q2233*n22           &
+             +  4.0d0*q2333*n23 + 12.0d0*q1233*n12           &
+             +        q3333*n33)*n33
+
+    !=======================================
+    !             velocity slip
+    !=======================================
+
+    presw = presw + 0.5d0*sig_nn                   &
+                - ( (30.0d0*r_nn + 7.0d0*deltap)/840.d0 + q_nnnn/24.0d0)/co2
+
+    upb = n1*(u2w - term2 - 2.0d0*n23*vww)         &
+        + (1.0d0 - 2.0d0*n11)*(n2*uvw + n3*uww)
+
+    vpb = n2*(v2w - term2 - 2.0d0*n13*uww)         &
+        + (1.0d0 - 2.0d0*n22)*(n1*uvw + n3*vww)
+
+    wpb = n3*(w2w - term2 - 2.0d0*n12*uvw)         &
+         + (1.0d0 - 2.0d0*n33)*(n1*uww + n2*vww)
+
+    co3 = 9.0d0/2520.0d0/co2
+
+    upb = -upb*co1 - 0.2d0*(qxw - qn*n1) + co3*(omega_x - omega_n*n1)
+    vpb = -vpb*co1 - 0.2d0*(qyw - qn*n2) + co3*(omega_y - omega_n*n2)
+    wpb = -wpb*co1 - 0.2d0*(qzw - qn*n3) + co3*(omega_z - omega_n*n3)
+    !==========================================
+    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
+                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
+    m_nnt = m111*n11*t1 + m222*n22*t2 + m333*n33*t3   &
+          + (n11*t2 + 2.0d0*n12*t1)*m112                &
+          + (n11*t3 + 2.0d0*n13*t1)*m113                &
+          + (n22*t1 + 2.0d0*n12*t2)*m122                &
+          + (n33*t1 + 2.0d0*n13*t3)*m133                &
+          + (n22*t3 + 2.0d0*n23*t2)*m223                &
+          + (n33*t2 + 2.0d0*n23*t3)*m233                &
+          + 2.0d0*(n12*t3 + n13*t2 + n23*t1)*m123
+
+    m_nns = m111*n11*s1 + m222*n22*s2 + m333*n33*s3    &
+          + (n11*s2 + 2.0d0*n12*s1)*m112                 &
+          + (n11*s3 + 2.0d0*n13*s1)*m113                 &
+          + (n22*s1 + 2.0d0*n12*s2)*m122                 &
+          + (n33*s1 + 2.0d0*n13*s3)*m133                 &
+          + (n22*s3 + 2.0d0*n23*s2)*m223                 &
+          + (n33*s2 + 2.0d0*n23*s3)*m233                 &
+          + 2.0d0*(n12*s3 + n13*s2 + n23*s1)*m123
+    psi_nnt = psi111*n11*t1 + psi222*n22*t2 + psi333*n33*t3   &
+          + (n11*t2 + 2.0d0*n12*t1)*psi112                &
+          + (n11*t3 + 2.0d0*n13*t1)*psi113                &
+          + (n22*t1 + 2.0d0*n12*t2)*psi122                &
+          + (n33*t1 + 2.0d0*n13*t3)*psi133                &
+          + (n22*t3 + 2.0d0*n23*t2)*psi223                &
+          + (n33*t2 + 2.0d0*n23*t3)*psi233                &
+          + 2.0d0*(n12*t3 + n13*t2 + n23*t1)*psi123
+    psi_nns = psi111*n11*s1 + psi222*n22*s2 + psi333*n33*s3    &
+          + (n11*s2 + 2.0d0*n12*s1)*psi112                 &
+          + (n11*s3 + 2.0d0*n13*s1)*psi113                 &
+          + (n22*s1 + 2.0d0*n12*s2)*psi122                 &
+          + (n33*s1 + 2.0d0*n13*s3)*psi133                 &
+          + (n22*s3 + 2.0d0*n23*s2)*psi223                 &
+          + (n33*s2 + 2.0d0*n23*s3)*psi233                 &
+          + 2.0d0*(n12*s3 + n13*s2 + n23*s1)*psi123
+
+    !=======================================
+    !             velocity slip
+    !=======================================
+
+    co3 = 7.0d0/252.0d0/co2
+    upb = (upb - 0.5d0*(t1*m_nnt + s1*m_nns) + co3*(t1*psi_nnt + s1*psi_nns))/presw
+    vpb = (vpb - 0.5d0*(t2*m_nnt + s2*m_nns) + co3*(t2*psi_nnt + s2*psi_nns))/presw
+    wpb = (wpb - 0.5d0*(t3*m_nnt + s3*m_nns) + co3*(t3*psi_nnt + s3*psi_nns))/presw
+
+    slip_t = (upb*t1 + vpb*t2 + wpb*t3)/sqrt(co2)
+    slip_s = (upb*s1 + vpb*s2 + wpb*s3)/sqrt(co2)
+    slip2 = slip_t*slip_t + slip_s*slip_s
+
+    !========================
+    !==   temperature jump ==
+    !========================
+    t_jump = -0.5d0*co1*qn - (deltap/30.d0 + 5.0d0/56.0d0*r_nn) + q_nnnn/24.0d0
+    t_jump = (t_jump + 0.25d0*co2*(slip2*presw - sig_nn))*const2/presw
+
+
+    if (nface == 1 .or. nface == 2) then
+       vel12_slip(jw,kw,1,nface) = vel12_slip(jw,kw,1,nface)  &
+                            + (upb-vel12_slip(jw,kw,1,nface))*deltatp
+       vel12_slip(jw,kw,2,nface) = vel12_slip(jw,kw,2,nface)  &
+                            + (vpb-vel12_slip(jw,kw,2,nface))*deltatp
+       vel12_slip(jw,kw,3,nface) = vel12_slip(jw,kw,3,nface)  &
+                            + (wpb-vel12_slip(jw,kw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel12_slip(jw,kw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel12_slip(jw,kw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel12_slip(jw,kw,3,nface) + wwall
+
+       tmp12_jump(jw,kw,nface) = tmp12_jump(jw, kw, nface)                &
+                     + (t_jump - tmp12_jump(jw, kw, nface) )*deltatp
+
+       tmp(iw, jw, kw) = tmp12_jump(jw, kw, nface) + twall
+    end if
+
+    if (nface == 3 .or. nface == 4) then
+       vel34_slip(iw,kw,1,nface) = vel34_slip(iw,kw,1,nface)  &
+                            + (upb-vel34_slip(iw,kw,1,nface))*deltatp
+       vel34_slip(iw,kw,2,nface) = vel34_slip(iw,kw,2,nface)  &
+                            + (vpb-vel34_slip(iw,kw,2,nface))*deltatp
+       vel34_slip(iw,kw,3,nface) = vel34_slip(iw,kw,3,nface)  &
+                            + (wpb-vel34_slip(iw,kw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel34_slip(iw,kw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel34_slip(iw,kw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel34_slip(iw,kw,3,nface) + wwall
+
+
+       tmp34_jump(iw,kw,nface) = tmp34_jump(iw,kw,nface)                &
+                     + (t_jump - tmp34_jump(iw,kw,nface) )*deltatp
+
+       tmp(iw, jw, kw) = tmp34_jump(iw,kw,nface) + twall
+    end if
+
+    if (nface == 5 .or. nface == 6) then
+       vel56_slip(iw,jw,1,nface) = vel56_slip(iw,jw,1,nface)  &
+                      + (upb-vel56_slip(iw,jw,1,nface))*deltatp
+       vel56_slip(iw,jw,2,nface) = vel56_slip(iw,jw,2,nface)  &
+                      + (vpb-vel56_slip(iw,jw,2,nface))*deltatp
+       vel56_slip(iw,jw,3,nface) = vel56_slip(iw,jw,3,nface)  &
+                      + (wpb-vel56_slip(iw,jw,3,nface))*deltatp
+
+       vel(iw, jw, kw, 1) = vel56_slip(iw,jw,1,nface) + uwall
+       vel(iw, jw, kw, 2) = vel56_slip(iw,jw,2,nface) + vwall
+       vel(iw, jw, kw, 3) = vel56_slip(iw,jw,3,nface) + wwall
+
+       tmp56_jump(iw,jw,nface) = tmp56_jump(iw,jw,nface)                &
+                     + (t_jump - tmp56_jump(iw,jw,nface) )*deltatp
+
+       tmp(iw, jw, kw) = tmp56_jump(iw,jw,nface) + twall
+    end if
+
+    rhow = thermal(pressure=prs(iw,jw,kw),temperature=tmp(iw, jw, kw))
+    rho(iw,jw,kw) = rho(iw,jw,kw) + (rhow - rho(iw,jw,kw))*deltatp
+
+    call fvar2q(      q=  q(iw,jw,kw,:),                      &
+                   density=rho(iw,jw,kw),                     &
+                  velocity=vel(iw,jw,kw,:),                   &
+                  temperature=tmp(iw,jw,kw) )
+
+    qrhs(iw, jw, kw,1:5) = 0.0d0 
+
+     return
+  end  subroutine R26wbc_slip
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to b.c. for N-S with R26 moment.               |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| xx-xx-xxxx: Created by X. Gu.                                     |
+  !+-------------------------------------------------------------------+
+  subroutine R26wbc(nface, n1, n2, n3, iw, jw, kw, ip, jp, kp,  &
+                  uwall, vwall, wwall, twall, alpha)
+
+    !==================================================================
+
+    use commvar,   only : const1, const2, deltat, subdeltat
+    use commarray, only : q, rho, vel, sigma, qflux, tmp, prs,  x, &
+                          vel12_slip, vel34_slip, vel56_slip
+
+    use fludyna,   only : fvar2q, thermal
+
+    integer, intent(in) :: iw, jw, kw, ip, jp, kp, nface
+    real(8), intent(in) :: n1, n2, n3, uwall, vwall, wwall, twall, alpha
+
+    real(8) tempw, presw, u2w, v2w, w2w, uvw, uww, vww, qxw, qyw, qzw
+    real(8) m111, m112, m113, m122, m223, m123, m222, m133, m233, m333
+    real(8) r11, r22, r12, r13, r23, r33, deltap
+    real(8) q1111, q1112, q1122, q1222, q2222, q1113,  &
+            q1123, q1223, q2223, q1333, q2333, q1133,  &
+            q2233, q1233, q3333
+
+    real(8) psi111, psi222, psi112, psi122, psi123,   &
+            psi113, psi223, psi133, psi233, psi333
+
+    real(8) omega_x, omega_y, omega_z
+
+    real(8) t1, t2, t3 , s1, s2 , s3
+    real(8) n11, n22, n33, n12, n13, n23
+    real(8) t11, t22, t33, t12, t13, t23
+    real(8) s11, s22, s33, s12, s13, s23
+
+    real(8) sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts
+    real(8) r_nn, r_tt, r_ss, r_ts, r_nt, r_ns, qn, qt, qs
+    real(8) m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn
+    real(8) q_tttt, q_ttts, q_ttss, q_tsss, q_ssss,   &
+            q_nttt, q_ntts, q_ntss, q_nsss, q_nnnt,   &
+            q_nnns, q_nntt, q_nnss, q_nnts, q_nnnn
+
+    real(8) psi_ttt, psi_sss, psi_tts, psi_tss, psi_nts,   &
+            psi_ntt, psi_nss, psi_nnt, psi_nns, psi_nnn
+
+    real(8) omega_n, omega_t, omega_s
+
+    real(8) upb, vpb, wpb, t_jump, slip_t, slip_s, G, co1, co2, co3
+    real(8) slip2, term1, term2, tr1, rhow,  deltatp, deltatt
+
+    real(8) dx, dy , dz
+    real(8) qt_new, qs_new
+    real(8) sig_nn_new, sig_tt_new, sig_ss_new, sig_ts_new, pwall
+
+    real(8) r_nn_new, r_tt_new, r_ss_new, r_ts_new
+
+    real(8) m_ttt_new, m_sss_new, m_nnt_new, m_nns_new, m_nts_new,  &
+            m_tts_new, m_tss_new
+
+    deltatp = subdeltat 
+    deltatt = subdeltat
+
+    G = (2.0d0 - alpha)/alpha*sqrt(0.5d0*pi)
+
+    n11 = n1*n1; n22 = n2*n2; n33 = n3*n3 
+    n12 = n1*n2; n13 = n1*n3; n23 = n2*n3
+
+    dx = x(iw, jw, kw, 1) - x(ip, jp, kp, 1)
+    dy = x(iw, jw, kw, 2) - x(ip, jp, kp, 2)
+    dz = x(iw, jw, kw, 3) - x(ip, jp, kp, 3)
+
+    tempw = tmp(iw, jw, kw)
+    presw = prs(iw, jw, kw)
+    rhow  = rho(iw, jw, kw)
+
+!    u2w = sigma(iw, jw, kw, 1)
+!    uvw = sigma(iw, jw, kw, 2)
+!    uww = sigma(iw, jw, kw, 3)
+!    v2w = sigma(iw, jw, kw, 4)
+!    vww = sigma(iw, jw, kw, 5)
+!    w2w = - u2w - v2w
+
+!    qxw = qflux(iw, jw, kw, 1)
+!    qyw = qflux(iw, jw, kw, 2)
+!    qzw = qflux(iw, jw, kw, 3)
+
+!    m111 = mijk(iw,jw,kw,1)
+!    m112 = mijk(iw,jw,kw,2)
+!    m113 = mijk(iw,jw,kw,3)
+!    m122 = mijk(iw,jw,kw,4)
+!    m222 = mijk(iw,jw,kw,5)
+!    m223 = mijk(iw,jw,kw,6)
+!    m123 = mijk(iw,jw,kw,7)
+!    m133 = - m111 - m122
+!    m233 = - m112 - m222
+!    m333 = - m113 - m223
+
+!    r11 = rij(iw,jw,kw,1)
+!    r12 = rij(iw,jw,kw,2)
+!    r13 = rij(iw,jw,kw,3)
+!    r22 = rij(iw,jw,kw,4)
+!    r23 = rij(iw,jw,kw,5)
+!    r33 = - r11 - r22
+
+    call extraplotionR13(nface, iw, jw, kw, ip, jp, kp,  &
+                 u2w, uvw, uww, v2w, vww, w2w, qxw, qyw, qzw)
+
+    call extraplotionR26(nface, iw, jw, kw, ip, jp, kp,   &
+                        r11, r12, r13, r22, r23, r33, &
+                       m111, m112,m113,m122,m222, m223, m123, m133, m233, m333)
+    
+
+    q1111 = Eijkl(iw,jw,kw,1)
+    q2222 = Eijkl(iw,jw,kw,8)
+    q1112 = Eijkl(iw,jw,kw,2)
+    q1113 = Eijkl(iw,jw,kw,3)
+    q1122 = Eijkl(iw,jw,kw,4)
+    q1222 = Eijkl(iw,jw,kw,6)
+    q1123 = Eijkl(iw,jw,kw,5)
+    q1223 = Eijkl(iw,jw,kw,7)
+    q2223 = Eijkl(iw,jw,kw,9)
+
+    q1333 = - q1113 - q1223
+    q2333 = - q1123 - q2223
+    q1133 = - q1111 - q1122
+    q2233 = - q1122 - q2222
+    q1233 = - q1112 - q1222
+    q3333 = - q1133 - q2233
+
+    psi111 = psi(iw,jw,kw,1)
+    psi112 = psi(iw,jw,kw,2)
+    psi113 = psi(iw,jw,kw,3)
+    psi122 = psi(iw,jw,kw,4)
+    psi222 = psi(iw,jw,kw,5)
+    psi223 = psi(iw,jw,kw,6)
+    psi123 = psi(iw,jw,kw,7)
+    psi133 = - psi111 - psi122
+    psi233 = - psi112 - psi222
+    psi333 = - psi113 - psi223
+    omega_x = omega(iw,jw,kw,1) 
+    omega_y = omega(iw,jw,kw,2) 
+    omega_z = omega(iw,jw,kw,3) 
+
+    deltap = delta(iw, jw, kw)
+
+
+    co2 = tempw/const2
+    co1 = G*sqrt(co2)
+    tr1 = twall/tempw
+
+    !=======================================
+    !==          normal heat flux        ==
+    !=======================================
+    qn = n1*qxw + n2*qyw + n3*qzw
+    omega_n =  n1*omega_x + n2*omega_y + n3*omega_z
+    term2 = n11*u2w + n22*v2w + n33*w2w
+    sig_nn = term2 + 2.0d0*(uvw*n12 + uww*n13 + vww*n23)
+    r_nn = r11*n11 + r22*n22 + r33*n33 + 2.0d0*(r12*n12 + r13*n13 + r23*n23)
+    q_nnnn = (      q1111*n11 +  4.0d0*q1112*n12             &
+             +  4.0d0*q1113*n13 +  6.0d0*q1122*n22           &
+             + 12.0d0*q1123*n23 +  6.0d0*q1133*n33)*n11      &
+             + (4.0d0*q1222*n12 + 12.0d0*q1223*n13           &
+             +        q2222*n22 +  4.0d0*q2223*n23)*n22      &
+             + (4.0d0*q1333*n13 +  6.0d0*q2233*n22           &
+             +  4.0d0*q2333*n23 + 12.0d0*q1233*n12           &
+             +        q3333*n33)*n33
+
+
+    !=======================================
+    !             velocity slip
+    !=======================================
+
+    presw = presw + 0.5d0*sig_nn                              &
+           - ( (30.0d0*r_nn + 7.0d0*deltap)/840.d0 + q_nnnn/24.0d0)/co2
+
+    if (nface == 1 .or. nface == 2) then
+       upb = vel12_slip(jw,kw,1,nface)
+       vpb = vel12_slip(jw,kw,2,nface)
+       wpb = vel12_slip(jw,kw,3,nface)
+    end if
+    if (nface == 3 .or. nface == 4) then
+        upb = vel34_slip(iw,kw,1,nface)
+        vpb = vel34_slip(iw,kw,2,nface)
+        wpb = vel34_slip(iw,kw,3,nface)
+    end if
+    if (nface == 5 .or. nface == 6) then
+       upb = vel56_slip(iw,jw,1,nface)
+       vpb = vel56_slip(iw,jw,2,nface)
+       wpb = vel56_slip(iw,jw,3,nface)
+    end if
+
+    call slip_orientation(upb, vpb, wpb, n1,n2,n3,t1, t2, t3, s1, s2, s3,  &
+                t11, t22, t33, t12, t13, t23, s11, s22, s33, s12, s13, s23)
+
+    call trans_sigma_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
+                             n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
+                             t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
+                             u2w, v2w, w2w, uvw, uww, vww,                 &
+                             sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
+
+    call trans_rij_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
+                           n11, n22, n33, n12, n13, n23, t11, t22, t33,  &
+                           t12, t13, t23, s11, s22, s33, s12, s13, s23,  &
+                           r11, r22, r12, r13, r23, r33,                 &
+                           r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
+
+    call trans_mijk_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,          &
+                            n11, n22, n33, n12, n13, n23, t11, t22, t33, &
+                            t12, t13, t23, s11, s22, s33, s12, s13, s23, &
+                m111, m112, m113, m122, m223, m123, m222, m133, m233, m333, &
+                m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn)
+
+    call trans_phi_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
+                         n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
+                         t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
+                         q1111, q1112, q1122, q1222, q2222, q1113,       &
+                         q1123, q1223, q2223, q1333, q2333, q1133,       &
+                         q2233, q1233, q3333,                            &
+                         q_tttt, q_ttts, q_ttss, q_tsss, q_ssss,         &
+                         q_nttt, q_ntts, q_ntss, q_nsss, q_nnnt,         &
+                         q_nnns, q_nntt, q_nnss, q_nnts, q_nnnn)
+
+    call trans_psi_to_wall(n1, n2, n3, t1, t2, t3, s1, s2, s3,           &
+                         n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
+                         t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
+                         psi111, psi112, psi113, psi122, psi223, psi123, &
+                         psi222, psi133, psi233, psi333,                 &
+                         psi_ttt, psi_sss, psi_tts, psi_tss, psi_nts,    &
+                         psi_ntt, psi_nss, psi_nnt, psi_nns, psi_nnn)
+
+    omega_t = t1*omega_x + t2*omega_y + t3*omega_z
+    omega_s = s1*omega_x + s2*omega_y + s3*omega_z
+    omega_n = n1*omega_x + n2*omega_y + n3*omega_z
+
+    qt = t1*qxw + t2*qyw + t3*qzw
+    qs = s1*qxw + s2*qyw + s3*qzw
+    qn = n1*qxw + n2*qyw + n3*qzw
+    !=======================================
+    !             velocity slip
+    !=======================================
+
+     slip_t = (upb*t1 + vpb*t2 + wpb*t3)/sqrt(co2)
+     slip_s = (upb*s1 + vpb*s2 + wpb*s3)/sqrt(co2)
+     slip2 = slip_t*slip_t + slip_s*slip_s
+
+    !==============
+    !== stresses ==
+    !==============
+    sig_tt_new = (-co1*(m_ntt + 0.4d0*qn) + r_ss/14.0d0 - deltap/30.0d0 -0.5d0*q_nntt)/co2  &
+           + (tr1 - 1.0d0 + slip_t**2)*presw
+
+    sig_nn_new =  (-co1*(0.5d0*m_nnn + 0.6d0*qn)               &
+           - (r_nn/7.0d0 + deltap/30.0d0 + q_nnnn/6.d0) )/co2  &
+           + (tr1 - 1.0d0)*presw
+
+    sig_ss_new = - sig_nn_new - sig_tt_new
+
+    sig_ts_new = (-co1*m_nts - r_ts/14.d0 - 0.5d0*q_nnts)/co2 + slip_t*slip_s*presw
+
+    !====================
+    ! == heat fluxes =====
+    !====================
+    term1 = (tr1 + slip2/6.0d0 )*presw/0.6d0*sqrt(co2)
+    qt_new = - co1*(r_nt/co2 + 7.0d0*sig_nt)/3.6d0  - m_nnt/0.9d0  &
+           - slip_t*term1  - (psi_nnt/16.2d0 + omega_t/56.0d0)/co2
+    qs_new = - co1*(r_ns/co2 + 7.0d0*sig_ns)/3.6d0  - m_nns/0.9d0  &
+           - slip_s*term1  - (psi_nns/16.2d0 + omega_s/56.0d0)/co2
+
+    if (nface == 1 .or. nface == 2) then
+       sig_ttbc12(jw,kw,nface) = sig_ttbc12(jw,kw,nface)         &
+                 + (sig_tt_new - sig_ttbc12(jw,kw,nface))*deltatp
+
+       sig_nnbc12(jw,kw,nface) = sig_nnbc12(jw,kw,nface)         &
+                 + (sig_nn_new - sig_nnbc12(jw,kw,nface))*deltatp
+
+       sig_tsbc12(jw,kw,nface) = sig_tsbc12(jw,kw,nface)         &
+                 + (sig_ts_new - sig_tsbc12(jw,kw,nface))*deltatp
+
+       qtbc12(jw,kw,nface) = qtbc12(jw,kw,nface) + (qt_new - qtbc12(jw,kw,nface))*deltatt
+       qsbc12(jw,kw,nface) = qsbc12(jw,kw,nface) + (qs_new - qsbc12(jw,kw,nface))*deltatt
+
+
+       sig_tt_new = sig_ttbc12(jw,kw,nface)
+       sig_nn_new = sig_nnbc12(jw,kw,nface)
+       sig_ts_new = sig_tsbc12(jw,kw,nface)
+       qt_new = qtbc12(jw,kw,nface)
+       qs_new = qsbc12(jw,kw,nface)
+    end if
+    if (nface == 3 .or. nface == 4) then
+       sig_ttbc34(iw,kw,nface) = sig_ttbc34(iw,kw,nface)         &
+                 + (sig_tt_new - sig_ttbc34(iw,kw,nface))*deltatp
+
+       sig_nnbc34(iw,kw,nface) = sig_nnbc34(iw,kw,nface)         &
+                 + (sig_nn_new - sig_nnbc34(iw,kw,nface))*deltatp
+
+       sig_tsbc34(iw,kw,nface) = sig_tsbc34(iw,kw,nface)         &
+                 + (sig_ts_new - sig_tsbc34(iw,kw,nface))*deltatp
+
+       qtbc34(iw,kw,nface) = qtbc34(iw,kw,nface) + (qt_new - qtbc34(iw,kw,nface))*deltatt
+       qsbc34(iw,kw,nface) = qsbc34(iw,kw,nface) + (qs_new - qsbc34(iw,kw,nface))*deltatt
+
+
+       sig_tt_new = sig_ttbc34(iw,kw,nface)
+       sig_nn_new = sig_nnbc34(iw,kw,nface)
+       sig_ts_new = sig_tsbc34(iw,kw,nface)
+       qt_new = qtbc34(iw,kw,nface)
+       qs_new = qsbc34(iw,kw,nface)
+    end if
+
+    if (nface == 5 .or. nface == 6) then
+       sig_ttbc56(iw,jw,nface) = sig_ttbc56(iw,jw,nface)         &
+                 + (sig_tt_new - sig_ttbc56(iw,jw,nface))*deltatp
+
+       sig_nnbc56(iw,jw,nface) = sig_nnbc56(iw,jw,nface)         &
+                 + (sig_nn_new - sig_nnbc56(iw,jw,nface))*deltatp
+
+       sig_tsbc56(iw,jw,nface) = sig_tsbc56(iw,jw,nface)         &
+                 + (sig_ts_new - sig_tsbc56(iw,jw,nface))*deltatp
+
+       qtbc56(iw,jw,nface) = qtbc56(iw,jw,nface) + (qt_new - qtbc56(iw,jw,nface))*deltatt
+       qsbc56(iw,jw,nface) = qsbc56(iw,jw,nface) + (qs_new - qsbc56(iw,jw,nface))*deltatt
+
+
+       sig_tt_new = sig_ttbc56(iw,jw,nface)
+       sig_nn_new = sig_nnbc56(iw,jw,nface)
+       sig_ts_new = sig_tsbc56(iw,jw,nface)
+       qt_new = qtbc56(iw,jw,nface)
+       qs_new = qsbc56(iw,jw,nface)
+    end if
+
+
+    !===============
+    !==  mijk ======
+    !===============
+    term1 = (3.0d0*tr1 + slip2)*presw*sqrt(co2)
+
+    m_ttt_new = -co1*(3.0d0*sig_nt + (q_nttt + 3.0d0/7.0d0*r_nt)/co2) &
+      - slip_t*term1 - 1.8d0*qt - 1.5d0*m_nnt                      &
+      -(psi_nnt/12.0d0 + psi_ttt/18.0 + 9.0d0*omega_t/280.0d0)/co2
+
+    m_sss_new = -co1*(3.0d0*sig_ns + (q_nsss + 3.0d0/7.0d0*r_ns)/co2) &
+      - slip_s*term1 - 1.8d0*qs - 1.5d0*m_nns                      &
+      -(psi_nns/12.0d0 + psi_sss/18.0 + 9.0d0*omega_s/280.0d0)/co2
+
+    m_nnt_new = -co1*(sig_nt + (q_nnnt/3.0d0 + r_nt/7.0d0)/co2)       &
+      - slip_t*tr1*presw*sqrt(co2)/1.5d0 - 0.4d0*qt                &
+      -(omega_t/140.0d0 + psi_nnt/18.0d0)/co2
+
+    m_nns_new = -co1*(sig_ns + (q_nnns/3.0d0 + r_ns/7.0d0)/co2)       &
+      - tr1*slip_s*presw*sqrt(co2)/1.5d0 - 0.4d0*qs               &
+      -(omega_s/140.0d0 + psi_nns/18.0d0)/co2
+
+    m_nts_new = -0.5d0*co1*(sig_ts + (q_nnts + r_ts/7.0d0)/co2) - psi_nts/18.0d0/co2
+
+    m_tts_new = -(m_sss_new + m_nns_new)
+    m_tss_new = -(m_ttt_new + m_nnt_new)
+
+    !===============
+    !==  Rij ======
+    !===============
+    r_tt_new = -co1*(28.0d0/15.0d0*qn + 14.0d0/3.0d0*m_ntt    &
+         + (omega_n/15.0d0 +14.0d0/27.0d0*psi_ntt)/co2)   &
+         + (7.0d0*presw *(slip_t**4 + 6.0d0*tr1*slip_t**2  &
+         + 3.0d0*tr1**2 - 3.0d0)/9.0d0 - 14.0d0/3.0d0*sig_tt)*co2  &
+         - R_nn/3.0d0 - 14.0d0/45.0d0*deltap               &
+         - 7.0d0/9.0d0*(q_tttt + 3.0d0*q_nntt)
+
+
+    r_nn_new = -co1*(21.0d0/8.0d0*qn + 35.0d0/16.0d0*m_nnn               &
+         + (35.0d0/144.0d0*psi_nnn + 3.0d0/32.0d0*omega_n)/co2 )     &
+         + (7.0d0/4.0d0*presw*(tr1*tr1 - 1.0d0) - 3.5d0*sig_nn)*co2 &
+         - 7.0d0*deltap/30.0d0 - 7.0d0/6.0d0*q_nnnn
+
+
+    r_ts_new = - co1*(21.0d0*m_nts + 7.0d0/3.0d0*psi_nts/co2)/4.0d0      &
+        + 7.0d0/3.0d0*(slip_t*slip_s*(2.0d0*tr1 + 0.25*slip2)*presw  &
+        - 2.0d0*sig_ns)*co2 - 35.0d0/12.0d0*q_nnts
+
+
+    r_ss_new = - r_nn_new - r_tt_new
+
+    !============
+    !== Delta ==
+    !===========
+
+    deltap = -5.0d0/16.0d0*co1*(28.0d0*qn + Omega_n/co2)               &
+    + 1.25d0*co2*( (6.0d0*(tr1*tr1 - 1.0d0)                                 &
+    + slip2*(3.0d0*tr1*tr1 + 0.25d0*slip2) )*presw - 3.0d0*sig_nn)  &
+    - 1.875d0*r_nn + 35.0d0/48.0d0*q_nnnn
+
+   if (nface == 1 .or. nface == 2) then
+       delbc12(jw,kw,nface) = delbc12(jw,kw,nface) + (deltap - delbc12(jw,kw,nface))*deltatt
+       delta(iw, jw, kw) = delbc12(jw,kw,nface)
+
+       m_tttbc12(jw,kw,nface) = m_tttbc12(jw,kw,nface) + (m_ttt_new - m_tttbc12(jw,kw,nface))*deltatp
+       m_sssbc12(jw,kw,nface) = m_sssbc12(jw,kw,nface) + (m_sss_new - m_sssbc12(jw,kw,nface))*deltatp
+       m_nntbc12(jw,kw,nface) = m_nntbc12(jw,kw,nface) + (m_nnt_new - m_nntbc12(jw,kw,nface))*deltatp
+       m_nnsbc12(jw,kw,nface) = m_nnsbc12(jw,kw,nface) + (m_nns_new - m_nnsbc12(jw,kw,nface))*deltatp
+       m_ntsbc12(jw,kw,nface) = m_ntsbc12(jw,kw,nface) + (m_nts_new - m_ntsbc12(jw,kw,nface))*deltatp
+       r_ttbc12(jw,kw,nface) = r_ttbc12(jw,kw,nface) + (r_tt_new - r_ttbc12(jw,kw,nface))*deltatt
+       r_nnbc12(jw,kw,nface) = r_nnbc12(jw,kw,nface) + (r_nn_new - r_nnbc12(jw,kw,nface))*deltatt
+       r_tsbc12(jw,kw,nface) = r_tsbc12(jw,kw,nface) + (r_ts_new - r_tsbc12(jw,kw,nface))*deltatt
+
+       m_ttt_new = m_tttbc12(jw,kw,nface)
+       m_sss_new = m_sssbc12(jw,kw,nface)
+       m_nnt_new = m_nntbc12(jw,kw,nface)
+       m_nns_new = m_nnsbc12(jw,kw,nface)
+       m_nts_new = m_ntsbc12(jw,kw,nface)
+       r_tt_new = r_ttbc12(jw,kw,nface)
+       r_nn_new = r_nnbc12(jw,kw,nface)
+       r_ts_new = r_tsbc12(jw,kw,nface)
+    end if
+
+
+    if (nface == 3 .or. nface == 4) then
+       delbc34(iw,kw,nface) = delbc34(iw,kw,nface) + (deltap - delbc34(iw,kw,nface))*deltatt
+       delta(iw, jw, kw) = delbc34(iw,kw,nface)
+
+       m_tttbc34(iw,kw,nface) = m_tttbc34(iw,kw,nface) + (m_ttt_new - m_tttbc34(iw,kw,nface))*deltatp
+       m_sssbc34(iw,kw,nface) = m_sssbc34(iw,kw,nface) + (m_sss_new - m_sssbc34(iw,kw,nface))*deltatp
+       m_nntbc34(iw,kw,nface) = m_nntbc34(iw,kw,nface) + (m_nnt_new - m_nntbc34(iw,kw,nface))*deltatp
+       m_nnsbc34(iw,kw,nface) = m_nnsbc34(iw,kw,nface) + (m_nns_new - m_nnsbc34(iw,kw,nface))*deltatp
+       m_ntsbc34(iw,kw,nface) = m_ntsbc34(iw,kw,nface) + (m_nts_new - m_ntsbc34(iw,kw,nface))*deltatp
+       r_ttbc34(iw,kw,nface) = r_ttbc34(iw,kw,nface) + (r_tt_new - r_ttbc34(iw,kw,nface))*deltatt
+       r_nnbc34(iw,kw,nface) = r_nnbc34(iw,kw,nface) + (r_nn_new - r_nnbc34(iw,kw,nface))*deltatt
+       r_tsbc34(iw,kw,nface) = r_tsbc34(iw,kw,nface) + (r_ts_new - r_tsbc34(iw,kw,nface))*deltatt
+
+       m_ttt_new = m_tttbc34(iw,kw,nface)
+       m_sss_new = m_sssbc34(iw,kw,nface)
+       m_nnt_new = m_nntbc34(iw,kw,nface)
+       m_nns_new = m_nnsbc34(iw,kw,nface)
+       m_nts_new = m_ntsbc34(iw,kw,nface)
+       r_tt_new = r_ttbc34(iw,kw,nface)
+       r_nn_new = r_nnbc34(iw,kw,nface)
+       r_ts_new = r_tsbc34(iw,kw,nface)
+    end if
+    if (nface == 5 .or. nface == 6) then
+       delbc56(iw,jw,nface) = delbc56(iw,jw,nface) + (deltap - delbc56(iw,jw,nface))*deltatt
+       delta(iw, jw, kw) = delbc56(iw,jw,nface)
+
+       m_tttbc56(iw,jw,nface) = m_tttbc56(iw,jw,nface) + (m_ttt_new - m_tttbc56(iw,jw,nface))*deltatp
+       m_sssbc56(iw,jw,nface) = m_sssbc56(iw,jw,nface) + (m_sss_new - m_sssbc56(iw,jw,nface))*deltatp
+       m_nntbc56(iw,jw,nface) = m_nntbc56(iw,jw,nface) + (m_nnt_new - m_nntbc56(iw,jw,nface))*deltatp
+       m_nnsbc56(iw,jw,nface) = m_nnsbc56(iw,jw,nface) + (m_nns_new - m_nnsbc56(iw,jw,nface))*deltatp
+       m_ntsbc56(iw,jw,nface) = m_ntsbc56(iw,jw,nface) + (m_nts_new - m_ntsbc56(iw,jw,nface))*deltatp
+       r_ttbc56(iw,jw,nface) = r_ttbc56(iw,jw,nface) + (r_tt_new - r_ttbc56(iw,jw,nface))*deltatt
+       r_nnbc56(iw,jw,nface) = r_nnbc56(iw,jw,nface) + (r_nn_new - r_nnbc56(iw,jw,nface))*deltatt
+       r_tsbc56(iw,jw,nface) = r_tsbc56(iw,jw,nface) + (r_ts_new - r_tsbc56(iw,jw,nface))*deltatt
+
+       m_ttt_new = m_tttbc56(iw,jw,nface)
+       m_sss_new = m_sssbc56(iw,jw,nface)
+       m_nnt_new = m_nntbc56(iw,jw,nface)
+       m_nns_new = m_nnsbc56(iw,jw,nface)
+       m_nts_new = m_ntsbc56(iw,jw,nface)
+       r_tt_new = r_ttbc56(iw,jw,nface)
+       r_nn_new = r_nnbc56(iw,jw,nface)
+       r_ts_new = r_tsbc56(iw,jw,nface)
+    end if
+
+
+    !========================================
+    !== transfer to Cartisian componoments  ==
+    !=======================================
+
+    sig_tt = sig_tt_new
+    sig_nn = sig_nn_new
+    sig_ss = - (sig_nn + sig_tt)
+    sig_ts = sig_ts_new
+
+    call trans_sigma_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,          &
+                                  n11, n22, n33, n12, n13, n23, t11, t22, t33, &
+                                  t12, t13, t23, s11, s22, s33, s12, s13, s23, &
+                                  u2w, v2w, w2w, uvw, uww, vww,                &
+                                  sig_nn, sig_tt, sig_ss, sig_nt, sig_ns, sig_ts)
+
+    !==================================
+    !==================================
+    qt = qt_new
+    qs = qs_new
+
+    qxw = n1*qn + t1*qt + s1*qs
+    qyw = n2*qn + t2*qt + s2*qs
+    qzw = n3*qn + t3*qt + s3*qs
+
+       sigma(iw,jw,kw,1) = u2w
+       sigma(iw,jw,kw,2) = uvw
+       sigma(iw,jw,kw,3) = uww
+       sigma(iw,jw,kw,4) = v2w
+       sigma(iw,jw,kw,5) = vww
+
+       qflux(iw,jw,kw,1) = qxw
+       qflux(iw,jw,kw,2) = qyw
+       qflux(iw,jw,kw,3) = qzw
+
+
+    !===============
+    !==  mijk ======
+    !===============
+
+    m_ttt = m_ttt_new
+    m_sss = m_sss_new
+    m_nnt = m_nnt_new
+    m_nns = m_nns_new
+    m_nts = m_nts_new
+    m_tts = -(m_sss + m_nns)
+    m_tss = -(m_ttt + m_nnt)
+
+    call trans_mijk_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,        &
+                            n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
+                            t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
+                m111, m112, m113, m122, m223, m123, m222, m133, m233, m333, &
+       m_ttt, m_sss, m_tts, m_tss, m_nts, m_ntt, m_nss, m_nnt, m_nns, m_nnn)
+
+
+
+
+
+    r_tt = r_tt_new
+    r_nn = r_nn_new
+    r_ts = r_ts_new
+    r_ss = - r_nn - r_tt
+
+    call trans_rij_to_cartisian(n1, n2, n3, t1, t2, t3, s1, s2, s3,    &
+                             n11, n22, n33, n12, n13, n23, t11, t22, t33,    &
+                             t12, t13, t23, s11, s22, s33, s12, s13, s23,    &
+                             r11, r22, r12, r13, r23, r33,                   &
+                             r_nn, r_tt, r_ss, r_ts, r_nt, r_ns)
+
+       mijk(iw,jw,kw,1) = m111
+       mijk(iw,jw,kw,2) = m112
+       mijk(iw,jw,kw,3) = m113
+       mijk(iw,jw,kw,4) = m122
+       mijk(iw,jw,kw,5) = m222
+       mijk(iw,jw,kw,6) = m223
+       mijk(iw,jw,kw,7) = m123
+
+
+       rij(iw,jw,kw,1) = r11
+       rij(iw,jw,kw,2) = r12
+       rij(iw,jw,kw,3) = r13
+       rij(iw,jw,kw,4) = r22
+       rij(iw,jw,kw,5) = r23
+
+
+    call fvar2qmom(       q=q_mom(iw, jw, kw,:),                &
+                      stress=sigma(iw, jw, kw,:),               &
+                    heatflux=qflux(iw, jw, kw,:),               &
+                        mijk=mijk(iw, jw, kw,:),                &
+                         rij=rij(iw, jw, kw,:),                 &
+                     delta=delta(iw, jw, kw)                    )
+
+    qrhs_mom(iw,jw,kw,1:21)  = 0.0d0
+
+
+    return
+
+  end  subroutine R26wbc
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine R26wbc.                                 |
+  !+-------------------------------------------------------------------+
+
+
+    subroutine extraplotionR13(nface, iw, jw, kw, ip, jp, kp,  &
+                    u2w, uvw, uww, v2w, vww, w2w, qxw, qyw, qzw)
+!      ==================================================================
+    use commarray, only : sigma, qflux, x
+    use commvar, only : moment
+    implicit none
+
+    double precision, intent(out) :: u2w, uvw, uww, v2w, vww, w2w, qxw, qyw, qzw
+    integer, intent(in) :: nface, iw, jw, kw, ip, jp, kp
+    real(8) dx , dy , dz, rxfp, pwall
+    rxfp = 1.0d-4
+       
+!
+    if (.false.) then
+       if (nface == 1)  then
+           u2w = num1d3*(4.0d0*sigma(iw+1,jw,kw,1) - sigma(iw+2,jw,kw,1) )
+           uvw = num1d3*(4.0d0*sigma(iw+1,jw,kw,2) - sigma(iw+2,jw,kw,2) )
+           uww = num1d3*(4.0d0*sigma(iw+1,jw,kw,3) - sigma(iw+2,jw,kw,3) )
+           v2w = num1d3*(4.0d0*sigma(iw+1,jw,kw,4) - sigma(iw+2,jw,kw,4) )
+           vww = num1d3*(4.0d0*sigma(iw+1,jw,kw,5) - sigma(iw+2,jw,kw,5) )
+           qxw = num1d3*(4.0d0*qflux(iw+1,jw,kw,1) - qflux(iw+2,jw,kw,1))
+           qyw = num1d3*(4.0d0*qflux(iw+1,jw,kw,2) - qflux(iw+2,jw,kw,2))
+           qzw = num1d3*(4.0d0*qflux(iw+1,jw,kw,3) - qflux(iw+2,jw,kw,3))
+       end if
+       if (nface == 2) then
+           u2w = num1d3*(4.0d0*sigma(iw-1,jw,kw,1) - sigma(iw-2,jw,kw,1) )
+           uvw = num1d3*(4.0d0*sigma(iw-1,jw,kw,2) - sigma(iw-2,jw,kw,2) )
+           uww = num1d3*(4.0d0*sigma(iw-1,jw,kw,3) - sigma(iw-2,jw,kw,3) )
+           v2w = num1d3*(4.0d0*sigma(iw-1,jw,kw,4) - sigma(iw-2,jw,kw,4) )
+           vww = num1d3*(4.0d0*sigma(iw-1,jw,kw,5) - sigma(iw-2,jw,kw,5) )
+           qxw = num1d3*(4.0d0*qflux(iw-1,jw,kw,1) - qflux(iw-2,jw,kw,1))
+           qyw = num1d3*(4.0d0*qflux(iw-1,jw,kw,2) - qflux(iw-2,jw,kw,2))
+           qzw = num1d3*(4.0d0*qflux(iw-1,jw,kw,3) - qflux(iw-2,jw,kw,3))
+       end if
+       if (nface == 3) then
+           u2w = num1d3*(4.0d0*sigma(iw,jw+1,kw,1) - sigma(iw,jw+2,kw,1) )
+           uvw = num1d3*(4.0d0*sigma(iw,jw+1,kw,2) - sigma(iw,jw+2,kw,2) )
+           uww = num1d3*(4.0d0*sigma(iw,jw+1,kw,3) - sigma(iw,jw+2,kw,3) )
+           v2w = num1d3*(4.0d0*sigma(iw,jw+1,kw,4) - sigma(iw,jw+2,kw,4) )
+           vww = num1d3*(4.0d0*sigma(iw,jw+1,kw,5) - sigma(iw,jw+2,kw,5) )
+           qxw = num1d3*(4.0d0*qflux(iw,jw+1,kw,1) - qflux(iw,jw+2,kw,1))
+           qyw = num1d3*(4.0d0*qflux(iw,jw+1,kw,2) - qflux(iw,jw+2,kw,2))
+           qzw = num1d3*(4.0d0*qflux(iw,jw+1,kw,3) - qflux(iw,jw+2,kw,3))
+       end if
+       if (nface == 4) then
+           u2w = num1d3*(4.0d0*sigma(iw,jw-1,kw,1) - sigma(iw,jw-2,kw,1) )
+           uvw = num1d3*(4.0d0*sigma(iw,jw-1,kw,2) - sigma(iw,jw-2,kw,2) )
+           uww = num1d3*(4.0d0*sigma(iw,jw-1,kw,3) - sigma(iw,jw-2,kw,3) )
+           v2w = num1d3*(4.0d0*sigma(iw,jw-1,kw,4) - sigma(iw,jw-2,kw,4) )
+           vww = num1d3*(4.0d0*sigma(iw,jw-1,kw,5) - sigma(iw,jw-2,kw,5) )
+           qxw = num1d3*(4.0d0*qflux(iw,jw-1,kw,1) - qflux(iw,jw-2,kw,1))
+           qyw = num1d3*(4.0d0*qflux(iw,jw-1,kw,2) - qflux(iw,jw-2,kw,2))
+           qzw = num1d3*(4.0d0*qflux(iw,jw-1,kw,3) - qflux(iw,jw-2,kw,3))
+       end if
+       if (nface == 5) then
+           u2w = num1d3*(4.0d0*sigma(iw,jw,kw+1,1) - sigma(iw,jw,kw+2,1) )
+           uvw = num1d3*(4.0d0*sigma(iw,jw,kw+1,2) - sigma(iw,jw,kw+2,2) )
+           uww = num1d3*(4.0d0*sigma(iw,jw,kw+1,3) - sigma(iw,jw,kw+2,3) )
+           v2w = num1d3*(4.0d0*sigma(iw,jw,kw+1,4) - sigma(iw,jw,kw+2,4) )
+           vww = num1d3*(4.0d0*sigma(iw,jw,kw+1,5) - sigma(iw,jw,kw+2,5) )
+           qxw = num1d3*(4.0d0*qflux(iw,jw,kw+1,1) - qflux(iw,jw,kw+2,1))
+           qyw = num1d3*(4.0d0*qflux(iw,jw,kw+1,2) - qflux(iw,jw,kw+2,2))
+           qzw = num1d3*(4.0d0*qflux(iw,jw,kw+1,3) - qflux(iw,jw,kw+2,3))
+       end if
+
+       if (nface == 6)  then
+           u2w = num1d3*(4.0d0*sigma(iw,jw,kw-1,1) - sigma(iw,jw,kw-2,1) )
+           uvw = num1d3*(4.0d0*sigma(iw,jw,kw-1,2) - sigma(iw,jw,kw-2,2) )
+           uww = num1d3*(4.0d0*sigma(iw,jw,kw-1,3) - sigma(iw,jw,kw-2,3) )
+           v2w = num1d3*(4.0d0*sigma(iw,jw,kw-1,4) - sigma(iw,jw,kw-2,4) )
+           vww = num1d3*(4.0d0*sigma(iw,jw,kw-1,5) - sigma(iw,jw,kw-2,5) )
+           qxw = num1d3*(4.0d0*qflux(iw,jw,kw-1,1) - qflux(iw,jw,kw-2,1))
+           qyw = num1d3*(4.0d0*qflux(iw,jw,kw-1,2) - qflux(iw,jw,kw-2,2))
+           qzw = num1d3*(4.0d0*qflux(iw,jw,kw-1,3) - qflux(iw,jw,kw-2,3))
+       end if
+   else
+       dx = x(iw, jw, kw, 1) - x(ip, jp, kp, 1)
+       dy = x(iw, jw, kw, 2) - x(ip, jp, kp, 2)
+       dz = x(iw, jw, kw, 3) - x(ip, jp, kp, 3)
+
+       u2w = sigma(ip, jp, kp, 1) + dx*dsigmaxx(ip, jp, kp, 1) &
+                                  + dy*dsigmaxx(ip, jp, kp, 2) &
+                                  + dz*dsigmaxx(ip, jp, kp, 3)
+       uvw = sigma(ip, jp, kp, 2) + dx*dsigmaxy(ip, jp, kp, 1) &
+                                  + dy*dsigmaxy(ip, jp, kp, 2) &
+                                  + dz*dsigmaxy(ip, jp, kp, 3)
+       uww = sigma(ip, jp, kp, 3) + dx*dsigmaxz(ip, jp, kp, 1) &
+                                  + dy*dsigmaxz(ip, jp, kp, 2) &
+                                  + dz*dsigmaxz(ip, jp, kp, 3)
+       v2w = sigma(ip, jp, kp, 4) + dx*dsigmayy(ip, jp, kp, 1) &
+                                  + dy*dsigmayy(ip, jp, kp, 2) &
+                                  + dz*dsigmayy(ip, jp, kp, 3)
+       vww = sigma(ip, jp, kp, 5) + dx*dsigmayz(ip, jp, kp, 1) &
+                                  + dy*dsigmayz(ip, jp, kp, 2) &
+                                  + dz*dsigmayz(ip, jp, kp, 3)
+       qxw = qflux(ip, jp, kp, 1) + dx*dqx(ip, jp, kp, 1) &
+                                  + dy*dqx(ip, jp, kp, 2) &
+                                  + dz*dqx(ip, jp, kp, 3)
+
+       qyw = qflux(ip, jp, kp, 2) + dx*dqy(ip, jp, kp, 1) &
+                                  + dy*dqy(ip, jp, kp, 2) &
+                                  + dz*dqy(ip, jp, kp, 3)
+
+       qzw = qflux(ip, jp, kp, 3) + dx*dqz(ip, jp, kp, 1) &
+                                  + dy*dqz(ip, jp, kp, 2) &
+                                  + dz*dqz(ip, jp, kp, 3)
+
+    end if
+
+!    if ( moment == 'r13') then
+    if ( nface == 1 .or. nface == 2 ) then
+       u2bc12(jw,kw,nface) = u2bc12(jw,kw,nface) + (u2w - u2bc12(jw,kw,nface))*rxfp
+       uvbc12(jw,kw,nface) = uvbc12(jw,kw,nface) + (uvw - uvbc12(jw,kw,nface))*rxfp
+       uwbc12(jw,kw,nface) = uwbc12(jw,kw,nface) + (uww - uwbc12(jw,kw,nface))*rxfp
+       v2bc12(jw,kw,nface) = v2bc12(jw,kw,nface) + (v2w - v2bc12(jw,kw,nface))*rxfp
+       vwbc12(jw,kw,nface) = vwbc12(jw,kw,nface) + (vww - vwbc12(jw,kw,nface))*rxfp
+       qxbc12(jw,kw,nface) = qxbc12(jw,kw,nface) + (qxw - qxbc12(jw,kw,nface))*rxfp
+       qybc12(jw,kw,nface) = qybc12(jw,kw,nface) + (qyw - qybc12(jw,kw,nface))*rxfp
+       qzbc12(jw,kw,nface) = qzbc12(jw,kw,nface) + (qzw - qzbc12(jw,kw,nface))*rxfp
+       u2w = u2bc12(jw,kw,nface)
+       uvw = uvbc12(jw,kw,nface)
+       uww = uwbc12(jw,kw,nface)
+       v2w = v2bc12(jw,kw,nface)
+       vww = vwbc12(jw,kw,nface)
+       qxw = qxbc12(jw,kw,nface)
+       qyw = qybc12(jw,kw,nface)
+       qzw = qzbc12(jw,kw,nface)
+    end if
+
+    if ( nface == 3 .or. nface == 4 ) then
+       u2bc34(iw,kw,nface) = u2bc34(iw,kw,nface) + (u2w - u2bc34(iw,kw,nface))*rxfp
+       uvbc34(iw,kw,nface) = uvbc34(iw,kw,nface) + (uvw - uvbc34(iw,kw,nface))*rxfp
+       uwbc34(iw,kw,nface) = uwbc34(iw,kw,nface) + (uww - uwbc34(iw,kw,nface))*rxfp
+       v2bc34(iw,kw,nface) = v2bc34(iw,kw,nface) + (v2w - v2bc34(iw,kw,nface))*rxfp
+       vwbc34(iw,kw,nface) = vwbc34(iw,kw,nface) + (vww - vwbc34(iw,kw,nface))*rxfp
+       qxbc34(iw,kw,nface) = qxbc34(iw,kw,nface) + (qxw - qxbc34(iw,kw,nface))*rxfp
+       qybc34(iw,kw,nface) = qybc34(iw,kw,nface) + (qyw - qybc34(iw,kw,nface))*rxfp
+       qzbc34(iw,kw,nface) = qzbc34(iw,kw,nface) + (qzw - qzbc34(iw,kw,nface))*rxfp
+       u2w = u2bc34(iw,kw,nface)
+       uvw = uvbc34(iw,kw,nface)
+       uww = uwbc34(iw,kw,nface)
+       v2w = v2bc34(iw,kw,nface)
+       vww = vwbc34(iw,kw,nface)
+       qxw = qxbc34(iw,kw,nface)
+       qyw = qybc34(iw,kw,nface)
+       qzw = qzbc34(iw,kw,nface)
+       
+    end if
+
+    if ( nface == 5 .or. nface == 6 ) then
+       u2bc56(iw,jw,nface) = u2bc56(iw,jw,nface) + (u2w - u2bc56(iw,jw,nface))*rxfp
+       uvbc56(iw,jw,nface) = uvbc56(iw,jw,nface) + (uvw - uvbc56(iw,jw,nface))*rxfp
+       uwbc56(iw,jw,nface) = uwbc56(iw,jw,nface) + (uww - uwbc56(iw,jw,nface))*rxfp
+       v2bc56(iw,jw,nface) = v2bc56(iw,jw,nface) + (v2w - v2bc56(iw,jw,nface))*rxfp
+       vwbc56(iw,jw,nface) = vwbc56(iw,jw,nface) + (vww - vwbc56(iw,jw,nface))*rxfp
+       qxbc56(iw,jw,nface) = qxbc56(iw,jw,nface) + (qxw - qxbc56(iw,jw,nface))*rxfp
+       qybc56(iw,jw,nface) = qybc56(iw,jw,nface) + (qyw - qybc56(iw,jw,nface))*rxfp
+       qzbc56(iw,jw,nface) = qzbc56(iw,jw,nface) + (qzw - qzbc56(iw,jw,nface))*rxfp
+       u2w = u2bc56(iw,jw,nface)
+       uvw = uvbc56(iw,jw,nface)
+       uww = uwbc56(iw,jw,nface)
+       v2w = v2bc56(iw,jw,nface)
+       vww = vwbc56(iw,jw,nface)
+       qxw = qxbc56(iw,jw,nface)
+       qyw = qybc56(iw,jw,nface)
+       qzw = qzbc56(iw,jw,nface)
+    end if
+!    end if
+
+    w2w = - (u2w + v2w)
+    return
+    end subroutine extraplotionR13
+
+
+       subroutine extraplotionR26(nface, iw, jw, kw,  ip, jp, kp, &
+                       r11, r12, r13, r22, r23, r33, &
+                       m111, m112,m113,m122,m222, m223, m123, m133, m233, m333)
+!      ==================================================================
+       use commarray, only : x
+       use commvar, only : deltat, subdeltat
+
+       implicit none
+
+       double precision, intent(out) :: r11, r12, r13, r22, r23,  r33,  &
+                m111, m112,m113,m122,m222, m223, m123, m133, m233, m333
+       integer , intent(in) :: nface, iw, jw, kw , ip, jp, kp
+!
+       real(8) dx , dy , dz, deltatp1, deltatp2
+       deltatp1 = 1.0d-4 ! deltat
+       deltatp2 = 1.0d-4 ! deltat
+
+
+       if (.false.) then
+       if (nface == 1)  then
+           r11 = num1d3*(4.0d0*rij(iw+1,jw,kw,1) - rij(iw+2,jw,kw,1) )
+           r12 = num1d3*(4.0d0*rij(iw+1,jw,kw,2) - rij(iw+2,jw,kw,2) )
+           r13 = num1d3*(4.0d0*rij(iw+1,jw,kw,3) - rij(iw+2,jw,kw,3) )
+           r22 = num1d3*(4.0d0*rij(iw+1,jw,kw,4) - rij(iw+2,jw,kw,4) )
+           r23 = num1d3*(4.0d0*rij(iw+1,jw,kw,5) - rij(iw+2,jw,kw,5) )
+
+           m111 = num1d3*(4.0d0*mijk(iw+1,jw,kw,1) - mijk(iw+2,jw,kw,1) )
+           m112 = num1d3*(4.0d0*mijk(iw+1,jw,kw,2) - mijk(iw+2,jw,kw,2) )
+           m113 = num1d3*(4.0d0*mijk(iw+1,jw,kw,3) - mijk(iw+2,jw,kw,3) )
+           m122 = num1d3*(4.0d0*mijk(iw+1,jw,kw,4) - mijk(iw+2,jw,kw,4) )
+           m222 = num1d3*(4.0d0*mijk(iw+1,jw,kw,5) - mijk(iw+2,jw,kw,5) )
+           m223 = num1d3*(4.0d0*mijk(iw+1,jw,kw,6) - mijk(iw+2,jw,kw,6) )
+           m123 = num1d3*(4.0d0*mijk(iw+1,jw,kw,7) - mijk(iw+2,jw,kw,7) )
+       end if
+       if (nface == 2) then
+           r11 = num1d3*(4.0d0*rij(iw-1,jw,kw,1) - rij(iw-2,jw,kw,1) )
+           r12 = num1d3*(4.0d0*rij(iw-1,jw,kw,2) - rij(iw-2,jw,kw,2) )
+           r13 = num1d3*(4.0d0*rij(iw-1,jw,kw,3) - rij(iw-2,jw,kw,3) )
+           r22 = num1d3*(4.0d0*rij(iw-1,jw,kw,4) - rij(iw-2,jw,kw,4) )
+           r23 = num1d3*(4.0d0*rij(iw-1,jw,kw,5) - rij(iw-2,jw,kw,5) )
+
+           m111 = num1d3*(4.0d0*mijk(iw-1,jw,kw,1) - mijk(iw-2,jw,kw,1) )
+           m112 = num1d3*(4.0d0*mijk(iw-1,jw,kw,2) - mijk(iw-2,jw,kw,2) )
+           m113 = num1d3*(4.0d0*mijk(iw-1,jw,kw,3) - mijk(iw-2,jw,kw,3) )
+           m122 = num1d3*(4.0d0*mijk(iw-1,jw,kw,4) - mijk(iw-2,jw,kw,4) )
+           m222 = num1d3*(4.0d0*mijk(iw-1,jw,kw,5) - mijk(iw-2,jw,kw,5) )
+           m223 = num1d3*(4.0d0*mijk(iw-1,jw,kw,6) - mijk(iw-2,jw,kw,6) )
+           m123 = num1d3*(4.0d0*mijk(iw-1,jw,kw,7) - mijk(iw-2,jw,kw,7) )
+       end if
+       if (nface == 3) then
+           r11 = num1d3*(4.0d0*rij(iw,jw+1,kw,1) - rij(iw,jw+2,kw,1) )
+           r12 = num1d3*(4.0d0*rij(iw,jw+1,kw,2) - rij(iw,jw+2,kw,2) )
+           r13 = num1d3*(4.0d0*rij(iw,jw+1,kw,3) - rij(iw,jw+2,kw,3) )
+           r22 = num1d3*(4.0d0*rij(iw,jw+1,kw,4) - rij(iw,jw+2,kw,4) )
+           r23 = num1d3*(4.0d0*rij(iw,jw+1,kw,5) - rij(iw,jw+2,kw,5) )
+
+           m111 = num1d3*(4.0d0*mijk(iw,jw+1,kw,1) - mijk(iw,jw+2,kw,1) )
+           m112 = num1d3*(4.0d0*mijk(iw,jw+1,kw,2) - mijk(iw,jw+2,kw,2) )
+           m113 = num1d3*(4.0d0*mijk(iw,jw+1,kw,3) - mijk(iw,jw+2,kw,3) )
+           m122 = num1d3*(4.0d0*mijk(iw,jw+1,kw,4) - mijk(iw,jw+2,kw,4) )
+           m222 = num1d3*(4.0d0*mijk(iw,jw+1,kw,5) - mijk(iw,jw+2,kw,5) )
+           m223 = num1d3*(4.0d0*mijk(iw,jw+1,kw,6) - mijk(iw,jw+2,kw,6) )
+           m123 = num1d3*(4.0d0*mijk(iw,jw+1,kw,7) - mijk(iw,jw+2,kw,7) )
+       end if
+       if (nface == 4) then
+           r11 = num1d3*(4.0d0*rij(iw,jw-1,kw,1) - rij(iw,jw-2,kw,1) )
+           r12 = num1d3*(4.0d0*rij(iw,jw-1,kw,2) - rij(iw,jw-2,kw,2) )
+           r13 = num1d3*(4.0d0*rij(iw,jw-1,kw,3) - rij(iw,jw-2,kw,3) )
+           r22 = num1d3*(4.0d0*rij(iw,jw-1,kw,4) - rij(iw,jw-2,kw,4) )
+           r23 = num1d3*(4.0d0*rij(iw,jw-1,kw,5) - rij(iw,jw-2,kw,5) )
+
+           m111 = num1d3*(4.0d0*mijk(iw,jw-1,kw,1) - mijk(iw,jw-2,kw,1) )
+           m112 = num1d3*(4.0d0*mijk(iw,jw-1,kw,2) - mijk(iw,jw-2,kw,2) )
+           m113 = num1d3*(4.0d0*mijk(iw,jw-1,kw,3) - mijk(iw,jw-2,kw,3) )
+           m122 = num1d3*(4.0d0*mijk(iw,jw-1,kw,4) - mijk(iw,jw-2,kw,4) )
+           m222 = num1d3*(4.0d0*mijk(iw,jw-1,kw,5) - mijk(iw,jw-2,kw,5) )
+           m223 = num1d3*(4.0d0*mijk(iw,jw-1,kw,6) - mijk(iw,jw-2,kw,6) )
+           m123 = num1d3*(4.0d0*mijk(iw,jw-1,kw,7) - mijk(iw,jw-2,kw,7) )
+       end if
+       if (nface == 5) then
+           r11 = num1d3*(4.0d0*rij(iw,jw,kw+1,1) - rij(iw,jw,kw+2,1) )
+           r12 = num1d3*(4.0d0*rij(iw,jw,kw+1,2) - rij(iw,jw,kw+2,2) )
+           r13 = num1d3*(4.0d0*rij(iw,jw,kw+1,3) - rij(iw,jw,kw+2,3) )
+           r22 = num1d3*(4.0d0*rij(iw,jw,kw+1,4) - rij(iw,jw,kw+2,4) )
+           r23 = num1d3*(4.0d0*rij(iw,jw,kw+1,5) - rij(iw,jw,kw+2,5) )
+
+           m111 = num1d3*(4.0d0*mijk(iw,jw,kw+1,1) - mijk(iw,jw,kw+2,1) )
+           m112 = num1d3*(4.0d0*mijk(iw,jw,kw+1,2) - mijk(iw,jw,kw+2,2) )
+           m113 = num1d3*(4.0d0*mijk(iw,jw,kw+1,3) - mijk(iw,jw,kw+2,3) )
+           m122 = num1d3*(4.0d0*mijk(iw,jw,kw+1,4) - mijk(iw,jw,kw+2,4) )
+           m222 = num1d3*(4.0d0*mijk(iw,jw,kw+1,5) - mijk(iw,jw,kw+2,5) )
+           m223 = num1d3*(4.0d0*mijk(iw,jw,kw+1,6) - mijk(iw,jw,kw+2,6) )
+           m123 = num1d3*(4.0d0*mijk(iw,jw,kw+1,7) - mijk(iw,jw,kw+2,7) )
+       end if
+       if (nface == 6)  then
+           r11 = num1d3*(4.0d0*rij(iw,jw,kw-1,1) - rij(iw,jw,kw-2,1) )
+           r12 = num1d3*(4.0d0*rij(iw,jw,kw-1,2) - rij(iw,jw,kw-2,2) )
+           r13 = num1d3*(4.0d0*rij(iw,jw,kw-1,3) - rij(iw,jw,kw-2,3) )
+           r22 = num1d3*(4.0d0*rij(iw,jw,kw-1,4) - rij(iw,jw,kw-2,4) )
+           r23 = num1d3*(4.0d0*rij(iw,jw,kw-1,5) - rij(iw,jw,kw-2,5) )
+
+           m111 = num1d3*(4.0d0*mijk(iw,jw,kw-1,1) - mijk(iw,jw,kw-2,1) )
+           m112 = num1d3*(4.0d0*mijk(iw,jw,kw-1,2) - mijk(iw,jw,kw-2,2) )
+           m113 = num1d3*(4.0d0*mijk(iw,jw,kw-1,3) - mijk(iw,jw,kw-2,3) )
+           m122 = num1d3*(4.0d0*mijk(iw,jw,kw-1,4) - mijk(iw,jw,kw-2,4) )
+           m222 = num1d3*(4.0d0*mijk(iw,jw,kw-1,5) - mijk(iw,jw,kw-2,5) )
+           m223 = num1d3*(4.0d0*mijk(iw,jw,kw-1,6) - mijk(iw,jw,kw-2,6) )
+           m123 = num1d3*(4.0d0*mijk(iw,jw,kw-1,7) - mijk(iw,jw,kw-2,7) )
+       end if
+
+
+
+       else
+         dx = x(iw, jw, kw, 1) - x(ip, jp, kp, 1)
+         dy = x(iw, jw, kw, 2) - x(ip, jp, kp, 2)
+         dz = x(iw, jw, kw, 3) - x(ip, jp, kp, 3)
+
+         m111 = mijk(ip,jp,kp,1) + dx*dmijk(ip,jp,kp,1,1)   &
+                                 + dy*dmijk(ip,jp,kp,2,1)   &
+                                 + dz*dmijk(ip,jp,kp,3,1)
+         m112 = mijk(ip,jp,kp,2) + dx*dmijk(ip,jp,kp,1,2)   &
+                                 + dy*dmijk(ip,jp,kp,2,2)   &
+                                 + dz*dmijk(ip,jp,kp,3,2)
+         m113 = mijk(ip,jp,kp,3) + dx*dmijk(ip,jp,kp,1,3)   &
+                                 + dy*dmijk(ip,jp,kp,2,3)   &
+                                 + dz*dmijk(ip,jp,kp,3,3)
+         m122 = mijk(ip,jp,kp,4) + dx*dmijk(ip,jp,kp,1,4)   &
+                                 + dy*dmijk(ip,jp,kp,2,4)   &
+                                 + dz*dmijk(ip,jp,kp,3,4)
+         m222 = mijk(ip,jp,kp,5) + dx*dmijk(ip,jp,kp,1,5)   &
+                                 + dy*dmijk(ip,jp,kp,2,5)   &
+                                 + dz*dmijk(ip,jp,kp,3,5)
+         m223 = mijk(ip,jp,kp,6) + dx*dmijk(ip,jp,kp,1,6)   &
+                                 + dy*dmijk(ip,jp,kp,2,6)   &
+                                 + dz*dmijk(ip,jp,kp,3,6)
+         m123 = mijk(ip,jp,kp,7) + dx*dmijk(ip,jp,kp,1,7)   &
+                                 + dy*dmijk(ip,jp,kp,2,7)   &
+                                 + dz*dmijk(ip,jp,kp,3,7)
+         r11 = rij(ip,jp,kp,1) + dx * dRij(ip,jp,kp,1,1)  &
+                               + dy * dRij(ip,jp,kp,2,1)  &
+                               + dz * dRij(ip,jp,kp,3,1)
+         r12 = rij(ip,jp,kp,2) + dx * dRij(ip,jp,kp,1,2)  &
+                               + dy * dRij(ip,jp,kp,2,2)  &
+                               + dz * dRij(ip,jp,kp,3,2)
+         r13 = rij(ip,jp,kp,3) + dx * dRij(ip,jp,kp,1,3)  &
+                               + dy * dRij(ip,jp,kp,2,3)  &
+                               + dz * dRij(ip,jp,kp,3,3)
+
+         r22 = rij(ip,jp,kp,4) + dx * dRij(ip,jp,kp,1,4)  &
+                               + dy * dRij(ip,jp,kp,2,4)  &
+                               + dz * dRij(ip,jp,kp,3,4)
+
+         r23 = rij(ip,jp,kp,5) + dx * dRij(ip,jp,kp,1,5)  &
+                               + dy * dRij(ip,jp,kp,2,5)  &
+                               + dz * dRij(ip,jp,kp,3,5)
+       if (nface == 1 .or. nface == 2) then
+
+       m111bc12(jw,kw,nface) = m111bc12(jw,kw,nface) + (m111 - m111bc12(jw,kw,nface))*deltatp1
+       m112bc12(jw,kw,nface) = m112bc12(jw,kw,nface) + (m112 - m112bc12(jw,kw,nface))*deltatp1
+       m113bc12(jw,kw,nface) = m113bc12(jw,kw,nface) + (m113 - m113bc12(jw,kw,nface))*deltatp1
+       m122bc12(jw,kw,nface) = m122bc12(jw,kw,nface) + (m122 - m122bc12(jw,kw,nface))*deltatp1
+       m222bc12(jw,kw,nface) = m222bc12(jw,kw,nface) + (m222 - m222bc12(jw,kw,nface))*deltatp1
+       m223bc12(jw,kw,nface) = m223bc12(jw,kw,nface) + (m223 - m223bc12(jw,kw,nface))*deltatp1
+       m123bc12(jw,kw,nface) = m123bc12(jw,kw,nface) + (m123 - m123bc12(jw,kw,nface))*deltatp1
+
+       m111 = m111bc12(jw,kw,nface)
+       m112 = m112bc12(jw,kw,nface)
+       m113 = m113bc12(jw,kw,nface)
+       m122 = m122bc12(jw,kw,nface)
+       m222 = m222bc12(jw,kw,nface)
+       m223 = m223bc12(jw,kw,nface)
+       m123 = m123bc12(jw,kw,nface)
+
+       r11bc12(jw,kw,nface) = r11bc12(jw,kw,nface) + (r11 - r11bc12(jw,kw,nface))*deltatp2
+       r12bc12(jw,kw,nface) = r12bc12(jw,kw,nface) + (r12 - r12bc12(jw,kw,nface))*deltatp2
+       r13bc12(jw,kw,nface) = r13bc12(jw,kw,nface) + (r13 - r13bc12(jw,kw,nface))*deltatp2
+       r22bc12(jw,kw,nface) = r22bc12(jw,kw,nface) + (r22 - r22bc12(jw,kw,nface))*deltatp2
+       r23bc12(jw,kw,nface) = r23bc12(jw,kw,nface) + (r23 - r23bc12(jw,kw,nface))*deltatp2
+
+       r11 = r11bc12(jw,kw,nface)
+       r12 = r12bc12(jw,kw,nface)
+       r13 = r13bc12(jw,kw,nface)
+       r22 = r22bc12(jw,kw,nface)
+       r23 = r23bc12(jw,kw,nface)
+      end if
+      if (nface == 3 .or. nface == 4) then
+       m111bc34(iw,kw,nface) = m111bc34(iw,kw,nface) + (m111 - m111bc34(iw,kw,nface))*deltatp1
+       m112bc34(iw,kw,nface) = m112bc34(iw,kw,nface) + (m112 - m112bc34(iw,kw,nface))*deltatp1
+       m113bc34(iw,kw,nface) = m113bc34(iw,kw,nface) + (m113 - m113bc34(iw,kw,nface))*deltatp1
+       m122bc34(iw,kw,nface) = m122bc34(iw,kw,nface) + (m122 - m122bc34(iw,kw,nface))*deltatp1
+       m222bc34(iw,kw,nface) = m222bc34(iw,kw,nface) + (m222 - m222bc34(iw,kw,nface))*deltatp1
+       m223bc34(iw,kw,nface) = m223bc34(iw,kw,nface) + (m223 - m223bc34(iw,kw,nface))*deltatp1
+       m123bc34(iw,kw,nface) = m123bc34(iw,kw,nface) + (m123 - m123bc34(iw,kw,nface))*deltatp1
+
+       m111 = m111bc34(iw,kw,nface)
+       m112 = m112bc34(iw,kw,nface)
+       m113 = m113bc34(iw,kw,nface)
+       m122 = m122bc34(iw,kw,nface)
+       m222 = m222bc34(iw,kw,nface)
+       m223 = m223bc34(iw,kw,nface)
+       m123 = m123bc34(iw,kw,nface)
+
+       r11bc34(iw,kw,nface) = r11bc34(iw,kw,nface) + (r11 - r11bc34(iw,kw,nface))*deltatp2
+       r12bc34(iw,kw,nface) = r12bc34(iw,kw,nface) + (r12 - r12bc34(iw,kw,nface))*deltatp2
+       r13bc34(iw,kw,nface) = r13bc34(iw,kw,nface) + (r13 - r13bc34(iw,kw,nface))*deltatp2
+       r22bc34(iw,kw,nface) = r22bc34(iw,kw,nface) + (r22 - r22bc34(iw,kw,nface))*deltatp2
+       r23bc34(iw,kw,nface) = r23bc34(iw,kw,nface) + (r23 - r23bc34(iw,kw,nface))*deltatp2
+
+       r11 = r11bc34(iw,kw,nface)
+       r12 = r12bc34(iw,kw,nface)
+       r13 = r13bc34(iw,kw,nface)
+       r22 = r22bc34(iw,kw,nface)
+       r23 = r23bc34(iw,kw,nface)
+      end if
+      if (nface == 5 .or. nface == 6) then
+       m111bc56(iw,jw,nface) = m111bc56(iw,jw,nface) + (m111 - m111bc56(iw,jw,nface))*deltatp1
+       m112bc56(iw,jw,nface) = m112bc56(iw,jw,nface) + (m112 - m112bc56(iw,jw,nface))*deltatp1
+       m113bc56(iw,jw,nface) = m113bc56(iw,jw,nface) + (m113 - m113bc56(iw,jw,nface))*deltatp1
+       m122bc56(iw,jw,nface) = m122bc56(iw,jw,nface) + (m122 - m122bc56(iw,jw,nface))*deltatp1
+       m222bc56(iw,jw,nface) = m222bc56(iw,jw,nface) + (m222 - m222bc56(iw,jw,nface))*deltatp1
+       m223bc56(iw,jw,nface) = m223bc56(iw,jw,nface) + (m223 - m223bc56(iw,jw,nface))*deltatp1
+       m123bc56(iw,jw,nface) = m123bc56(iw,jw,nface) + (m123 - m123bc56(iw,jw,nface))*deltatp1
+
+       m111 = m111bc56(iw,jw,nface)
+       m112 = m112bc56(iw,jw,nface)
+       m113 = m113bc56(iw,jw,nface)
+       m122 = m122bc56(iw,jw,nface)
+       m222 = m222bc56(iw,jw,nface)
+       m223 = m223bc56(iw,jw,nface)
+       m123 = m123bc56(iw,jw,nface)
+
+       r11bc56(iw,jw,nface) = r11bc56(iw,jw,nface) + (r11 - r11bc56(iw,jw,nface))*deltatp2
+       r12bc56(iw,jw,nface) = r12bc56(iw,jw,nface) + (r12 - r12bc56(iw,jw,nface))*deltatp2
+       r13bc56(iw,jw,nface) = r13bc56(iw,jw,nface) + (r13 - r13bc56(iw,jw,nface))*deltatp2
+       r22bc56(iw,jw,nface) = r22bc56(iw,jw,nface) + (r22 - r22bc56(iw,jw,nface))*deltatp2
+       r23bc56(iw,jw,nface) = r23bc56(iw,jw,nface) + (r23 - r23bc56(iw,jw,nface))*deltatp2
+
+       r11 = r11bc56(iw,jw,nface)
+       r12 = r12bc56(iw,jw,nface)
+       r13 = r13bc56(iw,jw,nface)
+       r22 = r22bc56(iw,jw,nface)
+       r23 = r23bc56(iw,jw,nface)
+      end if
+
+      m133 = - m111 - m122
+      m233 = - m112 - m222
+      m333 = - m113 - m223
+       r33 = - r11 - r22
+
+
+                       
+       endif
+       return
+       end subroutine extraplotionR26
+
 
 end module methodmoment
 !+---------------------------------------------------------------------+

@@ -25,7 +25,7 @@ module mainloop
   integer :: nstep0
   real(8) :: time_start
   !
-  real(8),allocatable :: qsub(:,:,:,:),q00(:,:,:,:)
+  real(8),allocatable :: qsub(:,:,:,:) ! ,q00(:,:,:,:)
   !
   contains
   !
@@ -40,7 +40,7 @@ module mainloop
     !
     use commvar,   only: maxstep,time,deltat,feqchkpt,feqwsequ,feqlist, &
                          rkscheme,nsrpt,flowtype,limmbou,moment,subdeltat
-    use commarray, only: q
+    use commarray, only: q, q00
     use comsolver, only: gradcal
     use readwrite, only: readcont,timerept,nxtchkpt,nxtwsequ
     use commcal,   only: cflcal
@@ -49,6 +49,7 @@ module mainloop
     use fludyna,   only: updatefvar,miucomp
     use interp,    only: interlinear
     use methodmoment, only: rk3mom,qmomswap,updatemoment
+    use bc,     only: bctype 
     !
     ! local data
     real(8) :: time_beg,time_next_step
@@ -69,7 +70,7 @@ module mainloop
       if(moment=='r13' .or. moment=='r26') then
         subtime=time
         ! subdeltat=deltat
-        subdeltat=0.1d0*deltat
+        subdeltat=deltat*0.1d0
         !
         allocate(qsub(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
       endif
@@ -231,6 +232,8 @@ module mainloop
       time=time+deltat
       !
     enddo
+
+
     !
     ! if(limmbou) call timerept
     !
@@ -325,7 +328,7 @@ module mainloop
                          lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
                          feqwsequ,lwslic,lreport,flowtype,     &
                          ndims,num_species,maxstep
-    use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
+    use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob, q00
     use fludyna,  only : updatefvar,miucomp
     use comsolver,only : filterq,spongefilter,filter2e
     use solver,   only : rhscal
@@ -376,7 +379,7 @@ module mainloop
       rkcoe(2,3)=num2d3
       rkcoe(3,3)=num2d3
       !
-      allocate(q00(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
+!      allocate(q00(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
       !
       firstcall=.false.
       !

@@ -130,7 +130,7 @@ module readwrite
                         lchardecomp,recon_schem,                       &
                         lrestart,limmbou,solidfile,bfacmpld,           &
                         turbmode,schmidt,ibmode,gridfile,testmode,     &
-                        moment,knudsen,gamma
+                        moment,knudsen,gamma,rgas
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
 #ifdef COMB
     use commvar, only : odetype,lcomb
@@ -234,6 +234,8 @@ module readwrite
       if(nondimen) then
         write(*,'(4X,5(A12))')'ref_tem','Reynolds','Mach','Knudsen','Gamma'
         write(*,"(4X,5(F12.6))")ref_tem,reynolds,mach,knudsen,gamma
+        write(*,'(4X,5(A12))')'gas constant'
+        write(*,"(4X,5(F12.6))") rgas
       else
         write(*,'(35X,A)')' everything is under SI units'
         write(*,'(4(A16))')'ref_tem','ref_vel','ref_len','ref_den'
@@ -367,6 +369,11 @@ module readwrite
           write(*,'(23X,I0,2(A))')bctype(n),' slip-nonslip isothermal wall at: ',bcdir(n)
           write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+        elseif(bctype(n)==412) then
+          write(*,'(23X,I0,2(A))')bctype(n),' wall slip boundary condition at:',bcdir(n)
+          write(*,'(31X,A,F12.6)')' slip-nonslip point: ',xslip
+          write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
+
         elseif(bctype(n)==413) then
           write(*,'(23X,I0,2(A))')bctype(n),'  slip condition for rarefied flow: ',bcdir(n)
           write(*,'(33X,A,F12.6)')' wall temperature: ',twall(n)
@@ -680,6 +687,14 @@ module readwrite
         if(bctype(n)==411) then
           backspace(fh)
           read(fh,*)bctype(n),xslip,twall(n)
+        endif
+        if(bctype(n)==412) then
+          backspace(fh)
+          read(fh,*)bctype(n),twall(n)
+        endif
+        if(bctype(n)==413) then
+          backspace(fh)
+          read(fh,*)bctype(n),twall(n)
         endif
         if(bctype(n)==421) then
           backspace(fh)

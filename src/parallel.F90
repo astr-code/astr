@@ -5480,6 +5480,35 @@ module parallel
     !
   end function size_integer
   !
+
+      SUBROUTINE PARA_bcast_sm(smm0)
+!     *************************
+      implicit none
+      double precision, intent(inout) :: smm0
+      double precision , dimension(:) , allocatable :: smm1, smm2
+      integer n , ierr
+      allocate(smm1(0:mpisize-1), smm2(0:mpisize-1))
+      smm1 = 0.0d0 ; smm1(mpirank) = smm0 ; smm2(mpirank) = smm0
+      smm0 = 0.0d0
+!      do n=0,nprocs-1
+!         call mpi_bcast(smm1(n),1,real_mp_type,n,mpi_comm_world,ierr)
+!      end do
+
+      call mpi_gather(smm2(mpirank),1,mpi_real8,smm1(mpirank),  &
+     &                 1,mpi_real8,0,mpi_comm_world,ierr)
+
+
+      if (mpirank == 0) then
+         do n=0,mpisize-1
+            smm0 = smm0 + smm1(n)
+         end do
+      end if
+
+      call mpi_bcast(smm0,1,mpi_real8,0,mpi_comm_world,ierr)
+      deallocate(smm1, smm2)
+      return
+      end SUBROUTINE PARA_bcast_sm
+
 end module parallel
 !+---------------------------------------------------------------------+
 !| The end of the module parallel.                                     |

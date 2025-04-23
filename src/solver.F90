@@ -2548,7 +2548,7 @@ module solver
     !
     use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm, &
                           ndims,num_species,is,ie,js,je,ks,ke,     &
-                          nstep,deltat,moment
+                          nstep,deltat,moment,lrestart
     use commarray, only : vel,dxi,jacob,qrhs,yflux,sigma,qflux
     use commfunc,  only : ddfc
     use comsolver, only : alfa_dif,dci,dcj,dck
@@ -2572,7 +2572,7 @@ module solver
     !
     if(moment=='r05') then
       call diffusion_flux
-    endif
+    end if     
     !
     allocate(gg(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
     !
