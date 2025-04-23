@@ -215,12 +215,12 @@ module solver
         firstcall=.false.
       endif
       !
-      ! call gradcal(timerept=ltimrpt)
-      call gradcal_x3d2
+      call gradcal(timerept=ltimrpt)
+      ! call gradcal_x3d2
       !
       if(mod(nconv,2)==0) then
-        ! call convrsdcal6(timerept=ltimrpt)
-        call convrsdcal6_x3d2
+        call convrsdcal6(timerept=ltimrpt)
+        ! call convrsdcal6_x3d2
       else
         !
         if(conschm(4:4)=='e') then
@@ -247,6 +247,7 @@ module solver
     qrhs=-qrhs
     !
     if(diffterm) call diffrsdcal6(timerept=ltimrpt)
+    ! if(diffterm) call diffrsdcal6_x3d2
     !
     if(trim(flowtype)=='channel') then 
       if(lihomo) call src_chan
@@ -2177,7 +2178,7 @@ module solver
 
     use commvar,  only : im,jm,km,hm,numq
     use commarray,only : x,q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
-    use x3d2,     only : ddf_x3d2,exec_dist_tds_compact
+    use x3d2,     only : ddf_x3d2
     use tecio
 
     ! local data
@@ -2984,6 +2985,534 @@ module solver
   end subroutine diffrsdcal6
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the subroutine diffrsdcal6.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to calculate the diffusion term with 6-order
+  ! Compact Central scheme using x3d2
+  !   sixth-order Compact Central scheme.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2009-06-09.
+  ! Add scalar transport equation by Fang Jian, 2022-01-12.
+  ! Adopte x3d2 by Fang Jian, 2025-04-22.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine diffrsdcal6_x3d2
+    !
+    use commvar,   only : im,jm,km,numq,npdci,npdcj,npdck,difschm,     &
+                          conschm,ndims,num_species,num_modequ,        &
+                          reynolds,prandtl,const5,is,ie,js,je,ks,ke,   &
+                          turbmode,nondimen,schmidt,nstep,deltat,      &
+                          cp,flowtype
+    use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
+                          rho,vor,omg,tke,miut,dtke,domg,res12
+    use commfunc,  only : ddfc
+    use comsolver, only : alfa_dif,dci,dcj,dck
+    use fludyna,   only : miucal
+    use models,    only : komega,src_komega
+    use tecio
+    use parallel,  only : yflux_sendrecv
+    use x3d2,      only : ddf_x3d2
+#ifdef COMB
+    use thermchem, only : tranmod,tranco,enthpy,convertxiyi,wmolar
+#endif
+    !
+    !
+    ! local data
+    integer :: i,j,k,n,ncolm,jspc,idir
+    real(8),allocatable,dimension(:,:,:,:) :: df,ff
+    real(8),allocatable,dimension(:,:,:,:),  save :: sigma,qflux,dkflux,doflux
+    real(8),allocatable,dimension(:,:,:,:,:),save :: yflux
+    real(8) :: miu,miu2,miu3,miu4,hcc,s11,s12,s13,s22,s23,s33,skk
+    real(8) :: d11,d12,d13,d21,d22,d23,d31,d32,d33,miueddy,var1,var2
+    real(8) :: tau11,tau12,tau13,tau22,tau23,tau33
+    real(8) :: detk
+    real(8),allocatable :: dispec(:,:)
+    real(8) :: corrdiff,hispec(num_species),xi(num_species),cpe,kama, &
+               gradyi(num_species),sum1,sum2,mw
+    real(8),allocatable :: dfu(:)
+    logical,save :: firstcall=.true.
+    !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
+    if(firstcall) then
+      allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),                &
+                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+    endif
+    !
+    sigma =0.d0
+    qflux =0.d0
+    !
+    if(num_species>0) then
+      !
+      if(firstcall) then
+        allocate( yflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:num_species,1:3) )
+      endif
+      !
+#ifndef  COMB
+      allocate(dfu(1:num_species))
+#endif
+      yflux=0.d0
+      !
+    endif
+    !
+    if(trim(turbmode)=='k-omega') then
+      !
+      if(firstcall) then
+        allocate( dkflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),             &
+                  doflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+      endif
+      !
+      dkflux=0.d0
+      doflux=0.d0
+      !
+    endif
+    !
+    if(firstcall) firstcall=.false.
+    !
+    if(trim(turbmode)=='k-omega') call src_komega
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+#ifdef COMB
+
+     call enthpy(tmp(i,j,k),hispec(:))
+     call convertxiyi(spc(i,j,k,:),xi(:),'Y2X')
+     mw=sum(wmolar(:)*xi(:))
+     !
+     select case(tranmod)
+       case('multi')
+         if(.not.allocated(dispec))allocate(dispec(num_species,num_species))
+         call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                     spc=spc(i,j,k,:),rhodij=dispec(:,:))
+     case default
+       if(.not.allocated(dispec)) allocate(dispec(num_species,1))
+       call tranco(den=rho(i,j,k),tmp=tmp(i,j,k),cp=cpe,mu=miu,lam=kama, &
+                   spc=spc(i,j,k,:),rhodi=dispec(:,1))
+       ! print*,' ** miu=',miu,'cp=',cpe,'kamma=',kama,'rhodi=',dispec(:,1)
+     end select
+
+#else
+      if(nondimen) then 
+        miu=miucal(tmp(i,j,k))/reynolds
+      else
+        miu=miucal(tmp(i,j,k))
+      endif 
+#endif
+      !
+      s11=dvel(i,j,k,1,1)
+      s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
+      s13=0.5d0*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
+      s22=dvel(i,j,k,2,2)
+      s23=0.5d0*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
+      s33=dvel(i,j,k,3,3)
+      !
+      skk=num1d3*(s11+s22+s33)
+      !
+      vor(i,j,k,1)=dvel(i,j,k,3,2)-dvel(i,j,k,2,3)
+      vor(i,j,k,2)=dvel(i,j,k,1,3)-dvel(i,j,k,3,1)
+      vor(i,j,k,3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
+      !
+      tau11=0.d0
+      tau12=0.d0
+      tau13=0.d0
+      tau22=0.d0
+      tau23=0.d0
+      tau33=0.d0
+      !
+      if(trim(turbmode)=='k-omega') then
+        !
+        miu2=2.d0*(miu+miut(i,j,k))
+        !
+        hcc=(miu/prandtl+miut(i,j,k)/komega%prt)/const5
+        !
+        detk=num2d3*rho(i,j,k)*tke(i,j,k)
+        !
+        miu3=miu+komega%sigma_k(i,j,k)    *miut(i,j,k)
+        miu4=miu+komega%sigma_omega(i,j,k)*miut(i,j,k)
+        !
+        dkflux(i,j,k,:)=miu3*dtke(i,j,k,:)
+        doflux(i,j,k,:)=miu4*domg(i,j,k,:)
+      elseif(trim(turbmode)=='udf1') then
+        !
+        ! miu2=2.d0*(miu+miut(i,j,k))
+        ! hcc=(miu/prandtl+miut(i,j,k)/0.9d0)/const5
+        !
+        miu2=2.d0*miu
+        hcc=(miu/prandtl)/const5
+        !
+        tau11=0.d0
+        tau12=-res12(i,j,k)*rho(i,j,k)
+        tau13=0.d0
+        tau22=0.d0
+        tau23=0.d0
+        tau33=0.d0
+        !
+        detk=0.d0
+        !
+      elseif(trim(turbmode)=='none') then
+        miu2=2.d0*miu
+        !
+#ifdef COMB
+        hcc=kama
+#else
+        if(nondimen) then 
+          hcc=(miu/prandtl)/const5
+        else
+          hcc=cp*miu/prandtl
+        endif 
+#endif
+        !
+        detk=0.d0
+        !
+      endif
+      !
+      sigma(i,j,k,1)=miu2*(s11-skk)-detk + tau11 !s11   
+      sigma(i,j,k,2)=miu2* s12           + tau12 !s12  
+      sigma(i,j,k,3)=miu2* s13           + tau13 !s13   
+      sigma(i,j,k,4)=miu2*(s22-skk)-detk + tau22 !s22   
+      sigma(i,j,k,5)=miu2* s23           + tau23 !s23  
+      sigma(i,j,k,6)=miu2*(s33-skk)-detk + tau33 !s33  
+      !
+      qflux(i,j,k,1)=hcc*dtmp(i,j,k,1)+sigma(i,j,k,1)*vel(i,j,k,1) +   &
+                                       sigma(i,j,k,2)*vel(i,j,k,2) +   &
+                                       sigma(i,j,k,3)*vel(i,j,k,3)
+      qflux(i,j,k,2)=hcc*dtmp(i,j,k,2)+sigma(i,j,k,2)*vel(i,j,k,1) +   &
+                                       sigma(i,j,k,4)*vel(i,j,k,2) +   &
+                                       sigma(i,j,k,5)*vel(i,j,k,3)
+      qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
+                                       sigma(i,j,k,5)*vel(i,j,k,2) +   &
+                                       sigma(i,j,k,6)*vel(i,j,k,3)
+      !                                      
+      if(num_species>0) then
+        !
+#ifdef COMB
+        !
+        do idir=1,3
+          !
+          gradyi(:)=dspc(i,j,k,:,idir)
+          !
+          sum1=mw*sum(gradyi(:)/wmolar(:))
+          !
+          select case(tranmod)
+            !
+            case('multi')
+              !
+              do jspc=1,num_species
+                sum2=sum(dispec(jspc,:)*(gradyi(:)-spc(i,j,k,:)*sum1))
+                !species diffusive flux
+                yflux(i,j,k,jspc,idir)=-1.d0*wmolar(jspc)/mw*sum2
+                !energy flux due to species diffusion
+                qflux(i,j,k,idir)=qflux(i,j,k,idir)-yflux(i,j,k,jspc,idir)*hispec(jspc)
+              enddo
+              !
+            case default
+              !
+              sum2=sum(dispec(:,1)*(gradyi(:)-spc(i,j,k,:)*sum1))
+              !
+              do jspc=1,num_species
+                !Corretion diffusion velocity for continuity
+                corrdiff=sum2*spc(i,j,k,jspc)
+                !species diffusive flux
+                yflux(i,j,k,jspc,idir)=dispec(jspc,1)*(gradyi(jspc)-(spc(i,j,k,jspc)*sum1)) &
+                                        -corrdiff
+                !energy flux due to species diffusion
+                qflux(i,j,k,idir)=qflux(i,j,k,idir)+yflux(i,j,k,jspc,idir)*hispec(jspc)
+              enddo
+              !
+          end select
+          !
+        enddo 
+#else
+        if(nondimen) then 
+          dfu(1:num_species)=miu/schmidt(1:num_species)
+        else
+          dfu(1:num_species)=schmidt(1:num_species)
+        endif
+        !
+        do idir=1,3
+          yflux(i,j,k,:,idir)=dfu(:)*dspc(i,j,k,:,idir)
+        enddo
+#endif
+        !
+      endif !num_species>0 
+      !
+    enddo !k
+    enddo !j
+    enddo !i
+    !
+    call dataswap(sigma,timerept=ltimrpt)
+    !
+    call dataswap(qflux,timerept=ltimrpt)
+    !
+    if(num_species>0) then
+      call dataswap(yflux,timerept=ltimrpt)
+      ! call yflux_sendrecv(yflux,timerept=ltimrpt)
+    endif
+    !
+    if(trim(turbmode)=='k-omega') then
+      call dataswap(dkflux,timerept=ltimrpt)
+      !
+      call dataswap(doflux,timerept=ltimrpt)
+    endif
+    !
+    ! Calculating along i direction.
+    !
+    ncolm=4+num_species+num_modequ
+    !
+    allocate(df(0:im,0:jm,0:km,1:ncolm))
+
+    allocate(ff(-hm:im+hm,0:jm,0:km,1:ncolm))
+    do k=0,km
+    do j=0,jm
+      !
+      ff(:,j,k,1)=( sigma(:,j,k,1)*dxi(:,j,k,1,1) +                    &
+                    sigma(:,j,k,2)*dxi(:,j,k,1,2) +                   &
+                    sigma(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,j,k,2)=( sigma(:,j,k,2)*dxi(:,j,k,1,1) +                    &
+                    sigma(:,j,k,4)*dxi(:,j,k,1,2) +                    &
+                    sigma(:,j,k,5)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,j,k,3)=( sigma(:,j,k,3)*dxi(:,j,k,1,1) +                    &
+                    sigma(:,j,k,5)*dxi(:,j,k,1,2) +                    &
+                    sigma(:,j,k,6)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      ff(:,j,k,4)=( qflux(:,j,k,1)*dxi(:,j,k,1,1) +                    &
+                    qflux(:,j,k,2)*dxi(:,j,k,1,2) +                    &
+                    qflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      !
+      if(num_species>0) then
+        do jspc=1,num_species
+          ff(:,j,k,4+jspc)=( yflux(:,j,k,jspc,1)*dxi(:,j,k,1,1) +      &
+                             yflux(:,j,k,jspc,2)*dxi(:,j,k,1,2) +      &
+                             yflux(:,j,k,jspc,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+        enddo
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        n=4+num_species
+        !
+        ff(:,j,k,1+n)=( dkflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
+                        dkflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
+                        dkflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+        ff(:,j,k,2+n)=( doflux(:,j,k,1)*dxi(:,j,k,1,1) +                   &
+                        doflux(:,j,k,2)*dxi(:,j,k,1,2) +                   &
+                        doflux(:,j,k,3)*dxi(:,j,k,1,3) )*jacob(:,j,k)
+      endif
+      !
+    enddo
+    enddo 
+    !+------------------------------+
+    !|    calculate derivative      |
+    !+------------------------------+
+    df=ddf_x3d2(u=ff,nvar=ncolm,dir=1)
+    !+------------------------------+
+    !| end of calculate derivative  |
+    !+------------------------------+
+    !
+    do k=0,km
+    do j=0,jm
+
+      qrhs(is:ie,j,k,2)=qrhs(is:ie,j,k,2)+df(is:ie,j,k,1)
+      qrhs(is:ie,j,k,3)=qrhs(is:ie,j,k,3)+df(is:ie,j,k,2)
+      qrhs(is:ie,j,k,4)=qrhs(is:ie,j,k,4)+df(is:ie,j,k,3)
+      qrhs(is:ie,j,k,5)=qrhs(is:ie,j,k,5)+df(is:ie,j,k,4)
+      ! freeze energy flux for startup
+      ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(is:ie,j,k,5)=0.d0
+      
+      if(num_species>0) then
+        do jspc=1,num_species
+          qrhs(is:ie,j,k,jspc+5)=qrhs(is:ie,j,k,jspc+5)+df(is:ie,j,k,jspc+4)
+        enddo
+      endif
+      !
+      if(trim(turbmode)=='k-omega') then
+        n=5+num_species
+        qrhs(is:ie,j,k,1+n)=qrhs(is:ie,j,k,1+n)+df(is:ie,j,k,n)
+        qrhs(is:ie,j,k,2+n)=qrhs(is:ie,j,k,2+n)+df(is:ie,j,k,1+n)
+      endif
+      !
+    enddo
+    enddo
+    !
+    deallocate(ff)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End calculating along i
+    !!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    if(ndims>=2) then
+      ! Calculating along j direction.
+      !
+      allocate(ff(0:im,-hm:jm+hm,0:km,1:ncolm))
+      do k=0,km
+      do i=0,im
+        !
+        ff(i,:,k,1)=( sigma(i,:,k,1)*dxi(i,:,k,2,1) +                        &
+                      sigma(i,:,k,2)*dxi(i,:,k,2,2) +                        &
+                      sigma(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(i,:,k,2)=( sigma(i,:,k,2)*dxi(i,:,k,2,1) +                        &
+                      sigma(i,:,k,4)*dxi(i,:,k,2,2) +                        &
+                      sigma(i,:,k,5)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(i,:,k,3)=( sigma(i,:,k,3)*dxi(i,:,k,2,1) +                        &
+                      sigma(i,:,k,5)*dxi(i,:,k,2,2) +                        &
+                      sigma(i,:,k,6)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        ff(i,:,k,4)=( qflux(i,:,k,1)*dxi(i,:,k,2,1) +                        &
+                      qflux(i,:,k,2)*dxi(i,:,k,2,2) +                        &
+                      qflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        !
+        if(num_species>0) then
+          do jspc=1,num_species
+            ff(i,:,k,4+jspc)=( yflux(i,:,k,jspc,1)*dxi(i,:,k,2,1) +          &
+                               yflux(i,:,k,jspc,2)*dxi(i,:,k,2,2) +          &
+                               yflux(i,:,k,jspc,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          ff(i,:,k,1+n)=( dkflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
+                          dkflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
+                          dkflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+          ff(i,:,k,2+n)=( doflux(i,:,k,1)*dxi(i,:,k,2,1) +                   &
+                          doflux(i,:,k,2)*dxi(i,:,k,2,2) +                   &
+                          doflux(i,:,k,3)*dxi(i,:,k,2,3) )*jacob(i,:,k)
+        endif
+        !
+      enddo
+      enddo
+
+      !+------------------------------+
+      !|    calculate derivative      |
+      !+------------------------------+
+      df=ddf_x3d2(u=ff,nvar=ncolm,dir=2)
+      !+------------------------------+
+      !| end of calculate derivative  |
+      !+------------------------------+
+
+      do k=0,km
+      do i=0,im
+
+        qrhs(i,js:je,k,2)=qrhs(i,js:je,k,2)+df(i,js:je,k,1)
+        qrhs(i,js:je,k,3)=qrhs(i,js:je,k,3)+df(i,js:je,k,2)
+        qrhs(i,js:je,k,4)=qrhs(i,js:je,k,4)+df(i,js:je,k,3)
+        qrhs(i,js:je,k,5)=qrhs(i,js:je,k,5)+df(i,js:je,k,4)
+        ! freeze energy flux for startup
+        ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(i,js:je,k,5)=0.d0
+        
+        if(num_species>0) then
+          do jspc=1,num_species
+            qrhs(i,js:je,k,jspc+5)=qrhs(i,js:je,k,jspc+5)+df(i,js:je,k,jspc+4)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=5+num_species
+          !
+          qrhs(i,js:je,k,1+n)=qrhs(i,js:je,k,1+n)+df(i,js:je,k,n)
+          qrhs(i,js:je,k,2+n)=qrhs(i,js:je,k,2+n)+df(i,js:je,k,1+n)
+        endif
+        !
+      enddo
+      enddo
+      !
+      deallocate(ff)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! End calculating along j
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+    endif
+    !
+    if(ndims==3) then
+      ! Calculating along k direction.
+      !
+      allocate(ff(0:im,0:jm,-hm:km+hm,1:ncolm))
+      do j=0,jm
+      do i=0,im
+        !
+        ff(i,j,:,1)=( sigma(i,j,:,1)*dxi(i,j,:,3,1) +                      &
+                      sigma(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+                      sigma(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,:,2)=( sigma(i,j,:,2)*dxi(i,j,:,3,1) +                      &
+                      sigma(i,j,:,4)*dxi(i,j,:,3,2) +                      &
+                      sigma(i,j,:,5)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,:,3)=( sigma(i,j,:,3)*dxi(i,j,:,3,1) +                      &
+                      sigma(i,j,:,5)*dxi(i,j,:,3,2) +                      &
+                      sigma(i,j,:,6)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        ff(i,j,:,4)=( qflux(i,j,:,1)*dxi(i,j,:,3,1) +                      &
+                      qflux(i,j,:,2)*dxi(i,j,:,3,2) +                      &
+                      qflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        !
+        if(num_species>0) then
+          do jspc=1,num_species
+            ff(i,j,:,4+jspc)=( yflux(i,j,:,jspc,1)*dxi(i,j,:,3,1) +        &
+                               yflux(i,j,:,jspc,2)*dxi(i,j,:,3,2) +        &
+                               yflux(i,j,:,jspc,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=4+num_species
+          !
+          ff(i,j,:,1+n)=( dkflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
+                          dkflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
+                          dkflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+          ff(i,j,:,2+n)=( doflux(i,j,:,1)*dxi(i,j,:,3,1) +                 &
+                          doflux(i,j,:,2)*dxi(i,j,:,3,2) +                 &
+                          doflux(i,j,:,3)*dxi(i,j,:,3,3) )*jacob(i,j,:)
+        endif
+        !
+      enddo
+      enddo
+
+      !+------------------------------+
+      !|    calculate derivative      |
+      !+------------------------------+
+      df=ddf_x3d2(u=ff,nvar=ncolm,dir=3)
+      !+------------------------------+
+      !| end of calculate derivative  |
+      !+------------------------------+
+
+      do j=0,jm
+      do i=0,im
+        qrhs(i,j,ks:ke,2)=qrhs(i,j,ks:ke,2)+df(i,j,ks:ke,1)
+        qrhs(i,j,ks:ke,3)=qrhs(i,j,ks:ke,3)+df(i,j,ks:ke,2)
+        qrhs(i,j,ks:ke,4)=qrhs(i,j,ks:ke,4)+df(i,j,ks:ke,3)
+        qrhs(i,j,ks:ke,5)=qrhs(i,j,ks:ke,5)+df(i,j,ks:ke,4)
+        ! freeze energy flux for startup
+        ! if(flowtype=='tgvflame'.and.nstep*deltat<5.d-5)qrhs(i,j,ks:ke,5)=0.d0
+        !
+        if(num_species>0) then
+          do jspc=1,num_species
+            qrhs(i,j,ks:ke,jspc+5)=qrhs(i,j,ks:ke,jspc+5)+df(i,j,ks:ke,jspc+4)
+          enddo
+        endif
+        !
+        if(trim(turbmode)=='k-omega') then
+          n=5+num_species
+          !
+          qrhs(i,j,ks:ke,1+n)=qrhs(i,j,ks:ke,1+n)+df(i,j,ks:ke,n)
+          qrhs(i,j,ks:ke,2+n)=qrhs(i,j,ks:ke,2+n)+df(i,j,ks:ke,1+n)
+        endif
+        !
+      enddo
+      enddo
+      !
+      deallocate(ff)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! End calculating along j
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+    endif
+    !
+    deallocate(df)
+
+    if(allocated(dispec)) deallocate(dispec)
+    if(allocated(dfu))    deallocate(dfu)
+    !
+    return
+    !
+  end subroutine diffrsdcal6_x3d2
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! End of the subroutine diffrsdcal6_x3d2.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !
   subroutine check_LR55_unit(Lvec,Rvec,ii,jj,kk)
