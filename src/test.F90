@@ -261,8 +261,6 @@ module test
     !
     deallocate(dq)
 
-    stop
-
     ! testing ddy
     do k=0,km
     do j=0,jm

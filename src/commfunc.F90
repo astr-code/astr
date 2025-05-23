@@ -921,7 +921,7 @@ module commfunc
     ! local data
     real(8),allocatable :: b(:)
     integer :: k
-    real(8) :: aff(3)
+    real(8) :: aff(4)
     logical :: ffton
     complex(8),allocatable :: cf(:)
     real(8),allocatable :: kama(:)
@@ -961,7 +961,18 @@ module commfunc
 
     else
 
-      aff(1)=0.d0
+      if(ntype==1 .or. ntype==4) then
+        ! boundary at i=0
+        aff(1)=af
+      else
+        aff(1)=0.d0
+      endif
+      if(ntype==2 .or. ntype==4) then
+        ! boundary at i=m
+        aff(4)=af
+      else
+        aff(4)=0.d0
+      endif
       aff(2)=af
       aff(3)=af
       ! b =pfilterrhs(f,dim,ntype)
@@ -1391,7 +1402,7 @@ module commfunc
     ! var* : temporary variable.
     ! b: return variable.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
+    
     select case (ntype)
        case (1)
          ! the block with boundary at i==0
@@ -1415,34 +1426,74 @@ module commfunc
 
     allocate(b(i_0:i_m))
 
-    b(i_0)=var(i_0)
-    
-    ! b(i_0)=coefb(0,0)*var(i_0+0)+coefb(0,1)*var(i_0+1)+coefb(0,2)*var(i_0+2)+      &
-    !        coefb(0,3)*var(i_0+3)+coefb(0,4)*var(i_0+4)+coefb(0,5)*var(i_0+5)+      &
-    !        coefb(0,6)*var(i_0+6)
-    !
-    ! b(i_0+1)=coefb(1,0)*var(i_0+0)+coefb(1,1)*var(i_0+1)+coefb(1,2)*var(i_0+2)+      &
-    !          coefb(1,3)*var(i_0+3)+coefb(1,4)*var(i_0+4)+coefb(1,5)*var(i_0+5)+      &
-    !          coefb(1,6)*var(i_0+6)
-    var0=var(i_0+1)+var(i_0+1)
-    var1=var(i_0+2)+var(i_0+0)
-    b(i_0+1)=coef2i(0)*var0+coef2i(1)*var1
-    !
-    ! b(i_0+2)=coefb(2,0)*var(i_0+0)+coefb(2,1)*var(i_0+1)+coefb(2,2)*var(i_0+2)+      &
-    !          coefb(2,3)*var(i_0+3)+coefb(2,4)*var(i_0+4)+coefb(2,5)*var(i_0+5)+      &
-    !          coefb(2,6)*var(i_0+6)
+    if(ntype==1 .or. ntype==4) then
+      ! the block with boundary at i==0
 
-    var0=var(i_0+2)+var(i_0+2)
-    var1=var(i_0+3)+var(i_0+1)
-    var2=var(i_0+4)+var(i_0+0)
-    b(i_0+2)=coef4i(0)*var0+coef4i(1)*var1+coef4i(2)*var2
-    !
+      b(i_0)=coefb(0,0)*var(i_0+0)+coefb(0,1)*var(i_0+1)+coefb(0,2)*var(i_0+2)+      &
+             coefb(0,3)*var(i_0+3)+coefb(0,4)*var(i_0+4)+coefb(0,5)*var(i_0+5)+      &
+             coefb(0,6)*var(i_0+6)
+      
+      b(i_0+1)=coefb(1,0)*var(i_0+0)+coefb(1,1)*var(i_0+1)+coefb(1,2)*var(i_0+2)+      &
+               coefb(1,3)*var(i_0+3)+coefb(1,4)*var(i_0+4)+coefb(1,5)*var(i_0+5)+      &
+               coefb(1,6)*var(i_0+6)
+
+      b(i_0+2)=coefb(2,0)*var(i_0+0)+coefb(2,1)*var(i_0+1)+coefb(2,2)*var(i_0+2)+      &
+               coefb(2,3)*var(i_0+3)+coefb(2,4)*var(i_0+4)+coefb(2,5)*var(i_0+5)+      &
+               coefb(2,6)*var(i_0+6)
+    else
+
+      b(i_0)=var(i_0)
+  
+      var0=var(i_0+1)+var(i_0+1)
+      var1=var(i_0+2)+var(i_0+0)
+      b(i_0+1)=coef2i(0)*var0+coef2i(1)*var1
+
+      var0=var(i_0+2)+var(i_0+2)
+      var1=var(i_0+3)+var(i_0+1)
+      var2=var(i_0+4)+var(i_0+0)
+      b(i_0+2)=coef4i(0)*var0+coef4i(1)*var1+coef4i(2)*var2
+
+    endif
+
+
+    if(ntype==2 .or. ntype==4) then
+      ! the block with boundary at i==im
+
+      b(i_m-2)=coefb(2,0)*var(i_m)  +coefb(2,1)*var(i_m-1)+          &
+               coefb(2,2)*var(i_m-2)+coefb(2,3)*var(i_m-3)+          &
+               coefb(2,4)*var(i_m-4)+coefb(2,5)*var(i_m-5)+          &
+               coefb(2,6)*var(i_m-6)
+
+      b(i_m-1)=coefb(1,0)*var(i_m)  +coefb(1,1)*var(i_m-1)+          &
+               coefb(1,2)*var(i_m-2)+coefb(1,3)*var(i_m-3)+          &
+               coefb(1,4)*var(i_m-4)+coefb(1,5)*var(i_m-5)+          &
+               coefb(1,6)*var(i_m-6)
+
+      b(i_m)=coefb(0,0)*var(i_m)  +coefb(0,1)*var(i_m-1)+            &
+             coefb(0,2)*var(i_m-2)+coefb(0,3)*var(i_m-3)+            &
+             coefb(0,4)*var(i_m-4)+coefb(0,5)*var(i_m-5)+            &
+             coefb(0,6)*var(i_m-6)
+    else
+
+      var0=var(i_m-2)+var(i_m-2)
+      var1=var(i_m-1)+var(i_m-3)
+      var2=var(i_m)  +var(i_m-4)
+      b(i_m-2)=coef4i(0)*var0+coef4i(1)*var1+coef4i(2)*var2
+
+      var0=var(i_m-1)+var(i_m-1)
+      var1=var(i_m)  +var(i_m-2)
+      b(i_m-1)=coef2i(0)*var0+coef2i(1)*var1
+
+      b(i_m)=var(i_m)
+
+    endif
+
     var0=var(i_0+3)+var(i_0+3)
     var1=var(i_0+4)+var(i_0+2)
     var2=var(i_0+5)+var(i_0+1)
     var3=var(i_0+6)+var(i_0+0)
     b(i_0+3)=coef6i(0)*var0+coef6i(1)*var1+coef6i(2)*var2+coef6i(3)*var3
-    !
+
     var0=var(i_0+4)+var(i_0+4)
     var1=var(i_0+5)+var(i_0+3)
     var2=var(i_0+6)+var(i_0+2)
@@ -1450,9 +1501,9 @@ module commfunc
     var4=var(i_0+8)+var(i_0+0)
     b(i_0+4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +              &
              coef8i(3)*var3+coef8i(4)*var4
-    !
+
     do l=i_0+5,i_m-5
-      !
+
       var0=var(l)+var(l)
       var1=var(l+1)+var(l-1)
       var2=var(l+2)+var(l-2)
@@ -1462,9 +1513,9 @@ module commfunc
       !
       b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
            coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
-      !
+
     end do
-    !
+
     var0=var(i_m-4)+var(i_m-4)
     var1=var(i_m-3)+var(i_m-5)
     var2=var(i_m-2)+var(i_m-6)
@@ -1472,38 +1523,14 @@ module commfunc
     var4=var(i_m)  +var(i_m-8)
     b(i_m-4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +          &
              coef8i(3)*var3+coef8i(4)*var4
-    !
+
     var0=var(i_m-3)+var(i_m-3)
     var1=var(i_m-2)+var(i_m-4)
     var2=var(i_m-1)+var(i_m-5)
     var3=var(i_m)  +var(i_m-6)
     b(i_m-3)=coef6i(0)*var0+coef6i(1)*var1+                          &
              coef6i(2)*var2+coef6i(3)*var3
-    !
-    ! b(i_m-2)=coefb(2,0)*var(i_m)  +coefb(2,1)*var(i_m-1)+            &
-    !          coefb(2,2)*var(i_m-2)+coefb(2,3)*var(i_m-3)+            &
-    !          coefb(2,4)*var(i_m-4)+coefb(2,5)*var(i_m-5)+            &
-    !          coefb(2,6)*var(i_m-6)
-    var0=var(i_m-2)+var(i_m-2)
-    var1=var(i_m-1)+var(i_m-3)
-    var2=var(i_m)  +var(i_m-4)
-    b(i_m-2)=coef4i(0)*var0+coef4i(1)*var1+coef4i(2)*var2
-    !
-    ! b(i_m-1)=coefb(1,0)*var(i_m)  +coefb(1,1)*var(i_m-1)+            &
-    !          coefb(1,2)*var(i_m-2)+coefb(1,3)*var(i_m-3)+            &
-    !          coefb(1,4)*var(i_m-4)+coefb(1,5)*var(i_m-5)+            &
-    !          coefb(1,6)*var(i_m-6)
-    var0=var(i_m-1)+var(i_m-1)
-    var1=var(i_m)  +var(i_m-2)
-    b(i_m-1)=coef2i(0)*var0+coef2i(1)*var1
-    !
-    ! b(i_m)=coefb(0,0)*var(i_m)  +coefb(0,1)*var(i_m-1)+            &
-    !        coefb(0,2)*var(i_m-2)+coefb(0,3)*var(i_m-3)+            &
-    !        coefb(0,4)*var(i_m-4)+coefb(0,5)*var(i_m-5)+            &
-    !        coefb(0,6)*var(i_m-6)
-    b(i_m)=var(i_m)
-    ! !
-    !
+
   end function pfilterrhs2
   !
   function PFilterRHS2_2d(var,dim,ntype,ncolm) result(b)
@@ -1777,48 +1804,48 @@ module commfunc
     coefb(2,8)=0.d0
     !
     !
-    ! 4th-order asymmetry scheme for point 1
-    coefb(1,0)=( 1.d0 +14.d0*alfa)  /16.d0
-    coefb(1,1)=( 3.d0 + 2.d0*alfa)  /4.d0
-    coefb(1,2)=( 3.d0 + 2.d0*alfa)  /8.d0
-    coefb(1,3)=(-1.d0 + 2.d0*alfa)  /4.d0
-    coefb(1,4)=( 1.d0 - 2.d0*alfa)  /16.d0
-    coefb(1,5)=0.d0
-    coefb(1,6)=0.d0
-    coefb(1,7)=0.d0
-    coefb(1,8)=0.d0
-    ! ! 6-order asymmetry scheme for point 1
-    ! coefb(1,0)=( 1.d0 +62.d0*alfa)  /64.d0
-    ! coefb(1,1)=(29.d0 + 6.d0*alfa)  /32.d0
-    ! coefb(1,2)=(15.d0 +34.d0*alfa)  /64.d0
-    ! coefb(1,3)=(-5.d0 +10.d0*alfa)  /16.d0
-    ! coefb(1,4)=(15.d0 -30.d0*alfa)  /64.d0
-    ! coefb(1,5)=(-3.d0 + 6.d0*alfa)  /32.d0
-    ! coefb(1,6)=( 1.d0 - 2.d0*alfa)  /64.d0
+    ! ! 4th-order asymmetry scheme for point 1
+    ! coefb(1,0)=( 1.d0 +14.d0*alfa)  /16.d0
+    ! coefb(1,1)=( 3.d0 + 2.d0*alfa)  /4.d0
+    ! coefb(1,2)=( 3.d0 + 2.d0*alfa)  /8.d0
+    ! coefb(1,3)=(-1.d0 + 2.d0*alfa)  /4.d0
+    ! coefb(1,4)=( 1.d0 - 2.d0*alfa)  /16.d0
+    ! coefb(1,5)=0.d0
+    ! coefb(1,6)=0.d0
     ! coefb(1,7)=0.d0
     ! coefb(1,8)=0.d0
+    ! 6-order asymmetry scheme for point 1
+    coefb(1,0)=( 1.d0 +62.d0*alfa)  /64.d0
+    coefb(1,1)=(29.d0 + 6.d0*alfa)  /32.d0
+    coefb(1,2)=(15.d0 +34.d0*alfa)  /64.d0
+    coefb(1,3)=(-5.d0 +10.d0*alfa)  /16.d0
+    coefb(1,4)=(15.d0 -30.d0*alfa)  /64.d0
+    coefb(1,5)=(-3.d0 + 6.d0*alfa)  /32.d0
+    coefb(1,6)=( 1.d0 - 2.d0*alfa)  /64.d0
+    coefb(1,7)=0.d0
+    coefb(1,8)=0.d0
     !
-    ! 2nd-order asymmetry scheme for point 0
-    coefb(0,0)=( 3.d0 +alfa)  /4.d0
-    coefb(0,1)=( 1.d0 +alfa)  /2.d0
-    coefb(0,2)=(-1.d0 +alfa)  /4.d0
-    coefb(0,3)=0.d0
-    coefb(0,4)=0.d0
-    coefb(0,5)=0.d0
-    coefb(0,6)=0.d0
-    coefb(0,7)=0.d0
-    coefb(0,8)=0.d0
-
-    ! ! 6-order asymmetry scheme for point 0
-    ! coefb(0,0)=( 63.d0 + 1.d0*alfa)  /64.d0
-    ! coefb(0,1)=(  3.d0 +29.d0*alfa)  /32.d0
-    ! coefb(0,2)=(-15.d0 +15.d0*alfa)  /64.d0
-    ! coefb(0,3)=(  5.d0 - 5.d0*alfa)  /16.d0
-    ! coefb(0,4)=(-15.d0 +15.d0*alfa)  /64.d0
-    ! coefb(0,5)=(  3.d0 - 3.d0*alfa)  /32.d0
-    ! coefb(0,6)=( -1.d0 + 1.d0*alfa)  /64.d0
+    ! ! 2nd-order asymmetry scheme for point 0
+    ! coefb(0,0)=( 3.d0 +alfa)  /4.d0
+    ! coefb(0,1)=( 1.d0 +alfa)  /2.d0
+    ! coefb(0,2)=(-1.d0 +alfa)  /4.d0
+    ! coefb(0,3)=0.d0
+    ! coefb(0,4)=0.d0
+    ! coefb(0,5)=0.d0
+    ! coefb(0,6)=0.d0
     ! coefb(0,7)=0.d0
     ! coefb(0,8)=0.d0
+
+    ! 6-order asymmetry scheme for point 0
+    coefb(0,0)=( 63.d0 + 1.d0*alfa)  /64.d0
+    coefb(0,1)=(  3.d0 +29.d0*alfa)  /32.d0
+    coefb(0,2)=(-15.d0 +15.d0*alfa)  /64.d0
+    coefb(0,3)=(  5.d0 - 5.d0*alfa)  /16.d0
+    coefb(0,4)=(-15.d0 +15.d0*alfa)  /64.d0
+    coefb(0,5)=(  3.d0 - 3.d0*alfa)  /32.d0
+    coefb(0,6)=( -1.d0 + 1.d0*alfa)  /64.d0
+    coefb(0,7)=0.d0
+    coefb(0,8)=0.d0
     !
     ! explicit filter
     coef4be(0,0)=(15.d0 )/16.d0
@@ -2575,23 +2602,35 @@ module commfunc
     !
     ! local data
     integer :: l,i_0,i_m
-    real(8) :: af_1,af_2,af_3
+    real(8) :: af_1_0,af_2,af_3,af_1_m
     !
     select case (ntype)
        case (1)
          ! the block with boundary at i==0
+         af_1_0=af
+         af_1_m=0.d0
+
          i_0=0
          i_m=dim+hm
        case (2)
          ! the block with boundary at i==im
+         af_1_0=0.d0
+         af_1_m=af
+         
          i_0=-hm
          i_m=dim
        case (3)
          ! inner block
+         af_1_0=0.d0
+         af_1_m=0.d0
+
          i_0=-hm
          i_m=dim+hm
        case (4)
          ! the block with boundary at i=0 and i=im
+         af_1_0=af
+         af_1_m=af
+
          i_0=0
          i_m=dim
        case default
@@ -2605,12 +2644,11 @@ module commfunc
       return
     endif
 
-    af_1=0.d0
     af_2=af
     af_3=af
     
     cc(1,i_0)=1.d0
-    cc(2,i_0)=af_1/cc(1,i_0)
+    cc(2,i_0)=af_1_0/cc(1,i_0)
     !
     cc(1,i_0+1)=1.d0-af_2*cc(2,i_0)
     cc(2,i_0+1)=af_2/cc(1,i_0+1)
@@ -2626,7 +2664,7 @@ module commfunc
     cc(1,i_m-1)=1.d0-af_2*cc(2,i_m-2)
     cc(2,i_m-1)=af_2/cc(1,i_m-1)
 
-    cc(1,i_m)=1.d0-af_1*cc(2,i_m-1)
+    cc(1,i_m)=1.d0-af_1_m*cc(2,i_m-1)
 
     cc(1,:)=1.d0/cc(1,:)
 
@@ -3294,7 +3332,7 @@ module commfunc
   function ptds_filter_cal(bd,af,cc,dim,ntype) result(xd)
     !
     integer,intent(in) :: dim,ntype
-    real(8),intent(in) :: af(3),bd(:),cc(:,:)
+    real(8),intent(in) :: af(4),bd(:),cc(:,:)
     real(8) :: xd(0:dim)
     !
     !
@@ -3345,7 +3383,7 @@ module commfunc
       yd(l)=(bd2(l)-af(3)*yd(l-1))*cc2(1,l)
     end do
     yd(i_m-1)=(bd2(i_m-1)-af(2)*yd(i_m-2))*cc2(1,i_m-1)
-    yd(i_m)=(bd2(i_m)-af(1)*yd(i_m-1))*cc2(1,i_m)
+    yd(i_m)=(bd2(i_m)-af(4)*yd(i_m-1))*cc2(1,i_m)
 
     !
     xd2(i_m)=yd(i_m)
