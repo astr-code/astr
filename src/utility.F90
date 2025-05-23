@@ -34,265 +34,265 @@ module utility
     !
     ! local data
     !
-    type :: trep
-      character(len=16) :: rout,mode
-      character(len=64) :: mesg
-      character(len=1) :: cate
-      integer :: order
-      real(8) :: time
-    end type trep
-    !
-    logical :: lexist
-    integer :: i,ios,n,varorder
-    integer,save :: counter=0
-    integer,save :: hand_rp,repsp
-    logical,save :: linit=.true.
-    character(len=16) :: realmode,charinput
-    character(len=64) :: messinput,messoutp
-    character(len=20),save :: rptfname
-    real(8),save :: total_time=1.d-10
-    real(8) :: percent,datainput,commtime,iotime,xtratime,vartime
-    !
-    integer,parameter :: nmax=100
-    !
-    type(trep),save :: recorder(nmax)
-    !
-    if(linit) then
-      !
-      rptfname='time_report.'//message
-      !
-      inquire(file=rptfname, exist=lexist)
-      !
-      if(lexist) call system('mv -v '//rptfname//' '//rptfname//'.bak')
-      !
-      call system('echo "----------------------------------------------------------------" '//rptfname)
-      call system('echo "CPU infomation" >> '//rptfname)
-      call system('echo "----------------------------------------------------------------" >> '//rptfname)
-      call system('lscpu | grep "Model name" >> '//rptfname)
-      call system('lscpu | grep "CPU MHz" >> '//rptfname)
-      call system('lscpu | grep "Socket(s):" >> '//rptfname)
-      call system('lscpu | grep "Core(s) per socket:" >> '//rptfname)
-      call system('lscpu | grep "Thread(s) per core:" >> '//rptfname)
-      call system('lscpu | grep "cache" >> '//rptfname)
-      call system('echo "----------------------------------------------------------------" >> '//rptfname)
-      !
-      hand_rp=get_unit()
-      !
-      open(hand_rp,file=rptfname,position="append")
-      write(hand_rp,'(A)')'  statistic of computing time'
-      write(hand_rp,'(A,A)')'     flowtype: ',trim(flowtype)
-      write(hand_rp,'(A,A)')'  conv scheme: ',trim(conschm)
-      write(hand_rp,'(A,A)')'  diff scheme: ',trim(difschm)
-      write(hand_rp,'(A,A)')'    rk scheme: ',trim(rkscheme)
-      write(hand_rp,'(4(A,I0))')'    grid size: ',ia,' x ',ja,' x ', &
-                                         ka,' = ',(ia+1)*(ja+1)*(ka+1)
-      ! write(hand_rp,'(2X,62A)')('-',i=1,62)
-      !
-      close(hand_rp)
-      print*,' << ',rptfname
-      !
-      repsp=nstep
-      !
-      linit=.false.
-      !
-      return
-      !
-    endif
-    !
-    if(repsp==nstep) return
-    !
-    if(present(mode)) then
-      realmode=mode
-    else
-      realmode='general'
-    endif
-    !
-    if(trim(realmode)=='final') then
-      hand_rp=get_unit()
-      open (hand_rp,file=rptfname,position="append")
-      write(hand_rp,'(2X,62A)')('-',i=1,62)
-      write(hand_rp,'(2X,2(A20))')'total nsteps','computational time'
-      write(hand_rp,'(2X,3(A20))')('----------',i=1,2)
-      write(hand_rp,'(2X,I20,E20.6E2,10X,A)')nstep-1,timecost
-      close(hand_rp)
-      print*,' << ',rptfname
-    else
-      !
-      do n=1,counter
-        !
-        if(present(routine)) then
-         !
-         if(trim(recorder(n)%rout)==routine) then
-            !
-            if(trim(recorder(n)%mesg)==message) then
-                !
-                ! it is the report from the same subroutine
-                !
-                recorder(n)%time=recorder(n)%time+timecost
-                !
-                exit
-                !
-            endif
-            !
-         endif
-         !
-        endif
-        !
-      enddo
-      !
-      if(n==counter+1) then
-        ! normal exit from the previous step
-        !
-        counter=counter+1
-        !
-        if(present(routine))  recorder(counter)%rout=routine
-        if(present(mode))     recorder(counter)%mode=mode
-        if(present(message))  recorder(counter)%mesg=message
-        !
-        recorder(counter)%time=timecost
-        !
-      endif
-      !
-      if(counter==nmax) then
-        print*,' !! WARNING MAX counter reached @ timereporter'
-      endif
-      !
-      if(trim(routine)=='steploop') then
-        ! this is the last subroutine reporting
-        !
-        total_time=timecost
-        !
-        total_time=max(total_time,1.d-10)
-        !
-        hand_rp=get_unit()
-        open (hand_rp,file=rptfname,position="append")
-        write(hand_rp,'(2X,62A)')('-',i=1,62)
-        write(hand_rp,'(2X,A20,I7,A3,I7)')'    nsteps  : ',repsp,' - ',nstep
-        ! write(hand_rp,'(7X,55A)')('-',i=1,55)
-        ! write(hand_rp,'(2X,A16,A14,A11,A20)')'subroutine','time cost','%','note'
-        !
-        commtime=0.d0
-        xtratime=0.d0
-        iotime=0.d0
-        vartime=0.d0
-        varorder=1
-        do n=1,counter
-          !
-          if(trim(recorder(n)%rout)=='qswap'             .or. &
-             trim(recorder(n)%rout)=='array3d_sendrecv'  .or. & 
-             trim(recorder(n)%rout)=='array4d_sendrecv'  .or. &  
-             trim(recorder(n)%rout)=='updatable_rel2d_'  .or. & 
-             trim(recorder(n)%rout)=='updatable_rel_a2'  .or. & 
-             trim(recorder(n)%rout)=='updatable_rel2d_'  ) then
-           !
-           recorder(n)%cate='m'
-           !
-           commtime=commtime+recorder(n)%time
-           !
-          elseif(trim(recorder(n)%rout)=='writechkpt') then
-           !
-           recorder(n)%cate='o'
-           !
-           iotime=iotime+recorder(n)%time
-           !
-          else
-           !
-           recorder(n)%cate='x'
-           !
-           xtratime=xtratime+recorder(n)%time
-           !
-          endif
-          !
-        enddo
-        !
-        ! output the message part
-        if(commtime>1.d-10) then
-          !
-          percent=commtime/total_time*100.d0
-          write(hand_rp,'(5X,57A)')('-',i=1,57)
-          write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'Comm Time',commtime,percent,'%'
-          write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
-          !
-          do n=1,counter
-            !
-            percent=recorder(n)%time/total_time*100.d0
-            !
-            if(recorder(n)%cate=='m') then
-              !
-              write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A,10X,A)')trim(recorder(n)%rout), &
-                                     recorder(n)%time,percent,'%',trim(recorder(n)%mesg)
-            endif
-            !
-          enddo
-          !
-        endif
-        !
-        if(iotime>1.d-10) then
-          !
-          ! output the other part
-          percent=iotime/total_time*100.d0
-          write(hand_rp,'(5X,57A)')('-',i=1,57)
-          write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'IO Time',xtratime,percent,'%'
-          write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
-          !
-          do n=1,counter
-            !
-            percent=recorder(n)%time/total_time*100.d0
-            !
-            if(recorder(n)%cate=='o') then
-              !
-              write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A,10X,A)')trim(recorder(n)%rout), &
-                                     recorder(n)%time,percent,'%',trim(recorder(n)%mesg)
-            endif
-            !
-          enddo
-          !
-        endif
-        !
-        if(xtratime>1.d-10) then
-          !
-          ! output the other part
-          percent=100.d0-(iotime+commtime)/total_time*100.d0
-          write(hand_rp,'(5X,57A)')('-',i=1,57)
-          write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'Other Part',xtratime,percent,'%'
-          write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
-          !
-          do n=1,counter
-            !
-            percent=recorder(n)%time/total_time*100.d0
-            !
-            if(recorder(n)%cate=='x') then
-              !
-              write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A,10X,A)')trim(recorder(n)%rout), &
-                                     recorder(n)%time,percent,'%',trim(recorder(n)%mesg)
-            endif
-            !
-          enddo
-          !
-        endif
-        !
-        close(hand_rp)
-        !
-        print*,' << ',rptfname
-        !
-        total_time=timecost
-        !
-        counter=0
-        !
-        repsp=nstep
-        !
-        do n=1,nmax
-          recorder(n)%rout=''
-          recorder(n)%mode=''
-          recorder(n)%mesg=''
-          recorder(n)%time=0.d0
-        enddo
-        !
-      endif
-      !
-    endif
-    !
-    timecost=0.d0
+    ! type :: trep
+    !   character(len=16) :: rout,mode
+    !   character(len=64) :: mesg
+    !   character(len=1) :: cate
+    !   integer :: order
+    !   real(8) :: time
+    ! end type trep
+    ! !
+    ! logical :: lexist
+    ! integer :: i,ios,n,varorder
+    ! integer,save :: counter=0
+    ! integer,save :: hand_rp,repsp
+    ! logical,save :: linit=.true.
+    ! character(len=16) :: realmode,charinput
+    ! character(len=64) :: messinput,messoutp
+    ! character(len=20),save :: rptfname
+    ! real(8),save :: total_time=1.d-10
+    ! real(8) :: percent,datainput,commtime,iotime,xtratime,vartime
+    ! !
+    ! integer,parameter :: nmax=100
+    ! !
+    ! type(trep),save :: recorder(nmax)
+    ! !
+    ! if(linit) then
+    !   !
+    !   rptfname='time_report.'//message
+    !   !
+    !   inquire(file=rptfname, exist=lexist)
+    !   !
+    !   if(lexist) call system('mv -v '//rptfname//' '//rptfname//'.bak')
+    !   !
+    !   call system('echo "----------------------------------------------------------------" '//rptfname)
+    !   call system('echo "CPU infomation" >> '//rptfname)
+    !   call system('echo "----------------------------------------------------------------" >> '//rptfname)
+    !   call system('lscpu | grep "Model name" >> '//rptfname)
+    !   call system('lscpu | grep "CPU MHz" >> '//rptfname)
+    !   call system('lscpu | grep "Socket(s):" >> '//rptfname)
+    !   call system('lscpu | grep "Core(s) per socket:" >> '//rptfname)
+    !   call system('lscpu | grep "Thread(s) per core:" >> '//rptfname)
+    !   call system('lscpu | grep "cache" >> '//rptfname)
+    !   call system('echo "----------------------------------------------------------------" >> '//rptfname)
+    !   !
+    !   hand_rp=get_unit()
+    !   !
+    !   open(hand_rp,file=rptfname,position="append")
+    !   write(hand_rp,'(A)')'  statistic of computing time'
+    !   write(hand_rp,'(A,A)')'     flowtype: ',trim(flowtype)
+    !   write(hand_rp,'(A,A)')'  conv scheme: ',trim(conschm)
+    !   write(hand_rp,'(A,A)')'  diff scheme: ',trim(difschm)
+    !   write(hand_rp,'(A,A)')'    rk scheme: ',trim(rkscheme)
+    !   write(hand_rp,'(4(A,I0))')'    grid size: ',ia,' x ',ja,' x ', &
+    !                                      ka,' = ',(ia+1)*(ja+1)*(ka+1)
+    !   ! write(hand_rp,'(2X,62A)')('-',i=1,62)
+    !   !
+    !   close(hand_rp)
+    !   print*,' << ',rptfname
+    !   !
+    !   repsp=nstep
+    !   !
+    !   linit=.false.
+    !   !
+    !   return
+    !   !
+    ! endif
+    ! !
+    ! if(repsp==nstep) return
+    ! !
+    ! if(present(mode)) then
+    !   realmode=mode
+    ! else
+    !   realmode='general'
+    ! endif
+    ! !
+    ! if(trim(realmode)=='final') then
+    !   hand_rp=get_unit()
+    !   open (hand_rp,file=rptfname,position="append")
+    !   write(hand_rp,'(2X,62A)')('-',i=1,62)
+    !   write(hand_rp,'(2X,2(A20))')'total nsteps','computational time'
+    !   write(hand_rp,'(2X,3(A20))')('----------',i=1,2)
+    !   write(hand_rp,'(2X,I20,E20.6E2,10X,A)')nstep-1,timecost
+    !   close(hand_rp)
+    !   print*,' << ',rptfname
+    ! else
+    !   !
+    !   do n=1,counter
+    !     !
+    !     if(present(routine)) then
+    !      !
+    !      if(trim(recorder(n)%rout)==routine) then
+    !         !
+    !         if(trim(recorder(n)%mesg)==message) then
+    !             !
+    !             ! it is the report from the same subroutine
+    !             !
+    !             recorder(n)%time=recorder(n)%time+timecost
+    !             !
+    !             exit
+    !             !
+    !         endif
+    !         !
+    !      endif
+    !      !
+    !     endif
+    !     !
+    !   enddo
+    !   !
+    !   if(n==counter+1) then
+    !     ! normal exit from the previous step
+    !     !
+    !     counter=counter+1
+    !     !
+    !     if(present(routine))  recorder(counter)%rout=routine
+    !     if(present(mode))     recorder(counter)%mode=mode
+    !     if(present(message))  recorder(counter)%mesg=message
+    !     !
+    !     recorder(counter)%time=timecost
+    !     !
+    !   endif
+    !   !
+    !   if(counter==nmax) then
+    !     print*,' !! WARNING MAX counter reached @ timereporter'
+    !   endif
+    !   !
+    !   if(trim(routine)=='steploop') then
+    !     ! this is the last subroutine reporting
+    !     !
+    !     total_time=timecost
+    !     !
+    !     total_time=max(total_time,1.d-10)
+    !     !
+    !     hand_rp=get_unit()
+    !     open (hand_rp,file=rptfname,position="append")
+    !     write(hand_rp,'(2X,62A)')('-',i=1,62)
+    !     write(hand_rp,'(2X,A20,I7,A3,I7)')'    nsteps  : ',repsp,' - ',nstep
+    !     ! write(hand_rp,'(7X,55A)')('-',i=1,55)
+    !     ! write(hand_rp,'(2X,A16,A14,A11,A20)')'subroutine','time cost','%','note'
+    !     !
+    !     commtime=0.d0
+    !     xtratime=0.d0
+    !     iotime=0.d0
+    !     vartime=0.d0
+    !     varorder=1
+    !     do n=1,counter
+    !       !
+    !       if(trim(recorder(n)%rout)=='qswap'             .or. &
+    !          trim(recorder(n)%rout)=='array3d_sendrecv'  .or. & 
+    !          trim(recorder(n)%rout)=='array4d_sendrecv'  .or. &  
+    !          trim(recorder(n)%rout)=='updatable_rel2d_'  .or. & 
+    !          trim(recorder(n)%rout)=='updatable_rel_a2'  .or. & 
+    !          trim(recorder(n)%rout)=='updatable_rel2d_'  ) then
+    !        !
+    !        recorder(n)%cate='m'
+    !        !
+    !        commtime=commtime+recorder(n)%time
+    !        !
+    !       elseif(trim(recorder(n)%rout)=='writechkpt') then
+    !        !
+    !        recorder(n)%cate='o'
+    !        !
+    !        iotime=iotime+recorder(n)%time
+    !        !
+    !       else
+    !        !
+    !        recorder(n)%cate='x'
+    !        !
+    !        xtratime=xtratime+recorder(n)%time
+    !        !
+    !       endif
+    !       !
+    !     enddo
+    !     !
+    !     ! output the message part
+    !     if(commtime>1.d-10) then
+    !       !
+    !       percent=commtime/total_time*100.d0
+    !       write(hand_rp,'(5X,57A)')('-',i=1,57)
+    !       write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'Comm Time',commtime,percent,'%'
+    !       write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
+    !       !
+    !       do n=1,counter
+    !         !
+    !         percent=recorder(n)%time/total_time*100.d0
+    !         !
+    !         if(recorder(n)%cate=='m') then
+    !           !
+    !           write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A,10X,A)')trim(recorder(n)%rout), &
+    !                                  recorder(n)%time,percent,'%',trim(recorder(n)%mesg)
+    !         endif
+    !         !
+    !       enddo
+    !       !
+    !     endif
+    !     !
+    !     if(iotime>1.d-10) then
+    !       !
+    !       ! output the other part
+    !       percent=iotime/total_time*100.d0
+    !       write(hand_rp,'(5X,57A)')('-',i=1,57)
+    !       write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'IO Time',xtratime,percent,'%'
+    !       write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
+    !       !
+    !       do n=1,counter
+    !         !
+    !         percent=recorder(n)%time/total_time*100.d0
+    !         !
+    !         if(recorder(n)%cate=='o') then
+    !           !
+    !           write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A,10X,A)')trim(recorder(n)%rout), &
+    !                                  recorder(n)%time,percent,'%',trim(recorder(n)%mesg)
+    !         endif
+    !         !
+    !       enddo
+    !       !
+    !     endif
+    !     !
+    !     if(xtratime>1.d-10) then
+    !       !
+    !       ! output the other part
+    !       percent=100.d0-(iotime+commtime)/total_time*100.d0
+    !       write(hand_rp,'(5X,57A)')('-',i=1,57)
+    !       write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A)')'Other Part',xtratime,percent,'%'
+    !       write(hand_rp,'(2X,A16,A14,A11,A18)')('--------',i=1,4)
+    !       !
+    !       do n=1,counter
+    !         !
+    !         percent=recorder(n)%time/total_time*100.d0
+    !         !
+    !         if(recorder(n)%cate=='x') then
+    !           !
+    !           write(hand_rp,'(2X,A16,E14.5E2,3X,F7.2,A,10X,A)')trim(recorder(n)%rout), &
+    !                                  recorder(n)%time,percent,'%',trim(recorder(n)%mesg)
+    !         endif
+    !         !
+    !       enddo
+    !       !
+    !     endif
+    !     !
+    !     close(hand_rp)
+    !     !
+    !     print*,' << ',rptfname
+    !     !
+    !     total_time=timecost
+    !     !
+    !     counter=0
+    !     !
+    !     repsp=nstep
+    !     !
+    !     do n=1,nmax
+    !       recorder(n)%rout=''
+    !       recorder(n)%mode=''
+    !       recorder(n)%mesg=''
+    !       recorder(n)%time=0.d0
+    !     enddo
+    !     !
+    !   endif
+    !   !
+    ! endif
+    ! !
+    ! timecost=0.d0
     !
   end subroutine timereporter
   !+-------------------------------------------------------------------+

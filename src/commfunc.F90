@@ -914,12 +914,12 @@ module commfunc
     ! arguments
     integer,intent(in) :: ntype,dim
     real(8),intent(in) :: f(-hm:dim+hm)
-    real(8),intent(in) :: af,fc(1:2,0:dim)
+    real(8),intent(in) :: af,fc(:,:)
     real(8) :: ff(0:dim)
     logical,intent(in),optional :: lfft
     !
     ! local data
-    real(8) :: b(0:dim)
+    real(8),allocatable :: b(:)
     integer :: k
     real(8) :: aff(3)
     logical :: ffton
@@ -958,26 +958,26 @@ module commfunc
       ff(0)=ff(dim)
       !
       deallocate(cf,kama)
-        !
+
     else
-      aff(1)=af
+
+      aff(1)=0.d0
       aff(2)=af
       aff(3)=af
       ! b =pfilterrhs(f,dim,ntype)
       ! ff=ptdsfilter_cal(b,af,fc,dim,ntype)
       b =PFilterRHS2(f,dim,ntype)
-      ff=ptds_cal(b,aff,fc,dim,ntype,timerept=.true.)
-      !
+
+      ff=ptds_filter_cal(b,aff,fc,dim,ntype)
+
       ! reset the value at the boundary to avoid the drift 
       ! caused by the compact filter
       if(ntype==1 .or. ntype==4) then
         ff(0)=f(0)
-      elseif(ntype==2 .or. ntype==4) then
+      endif
+
+      if(ntype==2 .or. ntype==4) then
         ff(dim)=f(dim)
-      elseif(ntype==3) then
-        continue
-      else
-        stop ' ntype error @ spafilter10_basic'
       endif
       !
     endif
@@ -1374,16 +1374,16 @@ module commfunc
     !
     !
   end function pfilterrhs
-  !
+  ! 
   function pfilterrhs2(var,dim,ntype) result(b)
     !
     
     integer,intent(in) :: dim,ntype 
     real(8),intent(in) :: var(-hm:dim+hm)
-    real(8) :: b(0:dim)
+    real(8),allocatable :: b(:)
     !
     ! local data
-    integer :: l
+    integer :: l,i_0,i_m
     real(8) :: var0,var1,var2,var3,var4,var5
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! dim: dimensions in the direction.
@@ -1392,269 +1392,122 @@ module commfunc
     ! b: return variable.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    if(ntype==1) then
-      ! the block with boundary at 0
-      b(0)=coefb(0,0)*var(0)+coefb(0,1)*var(1)+coefb(0,2)*var(2)+      &
-           coefb(0,3)*var(3)+coefb(0,4)*var(4)+coefb(0,5)*var(5)+      &
-           coefb(0,6)*var(6)
-      !
-      b(1)=coefb(1,0)*var(0)+coefb(1,1)*var(1)+coefb(1,2)*var(2)+      &
-           coefb(1,3)*var(3)+coefb(1,4)*var(4)+coefb(1,5)*var(5)+      &
-           coefb(1,6)*var(6)
-      !
-      b(2)=coefb(2,0)*var(0)+coefb(2,1)*var(1)+coefb(2,2)*var(2)+      &
-           coefb(2,3)*var(3)+coefb(2,4)*var(4)+coefb(2,5)*var(5)+      &
-           coefb(2,6)*var(6)
-      !
-      var0=var(3)+var(3)
-      var1=var(4)+var(2)
-      var2=var(5)+var(1)
-      var3=var(6)+var(0)
-      b(3)=coef6i(0)*var0+coef6i(1)*var1+coef6i(2)*var2+coef6i(3)*var3
-      !
-      var0=var(4)+var(4)
-      var1=var(5)+var(3)
-      var2=var(6)+var(2)
-      var3=var(7)+var(1)
-      var4=var(8)+var(0)
-      b(4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +              &
-           coef8i(3)*var3+coef8i(4)*var4
-      !
-      ! inner block
-      do l=5,dim-1
-        !
-        var0=var(l)+var(l)
-        var1=var(l+1)+var(l-1)
-        var2=var(l+2)+var(l-2)
-        var3=var(l+3)+var(l-3)
-        var4=var(l+4)+var(l-4)
-        var5=var(l+5)+var(l-5)
-        !
-        b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
-             coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
-        !
-      end do
-      !
-      if(hm>=5) then
-        b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
-               + 0.205078125d0*(var(dim-1)+var(dim+1))   &
-               -   0.1171875d0*(var(dim-2)+var(dim+2))   &
-               +0.0439453125d0*(var(dim-3)+var(dim+3))   &
-               - 0.009765625d0*(var(dim-4)+var(dim+4))   &
-               +0.0009765625d0*(var(dim-5)+var(dim+5))
-      elseif(hm>=4) then
-        b(dim)=var(dim)-(0.2734375d0*var(dim)                          &
-                     -0.21875d0*(var(dim-1)+var(dim+1))                &
-                     +0.109375d0*(var(dim-2)+var(dim+2))               &
-                     -3.125d-2*(var(dim-3)+var(dim+3))                 &
-                   +3.90625d-3*(var(dim-4)+var(dim+4)))*1.d0
-      else
-        print*,' !! halo cell not sufficient !!'
-        stop ' error01 @ pfilterrhs2'
-      endif
-      !
-    elseif(ntype==2) then
-      ! the block with boundary at m
-      if(hm>=5) then
-        b(0)=    0.376953125d0*(var(0)  +var(0))   &
-               + 0.205078125d0*(var(-1) +var(1))   &
-               -   0.1171875d0*(var(-2) +var(2))   &
-               +0.0439453125d0*(var(-3) +var(3))   &
-               - 0.009765625d0*(var(-4) +var(4))   &
-               +0.0009765625d0*(var(-5) +var(5))
-      elseif(hm>=4) then
-        b(0)=var(0)-(0.2734375d0*var(0)-0.21875d0*(var(-1)+var(1))     &
-                    +0.109375d0*(var(-2)+var(2))                       &
-                    -3.125d-2*(var(-3)+var(3))                         &
-                    +3.90625d-3*(var(-4)+var(4)))*1.d0
-      else
-        print*,' !! halo cell not sufficient !!'
-        stop ' error02 @ pfilterrhs2'
-      endif
-      !
-      ! inner block
-      do l=1,dim-5
-        !
-        var0=var(l)+var(l)
-        var1=var(l+1)+var(l-1)
-        var2=var(l+2)+var(l-2)
-        var3=var(l+3)+var(l-3)
-        var4=var(l+4)+var(l-4)
-        var5=var(l+5)+var(l-5)
-        !
-        b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
-             coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
-        !
-      end do
-      !
-      var0=var(dim-4)+var(dim-4)
-      var1=var(dim-3)+var(dim-5)
-      var2=var(dim-2)+var(dim-6)
-      var3=var(dim-1)+var(dim-7)
-      var4=var(dim)  +var(dim-8)
-      b(dim-4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +          &
-               coef8i(3)*var3+coef8i(4)*var4
-      !
-      var0=var(dim-3)+var(dim-3)
-      var1=var(dim-2)+var(dim-4)
-      var2=var(dim-1)+var(dim-5)
-      var3=var(dim)  +var(dim-6)
-      b(dim-3)=coef6i(0)*var0+coef6i(1)*var1+                          &
-               coef6i(2)*var2+coef6i(3)*var3
-      !
-      b(dim-2)=coefb(2,0)*var(dim)  +coefb(2,1)*var(dim-1)+            &
-               coefb(2,2)*var(dim-2)+coefb(2,3)*var(dim-3)+            &
-               coefb(2,4)*var(dim-4)+coefb(2,5)*var(dim-5)+            &
-               coefb(2,6)*var(dim-6)
-      !
-      b(dim-1)=coefb(1,0)*var(dim)  +coefb(1,1)*var(dim-1)+            &
-               coefb(1,2)*var(dim-2)+coefb(1,3)*var(dim-3)+            &
-               coefb(1,4)*var(dim-4)+coefb(1,5)*var(dim-5)+            &
-               coefb(1,6)*var(dim-6)
-      !
-      b(dim)=coefb(0,0)*var(dim)  +coefb(0,1)*var(dim-1)+            &
-             coefb(0,2)*var(dim-2)+coefb(0,3)*var(dim-3)+            &
-             coefb(0,4)*var(dim-4)+coefb(0,5)*var(dim-5)+            &
-             coefb(0,6)*var(dim-6)
-      !
-    elseif(ntype==3) then
-      ! inner block
-      !
-      if(hm>=5) then
-        b(0)=    0.376953125d0*(var(0)  +var(0))   &
-               + 0.205078125d0*(var(-1) +var(1))   &
-               -   0.1171875d0*(var(-2) +var(2))   &
-               +0.0439453125d0*(var(-3) +var(3))   &
-               - 0.009765625d0*(var(-4) +var(4))   &
-               +0.0009765625d0*(var(-5) +var(5))
-      elseif(hm>=4) then
-        b(0)=var(0)-(0.2734375d0*var(0)-0.21875d0*(var(-1)+var(1))     &
-                    +0.109375d0*(var(-2)+var(2))                       &
-                    -3.125d-2*(var(-3)+var(3))                         &
-                    +3.90625d-3*(var(-4)+var(4)))*1.d0
-      else
-        print*,' !! halo cell not sufficient !!'
-        stop ' error03 @ pfilterrhs2'
-      endif
-      !
-      ! inner block
-      do l=1,dim-1
-        !
-        var0=var(l)+var(l)
-        var1=var(l+1)+var(l-1)
-        var2=var(l+2)+var(l-2)
-        var3=var(l+3)+var(l-3)
-        var4=var(l+4)+var(l-4)
-        var5=var(l+5)+var(l-5)
-        !
-        b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
-             coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
-        !
-      end do
-      !
-      if(hm>=5) then
-        b(dim)=  0.376953125d0*(var(dim)  +var(dim))     &
-               + 0.205078125d0*(var(dim-1)+var(dim+1))   &
-               -   0.1171875d0*(var(dim-2)+var(dim+2))   &
-               +0.0439453125d0*(var(dim-3)+var(dim+3))   &
-               - 0.009765625d0*(var(dim-4)+var(dim+4))   &
-               +0.0009765625d0*(var(dim-5)+var(dim+5))
-      elseif(hm>=4) then
-        b(dim)=var(dim)-(0.2734375d0*var(dim)                          &
-                     -0.21875d0*(var(dim-1)+var(dim+1))                &
-                     +0.109375d0*(var(dim-2)+var(dim+2))               &
-                     -3.125d-2*(var(dim-3)+var(dim+3))                 &
-                   +3.90625d-3*(var(dim-4)+var(dim+4)))*1.d0
-      else
-        print*,' !! halo cell not sufficient !!'
-        stop ' error04 @ pfilterrhs2'
-      endif
-      !
-    elseif(ntype==4) then
-      ! the block with boundary at i=0 and i=im
-      !
-      b(0)=coefb(0,0)*var(0)+coefb(0,1)*var(1)+coefb(0,2)*var(2)+      &
-           coefb(0,3)*var(3)+coefb(0,4)*var(4)+coefb(0,5)*var(5)+      &
-           coefb(0,6)*var(6)
-      !
-      b(1)=coefb(1,0)*var(0)+coefb(1,1)*var(1)+coefb(1,2)*var(2)+      &
-           coefb(1,3)*var(3)+coefb(1,4)*var(4)+coefb(1,5)*var(5)+      &
-           coefb(1,6)*var(6)
-      !
-      b(2)=coefb(2,0)*var(0)+coefb(2,1)*var(1)+coefb(2,2)*var(2)+      &
-           coefb(2,3)*var(3)+coefb(2,4)*var(4)+coefb(2,5)*var(5)+      &
-           coefb(2,6)*var(6)
-      !
-      var0=var(3)+var(3)
-      var1=var(4)+var(2)
-      var2=var(5)+var(1)
-      var3=var(6)+var(0)
-      b(3)=coef6i(0)*var0+coef6i(1)*var1+coef6i(2)*var2+coef6i(3)*var3
-      !
-      var0=var(4)+var(4)
-      var1=var(5)+var(3)
-      var2=var(6)+var(2)
-      var3=var(7)+var(1)
-      var4=var(8)+var(0)
-      b(4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +              &
-           coef8i(3)*var3+coef8i(4)*var4
-      !
-      ! inner block
-      do l=5,dim-5
-        !
-        var0=var(l)+var(l)
-        var1=var(l+1)+var(l-1)
-        var2=var(l+2)+var(l-2)
-        var3=var(l+3)+var(l-3)
-        var4=var(l+4)+var(l-4)
-        var5=var(l+5)+var(l-5)
-        !
-        b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
-             coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
-        !
-      end do
-      !
-      var0=var(dim-4)+var(dim-4)
-      var1=var(dim-3)+var(dim-5)
-      var2=var(dim-2)+var(dim-6)
-      var3=var(dim-1)+var(dim-7)
-      var4=var(dim)  +var(dim-8)
-      b(dim-4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +          &
-               coef8i(3)*var3+coef8i(4)*var4
-      !
-      var0=var(dim-3)+var(dim-3)
-      var1=var(dim-2)+var(dim-4)
-      var2=var(dim-1)+var(dim-5)
-      var3=var(dim)  +var(dim-6)
-      b(dim-3)=coef6i(0)*var0+coef6i(1)*var1+                          &
-               coef6i(2)*var2+coef6i(3)*var3
-      !
-      b(dim-2)=coefb(2,0)*var(dim)  +coefb(2,1)*var(dim-1)+            &
-               coefb(2,2)*var(dim-2)+coefb(2,3)*var(dim-3)+            &
-               coefb(2,4)*var(dim-4)+coefb(2,5)*var(dim-5)+            &
-               coefb(2,6)*var(dim-6)
-      !
-      b(dim-1)=coefb(1,0)*var(dim)  +coefb(1,1)*var(dim-1)+            &
-               coefb(1,2)*var(dim-2)+coefb(1,3)*var(dim-3)+            &
-               coefb(1,4)*var(dim-4)+coefb(1,5)*var(dim-5)+            &
-               coefb(1,6)*var(dim-6)
-      !
-      b(dim)=coefb(0,0)*var(dim)  +coefb(0,1)*var(dim-1)+            &
-             coefb(0,2)*var(dim-2)+coefb(0,3)*var(dim-3)+            &
-             coefb(0,4)*var(dim-4)+coefb(0,5)*var(dim-5)+            &
-             coefb(0,6)*var(dim-6)
-      !
-    else
-      print*,' !! error in subroutine pfilterrhs2!'
-      stop
-    end if
+    select case (ntype)
+       case (1)
+         ! the block with boundary at i==0
+         i_0=0
+         i_m=dim+hm
+       case (2)
+         ! the block with boundary at i==im
+         i_0=-hm
+         i_m=dim
+       case (3)
+         ! inner block
+         i_0=-hm
+         i_m=dim+hm
+       case (4)
+         ! the block with boundary at i=0 and i=im
+         i_0=0
+         i_m=dim
+       case default
+         print*, ' !! error in subroutine pfilterrhs2 !'
+    end select
+
+    allocate(b(i_0:i_m))
+
+    b(i_0)=var(i_0)
+    
+    ! b(i_0)=coefb(0,0)*var(i_0+0)+coefb(0,1)*var(i_0+1)+coefb(0,2)*var(i_0+2)+      &
+    !        coefb(0,3)*var(i_0+3)+coefb(0,4)*var(i_0+4)+coefb(0,5)*var(i_0+5)+      &
+    !        coefb(0,6)*var(i_0+6)
     !
+    ! b(i_0+1)=coefb(1,0)*var(i_0+0)+coefb(1,1)*var(i_0+1)+coefb(1,2)*var(i_0+2)+      &
+    !          coefb(1,3)*var(i_0+3)+coefb(1,4)*var(i_0+4)+coefb(1,5)*var(i_0+5)+      &
+    !          coefb(1,6)*var(i_0+6)
+    var0=var(i_0+1)+var(i_0+1)
+    var1=var(i_0+2)+var(i_0+0)
+    b(i_0+1)=coef2i(0)*var0+coef2i(1)*var1
+    !
+    ! b(i_0+2)=coefb(2,0)*var(i_0+0)+coefb(2,1)*var(i_0+1)+coefb(2,2)*var(i_0+2)+      &
+    !          coefb(2,3)*var(i_0+3)+coefb(2,4)*var(i_0+4)+coefb(2,5)*var(i_0+5)+      &
+    !          coefb(2,6)*var(i_0+6)
+
+    var0=var(i_0+2)+var(i_0+2)
+    var1=var(i_0+3)+var(i_0+1)
+    var2=var(i_0+4)+var(i_0+0)
+    b(i_0+2)=coef4i(0)*var0+coef4i(1)*var1+coef4i(2)*var2
+    !
+    var0=var(i_0+3)+var(i_0+3)
+    var1=var(i_0+4)+var(i_0+2)
+    var2=var(i_0+5)+var(i_0+1)
+    var3=var(i_0+6)+var(i_0+0)
+    b(i_0+3)=coef6i(0)*var0+coef6i(1)*var1+coef6i(2)*var2+coef6i(3)*var3
+    !
+    var0=var(i_0+4)+var(i_0+4)
+    var1=var(i_0+5)+var(i_0+3)
+    var2=var(i_0+6)+var(i_0+2)
+    var3=var(i_0+7)+var(i_0+1)
+    var4=var(i_0+8)+var(i_0+0)
+    b(i_0+4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +              &
+             coef8i(3)*var3+coef8i(4)*var4
+    !
+    do l=i_0+5,i_m-5
+      !
+      var0=var(l)+var(l)
+      var1=var(l+1)+var(l-1)
+      var2=var(l+2)+var(l-2)
+      var3=var(l+3)+var(l-3)
+      var4=var(l+4)+var(l-4)
+      var5=var(l+5)+var(l-5)
+      !
+      b(l)=coef10i(0)*var0+coef10i(1)*var1+coef10i(2)*var2+          &
+           coef10i(3)*var3+coef10i(4)*var4+coef10i(5)*var5
+      !
+    end do
+    !
+    var0=var(i_m-4)+var(i_m-4)
+    var1=var(i_m-3)+var(i_m-5)
+    var2=var(i_m-2)+var(i_m-6)
+    var3=var(i_m-1)+var(i_m-7)
+    var4=var(i_m)  +var(i_m-8)
+    b(i_m-4)=coef8i(0)*var0+coef8i(1)*var1+coef8i(2)*var2 +          &
+             coef8i(3)*var3+coef8i(4)*var4
+    !
+    var0=var(i_m-3)+var(i_m-3)
+    var1=var(i_m-2)+var(i_m-4)
+    var2=var(i_m-1)+var(i_m-5)
+    var3=var(i_m)  +var(i_m-6)
+    b(i_m-3)=coef6i(0)*var0+coef6i(1)*var1+                          &
+             coef6i(2)*var2+coef6i(3)*var3
+    !
+    ! b(i_m-2)=coefb(2,0)*var(i_m)  +coefb(2,1)*var(i_m-1)+            &
+    !          coefb(2,2)*var(i_m-2)+coefb(2,3)*var(i_m-3)+            &
+    !          coefb(2,4)*var(i_m-4)+coefb(2,5)*var(i_m-5)+            &
+    !          coefb(2,6)*var(i_m-6)
+    var0=var(i_m-2)+var(i_m-2)
+    var1=var(i_m-1)+var(i_m-3)
+    var2=var(i_m)  +var(i_m-4)
+    b(i_m-2)=coef4i(0)*var0+coef4i(1)*var1+coef4i(2)*var2
+    !
+    ! b(i_m-1)=coefb(1,0)*var(i_m)  +coefb(1,1)*var(i_m-1)+            &
+    !          coefb(1,2)*var(i_m-2)+coefb(1,3)*var(i_m-3)+            &
+    !          coefb(1,4)*var(i_m-4)+coefb(1,5)*var(i_m-5)+            &
+    !          coefb(1,6)*var(i_m-6)
+    var0=var(i_m-1)+var(i_m-1)
+    var1=var(i_m)  +var(i_m-2)
+    b(i_m-1)=coef2i(0)*var0+coef2i(1)*var1
+    !
+    ! b(i_m)=coefb(0,0)*var(i_m)  +coefb(0,1)*var(i_m-1)+            &
+    !        coefb(0,2)*var(i_m-2)+coefb(0,3)*var(i_m-3)+            &
+    !        coefb(0,4)*var(i_m-4)+coefb(0,5)*var(i_m-5)+            &
+    !        coefb(0,6)*var(i_m-6)
+    b(i_m)=var(i_m)
+    ! !
     !
   end function pfilterrhs2
   !
   function PFilterRHS2_2d(var,dim,ntype,ncolm) result(b)
     !
-    
     integer,intent(in) :: dim,ntype ,ncolm
     real(8),intent(in) :: var(-hm:dim+hm,1:ncolm)
     real(8) :: b(0:dim,1:ncolm)
@@ -1923,27 +1776,49 @@ module commfunc
     coefb(2,7)=0.d0
     coefb(2,8)=0.d0
     !
-    ! 6-order asymmetry scheme for point 1
-    coefb(1,0)=( 1.d0 +62.d0*alfa)  /64.d0
-    coefb(1,1)=(29.d0 + 6.d0*alfa)  /32.d0
-    coefb(1,2)=(15.d0 +34.d0*alfa)  /64.d0
-    coefb(1,3)=(-5.d0 +10.d0*alfa)  /16.d0
-    coefb(1,4)=(15.d0 -30.d0*alfa)  /64.d0
-    coefb(1,5)=(-3.d0 + 6.d0*alfa)  /32.d0
-    coefb(1,6)=( 1.d0 - 2.d0*alfa)  /64.d0
+    !
+    ! 4th-order asymmetry scheme for point 1
+    coefb(1,0)=( 1.d0 +14.d0*alfa)  /16.d0
+    coefb(1,1)=( 3.d0 + 2.d0*alfa)  /4.d0
+    coefb(1,2)=( 3.d0 + 2.d0*alfa)  /8.d0
+    coefb(1,3)=(-1.d0 + 2.d0*alfa)  /4.d0
+    coefb(1,4)=( 1.d0 - 2.d0*alfa)  /16.d0
+    coefb(1,5)=0.d0
+    coefb(1,6)=0.d0
     coefb(1,7)=0.d0
     coefb(1,8)=0.d0
+    ! ! 6-order asymmetry scheme for point 1
+    ! coefb(1,0)=( 1.d0 +62.d0*alfa)  /64.d0
+    ! coefb(1,1)=(29.d0 + 6.d0*alfa)  /32.d0
+    ! coefb(1,2)=(15.d0 +34.d0*alfa)  /64.d0
+    ! coefb(1,3)=(-5.d0 +10.d0*alfa)  /16.d0
+    ! coefb(1,4)=(15.d0 -30.d0*alfa)  /64.d0
+    ! coefb(1,5)=(-3.d0 + 6.d0*alfa)  /32.d0
+    ! coefb(1,6)=( 1.d0 - 2.d0*alfa)  /64.d0
+    ! coefb(1,7)=0.d0
+    ! coefb(1,8)=0.d0
     !
-    ! 6-order asymmetry scheme for point 0
-    coefb(0,0)=( 63.d0 + 1.d0*alfa)  /64.d0
-    coefb(0,1)=(  3.d0 +29.d0*alfa)  /32.d0
-    coefb(0,2)=(-15.d0 +15.d0*alfa)  /64.d0
-    coefb(0,3)=(  5.d0 - 5.d0*alfa)  /16.d0
-    coefb(0,4)=(-15.d0 +15.d0*alfa)  /64.d0
-    coefb(0,5)=(  3.d0 - 3.d0*alfa)  /32.d0
-    coefb(0,6)=( -1.d0 + 1.d0*alfa)  /64.d0
+    ! 2nd-order asymmetry scheme for point 0
+    coefb(0,0)=( 3.d0 +alfa)  /4.d0
+    coefb(0,1)=( 1.d0 +alfa)  /2.d0
+    coefb(0,2)=(-1.d0 +alfa)  /4.d0
+    coefb(0,3)=0.d0
+    coefb(0,4)=0.d0
+    coefb(0,5)=0.d0
+    coefb(0,6)=0.d0
     coefb(0,7)=0.d0
     coefb(0,8)=0.d0
+
+    ! ! 6-order asymmetry scheme for point 0
+    ! coefb(0,0)=( 63.d0 + 1.d0*alfa)  /64.d0
+    ! coefb(0,1)=(  3.d0 +29.d0*alfa)  /32.d0
+    ! coefb(0,2)=(-15.d0 +15.d0*alfa)  /64.d0
+    ! coefb(0,3)=(  5.d0 - 5.d0*alfa)  /16.d0
+    ! coefb(0,4)=(-15.d0 +15.d0*alfa)  /64.d0
+    ! coefb(0,5)=(  3.d0 - 3.d0*alfa)  /32.d0
+    ! coefb(0,6)=( -1.d0 + 1.d0*alfa)  /64.d0
+    ! coefb(0,7)=0.d0
+    ! coefb(0,8)=0.d0
     !
     ! explicit filter
     coef4be(0,0)=(15.d0 )/16.d0
@@ -2685,6 +2560,7 @@ module commfunc
     !
   end subroutine ptds_ini
   !
+  ! filter upto the inner part of halo nodes
   subroutine ptdsfilter_ini(cc,af,dim,ntype)
     !
     integer,intent(in) :: dim,ntype
@@ -2698,114 +2574,62 @@ module commfunc
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
     ! local data
-    integer :: l
+    integer :: l,i_0,i_m
     real(8) :: af_1,af_2,af_3
     !
-    allocate(cc(1:2,0:dim))
+    select case (ntype)
+       case (1)
+         ! the block with boundary at i==0
+         i_0=0
+         i_m=dim+hm
+       case (2)
+         ! the block with boundary at i==im
+         i_0=-hm
+         i_m=dim
+       case (3)
+         ! inner block
+         i_0=-hm
+         i_m=dim+hm
+       case (4)
+         ! the block with boundary at i=0 and i=im
+         i_0=0
+         i_m=dim
+       case default
+         print*, ' !! error in subroutine ptdsfilter_ini !'
+    end select
+
+    allocate(cc(1:2,i_0:i_m))
     !
     if(dim==0) then
       cc=0.d0
       return
     endif
-    !
-    af_1=af
+
+    af_1=0.d0
     af_2=af
     af_3=af
+    
+    cc(1,i_0)=1.d0
+    cc(2,i_0)=af_1/cc(1,i_0)
     !
-    if(ntype==1) then
-      ! the block with boundary at i==0
-      !
-      cc(1,0)=1.d0
-      cc(2,0)=af_1/cc(1,0)
-      !
-      cc(1,1)=1.d0-af_2*cc(2,0)
-      cc(2,1)=af_2/cc(1,1)
-      !
-      cc(1,2)=1.d0-af_3*cc(2,1)
-      !
-      do l=2,dim-3
-        cc(2,l)=af_3/cc(1,l)
-        cc(1,l+1)=1.d0-af_3*cc(2,l)
-      end do
-      cc(2,dim-2)=af_3/cc(1,dim-2)
-      !
-      cc(1,dim-1)=1.d0-af_3*cc(2,dim-2)
-      cc(2,dim-1)=af_3/cc(1,dim-1)
-      !
-      cc(1,dim)=1.d0
-      !
-    elseif(ntype==2) then
-      ! the block with boundary at i==im
-      !
-      cc(1,0)=1.d0
-      cc(2,0)=0.d0
-      !
-      cc(1,1)=1.d0-af_3*cc(2,0)
-      cc(2,1)=af_3/cc(1,1)
-      !
-      cc(1,2)=1.d0-af_3*cc(2,1)
-      !
-      do l=2,dim-3
-        cc(2,l)=af_3/cc(1,l)
-        cc(1,l+1)=1.d0-af_3*cc(2,l)
-      end do
-      cc(2,dim-2)=af_3/cc(1,dim-2)
-      !
-      cc(1,dim-1)=1.d0-af_2*cc(2,dim-2)
-      cc(2,dim-1)=af_2/cc(1,dim-1)
-      !
-      cc(1,dim)=1.d0-af_1*cc(2,dim-1)
-    elseif(ntype==3) then
-      ! inner block
-      !
-      cc(1,0)=1.d0
-      cc(2,0)=0.d0
-      !
-      cc(1,1)=1.d0-af_3*cc(2,0)
-      cc(2,1)=af_3/cc(1,1)
-      !
-      cc(1,2)=1.d0-af_3*cc(2,1)
-      !
-      do l=2,dim-3
-        cc(2,l)=af_3/cc(1,l)
-        cc(1,l+1)=1.d0-af_3*cc(2,l)
-        ! if(mpirank==0) print*,l,cc(2,l),cc(1,l+1)
-      end do
-      cc(2,dim-2)=af_3/cc(1,dim-2)
-      !
-      cc(1,dim-1)=1.d0-af_3*cc(2,dim-2)
-      cc(2,dim-1)=af_3/cc(1,dim-1)
-      !
-      cc(1,dim)=1.d0
-      !
-    elseif(ntype==4) then
-      ! the block with boundary at i=0 and i=im
-      !
-      cc(1,0)=1.d0
-      cc(2,0)=af_1/cc(1,0)
-      !
-      cc(1,1)=1.d0-af_2*cc(2,0)
-      cc(2,1)=af_2/cc(1,1)
-      !
-      cc(1,2)=1.d0-af_3*cc(2,1)
-      !
-      do l=2,dim-3
-        cc(2,l)=af_3/cc(1,l)
-        cc(1,l+1)=1.d0-af_3*cc(2,l)
-      end do
-      cc(2,dim-2)=af_3/cc(1,dim-2)
-      !
-      cc(1,dim-1)=1.d0-af_2*cc(2,dim-2)
-      cc(2,dim-1)=af_2/cc(1,dim-1)
-      !
-      cc(1,dim)=1.d0-af_1*cc(2,dim-1)
-    else
-      print*, ' !! error in subroutine ptds_ini !'
-      stop
-    end if
+    cc(1,i_0+1)=1.d0-af_2*cc(2,i_0)
+    cc(2,i_0+1)=af_2/cc(1,i_0+1)
     !
+    cc(1,i_0+2)=1.d0-af_3*cc(2,i_0+1)
+    !
+    do l=i_0+2,i_m-3
+      cc(2,l)=af_3/cc(1,l)
+      cc(1,l+1)=1.d0-af_3*cc(2,l)
+    end do
+    cc(2,i_m-2)=af_3/cc(1,i_m-2)
+    !
+    cc(1,i_m-1)=1.d0-af_2*cc(2,i_m-2)
+    cc(2,i_m-1)=af_2/cc(1,i_m-1)
+
+    cc(1,i_m)=1.d0-af_1*cc(2,i_m-1)
+
     cc(1,:)=1.d0/cc(1,:)
-    !
+
     return
     !
   end subroutine ptdsfilter_ini
@@ -3466,7 +3290,77 @@ module commfunc
     return
     !
   end function ptds4d_rhs
-  !!
+
+  function ptds_filter_cal(bd,af,cc,dim,ntype) result(xd)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(3),bd(:),cc(:,:)
+    real(8) :: xd(0:dim)
+    !
+    !
+    ! local data
+    integer :: l,i_0,i_m
+    real(8),allocatable :: yd(:),cc2(:,:),bd2(:),xd2(:)
+    !
+    !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(3): input dat
+    ! bd: input array
+    ! xd: output array
+    ! cc: input array
+    ! dim: input dat
+    ! l, yd: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+    select case (ntype)
+       case (1)
+         ! the block with boundary at i==0
+         i_0=0
+         i_m=dim+hm
+       case (2)
+         ! the block with boundary at i==im
+         i_0=-hm
+         i_m=dim
+       case (3)
+         ! inner block
+         i_0=-hm
+         i_m=dim+hm
+       case (4)
+         ! the block with boundary at i=0 and i=im
+         i_0=0
+         i_m=dim
+       case default
+         print*, ' !! error in subroutine ptds_filter_cal !'
+    end select
+
+    allocate ( yd(i_0:i_m),cc2(1:2,i_0:i_m),bd2(i_0:i_m),xd2(i_0:i_m) )
+
+    bd2=bd
+    cc2=cc
+    !
+    yd(i_0)=bd2(i_0)*cc2(1,i_0)
+    yd(i_0+1)=(bd2(i_0+1)-af(2)*yd(i_0))*cc2(1,i_0+1)
+    do l=i_0+2,i_m-2
+      yd(l)=(bd2(l)-af(3)*yd(l-1))*cc2(1,l)
+    end do
+    yd(i_m-1)=(bd2(i_m-1)-af(2)*yd(i_m-2))*cc2(1,i_m-1)
+    yd(i_m)=(bd2(i_m)-af(1)*yd(i_m-1))*cc2(1,i_m)
+
+    !
+    xd2(i_m)=yd(i_m)
+    do l=i_m-1,0,-1
+      xd2(l)=yd(l)-cc2(2,l)*xd2(l+1)
+    end do
+
+    xd(0:dim)=xd2(0:dim)
+
+    deallocate( yd,cc2,bd2,xd2)
+    !
+    return
+
+  end function ptds_filter_cal
+
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to solve the tridiagonal martix in the 
   ! programme with two layer of boundary scheme:
