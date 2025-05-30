@@ -640,11 +640,9 @@ module readwrite
       read(strings(4),*)spg_jm
       read(strings(5),*)spg_k0
       read(strings(6),*)spg_km
-      print*, spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
-      if(size(strings)>6 .or. trim(strings(7))=='layer' .or. trim(strings(7))=='circl') then
+      spg_def='layer'
+      if(size(strings)>6) then
         read(strings(7),*)spg_def
-      else
-        spg_def='layer'
       endif
       read(fh,'(/)')
       read(fh,'(A)')gridfile

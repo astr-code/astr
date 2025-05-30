@@ -3938,7 +3938,130 @@ module commfunc
   !+-------------------------------------------------------------------+
   !| The end of the function isidenmar.                                |
   !+-------------------------------------------------------------------+
-  !
+  
+    !+-------------------------------------------------------------------+
+    !| This subroutine is a preprocessor of the Thomas algorithm.        |
+    !+-------------------------------------------------------------------+
+    !|ref: https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm    |
+    !+-------------------------------------------------------------------+
+    !| CHANGE RECORD                                                     |
+    !| -------------                                                     |
+    !| 27-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
+    !+-------------------------------------------------------------------+
+    subroutine tridiagonal_thomas_proprocess(a,c,ac)
+        
+        real(8),intent(in) :: a(:),c(:)
+
+        real(8) :: ac(3,size(a))
+
+        integer :: i
+
+        ac(1,1)=c(1)
+
+        do i=2,size(a)
+
+            ac(1,i)=c(i)/(1.d0-a(i)*ac(1,i-1))
+
+            ac(2,i)=1.d0/(1.d0-a(i)*ac(1,i-1))
+
+            ac(3,i)=a(i)/(1.d0-a(i)*ac(1,i-1))
+
+        enddo
+
+        return
+
+    end subroutine tridiagonal_thomas_proprocess
+    !+-------------------------------------------------------------------+
+    !| The end of the subroutine tridiagonal_thomas_proprocess.          |
+    !+-------------------------------------------------------------------+
+
+    !+-------------------------------------------------------------------+
+    !| This is a standard tridiagonal matrix algorithm, also known as the|
+    !| Thomas algorithm to solve tridiagonal systems of equations.       |
+    !+-------------------------------------------------------------------+
+    !|ref: https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm    |
+    !+-------------------------------------------------------------------+
+    !| CHANGE RECORD                                                     |
+    !| -------------                                                     |
+    !| 25-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
+    !| 26-05-2025  | Separate the solver part by J. Fang @ Liverpool.    |
+    !+-------------------------------------------------------------------+
+    function tridiagonal_thomas_solver(ac,d) result(x)
+        
+        ! arguments
+        real(8),intent(in) :: ac(:,:)
+        real(8) :: d(:)
+        real(8) :: x(size(d))
+
+        ! local data 
+        integer :: i,n
+
+        n=size(d)
+
+        do i=2,n
+            d(i)=d(i)*ac(2,i)-d(i-1)*ac(3,i)
+        enddo
+
+        x(n)=d(n)
+        do i=n-1,1,-1
+            x(i)=d(i)-ac(1,i)*x(i+1)
+        enddo
+
+        return
+
+    end function tridiagonal_thomas_solver
+    !+-------------------------------------------------------------------+
+    !| The end of the function tridiagonal_thomas_solver.                |
+    !+-------------------------------------------------------------------+
+
+    !+-------------------------------------------------------------------+
+    !| This is a standard tridiagonal matrix algorithm, also known as the|
+    !| Thomas algorithm to solve tridiagonal systems of equations.       |
+    !+-------------------------------------------------------------------+
+    !|ref: https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm    |
+    !+-------------------------------------------------------------------+
+    !| CHANGE RECORD                                                     |
+    !| -------------                                                     |
+    !| 25-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
+    !+-------------------------------------------------------------------+
+    function tridiagonal_thomas(a,c,d) result(x)
+        
+        ! arguments
+        real(8),intent(in) :: a(:),c(:),d(:)
+        real(8) :: x(size(d))
+
+        ! local data 
+        integer :: i,n
+        real(8),allocatable :: cc(:),dd(:)
+
+        n=size(d)
+
+        allocate(cc(n),dd(n))
+
+        cc(1)=c(1)
+        dd(1)=d(1)
+        do i=2,n
+
+            cc(i)=c(i)/(1.d0-a(i)*cc(i-1))
+
+            dd(i)=(d(i)-a(i)*dd(i-1))/(1.d0-a(i)*cc(i-1))
+
+        enddo
+
+        x(n)=dd(n)
+        do i=n-1,1,-1
+            x(i)=dd(i)-cc(i)*x(i+1)
+        enddo
+
+        deallocate(cc,dd)
+
+        return
+
+    end function tridiagonal_thomas
+    !+-------------------------------------------------------------------+
+    !| The end of the function tridiagonal_thomas.                       |
+    !+-------------------------------------------------------------------+
+
 end module commfunc
 !+---------------------------------------------------------------------+
 !| The end of the module commfunc.                                     |
