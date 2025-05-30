@@ -120,7 +120,7 @@ module test
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie,ia
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use commfunc,  only : ddfc,recons
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,psum,pmax
     use comsolver, only : alfa_con,cci,ccj,cck
@@ -223,10 +223,11 @@ module test
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use commfunc,  only : ddfc,recons
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,jrkm,jrk
     use comsolver, only : alfa_con,fci,fcj,fck
+    use filter,    only : compact_filter
     !
     ! local data
     integer :: i,j,k,n
@@ -251,7 +252,8 @@ module test
     !
     allocate(dq(0:im))
     !
-    dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
+    ! dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
+    dq(:)=compact_filter(f=q(:,0,0,1),ntype=npdci,dim=im,dir=1)
 
     open(18,file='testout/filterx'//mpirankname//'.dat')
     write(18,'(3(1X,A15))')'x','q','q~'
@@ -278,8 +280,8 @@ module test
     !
     allocate(dq(0:jm))
     !
-    dq(:)=spafilter10(q(0,:,0,1),npdcj,jm,alfa_filter,fcj)
-    !
+    dq(:)=compact_filter(f=q(0,:,0,1),ntype=npdcj,dim=jm,dir=2)
+    
     open(18,file='testout/filtery'//mpirankname//'.dat')
     write(18,'(3(1X,A15))')'y','q','q~'
     write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
@@ -303,7 +305,7 @@ module test
     !
     allocate(dq(0:km))
     !
-    dq(:)=spafilter10(q(0,0,:,1),npdck,km,alfa_filter,fck)
+    dq(:)=compact_filter(f=q(0,0,:,1),ntype=npdck,dim=km,dir=3)
     !
     open(18,file='testout/filterz'//mpirankname//'.dat')
     write(18,'(3(1X,A15))')'y','q','q~'
@@ -320,7 +322,7 @@ module test
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie,hm,difschm
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons,spafilter10,spafilter6exp
+    use commfunc,  only : ddfc,recons
     use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,ptime

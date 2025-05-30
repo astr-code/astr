@@ -33,9 +33,9 @@ module comsolver
     !
     use commvar, only : numq,npdci,npdcj,npdck,               &
                         conschm,difschm,lfilter,alfa_filter,hm,turbmode
-    use commfunc,only : coeffcompac,ptds_ini,ptdsfilter_ini,           &
-                        ptds_aym_ini,genfilt10coef
+    use commfunc,only : coeffcompac,ptds_ini,ptds_aym_ini
     use models,  only : init_komegasst
+    use filter,  only : compact_filter_initiate,filter_coefficient_cal
     !
     ! local data
     integer :: nscheme,i
@@ -81,14 +81,12 @@ module comsolver
     endif
     !
     if(lfilter) then
-      !
-      call ptdsfilter_ini(fci,alfa_filter,im,npdci)
-      call ptdsfilter_ini(fcj,alfa_filter,jm,npdcj)
-      call ptdsfilter_ini(fck,alfa_filter,km,npdck)
-      !
+      call compact_filter_initiate(ntype=npdci,dim=im,dir=1)
+      call compact_filter_initiate(ntype=npdcj,dim=jm,dir=2)
+      call compact_filter_initiate(ntype=npdck,dim=km,dir=3)
     endif
     !
-    call genfilt10coef(alfa_filter)
+    call filter_coefficient_cal(alfa_filter)
     !
     if(trim(turbmode)=='k-omega') then
       call init_komegasst
@@ -469,7 +467,7 @@ module comsolver
     use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
                          alfa_filter,ndims,is,ie,js,je,ks,ke,turbmode
     use commarray,only : q
-    use commfunc, only : spafilter10,spafilter6exp
+    use filter,   only : compact_filter
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -494,19 +492,11 @@ module comsolver
       phi(:,:)=q(:,j,k,:)
       !
       do n=1,numq
-        fph(:,n)=spafilter10(phi(:,n),npdci,im,alfa_filter,fci)
+        fph(:,n)=compact_filter(f=phi(:,n),ntype=npdci,dim=im,dir=1)
         ! fph(:,n)=spafilter6exp(phi(:,n),npdci,im)
       enddo
       !
       q(0:im,j,k,:)=fph(0:im,:)
-      !
-      ! if(npdci==1) then
-      !   q(2:im,j,k,:)=fph(2:im,:)
-      ! elseif(npdci==2) then
-      !   q(0:im-2,j,k,:)=fph(0:im-2,:)
-      ! elseif(npdci==3) then
-      !   q(0:im,j,k,:)=fph(0:im,:)
-      ! endif
       !
     end do
     end do
@@ -530,20 +520,10 @@ module comsolver
         phi(:,:)=q(i,:,k,:)
         !
         do n=1,numq
-          fph(:,n)=spafilter10(phi(:,n),npdcj,jm,alfa_filter,fcj)
-          ! fph(:,n)=spafilter6exp(phi(:,n),npdcj,jm)
+          fph(:,n)=compact_filter(f=phi(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !
         q(i,0:jm,k,:)=fph(0:jm,:)
-        !
-        ! if(npdcj==1) then
-        !   q(i,2:jm,k,:)=fph(2:jm,:)
-        ! elseif(npdcj==2) then
-        !   q(i,0:jm-2,k,:)=fph(0:jm-2,:)
-        ! elseif(npdcj==3) then
-        !   q(i,0:jm,k,:)=fph(0:jm,:)
-        ! endif
-        !
         !
       end do
       end do
@@ -570,7 +550,7 @@ module comsolver
         phi(:,:)=q(i,j,:,:)
         !
         do n=1,numq
-          fph(:,n)=spafilter10(phi(:,n),npdck,km,alfa_filter,fck,lfft=lfftk)
+          fph(:,n)=compact_filter(f=phi(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !
         q(i,j,0:km,:)=fph
@@ -585,13 +565,6 @@ module comsolver
     ! end filter in k direction.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
-    !
-    ! call filter2e(q(:,:,:,1))
-    ! call filter2e(q(:,:,:,2))
-    ! call filter2e(q(:,:,:,3))
-    ! call filter2e(q(:,:,:,4))
-    ! call filter2e(q(:,:,:,5))
-    ! call filter2e(q(:,:,:,6))
     if(trim(turbmode)=='k-omega') then
       call filter2e(q(:,:,:,7))
     endif
@@ -705,7 +678,6 @@ module comsolver
     use commarray,only: sponge_damp_coef_i0,sponge_damp_coef_im, &
                         sponge_damp_coef_j0,sponge_damp_coef_jm, &
                         sponge_damp_coef_k0,sponge_damp_coef_km,x,q
-    use commfunc, only : spafilter10
     !
     integer :: i,j,k,n
     real(8) :: var1
