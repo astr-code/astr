@@ -14,6 +14,7 @@ add_executable(astr
                     commvar.F90
                     constdef.F90
                     fdnn.F90
+                    filter.F90
                     fludyna.F90
                     geom.F90
                     gridgeneration.F90

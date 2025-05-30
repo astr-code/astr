@@ -3664,7 +3664,8 @@ module bc
     !
     use commvar,   only : xmin,xmax,ymin,ymax,mach
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
-    use commfunc,  only : deriv,ddfc,spafilter6exp
+    use commfunc,  only : deriv,ddfc
+    use filter,    only : spafilter6exp
     !
     ! arguments
     integer,intent(in) :: ndir
@@ -4687,7 +4688,8 @@ module bc
     !
     use commvar,   only : xmin,xmax,mach,nondimen
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
-    use commfunc,  only : deriv,ddfc,spafilter6exp
+    use commfunc,  only : deriv,ddfc
+    use filter,    only : spafilter6exp
     use parallel,  only : psum,mpi_imax
 #ifdef COMB
     use thermchem, only : aceval

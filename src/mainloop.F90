@@ -48,10 +48,11 @@ module mainloop
     integer :: hours,minus,secod
     logical,save :: firstcall = .true.
     integer,dimension(8) :: value
-    real(8) :: time_total,time_dowhile
+    real(8) :: time_total,time_dowhile,time_per_loop,time_save
     !
     time_start=ptime()
     time_total  =0.d0
+    time_save   =0.d0
     time_dowhile=0.d0
     !
     nstep0=nstep
@@ -72,19 +73,17 @@ module mainloop
     fhand_err=get_unit()
     open(fhand_err,file='errnode.log')
     !
-    if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
-                              message='init file')
-    !
+    ! if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
+    !                           message='init file')
+    
+    time_beg=ptime()
+
     do while(nstep<=maxstep)
-      !
-      time_beg=ptime()
-      !
+
       call crashcheck
-      !
+
       call time_integration_rk
-      !
-      time_dowhile=time_dowhile+ptime()-time_beg
-      !
+
       if(loop_counter==feqchkpt .or. loop_counter==0) then
         !
         call readcont
@@ -93,71 +92,77 @@ module mainloop
         !
         call cflcal(deltat)
         !
+        time_per_loop=ptime()-time_start
+
         if(lio) then
-          !
-          write(*,'(A,I0)',advance='no')'  ** next checkpoint at step : ',nxtchkpt
-          !
-          if(loop_counter==0) then
-            write(*,*)''
-          else
-            !
-            time_next_step=(ctime(2)-ctime(6))*dble(feqchkpt)/dble(nstep-nsrpt)
-            hours=int(time_next_step/3600.d0)
-            minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
-            secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
-            !
-            write(*,'(3(A,I0),A)',advance='no')', after ',hours,'h:',  &
-                                               minus,'m:',secod,'s'
-            call date_and_time(VALUES=value)
-            !
-            secod=secod+value(7)
-            if(secod>=60) then
-              secod=secod-60
-              minus=minus+1
-            endif
-            minus=minus+value(6)
-            if(minus>=60) then
-              minus=minus-60
-              hours=hours+1
-            endif
-            hours=hours+value(5)
-            if(hours>=24) then
-              hours=hours-24
-            endif
-            !
-            write(*,'(3(A,I0))')', estimated at ',hours,':',minus,':',secod
-            !
-            time_next_step=ctime(2)*dble(maxstep-nstep)/dble(nstep-nsrpt)
-            hours=int(time_next_step/3600.d0)
-            minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
-            secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
-            !
-            write(*,'(3(A,I0),A)',advance='no')'  ** job ends after ', &
-                                        hours,'h:',minus,'m:',secod,'s'
-            call date_and_time(VALUES=value)
-            !
-            secod=secod+value(7)
-            if(secod>=60) then
-              secod=secod-60
-              minus=minus+1
-            endif
-            minus=minus+value(6)
-            if(minus>=60) then
-              minus=minus-60
-              hours=hours+1
-            endif
-            hours=hours+value(5)
-            if(hours>=24) then
-              hours=hours-24
-            endif
-            !
-            write(*,'(3(A,I0))')', estimated at ',hours,':',minus,':',secod
-            !
-            nsrpt=nstep
-            !
-            if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
-                              message='main loop')
-          endif
+
+          write(*,'(A,I0,A,F16.8,A)')' ** time cost at step',nstep,':',time_per_loop-time_save,'s'
+
+          time_save=time_per_loop
+
+          ! write(*,'(A,I0)',advance='no')'  ** next checkpoint at step : ',nxtchkpt
+          ! !
+          ! if(loop_counter==0) then
+          !   write(*,*)''
+          ! else
+          !   !
+          !   time_next_step=(ctime(2)-ctime(6))*dble(feqchkpt)/dble(nstep-nsrpt)
+          !   hours=int(time_next_step/3600.d0)
+          !   minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
+          !   secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
+          !   !
+          !   write(*,'(3(A,I0),A)',advance='no')', after ',hours,'h:',  &
+          !                                      minus,'m:',secod,'s'
+          !   call date_and_time(VALUES=value)
+          !   !
+          !   secod=secod+value(7)
+          !   if(secod>=60) then
+          !     secod=secod-60
+          !     minus=minus+1
+          !   endif
+          !   minus=minus+value(6)
+          !   if(minus>=60) then
+          !     minus=minus-60
+          !     hours=hours+1
+          !   endif
+          !   hours=hours+value(5)
+          !   if(hours>=24) then
+          !     hours=hours-24
+          !   endif
+          !   !
+          !   write(*,'(3(A,I0))')', estimated at ',hours,':',minus,':',secod
+          !   !
+          !   time_next_step=ctime(2)*dble(maxstep-nstep)/dble(nstep-nsrpt)
+          !   hours=int(time_next_step/3600.d0)
+          !   minus=int((time_next_step-3600.d0*dble(hours))/60.d0)
+          !   secod=time_next_step-3600.d0*dble(hours)-60.d0*dble(minus)
+          !   !
+          !   write(*,'(3(A,I0),A)',advance='no')'  ** job ends after ', &
+          !                               hours,'h:',minus,'m:',secod,'s'
+          !   call date_and_time(VALUES=value)
+          !   !
+          !   secod=secod+value(7)
+          !   if(secod>=60) then
+          !     secod=secod-60
+          !     minus=minus+1
+          !   endif
+          !   minus=minus+value(6)
+          !   if(minus>=60) then
+          !     minus=minus-60
+          !     hours=hours+1
+          !   endif
+          !   hours=hours+value(5)
+          !   if(hours>=24) then
+          !     hours=hours-24
+          !   endif
+          !   !
+          !   write(*,'(3(A,I0))')', estimated at ',hours,':',minus,':',secod
+          !   !
+          !   nsrpt=nstep
+          !   !
+          !   if(lio .and. lreport .and. ltimrpt) call timereporter(routine='steploop',timecost=time_dowhile,  &
+          !                     message='main loop')
+          ! endif
           !
         endif
         !
@@ -183,7 +188,7 @@ module mainloop
     !
     time_total=ptime()-time_start
     !
-    if(lio .and. lreport .and. ltimrpt) call timereporter(timecost=time_total,mode='final')
+    ! if(lio .and. lreport .and. ltimrpt) call timereporter(timecost=time_total,mode='final')
     !
     ! call errest
     !

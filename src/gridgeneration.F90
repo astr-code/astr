@@ -37,7 +37,7 @@ module gridgeneration
       elseif(trim(flowtype)=='hit') then
         call gridcube(2.d0*pi,2.d0*pi,2.d0*pi)
       elseif(trim(flowtype)=='2dvort') then
-        call gridcube(20.d0,10.d0,1.d0)
+        call gridcube(20.d0,5.d0,1.d0)
       elseif(trim(flowtype)=='accutest') then
         call gridcube(10.d0,1.d0,1.d0)
       elseif(trim(flowtype)=='shuosher') then
