@@ -106,6 +106,59 @@ module filter
     !+-------------------------------------------------------------------+
 
     !+-------------------------------------------------------------------+
+    !| This function is to apply compact low-pass filter to a input array|
+    !+-------------------------------------------------------------------+
+    !| CHANGE RECORD                                                     |
+    !| -------------                                                     |
+    !| 25-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
+    !+-------------------------------------------------------------------+
+    function compact_filter(f,ntype,dim,dir) result(ff)
+
+        use commvar, only : hm
+        use commfunc,only : tridiagonal_thomas_solver
+
+        ! arguments
+        integer,intent(in) :: ntype,dim,dir
+        real(8),intent(in) :: f(-hm:dim+hm)
+        real(8) :: ff(0:dim)
+
+        ! local data
+        integer :: l,i_0,i_m
+        real(8) :: alpha,var0,var1,var2,var3,var4,var5
+        real(8),pointer :: ac(:,:)
+        real(8),allocatable :: d(:),xx(:)
+
+        if(dir==1) then
+            i_0=ifs
+            i_m=ife
+            ac=>cfci
+        elseif(dir==2) then
+            i_0=jfs
+            i_m=jfe
+            ac=>cfcj
+        elseif(dir==3) then
+            i_0=kfs
+            i_m=kfe
+            ac=>cfck
+        endif
+
+        d=compact_filter_rhs(f,ntype,dim,dir)
+
+        allocate(xx(i_0:i_m))
+
+        xx=tridiagonal_thomas_solver(ac,d)
+
+        ff(0:dim)=xx(0:dim)
+
+        if(ntype==1 .or. ntype==4) ff(0)=f(0)
+        if(ntype==2 .or. ntype==4) ff(dim)=f(dim)
+
+    end function compact_filter
+    !+-------------------------------------------------------------------+
+    !| The end of the function compact_filter.                           |
+    !+-------------------------------------------------------------------+
+
+    !+-------------------------------------------------------------------+
     !| This function is to calculate R.H.S of the compact filter         |
     !+-------------------------------------------------------------------+
     !| CHANGE RECORD                                                     |
@@ -238,59 +291,6 @@ module filter
     end function compact_filter_rhs
     !+-------------------------------------------------------------------+
     !| The end of the function compact_filter_initiate.                  |
-    !+-------------------------------------------------------------------+
-
-    !+-------------------------------------------------------------------+
-    !| This function is to apply compact low-pass filter to a input array|
-    !+-------------------------------------------------------------------+
-    !| CHANGE RECORD                                                     |
-    !| -------------                                                     |
-    !| 25-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
-    !+-------------------------------------------------------------------+
-    function compact_filter(f,ntype,dim,dir) result(ff)
-
-        use commvar, only : hm
-        use commfunc,only : tridiagonal_thomas_solver
-
-        ! arguments
-        integer,intent(in) :: ntype,dim,dir
-        real(8),intent(in) :: f(-hm:dim+hm)
-        real(8) :: ff(0:dim)
-
-        ! local data
-        integer :: l,i_0,i_m
-        real(8) :: alpha,var0,var1,var2,var3,var4,var5
-        real(8),pointer :: ac(:,:)
-        real(8),allocatable :: d(:),xx(:)
-
-        if(dir==1) then
-            i_0=ifs
-            i_m=ife
-            ac=>cfci
-        elseif(dir==2) then
-            i_0=jfs
-            i_m=jfe
-            ac=>cfcj
-        elseif(dir==3) then
-            i_0=kfs
-            i_m=kfe
-            ac=>cfck
-        endif
-
-        d=compact_filter_rhs(f,ntype,dim,dir)
-
-        allocate(xx(i_0:i_m))
-
-        xx=tridiagonal_thomas_solver(ac,d)
-
-        ff(0:dim)=xx(0:dim)
-
-        if(ntype==1 .or. ntype==4) ff(0)=f(0)
-        if(ntype==2 .or. ntype==4) ff(dim)=f(dim)
-
-    end function compact_filter
-    !+-------------------------------------------------------------------+
-    !| The end of the function compact_filter.                           |
     !+-------------------------------------------------------------------+
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

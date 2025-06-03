@@ -62,11 +62,11 @@ program astr
     !
     call gridgen
     !
+    call solvrinit
+    !
     call geomcal
     !
     call spongelayerini
-    !
-    call solvrinit
     !
     call flowinit
     !

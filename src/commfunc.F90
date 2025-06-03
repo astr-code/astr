@@ -11,10 +11,9 @@ module commfunc
   use parallel, only: mpirank,mpistop,lio,lreport,ptime
   use constdef
   use utility,  only : timereporter
-  !
+
   implicit none
   !
-  ! include 'fftw3.f'
   !
   interface ddfc
     module procedure ddfc_basic
@@ -311,18 +310,18 @@ module commfunc
           ddfc=ptds_cal(b,af,cc,dim,ntype,timerept=.true.)
         elseif(stype(4:4)=='e') then
           !
-          if(nscheme/100==8) then
-            ddfc=diff8ec(f,dim,nscheme,ntype)
-          elseif(nscheme/100==6) then
-            ddfc=diff6ec(f,dim,nscheme,ntype)
-          elseif(nscheme/100==4) then
-            ddfc=diff4ec(f,dim,nscheme,ntype)
-          elseif(nscheme/100==2) then
-            ddfc=diff2ec(f,dim,nscheme,ntype)
-          else
-            print*,' !! nscheme',nscheme
-            stop ' !! scheme not defined @ ddfc_basic'
-          endif
+          ! if(nscheme/100==8) then
+          !   ddfc=diff8ec(f,dim,nscheme,ntype)
+          ! elseif(nscheme/100==6) then
+          !   ddfc=diff6ec(f,dim,nscheme,ntype)
+          ! elseif(nscheme/100==4) then
+          !   ddfc=diff4ec(f,dim,nscheme,ntype)
+          ! elseif(nscheme/100==2) then
+          !   ddfc=diff2ec(f,dim,nscheme,ntype)
+          ! else
+          !   print*,' !! nscheme',nscheme
+          !   stop ' !! scheme not defined @ ddfc_basic'
+          ! endif
         else
           !
           print*,' !! stype',stype(4:4)
@@ -552,6 +551,13 @@ module commfunc
                     32.d0*(vin(i+3)-vin(i-3))-                         &
                      3.d0*(vin(i+4)-vin(i-4)))*num1d840
       enddo
+    elseif(ntype==4) then
+      do i=0,dim
+        vout(i)  =(672.d0*(vin(i+1)-vin(i-1))-                         &
+                   168.d0*(vin(i+2)-vin(i-2))+                         &
+                    32.d0*(vin(i+3)-vin(i-3))-                         &
+                     3.d0*(vin(i+4)-vin(i-4)))*num1d840
+      enddo
     else
       print*,' !! ntype=',ntype
       stop ' !! errpr 3 @ diff6c'
@@ -559,64 +565,6 @@ module commfunc
     !
   end function diff8ec
   !
-  function diff6ec(vin,dim,ns,ntype) result(vout)
-    !
-    integer,intent(in) :: dim,ns,ntype
-    real(8),intent(in) :: vin(-hm:dim+hm)
-    real(8) :: vout(0:dim)
-    !
-    ! local data
-    integer :: i
-    !
-    if(ntype==1) then
-      !
-      if(ns==642) then
-        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
-        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
-        vout(1)=0.5d0*(vin(2)-vin(0))
-        vout(2)=num2d3*(vin(3)-vin(1))-num1d12*(vin(4)-vin(0))
-      else
-        print*,' !! ns=',ns
-        stop ' error 1 @ diff6c'
-      endif
-      !
-      do i=3,dim
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-      !
-    elseif(ntype==2) then
-      !
-      do i=0,dim-3
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-      !
-      if(ns==642) then
-        ! ns==642: 2-4-6-6-6-...-6-6-6-4-2
-        vout(dim-2) =num2d3*(vin(dim-1)-vin(dim-3))-                   &
-                    num1d12*(vin(dim)  -vin(dim-4))
-        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
-        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
-      else
-        print*,' !! ns=',ns
-        stop ' error 2 @ diff6c'
-      endif
-      !
-    elseif(ntype==3) then
-      do i=0,dim
-        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-                         &
-                  0.15d0 *(vin(i+2)-vin(i-2))+                         &
-                  num1d60*(vin(i+3)-vin(i-3))
-      enddo
-    else
-      print*,' !! ntype=',ntype
-      stop ' !! errpr 3 @ diff6c'
-    endif
-    !
-  end function diff6ec
   !
   function diff4ec(vin,dim,ns,ntype) result(vout)
     !

@@ -36,49 +36,60 @@ module comsolver
     use commfunc,only : coeffcompac,ptds_ini,ptds_aym_ini
     use models,  only : init_komegasst
     use filter,  only : compact_filter_initiate,filter_coefficient_cal
+    use derivative, only : compact_scheme_initiate,fds,compact_central, &
+                           explicit_central
     !
     ! local data
     integer :: nscheme,i
     !
-    ! convectional term
-    if(conschm(4:4)=='c') then
+    ! convectional and diffusional term
+    if(difschm(4:4)=='e') then
       ! a compact scheme is used
-      !
-      read(conschm(1:3),*) nscheme
-      !
-      alfa_con=coeffcompac(nscheme)
-      !
-      if(mod(nscheme/100,2)==0) then
-        ! symmetrical central scheme
-        call ptds_ini(cci,alfa_con,im,npdci)
-        call ptds_ini(ccj,alfa_con,jm,npdcj)
-        call ptds_ini(cck,alfa_con,km,npdck)
-      else
-        ! asymmetrical reconstruction upwind scheme
-        call ptds_aym_ini(uci,alfa_con,im,npdci,windir='+')
-        call ptds_aym_ini(ucj,alfa_con,jm,npdcj,windir='+')
-        call ptds_aym_ini(uck,alfa_con,km,npdck,windir='+')
-        !
-        call ptds_aym_ini(bci,alfa_con,im,npdci,windir='-')
-        call ptds_aym_ini(bcj,alfa_con,jm,npdcj,windir='-')
-        call ptds_aym_ini(bck,alfa_con,km,npdck,windir='-')
-      endif
-      !
-    endif
-    !
-    ! diffusional term
-    if(difschm(4:4)=='c') then
-      ! a compact scheme is used
-      !
+
+      allocate(explicit_central :: fds)
+
+    elseif(difschm(4:4)=='c') then
+
       read(difschm(1:3),*) nscheme
-      !
-      alfa_dif=coeffcompac(nscheme)
-      !
-      call ptds_ini(dci,alfa_dif,im,npdci)
-      call ptds_ini(dcj,alfa_dif,jm,npdcj)
-      call ptds_ini(dck,alfa_dif,km,npdck)
-      !
+
+      call compact_scheme_initiate(scheme=nscheme,ntype=npdci,dim=im,dir=1)
+      call compact_scheme_initiate(scheme=nscheme,ntype=npdcj,dim=jm,dir=2)
+      call compact_scheme_initiate(scheme=nscheme,ntype=npdck,dim=km,dir=3)
+
+      allocate(compact_central :: fds)
+
+    else
+
+      print*,' !! error !! the definition of a scheme must end with c/e, e.g., 642c'
+
+      stop
+
     endif
+
+    ! Extract the scheme number from the first 3 characters of conschm
+    read(conschm(1:3), *) nscheme
+    
+    ! Check if nscheme is a multiple of 200 (i.e., using central scheme)
+    if (mod(nscheme/100, 2) == 0) then
+        ! Central scheme is used for the convection term
+    
+        ! Check for consistency between convection and diffusion schemes
+        if (trim(conschm) /= trim(difschm)) then
+
+            print *, ' !! WARNING !! The convection and diffusion terms are both central schemes,'
+            print *, ' !! WARNING !! but they are not consistently defined.'
+            print *, ' !! WARNING !! It is recommended to use the same scheme for both terms.'
+            print *, ' !! WARNING !! Otherwise, unexpected behavior may occur.'
+
+            print*,  ' ** conschm:',conschm
+            print*,  ' ** difschm:',difschm
+
+            stop
+        end if
+    end if
+
+
+
     !
     if(lfilter) then
       call compact_filter_initiate(ntype=npdci,dim=im,dir=1)
@@ -112,7 +123,7 @@ module comsolver
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims
     use commarray, only : dxi
-    use commfunc,  only : ddfc
+    use derivative, only : fds
     !
     ! arguments
     real(8),intent(in) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
@@ -131,7 +142,7 @@ module comsolver
       !
       ff(:)=var(:,j,k)
       !
-      df(:)=ddfc(ff(:),difschm,npdci,im,alfa_dif,dci)
+      df(:)=fds%central(f=ff(:),ntype=npdci,dim=im,dir=1)
       !
       dvar(:,j,k,1)=dvar(:,j,k,1)+df(:)*dxi(0:im,j,k,1,1)
       dvar(:,j,k,2)=dvar(:,j,k,2)+df(:)*dxi(0:im,j,k,1,2)
@@ -148,7 +159,7 @@ module comsolver
       !
       ff(:)=var(i,:,k)
       !
-      df(:)=ddfc(ff(:),difschm,npdcj,jm,alfa_dif,dcj)
+      df(:)=fds%central(f=ff(:),ntype=npdcj,dim=jm,dir=2)
       !
       dvar(i,:,k,1)=dvar(i,:,k,1)+df(:)*dxi(i,0:jm,k,2,1)
       dvar(i,:,k,2)=dvar(i,:,k,2)+df(:)*dxi(i,0:jm,k,2,2)
@@ -166,7 +177,7 @@ module comsolver
         !
         ff(:)=var(i,j,:)
         !
-        df(:)=ddfc(ff(:),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+        df(:)=fds%central(f=ff(:),ntype=npdck,dim=km,dir=3)
         !
         dvar(i,j,:,1)=dvar(i,j,:,1)+df(:)*dxi(i,j,0:km,3,1)
         dvar(i,j,:,2)=dvar(i,j,:,2)+df(:)*dxi(i,j,0:km,3,2)
@@ -199,7 +210,7 @@ module comsolver
                           turbmode
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,omg,tke,dtke, &
                           domg
-    use commfunc,  only : ddfc
+    use derivative, only : fds
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -250,7 +261,7 @@ module comsolver
       endif
       !
       do n=1,ncolm
-        df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+        df(:,n)=fds%central(f=ff(:,n),ntype=npdci,dim=im,dir=1)
       enddo
       !
       dvel(:,j,k,1,1)=dvel(:,j,k,1,1)+df(:,1)*dxi(0:im,j,k,1,1)
@@ -319,7 +330,7 @@ module comsolver
         endif
         !
         do n=1,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+          df(:,n)=fds%central(f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !
         dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
@@ -390,7 +401,7 @@ module comsolver
         endif
         !
         do n=1,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+          df(:,n)=fds%central(f=ff(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !
         dvel(i,j,:,1,1)=dvel(i,j,:,1,1)+df(:,1)*dxi(i,j,0:km,3,1)

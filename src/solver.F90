@@ -2182,7 +2182,7 @@ module solver
     use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
                         conschm,npdci,npdcj,npdck,is,ie,js,je,ks,ke
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
-    use commfunc, only: ddfc
+    use derivative,only : fds
     use comsolver, only : alfa_con,cci,ccj,cck
     !
     ! arguments
@@ -2231,7 +2231,7 @@ module solver
       endif
       !
       do n=1,numq
-        dfcs(:,n)=ddfc(fcs(:,n),conschm,npdci,im,alfa_con,cci)
+        dfcs(:,n)=fds%central(fcs(:,n),ntype=npdci,dim=im,dir=1)
       enddo
       !
       qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:) 
@@ -2274,7 +2274,7 @@ module solver
         endif
         !
         do n=1,numq
-          dfcs(:,n)=ddfc(fcs(:,n),conschm,npdcj,jm,alfa_con,ccj)
+          dfcs(:,n)=fds%central(fcs(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !
         qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
@@ -2320,7 +2320,7 @@ module solver
         endif
         !
         do n=1,numq
-          dfcs(:,n)=ddfc(fcs(:,n),conschm,npdck,km,alfa_con,cck,lfft=lfftk)
+          dfcs(:,n)=fds%central(fcs(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !
         qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
@@ -2367,7 +2367,7 @@ module solver
                           cp,flowtype
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
-    use commfunc,  only : ddfc
+    use derivative, only : fds
     use comsolver, only : alfa_dif,dci,dcj,dck
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
@@ -2667,7 +2667,7 @@ module solver
       !|    calculate derivative      |
       !+------------------------------+
       do n=2,ncolm
-        df(:,n)=ddfc(ff(:,n),difschm,npdci,im,alfa_dif,dci)
+        df(:,n)=fds%central(f=ff(:,n),ntype=npdci,dim=im,dir=1)
       enddo
       !
       !+------------------------------+
@@ -2744,7 +2744,7 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdcj,jm,alfa_dif,dcj)
+          df(:,n)=fds%central(f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |
@@ -2823,7 +2823,7 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=ddfc(ff(:,n),difschm,npdck,km,alfa_dif,dck,lfft=lfftk)
+          df(:,n)=fds%central(f=ff(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |

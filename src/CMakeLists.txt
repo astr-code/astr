@@ -13,6 +13,7 @@ add_executable(astr
                     commtype.F90
                     commvar.F90
                     constdef.F90
+                    derivative.F90
                     fdnn.F90
                     filter.F90
                     fludyna.F90
