@@ -6,12 +6,14 @@
 !| 26-05-2025  | Created by J. Fang @ Liverpool                        |
 !+---------------------------------------------------------------------+
 module filter
-    
+
+    use commtype,only : compact_scheme
+
     implicit none
 
-    real(8),allocatable,dimension(:,:),target :: cfci,cfcj,cfck !cfc: compact filter coefficient
-    integer :: ifs,ife,jfs,jfe,kfs,kfe
-    
+    type(compact_scheme) :: filter_i,filter_j,filter_k
+    type(compact_scheme) :: filter_ii,filter_jj,filter_kk
+
     real(8),allocatable :: coef2i(:),coef4i(:),coef6i(:),coef8i(:),      &
                            coef10i(:),coefb(:,:),coefh(:,:),             &
                            coef10e(:),coef8e(:),coef6e(:),coef4e(:),     &
@@ -26,12 +28,14 @@ module filter
     !| -------------                                                     |
     !| 26-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    subroutine compact_filter_initiate(ntype,dim,dir)
+    subroutine compact_filter_initiate(afilter,ntype,dim,note)
 
         use commvar, only : hm,alfa_filter
         use commfunc,only : tridiagonal_thomas_proprocess
 
-        integer,intent(in) :: ntype,dim,dir
+        type(compact_scheme) :: afilter
+        integer,intent(in) :: ntype,dim
+        character(len=*),intent(in),optional :: note
 
         integer :: i_0,i_m
         real(8),allocatable :: a(:),c(:)
@@ -56,49 +60,31 @@ module filter
         case default
           print*, ' !! error 1 in subroutine compact_filter_initiate !'
         end select
+  
+        afilter%first_node=i_0
+        afilter%last_node=i_m
+        
+        call afilter%init()
 
-        allocate(a(i_0:i_m),c(i_0:i_m))
+        afilter%a=alfa_filter
+        afilter%c=alfa_filter
 
-        a=alfa_filter
-        c=alfa_filter
+        if(present(note) .and. note=='boundary_no_filter') then
 
-        ! set the filter to be non-compact at first or last points for interfaces
-        if(ntype==1 .or. ntype==4) then
-            a(i_m)=alfa_filter*2.d0
-            c(i_m)=alfa_filter*2.d0
-        endif
+          afilter%a(i_0) = 0.d0
+          afilter%c(i_0) = 0.d0
 
-        if(ntype==2 .or. ntype==4) then
-            a(i_0)=alfa_filter*2.d0
-            c(i_0)=alfa_filter*2.d0
-        endif
-
-        if(ntype==3) then
-            a(i_0)=alfa_filter*2.d0; a(i_m)=alfa_filter*2.d0
-            c(i_0)=alfa_filter*2.d0; c(i_m)=alfa_filter*2.d0
-        endif
-
-        if(dir==1) then
-            ifs=i_0
-            ife=i_m
-            allocate(cfci(1:3,ifs:ife))
-
-            call tridiagonal_thomas_proprocess(a,c,cfci)
-        elseif(dir==2) then
-            jfs=i_0
-            jfe=i_m
-            allocate(cfcj(1:3,jfs:jfe))
-
-            call tridiagonal_thomas_proprocess(a,c,cfcj)
-        elseif(dir==3) then
-            kfs=i_0
-            kfe=i_m
-            allocate(cfck(1:3,kfs:kfe))
-
-            call tridiagonal_thomas_proprocess(a,c,cfck)
+          afilter%a(i_m) = 0.d0
+          afilter%c(i_m) = 0.d0
         else
-            stop ' !! error 2 in subroutine compact_filter_initiate !'
+          afilter%a(i_0) = alfa_filter*2.d0
+          afilter%c(i_0) = alfa_filter*2.d0
+
+          afilter%a(i_m) = alfa_filter*2.d0
+          afilter%c(i_m) = alfa_filter*2.d0
         endif
+
+        call tridiagonal_thomas_proprocess(afilter%a,afilter%c,afilter%ac)
 
     end subroutine compact_filter_initiate
     !+-------------------------------------------------------------------+
@@ -112,14 +98,16 @@ module filter
     !| -------------                                                     |
     !| 25-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function compact_filter(f,ntype,dim,dir) result(ff)
+    function compact_filter(afilter,f,ntype,dim,note) result(ff)
 
         use commvar, only : hm
         use commfunc,only : tridiagonal_thomas_solver
 
         ! arguments
-        integer,intent(in) :: ntype,dim,dir
+        type(compact_scheme),intent(in) :: afilter
+        integer,intent(in) :: ntype,dim
         real(8),intent(in) :: f(-hm:dim+hm)
+        character(len=*),intent(in),optional :: note
         real(8) :: ff(0:dim)
 
         ! local data
@@ -128,25 +116,14 @@ module filter
         real(8),pointer :: ac(:,:)
         real(8),allocatable :: d(:),xx(:)
 
-        if(dir==1) then
-            i_0=ifs
-            i_m=ife
-            ac=>cfci
-        elseif(dir==2) then
-            i_0=jfs
-            i_m=jfe
-            ac=>cfcj
-        elseif(dir==3) then
-            i_0=kfs
-            i_m=kfe
-            ac=>cfck
-        endif
+        i_0=afilter%first_node
+        i_m=afilter%last_node
 
-        d=compact_filter_rhs(f,ntype,dim,dir)
+        d=compact_filter_rhs(afilter,f,ntype,dim,note)
 
         allocate(xx(i_0:i_m))
 
-        xx=tridiagonal_thomas_solver(ac,d)
+        xx=tridiagonal_thomas_solver(afilter%ac,d)
 
         ff(0:dim)=xx(0:dim)
 
@@ -165,27 +142,22 @@ module filter
     !| -------------                                                     |
     !| 26-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function compact_filter_rhs(f,ntype,dim,dir) result(d)
+    function compact_filter_rhs(afilter,f,ntype,dim,note) result(d)
 
         use commvar, only : hm
 
-        integer,intent(in) :: ntype,dim,dir
+        type(compact_scheme),intent(in) :: afilter
+        integer,intent(in) :: ntype,dim
         real(8),intent(in) :: f(-hm:dim+hm)
+        character(len=*),intent(in),optional :: note
         real(8),allocatable :: d(:)
 
         integer :: i_0,i_m,j,k,i_s,i_e
         real(8) :: var0,var1,var2,var3,var4,var5
 
-        if(dir==1) then
-            i_0=ifs
-            i_m=ife
-        elseif(dir==2) then
-            i_0=jfs
-            i_m=jfe
-        elseif(dir==3) then
-            i_0=kfs
-            i_m=kfe
-        endif
+
+        i_0=afilter%first_node
+        i_m=afilter%last_node
 
         allocate(d(i_0:i_m))
 
@@ -272,6 +244,12 @@ module filter
             enddo
           enddo
 
+
+        endif
+
+        if(present(note) .and. note=='boundary_no_filter') then
+            d(i_0)=f(i_0)
+            d(i_m)=f(i_m)
         endif
 
         do j=i_s,i_e
@@ -389,13 +367,13 @@ module filter
       coefb(1,8)=0.d0
 
       ! 6-order asymmetry scheme for point 0
-      coefb(0,0)=( 63.d0 + 1.d0*alfa)  /64.d0
-      coefb(0,1)=(  3.d0 +29.d0*alfa)  /32.d0
-      coefb(0,2)=(-15.d0 +15.d0*alfa)  /64.d0
-      coefb(0,3)=(  5.d0 - 5.d0*alfa)  /16.d0
-      coefb(0,4)=(-15.d0 +15.d0*alfa)  /64.d0
-      coefb(0,5)=(  3.d0 - 3.d0*alfa)  /32.d0
-      coefb(0,6)=( -1.d0 + 1.d0*alfa)  /64.d0
+      coefb(0,0)=( 63.d0 + 1.d0*alfa*2.d0)  /64.d0
+      coefb(0,1)=(  3.d0 +29.d0*alfa*2.d0)  /32.d0
+      coefb(0,2)=(-15.d0 +15.d0*alfa*2.d0)  /64.d0
+      coefb(0,3)=(  5.d0 - 5.d0*alfa*2.d0)  /16.d0
+      coefb(0,4)=(-15.d0 +15.d0*alfa*2.d0)  /64.d0
+      coefb(0,5)=(  3.d0 - 3.d0*alfa*2.d0)  /32.d0
+      coefb(0,6)=( -1.d0 + 1.d0*alfa*2.d0)  /64.d0
       coefb(0,7)=0.d0
       coefb(0,8)=0.d0
       !

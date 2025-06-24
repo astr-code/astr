@@ -556,7 +556,7 @@ module solver
                         nondimen
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lsolid,   &
                         lshock,crinod
-    use commfunc, only: recons_exp
+    use flux, only: recons_exp
     use riemann,  only: flux_steger_warming
     use fludyna,  only: sos
 #ifdef COMB
@@ -603,6 +603,9 @@ module solver
     elseif(npdci==3) then
       iss=-hm
       iee=im+hm
+    elseif(npdci==4) then
+      iss=0
+      iee=im
     else
       stop ' !! error 1 @ subroutine convrsduwd'
     endif
@@ -638,10 +641,6 @@ module solver
         ! end if
         !
         ! get value of gamma of this point
-
-#ifdef COMB
-        gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
-#endif
         !
         lso=.false.
         !
@@ -846,19 +845,6 @@ module solver
       ! Average and flux split as well as i+1/2 construction.
       do j=js-1,je
         !
-        ! if(j==js-1) then
-        !   lso=lsolid(i,j+1,k)
-        ! elseif(j==je) then
-        !   lso=lsolid(i,j,k)
-        ! else
-        !   lso=lsolid(i,j,k) .or. lsolid(i,j+1,k)
-        ! end if
-        ! 
-        ! get value of gamma of this point
-#ifdef COMB
-          gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
-#endif
-        !
         lso=.false.
         !
         if(sson) then
@@ -1060,13 +1046,7 @@ module solver
         ! else
         !   lso=lsolid(i,j,k) .or. lsolid(i,j,k+1)
         ! end if
-        !
-        ! get value of gamma of this point
         
-#ifdef COMB
-        gamma = gammarmix(tmp(i,j,k),spc(i,j,k,:))
-#endif
-        ! 
         lso=.false.
         !
         if(sson) then
@@ -1093,9 +1073,9 @@ module solver
         !
         ! hdiss=.true.
         !
-        ! if(lchardecomp .and. lsh) then
+        if(lchardecomp .and. lsh) then
         ! if(lchardecomp) then
-        if(.false.) then
+        ! if(.false.) then
           !
           call chardecomp(tmp(i,j,k),rho(i,j,k), prs(i,j,k), q(i,j,k,5),      &
                           vel(i,j,k,:),  spc(i,j,k,:),dxi(i,j,k,3,:),         &
@@ -1179,9 +1159,9 @@ module solver
           !
         enddo
         !
-        ! if(lchardecomp .and. lsh) then
+        if(lchardecomp .and. lsh) then
         ! if(lchardecomp) then
-        if(.false.) then
+        ! if(.false.) then
           do m=1,5
             Fh(k,m)=REV(m,1)*Fhc(1)+REV(m,2)*Fhc(2)+REV(m,3)*Fhc(3)+   &
                     REV(m,4)*Fhc(4)+REV(m,5)*Fhc(5) 
@@ -1297,8 +1277,8 @@ module solver
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
                         recon_schem,lchardecomp,conschm
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lshock,crinod
-    use commfunc, only: recons,mplimiter
-    use comsolver, only : alfa_con,uci,ucj,uck,bci,bcj,bck
+    use flux,     only: flux_compact,mplimiter
+    use comsolver,only: alfa_con,uci,ucj,uck,bci,bcj,bck
     use riemann,  only: flux_steger_warming
     !
     ! arguments
@@ -1343,6 +1323,9 @@ module solver
     elseif(npdci==3) then
       iss=-hm
       iee=im+hm
+    elseif(npdci==4) then
+      iss=0
+      iee=im
     else
       stop ' !! error 1 @ subroutine convrsdcmp'
     endif
@@ -1365,8 +1348,8 @@ module solver
       !
       ! calculating interface flux using compact upwind scheme ay i+1/2
       do jvar=1,numq
-        fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdci,im,alfa_con,uci,windir='+')
-        fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdci,im,alfa_con,bci,windir='-')
+        fhcp(:,jvar)=flux_compact(f=fswp(:,jvar),ntype=npdci,dim=im,dir=1,wind='+')
+        fhcm(:,jvar)=flux_compact(f=fswm(:,jvar),ntype=npdci,dim=im,dir=1,wind='-')
       enddo
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -1538,6 +1521,9 @@ module solver
     elseif(npdcj==3) then
       jss=-hm
       jee=jm+hm
+    elseif(npdcj==4) then
+      jss=0
+      jee=jm
     else
       stop ' !! error 2 @ subroutjne convrsdcmp'
     endif
@@ -1567,8 +1553,8 @@ module solver
       !
       ! calculating interface flux using compact upwind scheme ay j+1/2
       do jvar=1,numq
-        fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdcj,jm,alfa_con,ucj,windir='+')
-        fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdcj,jm,alfa_con,bcj,windir='-')
+        fhcp(:,jvar)=flux_compact(f=fswp(:,jvar),ntype=npdcj,dim=jm,dir=2,wind='+')
+        fhcm(:,jvar)=flux_compact(f=fswm(:,jvar),ntype=npdcj,dim=jm,dir=2,wind='-')
       enddo
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -1743,6 +1729,9 @@ module solver
     elseif(npdck==3) then
       kss=-hm
       kee=km+hm
+    elseif(npdck==4) then
+      kss=0
+      kee=km
     else
       stop ' !! error 2 @ subroutine convrsdcmp'
     endif
@@ -1769,8 +1758,8 @@ module solver
       !
       ! calculating interface flux using compact upwind scheme ay k+1/2
       do jvar=1,numq
-        fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdck,km,alfa_con,uck,windir='+')
-        fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdck,km,alfa_con,bck,windir='-')
+        fhcp(:,jvar)=flux_compact(f=fswp(:,jvar),ntype=npdck,dim=km,dir=3,wind='+')
+        fhcm(:,jvar)=flux_compact(f=fswm(:,jvar),ntype=npdck,dim=km,dir=3,wind='-')
       enddo
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -2182,7 +2171,7 @@ module solver
     use commvar,  only: im,jm,km,hm,numq,num_species,num_modequ,       &
                         conschm,npdci,npdcj,npdck,is,ie,js,je,ks,ke
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs
-    use derivative,only : fds
+    use derivative,only : fds,fds_compact_i,fds_compact_j,fds_compact_k
     use comsolver, only : alfa_con,cci,ccj,cck
     !
     ! arguments
@@ -2231,7 +2220,7 @@ module solver
       endif
       !
       do n=1,numq
-        dfcs(:,n)=fds%central(fcs(:,n),ntype=npdci,dim=im,dir=1)
+        dfcs(:,n)=fds%central(fds_compact_i,fcs(:,n),ntype=npdci,dim=im,dir=1)
       enddo
       !
       qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:) 
@@ -2274,7 +2263,7 @@ module solver
         endif
         !
         do n=1,numq
-          dfcs(:,n)=fds%central(fcs(:,n),ntype=npdcj,dim=jm,dir=2)
+          dfcs(:,n)=fds%central(fds_compact_j,fcs(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !
         qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
@@ -2320,7 +2309,7 @@ module solver
         endif
         !
         do n=1,numq
-          dfcs(:,n)=fds%central(fcs(:,n),ntype=npdck,dim=km,dir=3)
+          dfcs(:,n)=fds%central(fds_compact_k,fcs(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !
         qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
@@ -2367,7 +2356,7 @@ module solver
                           cp,flowtype
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,x,jacob,qrhs, &
                           rho,vor,omg,tke,miut,dtke,domg,res12
-    use derivative, only : fds
+    use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
     use comsolver, only : alfa_dif,dci,dcj,dck
     use fludyna,   only : miucal
     use models,    only : komega,src_komega
@@ -2667,7 +2656,7 @@ module solver
       !|    calculate derivative      |
       !+------------------------------+
       do n=2,ncolm
-        df(:,n)=fds%central(f=ff(:,n),ntype=npdci,dim=im,dir=1)
+        df(:,n)=fds%central(fds_compact_i,f=ff(:,n),ntype=npdci,dim=im,dir=1)
       enddo
       !
       !+------------------------------+
@@ -2744,7 +2733,7 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=fds%central(f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
+          df(:,n)=fds%central(fds_compact_j,f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |
@@ -2823,7 +2812,7 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=fds%central(f=ff(:,n),ntype=npdck,dim=km,dir=3)
+          df(:,n)=fds%central(fds_compact_k,f=ff(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |

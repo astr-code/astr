@@ -371,7 +371,11 @@ module mainloop
     if(rkscheme=='rk4') allocate(rhsav(0:im,0:jm,0:km,1:numq))
     !
     do rkstep=1,n_rk_steps
-      !
+      
+      if(lfilter) then
+        call filterq(timerept=ltimrpt)
+      endif
+
       if( (loop_counter==feqchkpt .or. loop_counter==0) .and. rkstep==1 ) then
         lreport=.true.
       else
@@ -380,9 +384,11 @@ module mainloop
 
       qrhs=0.d0
       !
-      if(limmbou) call immbody(timerept=ltimrpt)
-      !
-      if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
+      if(limmbou) then
+        call immbody(timerept=ltimrpt)
+
+        if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
+      endif
       !
       if(flowtype(1:2)/='0d') call boucon
       !
@@ -441,10 +447,6 @@ module mainloop
         endif
       else
         stop ' !! error2 @ time_integration_rk'
-      endif
-      !
-      if(lfilter) then
-        call filterq(timerept=ltimrpt)
       endif
       !
       call spongefilter

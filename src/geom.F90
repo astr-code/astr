@@ -106,7 +106,7 @@ module geom
     use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
     use commfunc,  only : coeffcompac,ptds_ini,volhex,arquad
     use tecio
-    use derivative, only : fds
+    use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
     use bc,       only : geombc,xyzbc
     !
     ! local data
@@ -148,7 +148,7 @@ module geom
     do k=0,km
     do j=0,jm
       do m=1,3
-        dx(0:im,j,k,m,1)=fds%central(f=x(:,j,k,m),ntype=npdci,dim=im,dir=1)
+        dx(0:im,j,k,m,1)=fds%central(fds_compact_i,f=x(:,j,k,m),ntype=npdci,dim=im,dir=1)
       enddo
     enddo
     enddo
@@ -157,7 +157,7 @@ module geom
     do i=0,im
       !
       do m=1,3
-        dx(i,0:jm,k,m,2)=fds%central(f=x(i,:,k,m),ntype=npdcj,dim=jm,dir=2)
+        dx(i,0:jm,k,m,2)=fds%central(fds_compact_j,f=x(i,:,k,m),ntype=npdcj,dim=jm,dir=2)
       enddo
       !
     enddo
@@ -169,12 +169,12 @@ module geom
       if(lfftk) then
         !
         do m=1,2
-          dx(i,j,0:km,m,3)=fds%central(f=x(i,j,:,m),ntype=npdck,dim=km,dir=3)
+          dx(i,j,0:km,m,3)=fds%central(fds_compact_k,f=x(i,j,:,m),ntype=npdck,dim=km,dir=3)
         enddo
         dx(i,j,0:km,3,3)=x(i,j,1,3)-x(i,j,0,3)
       else
         do m=1,3
-          dx(i,j,0:km,m,3)=fds%central(f=x(i,j,:,m),ntype=npdck,dim=km,dir=3)
+          dx(i,j,0:km,m,3)=fds%central(fds_compact_k,f=x(i,j,:,m),ntype=npdck,dim=km,dir=3)
         enddo
       endif
       !
@@ -422,27 +422,27 @@ module geom
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,3)-           &
                       dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,2))
-        dxi(0:im,j,k,2,1)=dxi(0:im,j,k,2,1)+fds%central(f=phi,ntype=npdci,dim=im,dir=1)
+        dxi(0:im,j,k,2,1)=dxi(0:im,j,k,2,1)+fds%central(fds_compact_i,f=phi,ntype=npdci,dim=im,dir=1)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,3)*x(-hm:im+hm,j,k,1)-           &
                       dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,3))
-        dxi(0:im,j,k,2,2)=dxi(0:im,j,k,2,2)+fds%central(f=phi,ntype=npdci,dim=im,dir=1)
+        dxi(0:im,j,k,2,2)=dxi(0:im,j,k,2,2)+fds%central(fds_compact_i,f=phi,ntype=npdci,dim=im,dir=1)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,3)*x(-hm:im+hm,j,k,2)-           &
                       dx(-hm:im+hm,j,k,2,3)*x(-hm:im+hm,j,k,1))
-        dxi(0:im,j,k,2,3)=dxi(0:im,j,k,2,3)+fds%central(f=phi,ntype=npdci,dim=im,dir=1)
+        dxi(0:im,j,k,2,3)=dxi(0:im,j,k,2,3)+fds%central(fds_compact_i,f=phi,ntype=npdci,dim=im,dir=1)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,2)-           &
                       dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,3))
-        dxi(0:im,j,k,3,1)=dxi(0:im,j,k,3,1)+fds%central(f=phi,ntype=npdci,dim=im,dir=1)
+        dxi(0:im,j,k,3,1)=dxi(0:im,j,k,3,1)+fds%central(fds_compact_i,f=phi,ntype=npdci,dim=im,dir=1)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,3)-           &
                       dx(-hm:im+hm,j,k,3,2)*x(-hm:im+hm,j,k,1))
-        dxi(0:im,j,k,3,2)=dxi(0:im,j,k,3,2)+fds%central(f=phi,ntype=npdci,dim=im,dir=1)
+        dxi(0:im,j,k,3,2)=dxi(0:im,j,k,3,2)+fds%central(fds_compact_i,f=phi,ntype=npdci,dim=im,dir=1)
         !
         phi(:)=0.5d0*(dx(-hm:im+hm,j,k,2,2)*x(-hm:im+hm,j,k,1)-           &
                       dx(-hm:im+hm,j,k,1,2)*x(-hm:im+hm,j,k,2))
-        dxi(0:im,j,k,3,3)=dxi(0:im,j,k,3,3)+fds%central(f=phi,ntype=npdci,dim=im,dir=1)
+        dxi(0:im,j,k,3,3)=dxi(0:im,j,k,3,3)+fds%central(fds_compact_i,f=phi,ntype=npdci,dim=im,dir=1)
         !
       enddo
       enddo
@@ -454,27 +454,27 @@ module geom
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,2)-           &
                       dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,3))
-        dxi(i,0:jm,k,1,1)=dxi(i,0:jm,k,1,1)+fds%central(f=phi,ntype=npdcj,dim=jm,dir=2)
+        dxi(i,0:jm,k,1,1)=dxi(i,0:jm,k,1,1)+fds%central(fds_compact_j,f=phi,ntype=npdcj,dim=jm,dir=2)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,3)-           &
                       dx(i,-hm:jm+hm,k,3,3)*x(i,-hm:jm+hm,k,1))
-        dxi(i,0:jm,k,1,2)=dxi(i,0:jm,k,1,2)+fds%central(f=phi,ntype=npdcj,dim=jm,dir=2)
+        dxi(i,0:jm,k,1,2)=dxi(i,0:jm,k,1,2)+fds%central(fds_compact_j,f=phi,ntype=npdcj,dim=jm,dir=2)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,3)*x(i,-hm:jm+hm,k,1)-           &
                       dx(i,-hm:jm+hm,k,1,3)*x(i,-hm:jm+hm,k,2))
-        dxi(i,0:jm,k,1,3)=dxi(i,0:jm,k,1,3)+fds%central(f=phi,ntype=npdcj,dim=jm,dir=2)
+        dxi(i,0:jm,k,1,3)=dxi(i,0:jm,k,1,3)+fds%central(fds_compact_j,f=phi,ntype=npdcj,dim=jm,dir=2)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,3)-           &
                       dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,2))
-        dxi(i,0:jm,k,3,1)=dxi(i,0:jm,k,3,1)+fds%central(f=phi,ntype=npdcj,dim=jm,dir=2)
+        dxi(i,0:jm,k,3,1)=dxi(i,0:jm,k,3,1)+fds%central(fds_compact_j,f=phi,ntype=npdcj,dim=jm,dir=2)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,3,1)*x(i,-hm:jm+hm,k,1)-           &
                       dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,3))
-        dxi(i,0:jm,k,3,2)=dxi(i,0:jm,k,3,2)+fds%central(f=phi,ntype=npdcj,dim=jm,dir=2)
+        dxi(i,0:jm,k,3,2)=dxi(i,0:jm,k,3,2)+fds%central(fds_compact_j,f=phi,ntype=npdcj,dim=jm,dir=2)
         !
         phi(:)=0.5d0*(dx(i,-hm:jm+hm,k,1,1)*x(i,-hm:jm+hm,k,2)-           &
                       dx(i,-hm:jm+hm,k,2,1)*x(i,-hm:jm+hm,k,1))
-        dxi(i,0:jm,k,3,3)=dxi(i,0:jm,k,3,3)+fds%central(f=phi,ntype=npdcj,dim=jm,dir=2)
+        dxi(i,0:jm,k,3,3)=dxi(i,0:jm,k,3,3)+fds%central(fds_compact_j,f=phi,ntype=npdcj,dim=jm,dir=2)
       enddo
       enddo
       deallocate( phi )
@@ -488,7 +488,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+fds%central(f=phi,ntype=npdck,dim=km,dir=3)
+          dxi(i,j,0:km,1,1)=dxi(i,j,0:km,1,1)+fds%central(fds_compact_k,f=phi,ntype=npdck,dim=km,dir=3)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,2)*x(i,j,-hm:km+hm,1)-           &
@@ -496,7 +496,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+fds%central(f=phi,ntype=npdck,dim=km,dir=3)
+          dxi(i,j,0:km,1,2)=dxi(i,j,0:km,1,2)+fds%central(fds_compact_k,f=phi,ntype=npdck,dim=km,dir=3)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,2)*x(i,j,-hm:km+hm,2)-           &
@@ -504,7 +504,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+fds%central(f=phi,ntype=npdck,dim=km,dir=3)
+          dxi(i,j,0:km,1,3)=dxi(i,j,0:km,1,3)+fds%central(fds_compact_k,f=phi,ntype=npdck,dim=km,dir=3)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,3,1)*x(i,j,-hm:km+hm,2)-           &
@@ -512,7 +512,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+fds%central(f=phi,ntype=npdck,dim=km,dir=3)
+          dxi(i,j,0:km,2,1)=dxi(i,j,0:km,2,1)+fds%central(fds_compact_k,f=phi,ntype=npdck,dim=km,dir=3)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,1,1)*x(i,j,-hm:km+hm,3)-           &
@@ -520,7 +520,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+fds%central(f=phi,ntype=npdck,dim=km,dir=3)
+          dxi(i,j,0:km,2,2)=dxi(i,j,0:km,2,2)+fds%central(fds_compact_k,f=phi,ntype=npdck,dim=km,dir=3)
         endif
         !
         phi(:)=0.5d0*(dx(i,j,-hm:km+hm,2,1)*x(i,j,-hm:km+hm,1)-           &
@@ -528,7 +528,7 @@ module geom
         if(lfftk) then
           dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+phi(1)-phi(0)
         else
-          dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+fds%central(f=phi,ntype=npdck,dim=km,dir=3)
+          dxi(i,j,0:km,2,3)=dxi(i,j,0:km,2,3)+fds%central(fds_compact_k,f=phi,ntype=npdck,dim=km,dir=3)
         endif
         !
       enddo
@@ -571,25 +571,25 @@ module geom
     !
     do k=0,km
     do j=0,jm
-      can(:,j,k,1)=can(:,j,k,1)+fds%central(f=dxi(:,j,k,1,1),ntype=npdci,dim=im,dir=1)
-      can(:,j,k,2)=can(:,j,k,2)+fds%central(f=dxi(:,j,k,1,2),ntype=npdci,dim=im,dir=1)
-      can(:,j,k,3)=can(:,j,k,3)+fds%central(f=dxi(:,j,k,1,3),ntype=npdci,dim=im,dir=1)
+      can(:,j,k,1)=can(:,j,k,1)+fds%central(fds_compact_i,f=dxi(:,j,k,1,1),ntype=npdci,dim=im,dir=1)
+      can(:,j,k,2)=can(:,j,k,2)+fds%central(fds_compact_i,f=dxi(:,j,k,1,2),ntype=npdci,dim=im,dir=1)
+      can(:,j,k,3)=can(:,j,k,3)+fds%central(fds_compact_i,f=dxi(:,j,k,1,3),ntype=npdci,dim=im,dir=1)
     enddo
     enddo
     !
     do k=0,km
     do i=0,im
-      can(i,:,k,1)=can(i,:,k,1)+fds%central(f=dxi(i,:,k,2,1),ntype=npdcj,dim=jm,dir=2)
-      can(i,:,k,2)=can(i,:,k,2)+fds%central(f=dxi(i,:,k,2,2),ntype=npdcj,dim=jm,dir=2)
-      can(i,:,k,3)=can(i,:,k,3)+fds%central(f=dxi(i,:,k,2,3),ntype=npdcj,dim=jm,dir=2)
+      can(i,:,k,1)=can(i,:,k,1)+fds%central(fds_compact_j,f=dxi(i,:,k,2,1),ntype=npdcj,dim=jm,dir=2)
+      can(i,:,k,2)=can(i,:,k,2)+fds%central(fds_compact_j,f=dxi(i,:,k,2,2),ntype=npdcj,dim=jm,dir=2)
+      can(i,:,k,3)=can(i,:,k,3)+fds%central(fds_compact_j,f=dxi(i,:,k,2,3),ntype=npdcj,dim=jm,dir=2)
     enddo
     enddo
     !
     do j=0,jm
     do i=0,im
-      can(i,j,:,1)=can(i,j,:,1)+fds%central(f=dxi(i,j,:,3,1),ntype=npdck,dim=km,dir=3)
-      can(i,j,:,2)=can(i,j,:,2)+fds%central(f=dxi(i,j,:,3,2),ntype=npdck,dim=km,dir=3)
-      can(i,j,:,3)=can(i,j,:,3)+fds%central(f=dxi(i,j,:,3,3),ntype=npdck,dim=km,dir=3)
+      can(i,j,:,1)=can(i,j,:,1)+fds%central(fds_compact_k,f=dxi(i,j,:,3,1),ntype=npdck,dim=km,dir=3)
+      can(i,j,:,2)=can(i,j,:,2)+fds%central(fds_compact_k,f=dxi(i,j,:,3,2),ntype=npdck,dim=km,dir=3)
+      can(i,j,:,3)=can(i,j,:,3)+fds%central(fds_compact_k,f=dxi(i,j,:,3,3),ntype=npdck,dim=km,dir=3)
       !
     enddo
     enddo

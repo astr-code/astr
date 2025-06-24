@@ -8,6 +8,8 @@
 !+---------------------------------------------------------------------+
 module derivative
 
+    use commtype,only : compact_scheme
+
     implicit none
 
     ! Abstract base type
@@ -18,11 +20,13 @@ module derivative
   
     ! Abstract interface for method
     abstract interface
-        function derivative_interface(this,f,ntype,dim,dir) result(df)
+        function derivative_interface(this,asolver,f,ntype,dim,dir) result(df)
+            use commtype,only : compact_scheme
             use commvar, only : hm
             import :: finite_difference
             implicit none
             class(finite_difference), intent(in) :: this
+            type(compact_scheme),intent(in) :: asolver
             real(8), intent(in) :: f(-hm:dim+hm)
             integer, intent(in) :: ntype,dim,dir
             real(8) :: df(0:dim)
@@ -41,8 +45,7 @@ module derivative
         procedure :: central => df_explicit
     end type explicit_central
 
-    real(8),allocatable,dimension(:,:),target :: cfdci,cfdcj,cfdck !cfc: compact finite difference coefficient
-    integer :: ifds,ifde,jfds,jfde,kfds,kfde ! starting and ending nodes of finite difference schemes
+    type(compact_scheme) :: fds_compact_i,fds_compact_j,fds_compact_k
 
     contains
 
@@ -53,15 +56,16 @@ module derivative
     !| -------------                                                     |
     !| 30-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    subroutine compact_scheme_initiate(scheme,ntype,dim,dir)
+    subroutine fd_scheme_initiate(asolver,scheme,ntype,dim,dir)
 
         use constdef
         use commfunc,only : tridiagonal_thomas_proprocess
 
-        integer,intent(in) :: scheme,ntype,dim,dir
+        type(compact_scheme) :: asolver
+        character(len=4),intent(in) :: scheme
+        integer,intent(in) :: ntype,dim,dir
 
-        integer :: i_0,i_m
-        real(8),allocatable :: a(:),c(:)
+        integer :: i_0,i_m,nscheme
 
         select case (ntype)
         case (1)
@@ -84,61 +88,51 @@ module derivative
           print*, ' !! error 1 in subroutine compact_filter_initiate !'
         end select
 
-        allocate(a(i_0:i_m),c(i_0:i_m))
+        asolver%first_node=i_0
+        asolver%last_node=i_m
+        call asolver%init()
 
-        if(scheme/100==6) then
+        asolver%nbctype=ntype
 
-          a(:)=num1d3
-          c(:)=num1d3
+        read(scheme(1:3),*) nscheme
 
-          ! default setup, interface
-          a(i_0)=0.d0;     c(i_0)=0.d0 ! explicit central scheme at interface
-          a(i_m)=0.d0;     c(i_m)=0.d0 ! explicit central scheme at interface
+        if(scheme(4:4)=='c') then
 
-          if(scheme==642) then
+          if(nscheme/100==6) then
+  
+            asolver%a(:)=num1d3
+            asolver%c(:)=num1d3
+  
+            ! default setup, interface
+            asolver%a(i_0)=0.d0;     asolver%c(i_0)=0.d0 ! explicit central scheme at interface
+            asolver%a(i_m)=0.d0;     asolver%c(i_m)=0.d0 ! explicit central scheme at interface
 
-            ! set near-boundary/interface schemes
-            if(ntype==1 .or. ntype==4) then
-              a(i_0)  =1.d0;   c(i_0)  =1.d0   ! 2nd-order compact biased scheme
-              a(i_0+1)=0.25d0; c(i_0+1)=0.25d0 ! 4th-order compact central scheme
+            if(nscheme==642) then
+  
+              ! set near-boundary/interface schemes
+              if(ntype==1 .or. ntype==4) then
+                asolver%a(i_0)  =1.d0;   asolver%c(i_0)  =1.d0   ! 2nd-order compact biased scheme
+                asolver%a(i_0+1)=0.25d0; asolver%c(i_0+1)=0.25d0 ! 4th-order compact central scheme
+              endif
+      
+              if(ntype==2 .or. ntype==4) then
+                asolver%a(i_m)  =1.d0;   asolver%c(i_m)  =1.d0   ! 2nd-order compact biased scheme
+                asolver%a(i_m-1)=0.25d0; asolver%c(i_m-1)=0.25d0 ! 4th-order compact central scheme
+              endif
+  
             endif
-    
-            if(ntype==2 .or. ntype==4) then
-              a(i_m)  =1.d0;   c(i_m)  =1.d0   ! 2nd-order compact biased scheme
-              a(i_m-1)=0.25d0; c(i_m-1)=0.25d0 ! 4th-order compact central scheme
-            endif
-
+  
+          else
+            stop ' !! scheme not defined @ coef_diffcompac'
           endif
+  
+          call tridiagonal_thomas_proprocess(asolver%a,asolver%c,asolver%ac)
 
-        else
-          stop ' !! scheme not defined @ coef_diffcompac'
         endif
 
-        if(dir==1) then
-            ifds=i_0
-            ifde=i_m
-            allocate(cfdci(1:3,i_0:i_m))
-
-            call tridiagonal_thomas_proprocess(a,c,cfdci)
-        elseif(dir==2) then
-            jfds=i_0
-            jfde=i_m
-            allocate(cfdcj(1:3,i_0:i_m))
-
-            call tridiagonal_thomas_proprocess(a,c,cfdcj)
-        elseif(dir==3) then
-            kfds=i_0
-            kfde=i_m
-            allocate(cfdck(1:3,i_0:i_m))
-
-            call tridiagonal_thomas_proprocess(a,c,cfdck)
-        else
-            stop ' !! error 2 in subroutine compact_filter_initiate !'
-        endif
-
-    end subroutine compact_scheme_initiate
+    end subroutine fd_scheme_initiate
     !+-------------------------------------------------------------------+
-    !| The end of the subroutine compact_scheme_initiate.                |
+    !| The end of the subroutine fd_scheme_initiate.                     |
     !+-------------------------------------------------------------------+
 
     !+-------------------------------------------------------------------+
@@ -149,42 +143,28 @@ module derivative
     !| -------------                                                     |
     !| 30-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function df_compact(this,f,ntype,dim,dir) result(df)
+    function df_compact(this,asolver,f,ntype,dim,dir) result(df)
 
         use commvar, only : hm
         use commfunc,only : tridiagonal_thomas_solver
 
         ! arguments
         class(compact_central), intent(in) :: this
+        type(compact_scheme),intent(in) :: asolver
         integer,intent(in) :: ntype,dim,dir
         real(8),intent(in) :: f(-hm:dim+hm)
         real(8) :: df(0:dim)
 
         ! local data
-        integer :: l,i_0,i_m
+        integer :: l
         real(8) :: alpha,var0,var1,var2,var3,var4,var5
-        real(8),pointer :: ac(:,:)
         real(8),allocatable :: d(:),xx(:)
 
-        if(dir==1) then
-            i_0=ifds
-            i_m=ifde
-            ac=>cfdci
-        elseif(dir==2) then
-            i_0=jfds
-            i_m=jfde
-            ac=>cfdcj
-        elseif(dir==3) then
-            i_0=kfds
-            i_m=kfde
-            ac=>cfdck
-        endif
+        d=compact_fd_rhs(asolver,f,ntype,dim,dir)
 
-        d=compact_fd_rhs(f,ntype,dim,dir)
+        allocate(xx(asolver%first_node:asolver%last_node))
 
-        allocate(xx(i_0:i_m))
-
-        xx=tridiagonal_thomas_solver(ac,d)
+        xx=tridiagonal_thomas_solver(asolver%ac,d)
 
         df(0:dim)=xx(0:dim)
 
@@ -202,11 +182,12 @@ module derivative
     !| -------------                                                     |
     !| 30-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function compact_fd_rhs(f,ntype,dim,dir) result(d)
+    function compact_fd_rhs(asolver,f,ntype,dim,dir) result(d)
 
         use constdef
         use commvar, only : hm
 
+        type(compact_scheme),intent(in) :: asolver
         integer,intent(in) :: ntype,dim,dir
         real(8),intent(in) :: f(-hm:dim+hm)
         real(8),allocatable :: d(:)
@@ -214,16 +195,8 @@ module derivative
         integer :: i_0,i_m,j,k,i_s,i_e
         real(8) :: var1,var2,var3
 
-        if(dir==1) then
-            i_0=ifds
-            i_m=ifde
-        elseif(dir==2) then
-            i_0=jfds
-            i_m=jfde
-        elseif(dir==3) then
-            i_0=kfds
-            i_m=kfde
-        endif
+        i_0=asolver%first_node
+        i_m=asolver%last_node
 
         allocate(d(i_0:i_m))
 
@@ -309,12 +282,13 @@ module derivative
     !| -------------                                                     |
     !| 30-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function df_explicit(this,f,ntype,dim,dir) result(df)
+    function df_explicit(this,asolver,f,ntype,dim,dir) result(df)
   
         use commvar, only : hm
   
         ! arguments
         class(explicit_central), intent(in) :: this
+        type(compact_scheme),intent(in) :: asolver
         integer,intent(in) :: ntype,dim,dir
         real(8),intent(in) :: f(-hm:dim+hm)
         real(8) :: df(0:dim)

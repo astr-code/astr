@@ -35,6 +35,8 @@ module test
       call enstest
     elseif(testmode=='filt') then 
       call filtertest
+    elseif(testmode=='flux') then 
+      call fluxtest
     elseif(testmode=='bc') then 
       call testbc
     else
@@ -221,22 +223,24 @@ module test
   subroutine filtertest
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie
+                          alfa_filter,numq,is,ie,ia,ja,ka
     use commarray, only : x,q,dxi
     use commfunc,  only : ddfc,recons
     use bc,        only : boucon
-    use parallel,  only : dataswap,mpirankname,jrkm,jrk
+    use parallel,  only : dataswap,mpirankname,jrkm,jrk,mpirank,psum,ptime
     use comsolver, only : alfa_con,fci,fcj,fck
-    use filter,    only : compact_filter
+    use filter,    only : compact_filter,filter_i,filter_j,filter_k,filter_ii,filter_jj,filter_kk
     !
     ! local data
     integer :: i,j,k,n
-    real(8) :: dx
+    real(8) :: dx,error,time_beg,subtime
     real(8),allocatable :: vtest(:,:,:)
     real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
     !
     ! print*,x(:,0,0,1)
     !
+    time_beg=ptime() 
+
     ! testing ddx
     do k=0,km
     do j=0,jm
@@ -253,24 +257,35 @@ module test
     allocate(dq(0:im))
     !
     ! dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
-    dq(:)=compact_filter(f=q(:,0,0,1),ntype=npdci,dim=im,dir=1)
+    dq(:)=compact_filter(afilter=filter_i,f=q(:,0,0,1),ntype=npdci,dim=im)
 
-    open(18,file='testout/filterx'//mpirankname//'.dat')
-    write(18,'(3(1X,A15))')'x','q','q~'
-    write(18,'(3(1X,E15.7E3))')(x(i,0,0,1),q(i,0,0,1),dq(i),i=0,im)
-    close(18)
-    print*,' << testout/filterx.dat'
-    !
+    error=0.d0
+    do i=1,im
+      error=error+(dq(i)-q(i,0,0,1))**2
+    enddo
+
+    error=psum(error)/(ia)
+
+    if(mpirank==0) then
+      print*,' ** filtering a smooth function in x direction,         error:',error
+    endif
+    ! open(18,file='testout/filterx'//mpirankname//'.dat')
+    ! write(18,'(3(1X,A15))')'x','q','q~'
+    ! write(18,'(3(1X,E15.7E3))')(x(i,0,0,1),q(i,0,0,1),dq(i),i=0,im)
+    ! close(18)
+    ! print*,' << testout/filterx.dat'
+    ! !
     deallocate(dq)
 
     ! testing ddy
     do k=0,km
     do j=0,jm
-    do i=0,im
       !
+      i=0
       q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))+0.1d0*sin((dble(j)+0.5d0)*pi)
       !
-    enddo
+      i=1
+      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))
     enddo
     enddo
     if(jrk==0) q(:, 0,:,1)=0.d0
@@ -280,13 +295,25 @@ module test
     !
     allocate(dq(0:jm))
     !
-    dq(:)=compact_filter(f=q(0,:,0,1),ntype=npdcj,dim=jm,dir=2)
+    ! dq(:)=compact_filter(afilter=filter_jj,f=q(0,:,0,1),ntype=npdcj,dim=jm,note='boundary_no_filter')
+    dq(:)=compact_filter(afilter=filter_j,f=q(0,:,0,1),ntype=npdcj,dim=jm)
     
-    open(18,file='testout/filtery'//mpirankname//'.dat')
-    write(18,'(3(1X,A15))')'y','q','q~'
-    write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
-    close(18)
-    print*,' << testout/filtery.dat'
+    error=0.d0
+    do j=1,jm
+      error=error+(dq(j)-q(1,j,0,1))**2
+    enddo
+
+    error=psum(error)/(ja)
+
+    if(mpirank==0) then
+      print*,' ** filtering a smooth+wiggled function in y direction, error:',error
+    endif
+
+    ! open(18,file='testout/filtery'//mpirankname//'.dat')
+    ! write(18,'(3(1X,A15))')'y','q','q~'
+    ! write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
+    ! close(18)
+    ! print*,' << testout/filtery.dat'
     !
     deallocate(dq)
     !
@@ -305,18 +332,33 @@ module test
     !
     allocate(dq(0:km))
     !
-    dq(:)=compact_filter(f=q(0,0,:,1),ntype=npdck,dim=km,dir=3)
+    dq(:)=compact_filter(afilter=filter_k,f=q(0,0,:,1),ntype=npdck,dim=km)
+    ! dq(:)=compact_filter(afilter=filter_kk,f=q(0,0,:,1),ntype=npdck,dim=km,note='boundary_no_filter')
     !
-    open(18,file='testout/filterz'//mpirankname//'.dat')
-    write(18,'(3(1X,A15))')'y','q','q~'
-    write(18,'(3(1X,E15.7E3))')(x(0,0,k,3),q(0,0,k,1),dq(k),k=0,km)
-    close(18)
-    print*,' << testout/filterz.dat'
+    error=0.d0
+    do k=1,km
+      error=error+(dq(k)-q(0,0,k,1))**2
+    enddo
+
+    error=psum(error)/(ka)
+
+    if(mpirank==0) then
+      print*,' ** filtering a smooth function in z direction,         error:',error
+    endif
+
+    subtime=subtime+ptime()-time_beg
+    !
+    if(mpirank==0) print*,' ** time cost:',subtime
+    ! open(18,file='testout/filterz'//mpirankname//'.dat')
+    ! write(18,'(3(1X,A15))')'y','q','q~'
+    ! write(18,'(3(1X,E15.7E3))')(x(0,0,k,3),q(0,0,k,1),dq(k),k=0,km)
+    ! close(18)
+    ! print*,' << testout/filterz.dat'
     !
     deallocate(dq)
     !
   end subroutine filtertest
-  !
+  
   subroutine gradtest
     !
     use commvar,   only : im,jm,km,ia,ja,ka,npdci,npdcj,npdck,conschm,          &
@@ -326,7 +368,7 @@ module test
     use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirank,mpirankname,ptime,psum,mpistop
-    use derivative, only : fds
+    use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
     use tecio
     !
     ! local data
@@ -385,7 +427,7 @@ module test
     do k=0,km
     do j=0,jm
         ! dff(:,j,k,n)=ddfc(ff(:,j,k,n),conschm,npdci,im,alfa_con,cci)
-        dff(:,j,k,n)=fds%central(f=ff(:,j,k,n),ntype=npdci,dim=im,dir=1)
+        dff(:,j,k,n)=fds%central(fds_compact_i,f=ff(:,j,k,n),ntype=npdci,dim=im,dir=1)
     enddo
     enddo
     enddo
@@ -413,7 +455,7 @@ module test
     do k=0,km
     do i=0,im
         ! dff(i,:,k,n)=ddfc(ff(i,:,k,n),conschm,npdcj,jm,alfa_con,ccj)
-        dff(i,:,k,n)=fds%central(f=ff(i,:,k,n),ntype=npdcj,dim=jm,dir=2)
+        dff(i,:,k,n)=fds%central(fds_compact_j,f=ff(i,:,k,n),ntype=npdcj,dim=jm,dir=2)
     enddo
     enddo
     enddo
@@ -448,7 +490,7 @@ module test
     do j=0,jm
     do i=0,im
         ! dff(i,j,:,n)=ddfc(ff(i,j,:,n),conschm,npdck,km,alfa_con,cck)
-        dff(i,j,:,n)=fds%central(f=ff(i,j,:,n),ntype=npdck,dim=km,dir=3)
+        dff(i,j,:,n)=fds%central(fds_compact_k,f=ff(i,j,:,n),ntype=npdck,dim=km,dir=3)
     enddo
     enddo
     enddo
@@ -492,18 +534,262 @@ module test
 
     subtime=subtime+ptime()-time_beg
     !
-    print*,' ** time cost:',subtime
+    if(mpirank==0) print*,' ** time cost:',subtime
 
-    call tecbin('testout/tectest'//mpirankname//'.plt',            &
-                                      x(0:im,0:jm,0:km,1),'x',     &
-                                      x(0:im,0:jm,0:km,2),'y',     &
-                                      x(0:im,0:jm,0:km,3),'z',     &
-                                  vtest(0:im,0:jm,0:km,1),'v1',    &
-                                  dvtes(0:im,0:jm,0:km,1,1),'dv1dy',    &
-                                  dvref(0:im,0:jm,0:km,1,2),'dv1dy_ref' )
+
+    ! call tecbin('testout/tectest'//mpirankname//'.plt',            &
+    !                                   x(0:im,0:jm,0:km,1),'x',     &
+    !                                   x(0:im,0:jm,0:km,2),'y',     &
+    !                                   x(0:im,0:jm,0:km,3),'z',     &
+    !                               vtest(0:im,0:jm,0:km,1),'v1',    &
+    !                               dvtes(0:im,0:jm,0:km,1,1),'dv1dy',    &
+    !                               dvref(0:im,0:jm,0:km,1,2),'dv1dy_ref' )
   end subroutine gradtest
-  !
+
+  subroutine fluxtest
     !
+    use commvar,   only : im,jm,km,ia,ja,ka,npdci,npdcj,npdck,conschm,          &
+                          alfa_filter,numq,is,ie,hm,difschm
+    use commarray, only : x,q,dxi
+    use commfunc,  only : ddfc,recons
+    use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
+    use bc,        only : boucon
+    use parallel,  only : dataswap,mpirank,mpirankname,ptime,psum,mpistop
+    use derivative,only : fds
+    use flux,      only : flux_compact
+    use tecio
+    !
+    ! local data
+    integer :: i,j,k,n,s,asize,ncolm,counter
+    real(8) :: dx,var1
+    real(8),allocatable :: vtest(:,:,:,:),dvtes(:,:,:,:,:),dvref(:,:,:,:,:)
+    real(8),allocatable :: f1(:,:),df1(:,:)
+    real(8),allocatable :: ff(:,:,:,:),dff(:,:,:,:),fh(:,:,:,:)
+    real(8),allocatable :: error(:,:)
+    !
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
+    ! call x3d2init(im,jm,km)
+    ! print*,x(:,0,0,1)
+    !
+    ! testing ddx
+    ncolm=1
+    allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:ncolm))
+    allocate(dvtes(0:im,0:jm,0:km,1:ncolm,1:3),dvref(0:im,0:jm,0:km,1:ncolm,1:3))
+    allocate(error(ncolm,3))
+
+    dvtes=0.d0
+    !
+    time_beg=ptime() 
+    counter=0
+    !
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      ! do n=1,ncolm
+      !   call random_number(var1)
+      !   vtest(i,j,k,n)=var1
+      ! enddo
+      ! vtest(i,j,k,1)=sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))
+      vtest(i,j,k,1)=sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
+      ! !
+      dvref(i,j,k,1,1)= cos(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
+      dvref(i,j,k,1,2)= 0.5d0*pi*sin(x(i,j,k,1))*cos(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
+      dvref(i,j,k,1,3)=-2.d0*sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*sin(2.d0*x(i,j,k,3))
+
+    enddo
+    enddo
+    enddo
+
+    call dataswap(vtest)
+    !
+    allocate(dff(0:im,0:jm,0:km,ncolm),fh(-1:im,-1:jm,-1:km,ncolm))
+
+    allocate(ff(-hm:im+hm,0:jm,0:km,ncolm))
+
+    ff(:,0:jm,0:km,1:ncolm)=vtest(:,0:jm,0:km,1:ncolm)
+    
+    do n=1,1
+    do k=0,km
+    do j=0,jm
+        ! dff(:,j,k,n)=ddfc(ff(:,j,k,n),conschm,npdci,im,alfa_con,cci)
+        fh(:,j,k,n)=flux_compact(f=ff(:,j,k,n),ntype=npdci,dim=im,dir=1,wind='+')
+        do i=0,im
+            dff(i,j,k,1)=fh(i,j,k,1)-fh(i-1,j,k,1)
+        enddo
+    enddo
+    enddo
+    enddo
+
+    ! j=jm/2
+    ! k=km/4
+    ! open(18,file='testout/fh_i'//mpirankname//'.dat')
+    ! write(18,'(5(1X,A15))')'x','f','df','xh','fh'
+    ! do i=0,im
+    !   write(18,'(5(1X,E15.7E3))')x(i,j,k,1),ff(i,j,k,1),0.5d0*(x(i,j,k,1)+x(i+1,j,k,1)),fh(i,j,k,1)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/fh_i'//mpirankname//'.dat'
+
+    ! open(18,file='testout/dfh_i'//mpirankname//'.dat')
+    ! write(18,'(3(1X,A15))')'x','df_ref','df'
+    ! do i=0,im
+    !   write(18,'(3(1X,E15.7E3))')x(i,j,k,1),dvref(i,j,k,1,1),dff(i,j,k,1)*dxi(i,j,k,1,1)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/dfh_i'//mpirankname//'.dat'
+
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      do n=1,ncolm
+        dvtes(i,j,k,n,1)=dff(i,j,k,n)*dxi(i,j,k,1,1)
+        dvtes(i,j,k,n,2)=dff(i,j,k,n)*dxi(i,j,k,1,2)
+        dvtes(i,j,k,n,3)=dff(i,j,k,n)*dxi(i,j,k,1,3)
+      enddo
+    enddo
+    enddo
+    enddo
+
+    deallocate(ff)
+
+    allocate(ff(0:im,-hm:jm+hm,0:km,ncolm))
+
+    ff(0:im,:,0:km,1:ncolm)=vtest(0:im,:,0:km,1:ncolm)
+    
+
+    do n=1,1
+    do k=0,km
+    do i=0,im
+        fh(i,:,k,n)=flux_compact(f=ff(i,:,k,n),ntype=npdcj,dim=jm,dir=2,wind='+')
+        do j=0,jm
+            dff(i,j,k,1)=fh(i,j,k,1)-fh(i,j-1,k,1)
+        enddo
+    enddo
+    enddo
+    enddo
+
+    ! i=im/2
+    ! k=km/4
+    ! open(18,file='testout/fh_j'//mpirankname//'.dat')
+    ! write(18,'(4(1X,A15))')'x','f','xh','fh'
+    ! do j=0,jm
+    !   write(18,'(4(1X,E15.7E3))')x(i,j,k,2),ff(i,j,k,1),0.5d0*(x(i,j,k,2)+x(i,j+1,k,2)),fh(i,j,k,1)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/fh_j'//mpirankname//'.dat'
+
+    ! open(18,file='testout/dfh_j'//mpirankname//'.dat')
+    ! write(18,'(3(1X,A15))')'x','df_ref','df'
+    ! do j=0,jm
+    !   write(18,'(3(1X,E15.7E3))')x(i,j,k,2),dvref(i,j,k,1,2),dff(i,j,k,1)*dxi(i,j,k,2,2)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/dfh_j'//mpirankname//'.dat'
+
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      do n=1,ncolm
+        dvtes(i,j,k,n,1)=dvtes(i,j,k,n,1)+dff(i,j,k,n)*dxi(i,j,k,2,1)
+        dvtes(i,j,k,n,2)=dvtes(i,j,k,n,2)+dff(i,j,k,n)*dxi(i,j,k,2,2)
+        dvtes(i,j,k,n,3)=dvtes(i,j,k,n,3)+dff(i,j,k,n)*dxi(i,j,k,2,3)
+      enddo
+    enddo
+    enddo
+    enddo
+
+
+    deallocate(ff)
+
+
+    allocate(ff(0:im,0:jm,-hm:km+hm,ncolm))
+
+    ff(0:im,0:jm,:,1:ncolm)=vtest(0:im,0:jm,:,1:ncolm)
+
+    do n=1,1
+    do j=0,jm
+    do i=0,im
+        ! dff(i,j,:,n)=ddfc(ff(i,j,:,n),conschm,npdck,km,alfa_con,cck)
+        fh(i,j,:,n)=flux_compact(f=ff(i,j,:,n),ntype=npdck,dim=km,dir=3,wind='+')
+        do k=0,km
+            dff(i,j,k,1)=fh(i,j,k,1)-fh(i,j,k-1,1)
+        enddo
+    enddo
+    enddo
+    enddo
+
+    ! i=im/2
+    ! j=jm/2
+    ! open(18,file='testout/fh_k'//mpirankname//'.dat')
+    ! write(18,'(4(1X,A15))')'x','f','xh','fh'
+    ! do k=0,km
+    !   write(18,'(4(1X,E15.7E3))')x(i,j,k,3),ff(i,j,k,1),0.5d0*(x(i,j,k,3)+x(i,j,k+1,3)),fh(i,j,k,1)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/fh_k'//mpirankname//'.dat'
+
+    ! open(18,file='testout/dfh_k'//mpirankname//'.dat')
+    ! write(18,'(3(1X,A15))')'x','df_ref','df'
+    ! do k=0,km
+    !   write(18,'(3(1X,E15.7E3))')x(i,j,k,3),dvref(i,j,k,1,3),dff(i,j,k,1)*dxi(i,j,k,3,3)
+    ! enddo
+    ! close(18)
+    ! print*,' << testout/dfh_k'//mpirankname//'.dat'
+
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      do n=1,ncolm
+        dvtes(i,j,k,n,1)=dvtes(i,j,k,n,1)+dff(i,j,k,n)*dxi(i,j,k,3,1)
+        dvtes(i,j,k,n,2)=dvtes(i,j,k,n,2)+dff(i,j,k,n)*dxi(i,j,k,3,2)
+        dvtes(i,j,k,n,3)=dvtes(i,j,k,n,3)+dff(i,j,k,n)*dxi(i,j,k,3,3)
+      enddo
+    enddo
+    enddo
+    enddo
+
+    deallocate(ff)
+
+    error=0.d0
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      do n=1,ncolm
+        error(n,1)=error(n,1)+(dvtes(i,j,k,n,1)-dvref(i,j,k,n,1))**2
+        error(n,2)=error(n,2)+(dvtes(i,j,k,n,2)-dvref(i,j,k,n,2))**2
+        error(n,3)=error(n,3)+(dvtes(i,j,k,n,3)-dvref(i,j,k,n,3))**2
+      enddo
+    enddo
+    enddo
+    enddo
+
+    error=psum(error)
+    ! error=sqrt(error)
+
+    if(mpirank==0) then
+      error=sqrt(error/(ia*ja*ka))
+
+      print*,' ** error in x gradient',error(:,1)
+      print*,' ** error in y gradient',error(:,2)
+      print*,' ** error in z gradient',error(:,3)
+    endif
+
+    subtime=subtime+ptime()-time_beg
+    !
+    if(mpirank==0) print*,' ** time cost:',subtime
+
+    ! call tecbin('testout/tectest'//mpirankname//'.plt',            &
+    !                                   x(0:im,0:jm,0:km,1),'x',     &
+    !                                   x(0:im,0:jm,0:km,2),'y',     &
+    !                                   x(0:im,0:jm,0:km,3),'z',     &
+    !                               vtest(0:im,0:jm,0:km,1),'v1',    &
+    !                               dvtes(0:im,0:jm,0:km,1,2),'dv1dy',    &
+    !                               dvref(0:im,0:jm,0:km,1,2),'dv1dy_ref' )
+  end subroutine fluxtest
+
 end module test
 !+---------------------------------------------------------------------+
 !| The end of the module test.                                         |

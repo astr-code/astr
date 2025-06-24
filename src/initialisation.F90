@@ -814,11 +814,11 @@ module initialisation
       radi2=((x(i,j,k,1)-xc)**2+(x(i,j,k,2)-yc)**2)/rvor/rvor
       var1=cvor/rvor/rvor*exp(-0.5d0*radi2)
       !
-      rho(i,j,k)  =roinf
-      vel(i,j,k,1)=uinf-var1*(x(i,j,k,2)-yc)
-      if(ndims>=2) vel(i,j,k,2)=vinf+var1*(x(i,j,k,1)-xc)
+      rho(i,j,k)  =roinf !*(1.d0+0.1d0*cos(dble(i)*pi))*(1.d0+0.1d0*cos(dble(j)*pi))
+      vel(i,j,k,1)=uinf-var1*(x(i,j,k,2)-yc) !*(0.1d0*cos(dble(i)*pi))
+      if(ndims>=2) vel(i,j,k,2)=vinf+var1*(x(i,j,k,1)-xc) !*(0.1d0*cos(dble(j)*pi))
       if(ndims==3) vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf-0.5d0*roinf*cvor**2/rvor**2*exp(-radi2)
+      prs(i,j,k)  =pinf-0.5d0*rho(i,j,k)*cvor**2/rvor**2*exp(-radi2)
       !
       tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
       !
@@ -964,11 +964,12 @@ module initialisation
     do k=0,km
     do j=0,jm
     do i=0,im
-      rho(i,j,k)  =roinf
+      rho(i,j,k)  =roinf *(1.d0+0.1d0*cos(dble(i)*pi))*(1.d0+0.1d0*cos(dble(j)*pi))*(1.d0+0.1d0*cos(dble(k)*pi))
+
       vel(i,j,k,1)= uinf*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
       vel(i,j,k,2)=-uinf*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
       vel(i,j,k,3)=0.d0
-      prs(i,j,k)  =pinf+roinf/16.d0*(uinf**2) &
+      prs(i,j,k)  =pinf+rho(i,j,k)/16.d0*(uinf**2) &
                         *(cos(2.d0*x(i,j,k,1)/l_0)+cos(2.d0*x(i,j,k,2)/l_0)) &
                         *(cos(2.d0*x(i,j,k,3)/l_0)+2.d0)
       !

@@ -9,7 +9,19 @@
 module commtype
   !
   implicit none
-  !
+
+  type :: compact_scheme
+    
+    integer :: first_node,last_node
+    integer :: nbctype
+    real(8),allocatable :: a(:),c(:),ac(:,:)
+
+    contains
+
+    procedure :: init=>allocate_compact_scheme_lhs
+
+  end type compact_scheme
+
   type :: triangle
     real(8) :: a(3),b(3),c(3),normdir(3),area,cen(3)
     !+-------------------+---------------------------------------------+
@@ -97,6 +109,26 @@ module commtype
   end type varray
   !
   contains 
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine initialise faces of a solid.                      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 02-Jul-2021  | Created by J. Fang STFC                            |
+  !+-------------------------------------------------------------------+
+  subroutine allocate_compact_scheme_lhs(ascheme)
+    !
+    class(compact_scheme),target :: ascheme
+    !
+    allocate( ascheme%a(ascheme%first_node:ascheme%last_node), &
+              ascheme%c(ascheme%first_node:ascheme%last_node), &
+              ascheme%ac(1:3,ascheme%first_node:ascheme%last_node) )
+    !
+  end subroutine allocate_compact_scheme_lhs
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine allocate_compact_scheme_lhs             |
+  !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
   !| This subroutine initialise faces of a solid.                      |

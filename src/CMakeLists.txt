@@ -17,6 +17,7 @@ add_executable(astr
                     fdnn.F90
                     filter.F90
                     fludyna.F90
+                    flux.F90
                     geom.F90
                     gridgeneration.F90
                     hdf5io.F90

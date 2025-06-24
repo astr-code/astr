@@ -31,30 +31,33 @@ module comsolver
   !+-------------------------------------------------------------------+
   subroutine solvrinit
     !
-    use commvar, only : numq,npdci,npdcj,npdck,               &
-                        conschm,difschm,lfilter,alfa_filter,hm,turbmode
-    use commfunc,only : coeffcompac,ptds_ini,ptds_aym_ini
-    use models,  only : init_komegasst
-    use filter,  only : compact_filter_initiate,filter_coefficient_cal
-    use derivative, only : compact_scheme_initiate,fds,compact_central, &
-                           explicit_central
-    !
+    use commvar,    only : numq,npdci,npdcj,npdck,               &
+                           conschm,difschm,lfilter,alfa_filter,hm,turbmode
+    use commfunc,   only : coeffcompac,ptds_ini,ptds_aym_ini
+    use models,     only : init_komegasst
+    use filter,     only : compact_filter_initiate,filter_coefficient_cal, &
+                           filter_i,filter_j,filter_k,filter_ii,filter_jj, &
+                           filter_kk
+    use derivative, only : fd_scheme_initiate,fds_compact_i,fds_compact_j, &
+                           fds_compact_k,explicit_central,compact_central,fds
+    use flux,       only : compact_flux_initiate
+
     ! local data
     integer :: nscheme,i
-    !
+
     ! convectional and diffusional term
+
+    call fd_scheme_initiate(asolver=fds_compact_i,scheme=difschm,ntype=npdci,dim=im,dir=1)
+    call fd_scheme_initiate(asolver=fds_compact_j,scheme=difschm,ntype=npdcj,dim=jm,dir=2)
+    call fd_scheme_initiate(asolver=fds_compact_k,scheme=difschm,ntype=npdck,dim=km,dir=3)
+
     if(difschm(4:4)=='e') then
-      ! a compact scheme is used
+      ! a explicit scheme is used
 
       allocate(explicit_central :: fds)
 
     elseif(difschm(4:4)=='c') then
-
-      read(difschm(1:3),*) nscheme
-
-      call compact_scheme_initiate(scheme=nscheme,ntype=npdci,dim=im,dir=1)
-      call compact_scheme_initiate(scheme=nscheme,ntype=npdcj,dim=jm,dir=2)
-      call compact_scheme_initiate(scheme=nscheme,ntype=npdck,dim=km,dir=3)
+      ! a compact scheme is used
 
       allocate(compact_central :: fds)
 
@@ -86,15 +89,26 @@ module comsolver
 
             stop
         end if
+    else
+      ! upwind-baised schemes
+      if(conschm(4:4)=='c') then
+
+        call compact_flux_initiate(scheme=nscheme,ntype=npdci,dim=im,dir=1)
+        call compact_flux_initiate(scheme=nscheme,ntype=npdcj,dim=jm,dir=2)
+        call compact_flux_initiate(scheme=nscheme,ntype=npdck,dim=km,dir=3)
+
+      endif
+
     end if
-
-
 
     !
     if(lfilter) then
-      call compact_filter_initiate(ntype=npdci,dim=im,dir=1)
-      call compact_filter_initiate(ntype=npdcj,dim=jm,dir=2)
-      call compact_filter_initiate(ntype=npdck,dim=km,dir=3)
+      call compact_filter_initiate(afilter=filter_i,ntype=npdci,dim=im)
+      call compact_filter_initiate(afilter=filter_j,ntype=npdcj,dim=jm)
+      call compact_filter_initiate(afilter=filter_k,ntype=npdck,dim=km)
+      ! call compact_filter_initiate(afilter=filter_ii,ntype=npdci,dim=im,note='boundary_no_filter')
+      ! call compact_filter_initiate(afilter=filter_jj,ntype=npdcj,dim=jm,note='boundary_no_filter')
+      ! call compact_filter_initiate(afilter=filter_kk,ntype=npdck,dim=km,note='boundary_no_filter')
     endif
     !
     call filter_coefficient_cal(alfa_filter)
@@ -123,7 +137,7 @@ module comsolver
     !
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,difschm,ndims
     use commarray, only : dxi
-    use derivative, only : fds
+    use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
     !
     ! arguments
     real(8),intent(in) :: var(-hm:im+hm,-hm:jm+hm,-hm:km+hm)
@@ -142,7 +156,7 @@ module comsolver
       !
       ff(:)=var(:,j,k)
       !
-      df(:)=fds%central(f=ff(:),ntype=npdci,dim=im,dir=1)
+      df(:)=fds%central(fds_compact_i,f=ff(:),ntype=npdci,dim=im,dir=1)
       !
       dvar(:,j,k,1)=dvar(:,j,k,1)+df(:)*dxi(0:im,j,k,1,1)
       dvar(:,j,k,2)=dvar(:,j,k,2)+df(:)*dxi(0:im,j,k,1,2)
@@ -159,7 +173,7 @@ module comsolver
       !
       ff(:)=var(i,:,k)
       !
-      df(:)=fds%central(f=ff(:),ntype=npdcj,dim=jm,dir=2)
+      df(:)=fds%central(fds_compact_j,f=ff(:),ntype=npdcj,dim=jm,dir=2)
       !
       dvar(i,:,k,1)=dvar(i,:,k,1)+df(:)*dxi(i,0:jm,k,2,1)
       dvar(i,:,k,2)=dvar(i,:,k,2)+df(:)*dxi(i,0:jm,k,2,2)
@@ -177,7 +191,7 @@ module comsolver
         !
         ff(:)=var(i,j,:)
         !
-        df(:)=fds%central(f=ff(:),ntype=npdck,dim=km,dir=3)
+        df(:)=fds%central(fds_compact_k,f=ff(:),ntype=npdck,dim=km,dir=3)
         !
         dvar(i,j,:,1)=dvar(i,j,:,1)+df(:)*dxi(i,j,0:km,3,1)
         dvar(i,j,:,2)=dvar(i,j,:,2)+df(:)*dxi(i,j,0:km,3,2)
@@ -210,7 +224,7 @@ module comsolver
                           turbmode
     use commarray, only : vel,tmp,spc,dvel,dtmp,dspc,dxi,omg,tke,dtke, &
                           domg
-    use derivative, only : fds
+    use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -261,7 +275,7 @@ module comsolver
       endif
       !
       do n=1,ncolm
-        df(:,n)=fds%central(f=ff(:,n),ntype=npdci,dim=im,dir=1)
+        df(:,n)=fds%central(fds_compact_i,f=ff(:,n),ntype=npdci,dim=im,dir=1)
       enddo
       !
       dvel(:,j,k,1,1)=dvel(:,j,k,1,1)+df(:,1)*dxi(0:im,j,k,1,1)
@@ -330,7 +344,7 @@ module comsolver
         endif
         !
         do n=1,ncolm
-          df(:,n)=fds%central(f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
+          df(:,n)=fds%central(fds_compact_j,f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
         enddo
         !
         dvel(i,:,k,1,1)=dvel(i,:,k,1,1)+df(:,1)*dxi(i,0:jm,k,2,1)
@@ -401,7 +415,7 @@ module comsolver
         endif
         !
         do n=1,ncolm
-          df(:,n)=fds%central(f=ff(:,n),ntype=npdck,dim=km,dir=3)
+          df(:,n)=fds%central(fds_compact_k,f=ff(:,n),ntype=npdck,dim=km,dir=3)
         enddo
         !
         dvel(i,j,:,1,1)=dvel(i,j,:,1,1)+df(:,1)*dxi(i,j,0:km,3,1)
@@ -478,7 +492,8 @@ module comsolver
     use commvar,  only : im,jm,km,numq,npdci,npdcj,npdck,              &
                          alfa_filter,ndims,is,ie,js,je,ks,ke,turbmode
     use commarray,only : q
-    use filter,   only : compact_filter
+    use filter,   only : compact_filter,filter_i,filter_j,filter_k,  &
+                        filter_ii,filter_jj,filter_kk
     !
     ! arguments
     logical,intent(in),optional :: timerept
@@ -503,7 +518,8 @@ module comsolver
       phi(:,:)=q(:,j,k,:)
       !
       do n=1,numq
-        fph(:,n)=compact_filter(f=phi(:,n),ntype=npdci,dim=im,dir=1)
+        ! fph(:,n)=compact_filter(afilter=filter_i,f=phi(:,n),ntype=npdci,dim=im)
+        fph(:,n)=compact_filter(afilter=filter_ii,f=phi(:,n),ntype=npdci,dim=im,note='boundary_no_filter')
         ! fph(:,n)=spafilter6exp(phi(:,n),npdci,im)
       enddo
       !
@@ -531,7 +547,9 @@ module comsolver
         phi(:,:)=q(i,:,k,:)
         !
         do n=1,numq
-          fph(:,n)=compact_filter(f=phi(:,n),ntype=npdcj,dim=jm,dir=2)
+          ! fph(:,n)=compact_filter(afilter=filter_j,f=phi(:,n),ntype=npdcj,dim=jm)
+          fph(:,n)=compact_filter(afilter=filter_jj,f=phi(:,n),ntype=npdcj,dim=jm,note='boundary_no_filter')
+
         enddo
         !
         q(i,0:jm,k,:)=fph(0:jm,:)
@@ -561,7 +579,8 @@ module comsolver
         phi(:,:)=q(i,j,:,:)
         !
         do n=1,numq
-          fph(:,n)=compact_filter(f=phi(:,n),ntype=npdck,dim=km,dir=3)
+          ! fph(:,n)=compact_filter(afilter=filter_k,f=phi(:,n),ntype=npdck,dim=km)
+          fph(:,n)=compact_filter(afilter=filter_kk,f=phi(:,n),ntype=npdck,dim=km,note='boundary_no_filter')
         enddo
         !
         q(i,j,0:km,:)=fph
