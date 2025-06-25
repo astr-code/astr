@@ -84,7 +84,7 @@ module filter
           afilter%c(i_m) = alfa_filter*2.d0
         endif
 
-        call tridiagonal_thomas_proprocess(afilter%a,afilter%c,afilter%ac)
+        afilter%ac=tridiagonal_thomas_proprocess(afilter%a,afilter%c)
 
     end subroutine compact_filter_initiate
     !+-------------------------------------------------------------------+
@@ -168,10 +168,11 @@ module filter
           i_s=i_0+5
 
           do k=i_0,i_0+2
-            d(k)=0.d0
+            var0=0.d0
             do j=0,6
-                d(k)=d(k)+coefb(k-i_0,j)*f(i_0+j)
+                var0=var0+coefb(k-i_0,j)*f(i_0+j)
             enddo
+            d(k)=var0
           enddo
 
           j=i_0+3
@@ -197,10 +198,11 @@ module filter
           i_s=i_0+3
 
           do k=i_0,i_0+2
-            d(k)=0.d0
+            var0=0.d0
             do j=0,10
-              d(k)=d(k)+coefh(k-i_0,j)*f(i_0-2+j)
+              var0=var0+coefh(k-i_0,j)*f(i_0-2+j)
             enddo
+            d(k)=var0
           enddo
 
         endif
@@ -211,10 +213,11 @@ module filter
           i_e=i_m-5
 
           do k=i_m-2,i_m
-            d(k)=0.d0
+            var0=0.d0
             do j=0,6
-              d(k)=d(k)+coefb(i_m-k,j)*f(i_m-j)
+              var0=var0+coefb(i_m-k,j)*f(i_m-j)
             enddo
+            d(k)=var0
           enddo
 
           j=i_m-3
@@ -238,10 +241,11 @@ module filter
           i_e=i_m-3
 
           do k=i_m-2,i_m
-            d(k)=0.d0
+            var0=0.d0
             do j=0,10
-              d(k)=d(k)+coefh(i_m-k,j)*f(i_m+2-j)
+              var0=var0+coefh(i_m-k,j)*f(i_m+2-j)
             enddo
+            d(k)=var0
           enddo
 
 

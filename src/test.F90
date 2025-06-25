@@ -122,10 +122,10 @@ module test
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie,ia
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,psum,pmax
     use comsolver, only : alfa_con,cci,ccj,cck
+    use derivative, only : fds,fds_compact_i
     !
     ! local data
     integer :: i,j,k,n
@@ -155,7 +155,7 @@ module test
     !
     allocate(dq(0:im))
     !
-    dq(:)=ddfc(q(:,0,0,1),conschm,npdci,im,alfa_con,cci)*dxi(:,0,0,1,1)
+    dq(:)=fds%central(fds_compact_i,f=q(:,0,0,1),dim=im)*dxi(:,0,0,1,1)
     !
     error1=0.d0
     error2=0.d0
@@ -225,7 +225,6 @@ module test
     use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie,ia,ja,ka
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirankname,jrkm,jrk,mpirank,psum,ptime
     use comsolver, only : alfa_con,fci,fcj,fck
@@ -364,7 +363,6 @@ module test
     use commvar,   only : im,jm,km,ia,ja,ka,npdci,npdcj,npdck,conschm,          &
                           alfa_filter,numq,is,ie,hm,difschm
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons
     use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirank,mpirankname,ptime,psum,mpistop
@@ -426,8 +424,7 @@ module test
     do n=1,1
     do k=0,km
     do j=0,jm
-        ! dff(:,j,k,n)=ddfc(ff(:,j,k,n),conschm,npdci,im,alfa_con,cci)
-        dff(:,j,k,n)=fds%central(fds_compact_i,f=ff(:,j,k,n),ntype=npdci,dim=im,dir=1)
+        dff(:,j,k,n)=fds%central(fds_compact_i,f=ff(:,j,k,n),dim=im)
     enddo
     enddo
     enddo
@@ -454,8 +451,7 @@ module test
     do n=1,1
     do k=0,km
     do i=0,im
-        ! dff(i,:,k,n)=ddfc(ff(i,:,k,n),conschm,npdcj,jm,alfa_con,ccj)
-        dff(i,:,k,n)=fds%central(fds_compact_j,f=ff(i,:,k,n),ntype=npdcj,dim=jm,dir=2)
+        dff(i,:,k,n)=fds%central(fds_compact_j,f=ff(i,:,k,n),dim=jm)
     enddo
     enddo
     enddo
@@ -490,7 +486,7 @@ module test
     do j=0,jm
     do i=0,im
         ! dff(i,j,:,n)=ddfc(ff(i,j,:,n),conschm,npdck,km,alfa_con,cck)
-        dff(i,j,:,n)=fds%central(fds_compact_k,f=ff(i,j,:,n),ntype=npdck,dim=km,dir=3)
+        dff(i,j,:,n)=fds%central(fds_compact_k,f=ff(i,j,:,n),dim=km)
     enddo
     enddo
     enddo
@@ -549,14 +545,15 @@ module test
   subroutine fluxtest
     !
     use commvar,   only : im,jm,km,ia,ja,ka,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie,hm,difschm
+                          alfa_filter,numq,is,ie,hm,difschm,is,ie,js,je,ks,ke
     use commarray, only : x,q,dxi
-    use commfunc,  only : ddfc,recons
     use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
     use bc,        only : boucon
     use parallel,  only : dataswap,mpirank,mpirankname,ptime,psum,mpistop
     use derivative,only : fds
-    use flux,      only : flux_compact
+    use flux,      only : flux_compact,flux_uw_i,flux_dw_i,flux_uw_j,flux_dw_j, &
+                          flux_uw_k,flux_dw_k
+
     use tecio
     !
     ! local data
@@ -614,8 +611,7 @@ module test
     do n=1,1
     do k=0,km
     do j=0,jm
-        ! dff(:,j,k,n)=ddfc(ff(:,j,k,n),conschm,npdci,im,alfa_con,cci)
-        fh(:,j,k,n)=flux_compact(f=ff(:,j,k,n),ntype=npdci,dim=im,dir=1,wind='+')
+        fh(:,j,k,n)=flux_compact(asolver=flux_uw_i,f=ff(:,j,k,n),dim=im)
         do i=0,im
             dff(i,j,k,1)=fh(i,j,k,1)-fh(i-1,j,k,1)
         enddo
@@ -663,7 +659,7 @@ module test
     do n=1,1
     do k=0,km
     do i=0,im
-        fh(i,:,k,n)=flux_compact(f=ff(i,:,k,n),ntype=npdcj,dim=jm,dir=2,wind='+')
+        fh(i,:,k,n)=flux_compact(asolver=flux_uw_j,f=ff(i,:,k,n),dim=jm)
         do j=0,jm
             dff(i,j,k,1)=fh(i,j,k,1)-fh(i,j-1,k,1)
         enddo
@@ -671,8 +667,8 @@ module test
     enddo
     enddo
 
-    ! i=im/2
-    ! k=km/4
+    i=im/4
+    k=0
     ! open(18,file='testout/fh_j'//mpirankname//'.dat')
     ! write(18,'(4(1X,A15))')'x','f','xh','fh'
     ! do j=0,jm
@@ -680,14 +676,13 @@ module test
     ! enddo
     ! close(18)
     ! print*,' << testout/fh_j'//mpirankname//'.dat'
-
-    ! open(18,file='testout/dfh_j'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'x','df_ref','df'
-    ! do j=0,jm
-    !   write(18,'(3(1X,E15.7E3))')x(i,j,k,2),dvref(i,j,k,1,2),dff(i,j,k,1)*dxi(i,j,k,2,2)
-    ! enddo
-    ! close(18)
-    ! print*,' << testout/dfh_j'//mpirankname//'.dat'
+    open(18,file='testout/dfh_j'//mpirankname//'.dat')
+    write(18,'(3(1X,A15))')'x','df_ref','df'
+    do j=js,je
+      write(18,'(3(1X,E15.7E3))')x(i,j,k,2),dvref(i,j,k,1,2),dff(i,j,k,1)*dxi(i,j,k,2,2)
+    enddo
+    close(18)
+    print*,' << testout/dfh_j'//mpirankname//'.dat'
 
     do k=0,km
     do j=0,jm
@@ -713,7 +708,7 @@ module test
     do j=0,jm
     do i=0,im
         ! dff(i,j,:,n)=ddfc(ff(i,j,:,n),conschm,npdck,km,alfa_con,cck)
-        fh(i,j,:,n)=flux_compact(f=ff(i,j,:,n),ntype=npdck,dim=km,dir=3,wind='+')
+        fh(i,j,:,n)=flux_compact(asolver=flux_uw_k,f=ff(i,j,:,n),dim=km)
         do k=0,km
             dff(i,j,k,1)=fh(i,j,k,1)-fh(i,j,k-1,1)
         enddo
@@ -754,9 +749,9 @@ module test
     deallocate(ff)
 
     error=0.d0
-    do k=1,km
-    do j=1,jm
-    do i=1,im
+    do k=ks,ke
+    do j=js,je
+    do i=is,ie
       do n=1,ncolm
         error(n,1)=error(n,1)+(dvtes(i,j,k,n,1)-dvref(i,j,k,n,1))**2
         error(n,2)=error(n,2)+(dvtes(i,j,k,n,2)-dvref(i,j,k,n,2))**2

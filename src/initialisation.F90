@@ -964,7 +964,7 @@ module initialisation
     do k=0,km
     do j=0,jm
     do i=0,im
-      rho(i,j,k)  =roinf *(1.d0+0.1d0*cos(dble(i)*pi))*(1.d0+0.1d0*cos(dble(j)*pi))*(1.d0+0.1d0*cos(dble(k)*pi))
+      rho(i,j,k)  =roinf  !*(1.d0+0.1d0*cos(dble(i)*pi))*(1.d0+0.1d0*cos(dble(j)*pi))*(1.d0+0.1d0*cos(dble(k)*pi))
 
       vel(i,j,k,1)= uinf*sin(x(i,j,k,1)/l_0)*cos(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)
       vel(i,j,k,2)=-uinf*cos(x(i,j,k,1)/l_0)*sin(x(i,j,k,2)/l_0)*cos(x(i,j,k,3)/l_0)

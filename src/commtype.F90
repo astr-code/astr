@@ -12,9 +12,9 @@ module commtype
 
   type :: compact_scheme
     
-    integer :: first_node,last_node
-    integer :: nbctype
+    integer :: first_node,last_node,dimension,nbctype
     real(8),allocatable :: a(:),c(:),ac(:,:)
+    character(len=1) :: wind
 
     contains
 

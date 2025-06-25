@@ -127,10 +127,8 @@ module solver
       !
     else 
       !
-      ! rgas=287.1d0
-      !
-      rgas=376.177d0
-      !
+      rgas=287.1d0
+      
       cp  =gamma/(gamma-1.d0)*rgas
       cv  = rgas/(gamma-1.d0)
       !
@@ -1277,7 +1275,8 @@ module solver
                         npdci,npdcj,npdck,is,ie,js,je,ks,ke,gamma,     &
                         recon_schem,lchardecomp,conschm
     use commarray,only: q,vel,rho,prs,tmp,spc,dxi,jacob,qrhs,lshock,crinod
-    use flux,     only: flux_compact,mplimiter
+    use flux,     only: flux_compact,mplimiter,recons, &
+                        flux_uw_i,flux_dw_i,flux_uw_j,flux_dw_j,flux_uw_k,flux_dw_k
     use comsolver,only: alfa_con,uci,ucj,uck,bci,bcj,bck
     use riemann,  only: flux_steger_warming
     !
@@ -1348,8 +1347,10 @@ module solver
       !
       ! calculating interface flux using compact upwind scheme ay i+1/2
       do jvar=1,numq
-        fhcp(:,jvar)=flux_compact(f=fswp(:,jvar),ntype=npdci,dim=im,dir=1,wind='+')
-        fhcm(:,jvar)=flux_compact(f=fswm(:,jvar),ntype=npdci,dim=im,dir=1,wind='-')
+        fhcp(:,jvar)=flux_compact(asolver=flux_uw_i,f=fswp(:,jvar),dim=im)
+        fhcm(:,jvar)=flux_compact(asolver=flux_dw_i,f=fswm(:,jvar),dim=im)
+        ! fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdci,im,alfa_con,uci,windir='+')
+        ! fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdci,im,alfa_con,bci,windir='-')
       enddo
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -1553,8 +1554,10 @@ module solver
       !
       ! calculating interface flux using compact upwind scheme ay j+1/2
       do jvar=1,numq
-        fhcp(:,jvar)=flux_compact(f=fswp(:,jvar),ntype=npdcj,dim=jm,dir=2,wind='+')
-        fhcm(:,jvar)=flux_compact(f=fswm(:,jvar),ntype=npdcj,dim=jm,dir=2,wind='-')
+        fhcp(:,jvar)=flux_compact(asolver=flux_uw_j,f=fswp(:,jvar),dim=jm)
+        fhcm(:,jvar)=flux_compact(asolver=flux_dw_j,f=fswm(:,jvar),dim=jm)
+        ! fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdcj,jm,alfa_con,ucj,windir='+')
+        ! fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdcj,jm,alfa_con,bcj,windir='-')
       enddo
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -1758,8 +1761,10 @@ module solver
       !
       ! calculating interface flux using compact upwind scheme ay k+1/2
       do jvar=1,numq
-        fhcp(:,jvar)=flux_compact(f=fswp(:,jvar),ntype=npdck,dim=km,dir=3,wind='+')
-        fhcm(:,jvar)=flux_compact(f=fswm(:,jvar),ntype=npdck,dim=km,dir=3,wind='-')
+        fhcp(:,jvar)=flux_compact(asolver=flux_uw_k,f=fswp(:,jvar),dim=km)
+        fhcm(:,jvar)=flux_compact(asolver=flux_dw_k,f=fswm(:,jvar),dim=km)
+        ! fhcp(:,jvar)=recons(fswp(:,jvar),conschm,npdck,km,alfa_con,uck,windir='+')
+        ! fhcm(:,jvar)=recons(fswm(:,jvar),conschm,npdck,km,alfa_con,bck,windir='-')
       enddo
       !
       ! Calculating Matrix of Left and Right eigenvectors using Roe 
@@ -2220,7 +2225,7 @@ module solver
       endif
       !
       do n=1,numq
-        dfcs(:,n)=fds%central(fds_compact_i,fcs(:,n),ntype=npdci,dim=im,dir=1)
+        dfcs(:,n)=fds%central(fds_compact_i,fcs(:,n),dim=im)
       enddo
       !
       qrhs(is:ie,j,k,:)=qrhs(is:ie,j,k,:)+dfcs(is:ie,:) 
@@ -2263,7 +2268,7 @@ module solver
         endif
         !
         do n=1,numq
-          dfcs(:,n)=fds%central(fds_compact_j,fcs(:,n),ntype=npdcj,dim=jm,dir=2)
+          dfcs(:,n)=fds%central(fds_compact_j,fcs(:,n),dim=jm)
         enddo
         !
         qrhs(i,js:je,k,:)=qrhs(i,js:je,k,:)+dfcs(js:je,:)
@@ -2309,7 +2314,7 @@ module solver
         endif
         !
         do n=1,numq
-          dfcs(:,n)=fds%central(fds_compact_k,fcs(:,n),ntype=npdck,dim=km,dir=3)
+          dfcs(:,n)=fds%central(fds_compact_k,fcs(:,n),dim=km)
         enddo
         !
         qrhs(i,j,ks:ke,:)=qrhs(i,j,ks:ke,:)+dfcs(ks:ke,:)
@@ -2656,7 +2661,7 @@ module solver
       !|    calculate derivative      |
       !+------------------------------+
       do n=2,ncolm
-        df(:,n)=fds%central(fds_compact_i,f=ff(:,n),ntype=npdci,dim=im,dir=1)
+        df(:,n)=fds%central(fds_compact_i,f=ff(:,n),dim=im)
       enddo
       !
       !+------------------------------+
@@ -2733,7 +2738,7 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=fds%central(fds_compact_j,f=ff(:,n),ntype=npdcj,dim=jm,dir=2)
+          df(:,n)=fds%central(fds_compact_j,f=ff(:,n),dim=jm)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |
@@ -2812,7 +2817,7 @@ module solver
         !|    calculate derivative      |
         !+------------------------------+
         do n=2,ncolm
-          df(:,n)=fds%central(fds_compact_k,f=ff(:,n),ntype=npdck,dim=km,dir=3)
+          df(:,n)=fds%central(fds_compact_k,f=ff(:,n),dim=km)
         enddo
         !+------------------------------+
         !| end of calculate derivative  |

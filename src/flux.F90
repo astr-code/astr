@@ -9,12 +9,15 @@
 module flux
 
     use parallel, only : mpirank,mpistop
+    use commtype, only : compact_scheme
 
     implicit none
 
     real(8),allocatable,dimension(:,:),target :: cfluxi_uwd,cfluxj_uwd,cfluxk_uwd, & !cflux: compact flux calculation coefficient
                                                  cfluxi_dwd,cfluxj_dwd,cfluxk_dwd
     integer :: ifxs,ifxe,jfxs,jfxe,kfxs,kfxe ! starting and ending nodes of finite difference schemes
+    type(compact_scheme) :: flux_uw_i,flux_dw_i,flux_uw_j,flux_dw_j, &
+                            flux_uw_k,flux_dw_k
 
     contains
 
@@ -25,15 +28,16 @@ module flux
     !| -------------                                                     |
     !| 03-06-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    subroutine compact_flux_initiate(scheme,ntype,dim,dir)
+    subroutine compact_flux_initiate(asolver,scheme,ntype,dim,wind)
 
         use constdef
         use commfunc,only : tridiagonal_thomas_proprocess
 
-        integer,intent(in) :: scheme,ntype,dim,dir
+        type(compact_scheme) :: asolver
+        integer,intent(in) :: scheme,ntype,dim
+        character(len=1),intent(in) :: wind
 
         integer :: i_0,i_m,j
-        real(8),allocatable :: a_uwd(:),c_uwd(:),a_dwd(:),c_dwd(:)
 
         select case (ntype)
         case (1)
@@ -56,69 +60,51 @@ module flux
           print*, ' !! error 1 in subroutine compact_filter_initiate !'
         end select
 
-        allocate(a_uwd(i_0:i_m),c_uwd(i_0:i_m),a_dwd(i_0:i_m),c_dwd(i_0:i_m))
+        asolver%first_node=i_0
+        asolver%last_node =i_m
+        asolver%dimension =dim
+        asolver%nbctype   =ntype
+        asolver%wind      =wind
+
+        call asolver%init()
 
         if(scheme/100==5) then
 
-          a_uwd(:)=0.5d0;  c_uwd(:)=num1d6
-          a_dwd(:)=num1d6; c_dwd(:)=0.5d0
+          if(asolver%wind=='+') then
+            asolver%a(:)=0.5d0;  asolver%c(:)=num1d6
+          elseif(asolver%wind=='-') then
+            asolver%a(:)=num1d6; asolver%c(:)=0.5d0
+          else
+            stop 'wind error @ compact_flux_initiate'
+          endif
 
           ! default setup, interface
-          a_uwd(i_0)=0.d0;     c_uwd(i_0)=0.d0 ! explicit central scheme at interface
-          a_uwd(i_m)=0.d0;     c_uwd(i_m)=0.d0 ! explicit central scheme at interface
+          asolver%a(i_0)=0.d0;     asolver%c(i_0)=0.d0 ! explicit central scheme at interface
+          asolver%a(i_m)=0.d0;     asolver%c(i_m)=0.d0 ! explicit central scheme at interface
 
-          a_dwd(i_0)=0.d0;     c_dwd(i_0)=0.d0 ! explicit central scheme at interface
-          a_dwd(i_m)=0.d0;     c_dwd(i_m)=0.d0 ! explicit central scheme at interface
-
-          if(scheme==543) then
-
+          if(scheme==553) then  
             ! set near-boundary/interface schemes
             if(ntype==1 .or. ntype==4) then
-              a_uwd(i_0)   =2.d0;   c_uwd(i_0)  =2.d0     ! 3nd-order downwind-biased scheme
-              a_uwd(i_0+1) =0.25d0; c_uwd(i_0+1)=0.25d0   ! 4th-order central scheme
-              a_dwd(i_0)   =2.d0;   c_dwd(i_0)  =2.d0     ! 3nd-order upwind-biased scheme
-              a_dwd(i_0+1) =0.25d0; c_dwd(i_0+1)=0.25d0   ! 4th-order central scheme
+              asolver%a(i_0)   =2.d0;    asolver%c(i_0)  =2.d0  ! 3nd-order downwind-biased scheme
+              asolver%a(i_0+1) =0.25d0;  asolver%c(i_0+1)=0.25d0  ! 3nd-order downwind-biased scheme
             endif
     
             if(ntype==2 .or. ntype==4) then
-              a_uwd(i_m)   =2.d0;   c_uwd(i_m)  =2.d0    ! 3nd-order upwind-biased scheme
-              a_uwd(i_m-1) =0.25d0; c_uwd(i_m-1)=0.25d0  ! 4th-order central scheme
-              a_dwd(i_m)   =2.d0;   c_dwd(i_m)  =2.d0    ! 3nd-order down-biased scheme
-              a_dwd(i_m-1) =0.25d0; c_dwd(i_m-1)=0.25d0  ! 4th-order central scheme
+              asolver%a(i_m)   =2.d0;    asolver%c(i_m)  =2.d0    ! 3nd-order upwind-biased scheme        
+              asolver%a(i_m-1) =0.25d0;  asolver%c(i_m-1)=0.25d0    ! 3nd-order upwind-biased scheme
             endif
           else
             print*,' scheme:',scheme
-            stop ' !! scheme not defined @ coef_diffcompac'
+            stop ' !! scheme not defined @ compact_flux_initiate'
           endif
 
         else
-          stop ' !! scheme not defined @ coef_diffcompac'
+
+          stop ' !! scheme not defined @ compact_flux_initiate'
+
         endif
 
-        if(dir==1) then
-            ifxs=i_0
-            ifxe=i_m
-            allocate(cfluxi_uwd(1:3,i_0:i_m),cfluxi_dwd(1:3,i_0:i_m))
-
-            call tridiagonal_thomas_proprocess(a_uwd,c_uwd,cfluxi_uwd)
-            call tridiagonal_thomas_proprocess(a_dwd,c_dwd,cfluxi_dwd)
-        elseif(dir==2) then
-            jfxs=i_0
-            jfxe=i_m
-            allocate(cfluxj_uwd(1:3,i_0:i_m),cfluxj_dwd(1:3,i_0:i_m))
-
-            call tridiagonal_thomas_proprocess(a_uwd,c_uwd,cfluxj_uwd)
-            call tridiagonal_thomas_proprocess(a_dwd,c_dwd,cfluxj_dwd)
-        elseif(dir==3) then
-            kfxs=i_0
-            kfxe=i_m
-            allocate(cfluxk_uwd(1:3,i_0:i_m),cfluxk_dwd(1:3,i_0:i_m))
-
-            call tridiagonal_thomas_proprocess(a_uwd,c_uwd,cfluxk_uwd)
-            call tridiagonal_thomas_proprocess(a_dwd,c_dwd,cfluxk_dwd)
-        else
-            stop ' !! error 2 in subroutine compact_filter_initiate !'
-        endif
+        asolver%ac=tridiagonal_thomas_proprocess(asolver%a,asolver%c)
 
     end subroutine compact_flux_initiate
     !+-------------------------------------------------------------------+
@@ -133,63 +119,26 @@ module flux
     !| -------------                                                     |
     !| 03-06-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function flux_compact(f,ntype,dim,dir,wind) result(fh)
+    function flux_compact(asolver,f,dim) result(fh)
 
         use commvar, only : hm
         use commfunc,only : tridiagonal_thomas_solver
 
         ! arguments
-        integer,intent(in) :: ntype,dim,dir
+        type(compact_scheme),intent(in) :: asolver
+        integer,intent(in) :: dim
         real(8),intent(in) :: f(-hm:dim+hm)
-        character(len=1),intent(in) :: wind
         real(8) :: fh(-1:dim)
 
         ! local data
-        integer :: l,i_0,i_m
-        real(8) :: alpha,var0,var1,var2,var3,var4,var5
-        real(8),pointer :: ac(:,:)
+        integer :: l
         real(8),allocatable :: d(:),xx(:)
 
-        if(dir==1) then
+        d=compact_flux_rhs(asolver,f,dim)
 
-            i_0=ifxs
-            i_m=ifxe
-            
-            if(wind=='+') then
-                ac=>cfluxi_uwd
-            elseif(wind=='-') then
-                ac=>cfluxi_dwd
-            endif
+        allocate(xx(-2:dim+1))
 
-        elseif(dir==2) then
-
-            i_0=jfxs
-            i_m=jfxe
-
-            if(wind=='+') then
-                ac=>cfluxj_uwd
-            elseif(wind=='-') then
-                ac=>cfluxj_dwd
-            endif
-
-        elseif(dir==3) then
-
-            i_0=kfxs
-            i_m=kfxe
-
-            if(wind=='+') then
-                ac=>cfluxk_uwd
-            elseif(wind=='-') then
-                ac=>cfluxk_dwd
-            endif
-
-        endif
-
-        d=compact_flux_rhs(f,ntype,dim,dir,wind)
-
-        allocate(xx(i_0:i_m))
-
-        xx=tridiagonal_thomas_solver(ac,d)
+        xx(asolver%first_node:asolver%last_node)=tridiagonal_thomas_solver(asolver%ac,d)
 
         fh(-1:dim)=xx(-1:dim)
 
@@ -208,51 +157,48 @@ module flux
     !| -------------                                                     |
     !| 03-06-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function compact_flux_rhs(f,ntype,dim,dir,wind) result(d)
+    function compact_flux_rhs(asolver,f,dim) result(d)
 
         use constdef
         use commvar, only : hm
 
-        integer,intent(in) :: ntype,dim,dir
+        type(compact_scheme),intent(in) :: asolver
+        integer,intent(in) :: dim
         real(8),intent(in) :: f(-hm:dim+hm)
-        character(len=1),intent(in) :: wind
         real(8),allocatable :: d(:)
 
-        integer :: i_0,i_m,j,k,i_s,i_e
+        integer :: i_0,i_m,j,k,i_s,i_e,ntype
         real(8) :: var1,var2,var3
+        character(len=1) :: wind
 
-        if(dir==1) then
-            i_0=ifxs
-            i_m=ifxe
-        elseif(dir==2) then
-            i_0=jfxs
-            i_m=jfxe
-        elseif(dir==3) then
-            i_0=kfxs
-            i_m=kfxe
-        endif
+        i_0=asolver%first_node
+        i_m=asolver%last_node
+
+        ntype=asolver%nbctype
+
+        wind=asolver%wind
 
         allocate(d(i_0:i_m))
+
+        i_s=i_0+1
+        i_e=i_m-1
 
         if(ntype==1 .or. ntype==4) then
 
           ! physical boundary
 
-          i_s=i_0+2
-
-          ! 4th-order compact
-          j=i_0+1 ! i=0
-          var1=f(j)+f(j+1)
-          d(j)=0.75d0*var1
-
           ! 3rd-order flux
           j=i_0 ! i=-1
-          d(j)=2.5d0*var1*f(j+1)+0.5d0*f(j+2)
+          d(j)=2.5d0*f(j+1)+0.5d0*f(j+2)
+
+          j=i_0+1 ! i=0
+          d(j)=0.75d0*f(j)+0.75d0*f(j+1)
+
+          i_s=i_0+2
 
         else
 
           ! interfaces
-          i_s=i_0+1
 
           ! 6th-order explicit
           j=i_0
@@ -266,20 +212,17 @@ module flux
         if(ntype==2 .or. ntype==4) then
 
           ! physical boundary
-          i_e=i_m-2
 
-          ! 4th-order compact i=im-1
+          ! 3rd-order flux i=im-1
           j=i_m-1
-          var1=f(j)+f(j+1)
-          d(j)=0.75d0*var1
-    
-          ! 3rd-order flux i=im
-          j=i_m
-          d(j)=0.5d0*f(j-1) + 2.5d0*f(j)
+          d(j)=0.75d0*f(j+1)+0.75d0*f(j)
 
+          j=i_m
+          d(j)=2.5d0*f(j)+0.5d0*f(j-1)
+
+          i_e=i_m-2
         else
           ! interfaces
-          i_e=i_m-1
 
           ! 6th-order explicit
           j=i_m
@@ -421,7 +364,7 @@ module flux
          (ntype==1 .and. inode==1) .or. (ntype==2 .and. inode==dim-2) ) then
         fc=fl
       else
-        fc=mp5(f,fl,discont=shock)
+        fc=mp5(f,fl,discont=.true.)
       endif
       !
       return
@@ -1107,4 +1050,682 @@ module flux
     !End of the subroutine WENO7Z.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! This subroutine is used to initial for solving the tridiagonal 
+  ! martix with two layer of boundary scheme:, considering asymmetry 
+  ! upwind scheme
+  ! A*x=b
+  !   |1,af1,...............|
+  !   |af2,1,af3,.... ......|
+  !   |..af4,1,af5,.........|
+  !   |.....................|
+  ! A=|...,af4,1,af5,.......|
+  !   |.....................|
+  !   |.........,af4,1,af5..|
+  !   |...........,af2,1,af3|
+  !   |...............,af1,1|
+  !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Writen by Fang Jian, 2008-11-04.
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function recons(f,stype,ntype,dim,af,cc,windir) result(fc)
+    !
+    use commvar,  only: hm
+    ! arguments
+    character(len=4),intent(in) :: stype
+    integer,intent(in) :: ntype,dim
+    real(8),intent(in) :: f(-hm:dim+hm)
+    real(8),intent(in) :: af(1:5),cc(1:2,-2:dim+1)
+    character(len=1) :: windir
+    real(8) :: fc(-1:dim)
+    !
+    ! local data
+    integer :: nscheme,k
+    real(8) :: b(-2:dim+1)
+    ! integer(8),save :: plan_f,plan_b
+    !
+    complex(8),allocatable :: cf(:)
+    real(8),allocatable :: kama(:)
+    !
+    ! print*,mpirank,'|',dim,im
+    !
+    read(stype(1:3),*) nscheme
+    !
+    if(dim==0) then
+      fc=f(0)
+    else
+      b =ptds_recon_rhs(f,dim,nscheme,ntype,windir)
+      fc=ptds_recon_cal(b,af,cc,dim,ntype,windir)
+    endif
+    !
+    return
+    !
+  end function recons
+
+  function coeffcompac(scheme) result(alfa)
+    !
+    use constdef
+    use commvar,  only: bfacmpld
+    !
+    integer,intent(in) :: scheme
+    real(8),allocatable :: alfa(:)
+    !
+    if(scheme==642) then
+      allocate(alfa(3))
+      alfa(3)=num1d3
+      alfa(2)=0.25d0
+      alfa(1)=1.d0
+    elseif(scheme==644) then
+      allocate(alfa(3))
+      alfa(3)=num1d3
+      alfa(2)=0.25d0
+      alfa(1)=0.d0
+    elseif(scheme==553) then
+      allocate(alfa(5))
+      alfa(1)=0.5d0
+      alfa(2)=0.5d0 -1.d0/6.d0*bfacmpld
+      alfa(3)=num1d6+1.d0/6.d0*bfacmpld
+      alfa(4)=0.5d0 -1.d0/6.d0*bfacmpld
+      alfa(5)=num1d6+1.d0/6.d0*bfacmpld
+    elseif(scheme==543) then
+      allocate(alfa(5))
+      alfa(1)=0.5d0
+      alfa(2)=0.25d0
+      alfa(3)=0.25d0
+      alfa(4)=0.5d0
+      alfa(5)=num1d6
+    elseif(scheme==753) then
+      allocate(alfa(5))
+      alfa(1)=0.5d0
+      alfa(2)=0.5d0 -1.d0/6.d0*bfacmpld
+      alfa(3)=num1d6+1.d0/6.d0*bfacmpld
+      alfa(4)=0.5d0 -1.d0/8.d0*bfacmpld
+      alfa(5)=0.25d0+1.d0/8.d0*bfacmpld
+    else
+      stop ' !! scheme not defined @ coef_diffcompac'
+    endif
+    !
+    return
+    !
+  end function coeffcompac
+
+  subroutine ptds_aym_ini(cc,af,dim,ntype,windir)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(1:5)
+    real(8),allocatable,intent(out) :: cc(:,:)
+    character(len=1),intent(in) :: windir
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(1),af2,af: input dat
+    ! cc: output array
+    ! dim: input dat
+    ! l: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    ! local data
+    integer :: l
+    !
+    allocate(cc(1:2,-2:dim+1))
+    !
+    if(dim==0) then
+      cc=0.d0
+      return
+    endif
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      cc(1,0)=1.d0
+      cc(2,0)=af(1)/cc(1,0)
+      !
+      if(windir=='+') then
+        cc(1,1)=1.d0-af(2)*cc(2,0)
+        cc(2,1)=af(3)/cc(1,1)
+        do l=2,dim+1
+          cc(1,l)=1.d0-af(4)*cc(2,l-1)
+          cc(2,l)=af(5)/cc(1,l)
+        end do
+      elseif(windir=='-') then
+        cc(1,1)=1.d0-af(3)*cc(2,0)
+        cc(2,1)=af(2)/cc(1,1)
+        do l=2,dim+1
+          cc(1,l)=1.d0-af(5)*cc(2,l-1)
+          cc(2,l)=af(4)/cc(1,l)
+        end do
+      endif
+      !
+      cc(1,dim+1)=1.d0
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      cc(1,-2)=1.d0
+      cc(2,-2)=0.d0
+      !
+      if(windir=='+') then
+        do l=-1,dim-3
+          cc(1,l)=1.d0-af(4)*cc(2,l-1)
+          cc(2,l)=af(5)/cc(1,l)
+        end do
+        l=dim-2
+        cc(1,l)=1.d0-af(2)*cc(2,l-1)
+        cc(2,l)=af(3)/cc(1,l)
+        l=dim-1
+        cc(1,l)=1.d0-af(1)*cc(2,l-1)
+      elseif(windir=='-') then
+        do l=-1,dim+1
+          cc(1,l)=1.d0-af(5)*cc(2,l-1)
+          cc(2,l)=af(4)/cc(1,l)
+        end do
+        l=dim-2
+        cc(1,l)=1.d0-af(3)*cc(2,l-1)
+        cc(2,l)=af(2)/cc(1,l)
+        l=dim-1
+        cc(1,l)=1.d0-af(1)*cc(2,l-1)
+      endif
+      !
+    elseif(ntype==3) then
+      ! inner block
+      !
+      cc(1,-2)=1.d0
+      cc(2,-2)=0.d0
+      !
+      if(windir=='+') then
+        do l=-1,dim+1
+          cc(1,l)=1.d0-af(4)*cc(2,l-1)
+          cc(2,l)=af(5)/cc(1,l)
+        end do
+      elseif(windir=='-') then
+        do l=-1,dim+1
+          cc(1,l)=1.d0-af(5)*cc(2,l-1)
+          cc(2,l)=af(4)/cc(1,l)
+        end do
+      endif
+      !
+      cc(1,dim+1)=1.d0
+      !
+    else
+      print*, ' !! error in subroutine ptds_aym_ini !'
+      stop
+    end if
+    !
+    cc(1,:)=1.d0/cc(1,:)
+    !
+    return
+    !
+  end subroutine ptds_aym_ini
+  !
+  function ptds_recon_rhs(vin,dim,ns,ntype,windir) result(vout)
+    !
+    use constdef
+    use commvar,  only: bfacmpld,hm
+    !
+    integer,intent(in) :: dim,ns,ntype
+    real(8),intent(in) :: vin(-hm:dim+hm)
+    character(len=1),intent(in) :: windir
+    real(8) :: vout(-2:dim+1)
+    !
+    ! local data
+    integer :: l
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      if(ns==553) then
+        ! ns==553 3-5-5-...-5-5-3
+        l=0
+        vout(0)=0.25d0*vin(l)+1.25d0*vin(l+1)
+        if(windir=='+') then
+          do l=1,dim
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                              num1d36*bfacmpld *vin(l+2)
+          end do
+          l=dim+1
+          vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
+                   27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
+        elseif(windir=='-') then
+          do l=1,dim
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                              num1d36*bfacmpld *vin(l-1)
+          end do
+          l=dim+1
+          vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
+                   27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+        endif
+      elseif(ns==543) then
+
+        ! ns==543 3-5-5-...-5-5-3
+        l=0
+        vout(l)=0.25d0*vin(l)+1.25d0*vin(l+1)
+        l=1
+        vout(l)=0.75d0*vin(l)+0.75d0*vin(l+1)
+        if(windir=='+') then
+          do l=2,dim
+            vout(l)=(num1d18 )*vin(l-1) + &
+                    (num19d18)*vin(l)   + &
+                    (num5d9  )*vin(l+1)
+          end do
+        elseif(windir=='-') then
+          do l=2,dim
+            vout(l)=(num1d18)*vin(l+2) + &
+                    (num19d18)*vin(l+1) + &
+                    (num5d9)*vin(l)
+          end do
+        endif
+        l=dim+1
+        vout(l)=(vin(l-2)-8.d0*vin(l-1)+37.d0*vin(l)+          &
+                 37.d0*vin(l+1)-8.d0*vin(l+2)+vin(l+3))/60.d0
+        !
+      elseif(ns==753) then
+        ! ns==553 3-5-7-...-7-5-3
+        !
+        ! 3rd-order compact upwind
+        l=0
+        vout(0)=0.25d0*vin(l)+1.25d0*vin(l+1)
+        !
+        if(windir=='+') then
+          !
+          ! 5th-order compact upwind near boundary
+          l=1
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                            num1d36*bfacmpld *vin(l+2)
+          !
+          ! 7th-order compact upwind
+          do l=2,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l-2) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l-1) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l)   +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l+1) +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l+2)     &
+                             - 0.5d0*bfacmpld *vin(l+3))/240.d0
+          end do
+          !
+          ! 7th-order explicit upwind
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          !
+        elseif(windir=='-') then
+          !
+          ! 5th-order compact upwind near boundary
+          l=1
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                            num1d36*bfacmpld *vin(l-1)
+          !
+          ! 7th-order compact upwind
+          do l=2,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l+3) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l+2) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l+1) +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l)   +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l-1)     &
+                             - 0.5d0*bfacmpld *vin(l-2))/240.d0
+          end do
+          !
+          ! 7th-order explicit upwind for interface
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+        endif
+        !
+      end if
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      if(ns==553) then
+        ! ns==553 3-5-5-...-5-5-3
+        !
+        if(windir=='+') then
+          l=-2
+          vout(l)=(2.d0*vin(l-2)-13.d0*vin(l-1)+47.d0*vin(l)+          &
+                   27.d0*vin(l+1)-3.d0*vin(l+2))/60.d0
+          do l=-1,dim-2
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                              num1d36*bfacmpld *vin(l+2)
+          end do
+        elseif(windir=='-') then
+          l=-2
+          vout(l)=(2.d0*vin(l+3)-13.d0*vin(l+2)+47.d0*vin(l+1)+        &
+                   27.d0*vin(l)  -3.d0*vin(l-1))/60.d0
+          do l=-1,dim-2
+            vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                    (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                    (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                              num1d36*bfacmpld *vin(l-1)
+          end do
+        endif
+        l=dim-1
+        vout(l)=0.25d0*vin(l+1)+1.25d0*vin(l)
+        !
+      elseif(ns==543) then
+        ! ns==543 3-5-5-...-5-4-3
+        !
+        l=-2
+        vout(l)=(vin(l-2)-8.d0*vin(l-1)+37.d0*vin(l)+          &
+                 37.d0*vin(l+1)-8.d0*vin(l+2)+vin(l+3))/60.d0
+        if(windir=='+') then
+          do l=-1,dim-3
+            vout(l)=(num1d18 )*vin(l-1) + &
+                    (num19d18)*vin(l)   + &
+                    (num5d9  )*vin(l+1)
+          end do
+
+        elseif(windir=='-') then
+          do l=-1,dim-3
+            vout(l)=(num1d18 )*vin(l+2) + &
+                    (num19d18)*vin(l+1) + &
+                    (num5d9  )*vin(l) 
+          end do
+        endif
+        l=dim-2
+        vout(l)=0.75d0*vin(l)+0.75d0*vin(l+1)
+        l=dim-1
+        vout(l)=0.25d0*vin(l+1)+1.25d0*vin(l)
+        !
+      elseif(ns==753) then
+        ! ns==753 3-5-7-...-7-5-3
+        !
+        if(windir=='+') then
+          !
+          l=-2
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          ! 7th-order compact upwind
+          do l=-1,dim-3
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l-2) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l-1) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l)   +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l+1) +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l+2)     &
+                             - 0.5d0*bfacmpld *vin(l+3))/240.d0
+          end do
+          !
+          ! 5th-order compact upwind near the boundary
+          l=dim-2
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l-1) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l)   + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l+1) + &
+                            num1d36*bfacmpld *vin(l+2)
+          !
+        elseif(windir=='-') then
+          !
+          ! 7th-order explicit upwind for interface
+          l=-2
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+          ! 7th-order compact upwind
+          do l=-1,dim-3
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l+3) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l+2) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l+1) +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l)   +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l-1)     &
+                             - 0.5d0*bfacmpld *vin(l-2))/240.d0
+          end do
+          !
+          ! 5th-order compact upwind near the boundary
+          l=dim-2
+          vout(l)=(num1d18 -num1d36*bfacmpld)*vin(l+2) + &
+                  (num19d18-num9d36*bfacmpld)*vin(l+1) + &
+                  (num5d9  +num9d36*bfacmpld)*vin(l)   + &
+                            num1d36*bfacmpld *vin(l-1)
+          !
+        endif
+        !
+        ! 3rd-order compact upwind at the boundary
+        l=dim-1
+        vout(l)=0.25d0*vin(l+1)+1.25d0*vin(l)
+        !
+      else
+        print*,' ** ntype: ',ntype
+        print*, ' !! error 2 in subroutine ptds_recon_rhs !'
+        stop
+      endif
+      !
+    elseif(ntype==3) then
+      !
+      ! inner block
+      if(ns/100==5) then
+        !
+        if(windir=='+') then
+          !
+          l=-2
+          vout(l)=(vin(l-2)-8.d0*vin(l-1)+37.d0*vin(l)+          &
+                   37.d0*vin(l+1)-8.d0*vin(l+2)+vin(l+3))/60.d0
+          do l=-1,dim
+            vout(l)=(num1d18 )*vin(l-1) + &
+                    (num19d18)*vin(l)   + &
+                    (num5d9  )*vin(l+1)
+          end do
+          l=dim+1
+          vout(l)=(vin(l-2)-8.d0*vin(l-1)+37.d0*vin(l)+          &
+                   37.d0*vin(l+1)-8.d0*vin(l+2)+vin(l+3))/60.d0
+        elseif(windir=='-') then
+          l=-2
+          vout(l)=(vin(l-2)-8.d0*vin(l-1)+37.d0*vin(l)+          &
+                   37.d0*vin(l+1)-8.d0*vin(l+2)+vin(l+3))/60.d0
+          do l=-1,dim
+            vout(l)=(num1d18 )*vin(l+2) + &
+                    (num19d18)*vin(l+1) + &
+                    (num5d9  )*vin(l)  
+          end do
+          l=dim+1
+          vout(l)=(vin(l-2)-8.d0*vin(l-1)+37.d0*vin(l)+          &
+                   37.d0*vin(l+1)-8.d0*vin(l+2)+vin(l+3))/60.d0
+        endif
+        !
+      elseif(ns/100==7) then
+        !
+        if(windir=='+') then
+          !
+          ! 7th-order explicit upwind for interface
+          l=-2
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          ! 
+          ! 7th-order compact scheme
+          do l=-1,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l-2) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l-1) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l)   +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l+1) +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l+2)     &
+                             - 0.5d0*bfacmpld *vin(l+3))/240.d0
+          end do
+          !
+          ! 7th-order explicit upwind for interface
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l-3)+  &
+                      25.d0*vin(l-2)-  &
+                     101.d0*vin(l-1)+  &
+                     319.d0*vin(l)+    &
+                     214.d0*vin(l+1)-  &
+                      38.d0*vin(l+2)+  &
+                       4.d0*vin(l+3) )/420.d0
+          !
+        elseif(windir=='-') then
+          !
+          ! 7th-order explicit upwind for interface
+          l=-2
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+          ! 7th-order compact scheme
+          do l=-1,dim
+            vout(l)=(( -1.d0 + 0.5d0*bfacmpld)*vin(l+3) +   &
+                     ( 19.d0 - 7.5d0*bfacmpld)*vin(l+2) +   &
+                     (239.d0 - 40.d0*bfacmpld)*vin(l+1) +   &
+                     (159.d0 + 40.d0*bfacmpld)*vin(l)   +   &
+                     (  4.d0 + 7.5d0*bfacmpld)*vin(l-1)     &
+                             - 0.5d0*bfacmpld *vin(l-2))/240.d0
+          end do
+          ! 7th-order explicit upwind for interface
+          l=dim+1
+          vout(l)=(   -3.d0*vin(l+4)+  &
+                      25.d0*vin(l+3)-  &
+                     101.d0*vin(l+2)+  &
+                     319.d0*vin(l+1)+  &
+                     214.d0*vin(l)-    &
+                      38.d0*vin(l-1)+  &
+                       4.d0*vin(l-2) )/420.d0
+        endif
+        !
+      endif
+      !
+    else
+      print*,' ** ntype: ',ntype
+      print*, ' !! error in subroutine ptds_recon_rhs !'
+      stop
+    end if
+  end function ptds_recon_rhs
+  !
+  function ptds_recon_cal(bd,af,cc,dim,ntype,windir) result(xd)
+    !
+    integer,intent(in) :: dim,ntype
+    real(8),intent(in) :: af(5),bd(-2:dim+1),cc(1:2,-2:dim+1)
+    character(len=1),intent(in) :: windir
+    real(8) :: xd(-1:dim)
+    !
+    ! local data
+    integer :: l
+    real(8),allocatable,dimension(:) :: yd,md
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! af(3): input dat
+    ! bd: input array
+    ! xd: output array
+    ! cc: input array
+    ! dim: input dat
+    ! l, yd: temporary variable
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    allocate ( yd(-2:dim+1),md(-2:dim+1) )
+    !
+    if(ntype==1) then
+      ! the block with boundary at i==0
+      !
+      yd(0)=bd(0)*cc(1,0)
+      if(windir=='+') then
+        yd(1)=(bd(1)-af(2)*yd(0))*cc(1,1)
+        do l=2,dim
+          yd(l)=(bd(l)-af(4)*yd(l-1))*cc(1,l)
+        end do
+      elseif(windir=='-') then
+        yd(1)=(bd(1)-af(3)*yd(0))*cc(1,1)
+        do l=2,dim
+          yd(l)=(bd(l)-af(5)*yd(l-1))*cc(1,l)
+        end do
+      endif
+      yd(dim+1)=bd(dim+1)*cc(1,dim+1)
+      !
+      md(dim+1)=yd(dim+1)
+      do l=dim,-2,-1
+        md(l)=yd(l)-cc(2,l)*md(l+1)
+      end do
+      !
+      xd(0:dim)=md(0:dim)
+      !
+    elseif(ntype==2) then
+      ! the block with boundary at i==im
+      !
+      yd(-2)=bd(-2)*cc(1,-2)
+      if(windir=='+') then
+        do l=-1,dim-3
+          yd(l)=(bd(l)-af(4)*yd(l-1))*cc(1,l)
+        end do
+        l=dim-2
+        yd(l)=(bd(l)-af(2)*yd(l-1))*cc(1,l)
+      elseif(windir=='-') then
+        do l=-1,dim-3
+          yd(l)=(bd(l)-af(5)*yd(l-1))*cc(1,l)
+        end do
+        l=dim-2
+        yd(l)=(bd(l)-af(3)*yd(l-1))*cc(1,l)
+      endif
+      l=dim-1
+      yd(l)=(bd(l)-af(1)*yd(l-1))*cc(1,l)
+      !
+      md(dim-1)=yd(dim-1)
+      do l=dim-2,-2,-1
+        md(l)=yd(l)-cc(2,l)*md(l+1)
+      end do
+      !
+      xd(-1:dim-1)=md(-1:dim-1)
+      !
+    elseif(ntype==3) then
+      !
+      ! inner block
+      !
+      yd(-2)=bd(-2)*cc(1,-2)
+      if(windir=='+') then
+        do l=-1,dim
+          yd(l)=(bd(l)-af(4)*yd(l-1))*cc(1,l)
+        end do
+      elseif(windir=='-') then
+        do l=-1,dim
+          yd(l)=(bd(l)-af(5)*yd(l-1))*cc(1,l)
+        end do
+      endif
+      yd(dim+1)=bd(dim+1)*cc(1,dim+1)
+      !
+      md(dim+1)=yd(dim+1)
+      do l=dim,-2,-1
+        md(l)=yd(l)-cc(2,l)*md(l+1)
+      end do
+      !
+      xd(-1:dim)=md(-1:dim)
+      !
+    else
+      print*,' ** ntype: ',ntype
+      print*, ' !! error in subroutine ptds_recon_cal !'
+      stop
+    end if
+    !
+    deallocate( yd )
+    !
+    return
+    !
+  end function ptds_recon_cal
+  !+-------------------------------------------------------------------+
+  !| The end of the function ptds_recon_.                              |
+  !+-------------------------------------------------------------------+
+  !
 end module flux
