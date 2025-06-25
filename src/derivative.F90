@@ -93,7 +93,7 @@ module derivative
         end select
 
         asolver%first_node=i_0
-        asolver%last_node=i_m
+        asolver%last_node =i_m
         asolver%dimension =dim
         asolver%nbctype   =ntype
 

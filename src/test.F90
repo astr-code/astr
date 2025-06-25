@@ -256,7 +256,7 @@ module test
     allocate(dq(0:im))
     !
     ! dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
-    dq(:)=compact_filter(afilter=filter_i,f=q(:,0,0,1),ntype=npdci,dim=im)
+    dq(:)=compact_filter(afilter=filter_i,f=q(:,0,0,1),dim=im)
 
     error=0.d0
     do i=1,im
@@ -295,7 +295,7 @@ module test
     allocate(dq(0:jm))
     !
     ! dq(:)=compact_filter(afilter=filter_jj,f=q(0,:,0,1),ntype=npdcj,dim=jm,note='boundary_no_filter')
-    dq(:)=compact_filter(afilter=filter_j,f=q(0,:,0,1),ntype=npdcj,dim=jm)
+    dq(:)=compact_filter(afilter=filter_j,f=q(0,:,0,1),dim=jm)
     
     error=0.d0
     do j=1,jm
@@ -331,7 +331,7 @@ module test
     !
     allocate(dq(0:km))
     !
-    dq(:)=compact_filter(afilter=filter_k,f=q(0,0,:,1),ntype=npdck,dim=km)
+    dq(:)=compact_filter(afilter=filter_k,f=q(0,0,:,1),dim=km)
     ! dq(:)=compact_filter(afilter=filter_kk,f=q(0,0,:,1),ntype=npdck,dim=km,note='boundary_no_filter')
     !
     error=0.d0

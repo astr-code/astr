@@ -531,9 +531,7 @@ module comsolver
       phi(:,:)=q(:,j,k,:)
       !
       do n=1,numq
-        fph(:,n)=compact_filter(afilter=filter_i,f=phi(:,n),ntype=npdci,dim=im)
-        ! fph(:,n)=compact_filter(afilter=filter_ii,f=phi(:,n),ntype=npdci,dim=im,note='boundary_no_filter')
-        ! fph(:,n)=spafilter6exp(phi(:,n),npdci,im)
+        fph(:,n)=compact_filter(afilter=filter_i,f=phi(:,n),dim=im)
       enddo
       !
       q(0:im,j,k,:)=fph(0:im,:)
@@ -560,9 +558,7 @@ module comsolver
         phi(:,:)=q(i,:,k,:)
         !
         do n=1,numq
-          fph(:,n)=compact_filter(afilter=filter_j,f=phi(:,n),ntype=npdcj,dim=jm)
-          ! fph(:,n)=compact_filter(afilter=filter_jj,f=phi(:,n),ntype=npdcj,dim=jm,note='boundary_no_filter')
-
+          fph(:,n)=compact_filter(afilter=filter_j,f=phi(:,n),dim=jm)
         enddo
         !
         q(i,0:jm,k,:)=fph(0:jm,:)
@@ -592,8 +588,7 @@ module comsolver
         phi(:,:)=q(i,j,:,:)
         !
         do n=1,numq
-          fph(:,n)=compact_filter(afilter=filter_k,f=phi(:,n),ntype=npdck,dim=km)
-          ! fph(:,n)=compact_filter(afilter=filter_kk,f=phi(:,n),ntype=npdck,dim=km,note='boundary_no_filter')
+          fph(:,n)=compact_filter(afilter=filter_k,f=phi(:,n),dim=km)
         enddo
         !
         q(i,j,0:km,:)=fph

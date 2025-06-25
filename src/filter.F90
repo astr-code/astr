@@ -62,7 +62,9 @@ module filter
         end select
   
         afilter%first_node=i_0
-        afilter%last_node=i_m
+        afilter%last_node =i_m
+        afilter%dimension =dim
+        afilter%nbctype   =ntype
         
         call afilter%init()
 
@@ -98,14 +100,14 @@ module filter
     !| -------------                                                     |
     !| 25-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function compact_filter(afilter,f,ntype,dim,note) result(ff)
+    function compact_filter(afilter,f,dim,note) result(ff)
 
         use commvar, only : hm
         use commfunc,only : tridiagonal_thomas_solver
 
         ! arguments
         type(compact_scheme),intent(in) :: afilter
-        integer,intent(in) :: ntype,dim
+        integer,intent(in) :: dim
         real(8),intent(in) :: f(-hm:dim+hm)
         character(len=*),intent(in),optional :: note
         real(8) :: ff(0:dim)
@@ -119,7 +121,7 @@ module filter
         i_0=afilter%first_node
         i_m=afilter%last_node
 
-        d=compact_filter_rhs(afilter,f,ntype,dim,note)
+        d=compact_filter_rhs(afilter,f,dim,note)
 
         allocate(xx(i_0:i_m))
 
@@ -127,8 +129,8 @@ module filter
 
         ff(0:dim)=xx(0:dim)
 
-        if(ntype==1 .or. ntype==4) ff(0)=f(0)
-        if(ntype==2 .or. ntype==4) ff(dim)=f(dim)
+        if(afilter%nbctype==1 .or. afilter%nbctype==4) ff(0)=f(0)
+        if(afilter%nbctype==2 .or. afilter%nbctype==4) ff(dim)=f(dim)
 
     end function compact_filter
     !+-------------------------------------------------------------------+
@@ -142,22 +144,23 @@ module filter
     !| -------------                                                     |
     !| 26-05-2025  | Rewrite by J. Fang @ Liverpool.                     |
     !+-------------------------------------------------------------------+
-    function compact_filter_rhs(afilter,f,ntype,dim,note) result(d)
+    function compact_filter_rhs(afilter,f,dim,note) result(d)
 
         use commvar, only : hm
 
         type(compact_scheme),intent(in) :: afilter
-        integer,intent(in) :: ntype,dim
+        integer,intent(in) :: dim
         real(8),intent(in) :: f(-hm:dim+hm)
         character(len=*),intent(in),optional :: note
         real(8),allocatable :: d(:)
 
-        integer :: i_0,i_m,j,k,i_s,i_e
+        integer :: i_0,i_m,j,k,i_s,i_e,ntype
         real(8) :: var0,var1,var2,var3,var4,var5
 
 
         i_0=afilter%first_node
         i_m=afilter%last_node
+        ntype=afilter%nbctype
 
         allocate(d(i_0:i_m))
 
