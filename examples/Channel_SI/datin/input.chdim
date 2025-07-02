@@ -24,7 +24,7 @@ f
 273.15d0, 100.d0, 3.981d-4, 1.293d0
 
 # conschm,difschm,rkscheme                              : Numerical scheme
-642c, 642c, rk3 
+643c, 643c, rk3 
 
 # recon_schem, lchardecomp,bfacmpld                     : Parameters for upwind-biased scheme
 3, f, 0.3d0, 0.01d0

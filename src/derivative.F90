@@ -112,18 +112,32 @@ module derivative
             asolver%a(i_0)=0.d0;     asolver%c(i_0)=0.d0 ! explicit central scheme at interface
             asolver%a(i_m)=0.d0;     asolver%c(i_m)=0.d0 ! explicit central scheme at interface
 
-            if(nscheme==642) then
+            ! if(nscheme==642) then
+  
+            !   ! set near-boundary/interface schemes
+            !   if(ntype==1 .or. ntype==4) then
+            !     asolver%a(i_0)  =1.d0;   asolver%c(i_0)  =1.d0   ! 2nd-order compact biased scheme
+            !     asolver%a(i_0+1)=0.25d0; asolver%c(i_0+1)=0.25d0 ! 4th-order compact central scheme
+            !   endif
+      
+            !   if(ntype==2 .or. ntype==4) then
+            !     asolver%a(i_m)  =1.d0;   asolver%c(i_m)  =1.d0   ! 2nd-order compact biased scheme
+            !     asolver%a(i_m-1)=0.25d0; asolver%c(i_m-1)=0.25d0 ! 4th-order compact central scheme
+            !   endif
+            ! else
+            if(nscheme==643) then
   
               ! set near-boundary/interface schemes
               if(ntype==1 .or. ntype==4) then
-                asolver%a(i_0)  =1.d0;   asolver%c(i_0)  =1.d0   ! 2nd-order compact biased scheme
+                asolver%a(i_0)  =2.d0;   asolver%c(i_0)  =2.d0   ! 2nd-order compact biased scheme
                 asolver%a(i_0+1)=0.25d0; asolver%c(i_0+1)=0.25d0 ! 4th-order compact central scheme
               endif
       
               if(ntype==2 .or. ntype==4) then
-                asolver%a(i_m)  =1.d0;   asolver%c(i_m)  =1.d0   ! 2nd-order compact biased scheme
+                asolver%a(i_m)  =2.d0;   asolver%c(i_m)  =2.d0   ! 2nd-order compact biased scheme
                 asolver%a(i_m-1)=0.25d0; asolver%c(i_m-1)=0.25d0 ! 4th-order compact central scheme
               endif
+
 
             else
 
@@ -224,11 +238,14 @@ module derivative
           var1=f(j+1)-f(j-1)
           d(j)=0.75d0*var1
     
-          ! 2nd-order biased compact
-          j=i_0
-          var1=f(j+1)-f(j)
-          d(j)=2.d0*var1
+          ! ! 2nd-order biased compact
+          ! j=i_0
+          ! var1=f(j+1)-f(j)
+          ! d(j)=2.d0*var1
 
+          ! 3rd-order biased compact
+          j=i_0
+          d(j)=-2.5d0*f(j)+2.d0*f(j+1)+0.5d0*f(j+2)
 
         else
 
@@ -254,10 +271,14 @@ module derivative
           var1=f(j+1)-f(j-1)
           d(j)=0.75d0*var1
     
-          ! 2nd-order biased compact
+          ! ! 2nd-order biased compact
+          ! j=i_m
+          ! var1=f(j)-f(j-1)
+          ! d(j)=2.d0*var1
+
+          ! 3rd-order biased compact
           j=i_m
-          var1=f(j)-f(j-1)
-          d(j)=2.d0*var1
+          d(j)=2.5d0*f(j)-2.d0*f(j-1)-0.5d0*f(j-2)
 
         else
           ! interfaces

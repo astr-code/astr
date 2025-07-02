@@ -82,7 +82,7 @@ module flux
           asolver%a(i_0)=0.d0;     asolver%c(i_0)=0.d0 ! explicit central scheme at interface
           asolver%a(i_m)=0.d0;     asolver%c(i_m)=0.d0 ! explicit central scheme at interface
 
-          if(scheme==553) then  
+          if(scheme==543) then  
             ! set near-boundary/interface schemes
             if(ntype==1 .or. ntype==4) then
               asolver%a(i_0)   =2.d0;    asolver%c(i_0)  =2.d0  ! 3nd-order downwind-biased scheme
@@ -191,6 +191,7 @@ module flux
           j=i_0 ! i=-1
           d(j)=2.5d0*f(j+1)+0.5d0*f(j+2)
 
+          ! 4th-order flux
           j=i_0+1 ! i=0
           d(j)=0.75d0*f(j)+0.75d0*f(j+1)
 
@@ -217,6 +218,7 @@ module flux
           j=i_m-1
           d(j)=0.75d0*f(j+1)+0.75d0*f(j)
 
+          ! 4th-order flux
           j=i_m
           d(j)=2.5d0*f(j)+0.5d0*f(j-1)
 

@@ -177,105 +177,76 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_stalist
     !
-!     use commvar,  only : im,jm,km,ia,ja,ka,deltat
-!     use commarray,only : vel,prs,rho,tmp,spc,cell,x
-!     use interp,   only : interlinear
-!     use parallel, only : pmax,psum,irk,irkm,lio
-!     use utility,  only : listinit,listwrite
-!     !
-! #ifdef COMB
-!     use thermchem,only : heatrate,spcindex
-! #endif
-!     !
-!     integer :: i,j,k
-!     real(8) :: tmpmax,rhomax,umax,qdotmax,poutrt
-!     real(8) :: qdot,var1,var2
-!     !
-!     integer,save :: hand_fs
-!     real(8),save :: xflame=0.d0,vflame=0.d0
-!     logical,save :: linit=.true.
-!     !
-!     if(lio) then
-!       !
-!       if(linit) then
-!         call listinit(filename='flamesta.dat',handle=hand_fs, &
-!                       firstline='nstep time maxT maxU maxHRR xflame vflame pout')
-!         linit=.false.
-!       endif
-!       !
-!     endif
-!     !
-!     tmpmax=maxval(tmp(0:im,0:jm,0:km))
-!     tmpmax=pmax(tmpmax)
-!     !
-!     rhomax=maxval(rho(0:im,0:jm,0:km))
-!     rhomax=pmax(rhomax)
-!     !
-!     umax=maxval(vel(0:im,0:jm,0:km,1))
-!     umax=pmax(umax)
-!     !
-!     var1=0.d0
-!     var2=0.d0
-!     !
-!     qdotmax=-1.d30
-!     !
-!     do i=0,im
-!       do j=0,jm
-!         do k=0,km
-!           !
-!           qdot=heatrate(rho(i,j,k),tmp(i,j,k),spc(i,j,k,:))
-!           if(qdot>qdotmax) then
-!             qdotmax=qdot
-!           endif
-!           !
-!         enddo 
-!       enddo 
-!     enddo  
-!     qdotmax=pmax(qdotmax)
-!     !
-!     ! calculate the averaged flame location, set as the T=400K
-!     var1=0.d0
-!     !
-!     do j=1,jm
-!       !
-!       do i=1,im
-!         !
-!         if( (tmp(i-1,j,k)<=400.d0 .and. tmp(i,j,k)>=400.d0) ) then
-!           var1=var1+interlinear(tmp(i-1,j,k),tmp(i,j,k),        &
-!                                 x(i-1,j,k,1),x(i,j,k,1),400.d0)
-!           exit
-!         endif
-!         !
-!       enddo
-!       !
-!     enddo
-!     !
-!     var1=psum(var1)/ja
-!     !
-!     ! use xflame to calculate vflame
-!     if(abs(xflame)<1.d-16) then
-!       vflame=0.d0
-!     else
-!       vflame=(var1-xflame)/deltat
-!     endif
-!     !
-!     xflame=var1
-!     !
-!     ! calculate mean pressure at outflow
-!     i=im
-!     k=0
-!     poutrt=0.d0
-!     !
-!     if(irk==irkm) then
-!       do j=1,jm
-!         poutrt=poutrt+prs(i,j,k)
-!       enddo
-!     endif
-!     !
-!     poutrt=psum(poutrt)/dble(ja)
-!     !
-!     if(lio) call listwrite(hand_fs,tmpmax,umax,qdotmax,xflame,vflame,poutrt)
-    !
+    use commvar,  only : im,jm,km,ia,ja,ka,deltat
+    use commarray,only : vel,prs,rho,tmp
+    use parallel, only : pmax,lio
+    use utility,  only : listinit,listwrite
+
+    integer :: i,j,k
+
+    integer,save :: hand_fs
+    real(8) :: R_rho,R_u,R_v,R_T,R_p
+    real(8) :: A_rho,A_u,A_v,A_T,A_p
+    real(8),allocatable,dimension(:,:,:),save :: data_save
+    logical,save :: linit=.true.
+
+    if(linit) then
+
+      if(lio) then
+        call listinit(filename='residual.dat',handle=hand_fs, &
+                      firstline='nstep time R_rho R_u R_v R_T R_p')
+      endif
+
+      allocate(data_save(0:im,0:jm,1:5))
+
+      data_save=0.d0
+
+      linit=.false.
+
+    endif
+
+    R_rho=0.d0
+    R_u=0.d0
+    R_v=0.d0
+    R_T=0.d0
+    R_p=0.d0
+
+    A_rho=0.d0
+    A_u=0.d0
+    A_v=0.d0
+    A_T=0.d0
+    A_p=0.d0
+
+    k=0
+    do j=0,jm
+    do i=0,im
+      A_rho=max(A_rho,abs(rho(i,j,k)  ))
+      A_u  =max(A_u,  abs(vel(i,j,k,1)))
+      A_v  =max(A_v,  abs(vel(i,j,k,2)))
+      A_T  =max(A_T,  abs(tmp(i,j,k)  ))
+      A_p  =max(A_p,  abs(prs(i,j,k)  ))
+
+      R_rho=max(R_rho,abs(rho(i,j,k)  -data_save(i,j,1)))
+      R_u  =max(R_u,  abs(vel(i,j,k,1)-data_save(i,j,2)))
+      R_v  =max(R_v,  abs(vel(i,j,k,2)-data_save(i,j,3)))
+      R_T  =max(R_T,  abs(tmp(i,j,k)  -data_save(i,j,4)))
+      R_p  =max(R_p,  abs(prs(i,j,k)  -data_save(i,j,5)))
+    enddo 
+    enddo
+    R_rho=pmax(R_rho)/pmax(A_rho)
+    R_u  =pmax(R_u  )/pmax(A_u  )
+    R_v  =pmax(R_v  )/pmax(A_v  )
+    R_T  =pmax(R_T  )/pmax(A_T  )
+    R_p  =pmax(R_p  )/pmax(A_p  )
+
+    data_save(0:im,0:jm,1)=rho(0:im,0:jm,0)
+    data_save(0:im,0:jm,2)=vel(0:im,0:jm,0,1)
+    data_save(0:im,0:jm,3)=vel(0:im,0:jm,0,2)
+    data_save(0:im,0:jm,4)=tmp(0:im,0:jm,0)
+    data_save(0:im,0:jm,5)=prs(0:im,0:jm,0)
+
+    if(lio) call listwrite(hand_fs,R_rho,R_u,R_v,R_T,R_p)
+
   end subroutine udf_stalist
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_stalist.                            |
@@ -416,15 +387,6 @@ module userdefine
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_meanflow.                           |
   !+-------------------------------------------------------------------+
-
-
-  !+-------------------------------------------------------------------+
-  !| This subroutine is a user defined boundary condition              | 
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 02-Juil-2025: created by Jian Fang @ IMech, CAS, Beijing          |
-  !+-------------------------------------------------------------------+
   subroutine udf_bc(ndir)
     
     use constdef
@@ -486,9 +448,6 @@ module userdefine
     endif
 
   end subroutine udf_bc
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine udf_bc.                                 |
-  !+-------------------------------------------------------------------+
 
 end module userdefine
 !+---------------------------------------------------------------------+

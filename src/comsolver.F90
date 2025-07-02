@@ -114,8 +114,10 @@ module comsolver
 
     end if
 
-    !
     if(lfilter) then
+
+      call filter_coefficient_cal(alfa=alfa_filter,beter_halo=1.11d0,beter_bouond=1.09d0)
+
       call compact_filter_initiate(afilter=filter_i,ntype=npdci,dim=im)
       call compact_filter_initiate(afilter=filter_j,ntype=npdcj,dim=jm)
       call compact_filter_initiate(afilter=filter_k,ntype=npdck,dim=km)
@@ -123,9 +125,7 @@ module comsolver
       ! call compact_filter_initiate(afilter=filter_jj,ntype=npdcj,dim=jm,note='boundary_no_filter')
       ! call compact_filter_initiate(afilter=filter_kk,ntype=npdck,dim=km,note='boundary_no_filter')
     endif
-    !
-    call filter_coefficient_cal(alfa_filter)
-    !
+
     if(trim(turbmode)=='k-omega') then
       call init_komegasst
     endif

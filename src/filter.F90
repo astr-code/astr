@@ -38,6 +38,7 @@ module filter
         character(len=*),intent(in),optional :: note
 
         integer :: i_0,i_m
+        real(8) :: beter_0,beter_m
         real(8),allocatable :: a(:),c(:)
 
         select case (ntype)
@@ -45,18 +46,26 @@ module filter
           ! the block with boundary at i==0
           i_0=0
           i_m=dim+3
+          beter_0=1.09d0
+          beter_m=1.11d0
         case (2)
           ! the block with boundary at i==im
           i_0=-3
           i_m=dim
+          beter_0=1.11d0
+          beter_m=1.09d0
         case (3)
           ! inner block
           i_0=-3
           i_m=dim+3
+          beter_0=1.11d0
+          beter_m=1.11d0
         case (4)
           ! the block with boundary at i=0 and i=im
           i_0=0
           i_m=dim
+          beter_0=1.09d0
+          beter_m=1.09d0
         case default
           print*, ' !! error 1 in subroutine compact_filter_initiate !'
         end select
@@ -79,11 +88,11 @@ module filter
           afilter%a(i_m) = 0.d0
           afilter%c(i_m) = 0.d0
         else
-          afilter%a(i_0) = alfa_filter*2.d0
-          afilter%c(i_0) = alfa_filter*2.d0
+          afilter%a(i_0) = beter_0
+          afilter%c(i_0) = beter_0
 
-          afilter%a(i_m) = alfa_filter*2.d0
-          afilter%c(i_m) = alfa_filter*2.d0
+          afilter%a(i_m) = beter_m
+          afilter%c(i_m) = beter_m
         endif
 
         afilter%ac=tridiagonal_thomas_proprocess(afilter%a,afilter%c)
@@ -287,9 +296,9 @@ module filter
     ! Writen by Fang Jian, 2008-11-05.
     ! Moved to this module, 30-05-2025
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    subroutine filter_coefficient_cal(alfa)
+    subroutine filter_coefficient_cal(alfa,beter_halo,beter_bouond)
       !
-      real(8),intent(in) :: alfa
+      real(8),intent(in) :: alfa,beter_halo,beter_bouond
       !
       allocate(coef2i(0:1),coef4i(0:2),coef6i(0:3),coef8i(0:4),coef10i(0:5))
       allocate(coefb(0:4,0:8),coefh(0:4,0:10))
@@ -374,28 +383,28 @@ module filter
       coefb(1,8)=0.d0
 
       ! 6-order asymmetry scheme for point 0
-      coefb(0,0)=( 63.d0 + 1.d0*alfa*2.d0)  /64.d0
-      coefb(0,1)=(  3.d0 +29.d0*alfa*2.d0)  /32.d0
-      coefb(0,2)=(-15.d0 +15.d0*alfa*2.d0)  /64.d0
-      coefb(0,3)=(  5.d0 - 5.d0*alfa*2.d0)  /16.d0
-      coefb(0,4)=(-15.d0 +15.d0*alfa*2.d0)  /64.d0
-      coefb(0,5)=(  3.d0 - 3.d0*alfa*2.d0)  /32.d0
-      coefb(0,6)=( -1.d0 + 1.d0*alfa*2.d0)  /64.d0
+      coefb(0,0)=( 63.d0 + 1.d0*beter_bouond)  /64.d0
+      coefb(0,1)=(  3.d0 +29.d0*beter_bouond)  /32.d0
+      coefb(0,2)=(-15.d0 +15.d0*beter_bouond)  /64.d0
+      coefb(0,3)=(  5.d0 - 5.d0*beter_bouond)  /16.d0
+      coefb(0,4)=(-15.d0 +15.d0*beter_bouond)  /64.d0
+      coefb(0,5)=(  3.d0 - 3.d0*beter_bouond)  /32.d0
+      coefb(0,6)=( -1.d0 + 1.d0*beter_bouond)  /64.d0
       coefb(0,7)=0.d0
       coefb(0,8)=0.d0
       !
       ! halo nodes
-      coefh(0,0)=(-1.d0+1.d0*alfa*2.d0)/1024.d0
-      coefh(0,1)=(5.d0-5.d0*alfa*2.d0)/512.d0
-      coefh(0,2)=(979.d0+45.d0*alfa*2.d0)/1024.d0
-      coefh(0,3)=(15.d0+113.d0*alfa*2.d0)/128.d0
-      coefh(0,4)=(-105.d0+105.d0*alfa*2.d0)/512.d0
-      coefh(0,5)=(63.d0-63.d0*alfa*2.d0)/256.d0
-      coefh(0,6)=(-105.d0+105.d0*alfa*2.d0)/512.d0
-      coefh(0,7)=(15.d0-15.d0*alfa*2.d0)/128.d0
-      coefh(0,8)=(-45.d0+45.d0*alfa*2.d0)/1024.d0
-      coefh(0,9)=(5.d0-5.d0*alfa*2.d0)/512.d0
-      coefh(0,10)=(-1.d0+1.d0*alfa*2.d0)/1024.d0
+      coefh(0,0)=(-1.d0+1.d0*beter_halo)/1024.d0
+      coefh(0,1)=(5.d0-5.d0*beter_halo)/512.d0
+      coefh(0,2)=(979.d0+45.d0*beter_halo)/1024.d0
+      coefh(0,3)=(15.d0+113.d0*beter_halo)/128.d0
+      coefh(0,4)=(-105.d0+105.d0*beter_halo)/512.d0
+      coefh(0,5)=(63.d0-63.d0*beter_halo)/256.d0
+      coefh(0,6)=(-105.d0+105.d0*beter_halo)/512.d0
+      coefh(0,7)=(15.d0-15.d0*beter_halo)/128.d0
+      coefh(0,8)=(-45.d0+45.d0*beter_halo)/1024.d0
+      coefh(0,9)=(5.d0-5.d0*beter_halo)/512.d0
+      coefh(0,10)=(-1.d0+1.d0*beter_halo)/1024.d0
   
       coefh(1,0)=(1.d0-2.d0*alfa)/1024.d0
       coefh(1,1)=(-5.d0+10.d0*alfa)/512.d0

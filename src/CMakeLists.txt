@@ -38,7 +38,7 @@ add_executable(astr
                     tecio.F90
                     test.F90
                     thermchem.F90
-                    userdefine.F90
+                    ../user_define_module/userdefine.F90
                     utility.F90
                     vtkio.F90)
                     

@@ -1,0 +1,35 @@
+############################################################
+#               control file for ASTR  code                #
+############################################################
+
+# lwsequ,lwslic,lavg,lcracon
+       f,     f,   f,      f
+
+# maxstep,feqchkpt,feqwsequ,feqslice,feqlist,feqavg
+   500000,      1000,     100,      50,      10,    50
+
+# deltat
+1.d-4
+
+
+# The controller file will be read during a simulation, 
+# everytime after dumping checkpoint.
+
+#+---------------+-----------------------------------------+
+#|        lwsequ | to output flowfield sequence            |
+#|        lwslic | to output flowfield at given i/j/k cut  |
+#|               | , slice.dat will be required to define  |
+#|               |  i/j/k position                         |
+#|          lavg | to calculate statistics and also output |
+#|               | meanflow, 2order and 3order files.      |
+#+---------------+-----------------------------------------+
+#|       maxstep | the max step to run.                    |
+#|      feqchkpt | frequency of writing checkpoint         |
+#|      feqwsequ | frequency of writing flowfield sequence |
+#|      feqslice | frequency of writing slices             |
+#|       feqlist | frequency of listing log                |
+#|        feqavg | frequency of averaging flowfield        |
+#|      feqchkpt | frequency of outputting checkpoint      |
+#+---------------+-----------------------------------------+
+#|        deltat | the time step                           |
+#+---------------+-----------------------------------------+

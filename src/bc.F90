@@ -327,6 +327,7 @@ module bc
   subroutine boucon(subtime)
     !
     use commvar, only : limmbou
+    use userdefine, only : udf_bc
     !
     ! arguments
     real(8),intent(inout),optional :: subtime
@@ -391,6 +392,10 @@ module bc
       !
       if(bctype(n)==31) then
         call fixbc(n)
+      endif
+      !
+      if(bctype(n)==0) then
+        call udf_bc(n)
       endif
       !
     enddo
@@ -6354,7 +6359,99 @@ module bc
     !
     beta1=0.075d0
     !
-    if(ndir==3) then
+    if(ndir==1) then
+
+      if(irk==0) then
+        !
+        i=0
+        do k=0,km
+        do j=0,jm
+          pe=num1d3*(4.d0*prs(i+1,j,k)-prs(i+2,j,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =tw
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i+1,j,k,1)-spc(i,j+2,k,1))
+          endif
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+
+    elseif(ndir==2) then
+
+      if(irk==irkm) then
+        !
+        i=im
+        do k=0,km
+        do j=0,jm
+          pe=num1d3*(4.d0*prs(i-1,j,k)-prs(i-2,j,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =tw
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i-1,j,k,1)-spc(i,j-2,k,1))
+          endif
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+      
+    elseif(ndir==3) then
       !
       if(jrk==0) then
         !
@@ -6532,6 +6629,7 @@ module bc
       endif
       !
     else
+      print*,' !! ndir',ndir
       stop ' !! ndir not defined @ noslip'
     endif
     !

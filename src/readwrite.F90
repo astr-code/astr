@@ -353,7 +353,9 @@ module readwrite
       write(*,'(2X,A)')'                    *** Boundary Conditions ***'
       do n=1,6
         !
-        if(bctype(n)==1) then
+        if(bctype(n)==0) then
+          write(*,'(45X,I0,2(A))')bctype(n),' user defined b.c. at: ',bcdir(n)
+        elseif(bctype(n)==1) then
           write(*,'(45X,I0,2(A))')bctype(n),' periodic at: ',bcdir(n)
         elseif(bctype(n)==41) then
           write(*,'(37X,I0,2(A))')bctype(n),' isothermal wall at: ',bcdir(n)
