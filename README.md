@@ -1,60 +1,89 @@
-# ASTR code 
-Version 2.0 
+ASTR Code
 
-ASTR code is a high-order finite-difference flow solver for compressible turbulence research.
+Version 2.5
 
-# Download, Installation and Compilation
-Required dependencies: Fortran 90, MPI, HDF5
+ASTR is a high-order finite-difference flow solver designed for high-fidelity simulation of compressible turbulence. It supports multi-physics extensions including combustion and is optimized for modern high-performance computing systems.
 
-## Download the astr code:
+Dependencies
+Before building ASTR, ensure the following dependencies are installed:
 
+Fortran 90 compiler (e.g., gfortran, ifort)
+MPI (e.g., OpenMPI, MPICH)
+HDF5 with Fortran bindings
+(Optional) Cantera (for combustion simulations)
+
+Download the Source Code
+Clone the official repository:
 git clone git@github.com:astr-code/astr.git
 
-## Compilation and installation:
-ASTR 2.0 supports both gnu make and cmake.
-For the use of gnu make, do:
-make 
-in the directory containing src folder, and the executable will be found as ./bin/astr 
+Compilation and Installation
 
-The cmake gives a more complete and safe way of compiling and installing the code.
-By default ASTR solves equations under non-dimensional form, unless the chemstry is included.
+Option 1: Using make
+A simple build using GNU Make:
 
-create a case folder, e.g.
+cd astr
+make
+The executable will be located at:
+./bin/astr
+
+Option 2: Using CMake (Recommended)
+CMake provides a safer and more flexible build environment. To compile and install using CMake:
+
+Create a case directory:
+
 mkdir test_case
-sh path_to_the_source/script/astr.case.creater #create a new case
 
 cmake path_to_the_source
-cmake --build 
-cmake --install 
+cmake --build .
+cmake --install .
 ctest -L nondim
+The binary will be installed under:
 
-The code will be installed in test_case and excutable can be found at test_case/bin/astr
+test_case/bin/astr
 
-If you want to use the chemstry function, you need first to install cantera. After download and unpack the cantera, you can use the following script to install:
-python scons/scripts/scons.py build python_package=none FORTRAN=<your fortran compiler> f90_interface=y prefix=<the directory of centera to install> boost_inc_dir=<to boost directory>
+Enabling Combustion Module
+ASTR supports detailed chemical kinetics via Cantera. To enable this feature:
+
+Install Cantera (Fortran interface required):
+
+python scons/scripts/scons.py build python_package=none \
+    FORTRAN=<your fortran compiler> f90_interface=y \
+    prefix=<installation_dir> boost_inc_dir=<boost_include_dir>
 
 python scons/scripts/scons.py test
-
 python scons/scripts/scons.py install
 
-you may need to make and test ASTR with chemstry with following cmake commands:
-
+Configure ASTR with Cantera support:
 cmake -DCHEMISTRY=TRUE -DCANTERA_DIR=path_to_cantera path_to_the_source
-
-cmake --build 
-
-cmake --install 
-
+cmake --build .
+cmake --install .
 ctest -L combustion
 
-
-## Run the solver:
-
-Once the excutable is built, a typical simulation can be run as,
+Running a Simulation
+To execute a simulation:
 mpirun -np 8 ./astr run ./datin/input_file
 
+Mini Apps
+ASTR includes lightweight mini-applications for testing and development.
 
+To compile and run mini-apps:
 
+mkdir test_mini_apps
+cd test_mini_apps
+cmake path_to_the_source/miniapps/
+cmake --build .
+./astr.min
 
+Directory Structure Overview
 
+astr/
+├── src/                # Core solver source code
+├── script/             # Utility scripts (e.g. case creation)
+├── miniapps/           # Testing and development tools
+├── bin/                # Compiled binaries
+└── examples/           # Sample cases
 
+Contact
+For questions, bug reports, or contributions, please open an issue on GitHub or contact the development team.
+
+Let me know if you want to include badges (e.g., build status), citation info, or extended documentation links.

@@ -8,9 +8,7 @@
 module commfunc
   !
   use commvar, only : hm,kcutoff,ltimrpt
-  use parallel, only: mpirank,mpistop,lio,lreport,ptime
   use constdef
-  use utility,  only : timereporter
 
   implicit none
   !
