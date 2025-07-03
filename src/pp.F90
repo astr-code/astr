@@ -2003,10 +2003,10 @@ module pp
       call h5_read2dfrom3d( p_2d,im,jm,km, 'p',flowfile,kslice=0)
       call h5_read2dfrom3d( t_2d,im,jm,km, 't',flowfile,kslice=0)
       !
-      call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
-                                     v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
-       ! call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
-       !                                   v_2d,'v',p_2d,'p',t_2d,'t')
+      ! call writeprvbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+      !                                v_2d,'v',p_2d,'p',t_2d,'t',im,jm)
+       call tecbin(outputfile,x_2d,'x',y_2d,'y',ro_2d,'ro',u_2d,'u',   &
+                                         v_2d,'v',p_2d,'p',t_2d,'t')
     elseif(viewmode=='3d') then
       allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
     elseif(viewmode=='1d') then

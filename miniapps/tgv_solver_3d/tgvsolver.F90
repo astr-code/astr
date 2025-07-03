@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=10
+        maxstep=100
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -223,10 +223,10 @@ module initilise
         enddo
         enddo
 
-        qrhs=0.d0
-
         nstep=0
+
         time =0.d0
+
         deltat=1.d-3
 
         print*,' ** flow field initilised'
@@ -669,7 +669,7 @@ module solver
 
             skk=num1d3*(s11+s22+s33)
 
-            miu=miucal(tmp(i,j,k))
+            miu=miucal(tmp(i,j,k))/reynolds
             miu2=2.d0*miu
             hcc=(miu/prandtl)/const5
 
@@ -776,10 +776,10 @@ module solver
             df(:,n)=fds%central(fds_compact_k,f=ff(:,n),dim=km)
           enddo
 
-          qrhs(i,j,0:km,2)=qrhs(i,j,0:km,2)+df(0:km,1)/dz
-          qrhs(i,j,0:km,3)=qrhs(i,j,0:km,3)+df(0:km,2)/dz
-          qrhs(i,j,0:km,4)=qrhs(i,j,0:km,4)+df(0:km,3)/dz
-          qrhs(i,j,0:km,5)=qrhs(i,j,0:km,5)+df(0:km,4)/dz
+          qrhs(i,j,0:km,2)=qrhs(i,j,0:km,2)+df(0:km,2)/dz
+          qrhs(i,j,0:km,3)=qrhs(i,j,0:km,3)+df(0:km,3)/dz
+          qrhs(i,j,0:km,4)=qrhs(i,j,0:km,4)+df(0:km,4)/dz
+          qrhs(i,j,0:km,5)=qrhs(i,j,0:km,5)+df(0:km,5)/dz
           !
         enddo
         enddo
@@ -973,6 +973,8 @@ module mainloop
         call cpu_time(tstart)
     endif
     !
+    qrhs=0.d0
+
     call gradcal
     !
     call convection
@@ -1033,8 +1035,6 @@ module mainloop
     endif
     !
     do rkstep=1,3
-      !
-      qrhs=0.d0
 
       call bchomo
 
