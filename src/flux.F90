@@ -32,6 +32,7 @@ module flux
 
         use constdef
         use commfunc,only : tridiagonal_thomas_proprocess
+        use commvar,  only: bfacmpld
 
         type(compact_scheme) :: asolver
         integer,intent(in) :: scheme,ntype,dim
@@ -71,9 +72,11 @@ module flux
         if(scheme/100==5) then
 
           if(asolver%wind=='+') then
-            asolver%a(:)=0.5d0;  asolver%c(:)=num1d6
+            asolver%a(:)=0.5d0  -num1d6*bfacmpld
+            asolver%c(:)=num1d6 +num1d6*bfacmpld
           elseif(asolver%wind=='-') then
-            asolver%a(:)=num1d6; asolver%c(:)=0.5d0
+            asolver%a(:)=num1d6 +num1d6*bfacmpld
+            asolver%c(:)=0.5d0  -num1d6*bfacmpld
           else
             stop 'wind error @ compact_flux_initiate'
           endif
@@ -160,7 +163,7 @@ module flux
     function compact_flux_rhs(asolver,f,dim) result(d)
 
         use constdef
-        use commvar, only : hm
+        use commvar, only : hm,bfacmpld
 
         type(compact_scheme),intent(in) :: asolver
         integer,intent(in) :: dim
@@ -190,6 +193,7 @@ module flux
           ! 3rd-order flux
           j=i_0 ! i=-1
           d(j)=2.5d0*f(j+1)+0.5d0*f(j+2)
+          ! d(j)=num17d6*f(j+1)+num4d3*f(j+2)-num1d6*f(j+3)
 
           ! 4th-order flux
           j=i_0+1 ! i=0
@@ -221,6 +225,7 @@ module flux
           ! 4th-order flux
           j=i_m
           d(j)=2.5d0*f(j)+0.5d0*f(j-1)
+          ! d(j)=num17d6*f(j)+num4d3*f(j-1)-num1d6*f(j-2)
 
           i_e=i_m-2
         else
@@ -238,11 +243,17 @@ module flux
         if(wind=='+') then
           ! 5th-order compact upwind
           do j=i_s,i_e
-            d(j)=num1d18*f(j-1) + num19d18*f(j) + num5d9*f(j+1)
+            d(j)=( num1d18 - num1d36*bfacmpld)*f(j-1) + &
+                 (num19d18 - num9d36*bfacmpld)*f(j)   + &
+                 (  num5d9 + num9d36*bfacmpld)*f(j+1) + &
+                             num1d36*bfacmpld *f(j+2)
           end do
         elseif(wind=='-') then
           do j=i_s,i_e
-            d(j)=num5d9*f(j) + num19d18*f(j+1) + num1d18*f(j+2)
+            d(j)=(num1d18  - num1d36*bfacmpld)*f(j+2) + &
+                 (num19d18 - num9d36*bfacmpld)*f(j+1) + &
+                 (num5d9   + num9d36*bfacmpld)*f(j)   + &
+                             num1d36*bfacmpld *f(j-1)
           end do
         endif
     

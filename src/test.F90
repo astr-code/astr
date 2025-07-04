@@ -8,48 +8,78 @@
 module test
   !
   use constdef
-  use parallel, only: mpistop
+  use parallel, only: mpistop,mpirank
   !
   implicit none
   !
   contains
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine is the entrance of the test                       |  
+  !!+-------------------------------------------------------------------+
+  !| This subroutine is the entrance of the test                        |
   !+-------------------------------------------------------------------+
   subroutine codetest
-    !
+  
     use commvar,   only : testmode
-    use parallel,  only : mpistop,bcast
+    use parallel,  only : mpistop, bcast
     use cmdefne,   only : readkeyboad
-    !
+
+    !-------------------------------------------------------------------
+    ! Read test mode and broadcast it
+    !-------------------------------------------------------------------
     call readkeyboad(testmode)
-    !
+
     call bcast(testmode)
-    !
-    if(testmode=='grad') then 
+  
+    !-------------------------------------------------------------------
+    ! Execute selected test
+    !-------------------------------------------------------------------
+    select case (trim(testmode))
+    
+    case ('grad')
       call gradtest
-    elseif(testmode=='accu') then 
-      call accuracytest
-    elseif(testmode=='enst') then 
-      call enstest
-    elseif(testmode=='filt') then 
-      call filtertest
-    elseif(testmode=='flux') then 
+  
+    case ('flux')
       call fluxtest
-    elseif(testmode=='bc') then 
+  
+    case ('filt')
+      call filtertest
+
+    case ('accu')
+      call accuracytest
+  
+    case ('enst')
+      call enstest
+
+    case ('bc')
       call testbc
-    else
-      return
-    endif
-    !
+  
+    case default
+
+      if(mpirank==0) then
+        write(*,*) ' +------------------------------------------------------------+'
+        write(*,*) ' | Available test options                                     |'
+        write(*,*) ' +------------------------------------------------------------+'
+        write(*,*) ' | grad    - Test gradient calculation                        |'
+        write(*,*) ' | flux    - Test flux schemes                                |'
+        write(*,*) ' | filt    - Test filter routines                             |'
+        write(*,*) ' | accu    - Test numerical accuracy                          |'
+        write(*,*) ' | enst    - Test enstrophy evaluation                        |'
+        write(*,*) ' | bc      - Test boundary condition treatment                |'
+        write(*,*) ' +------------------------------------------------------------+'
+      endif
+    
+    end select
+  
     call mpistop
-    !
+  
   end subroutine codetest
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine codetest                                |  
+  !| End of subroutine codetest                                        |
   !+-------------------------------------------------------------------+
-  !
+
+  subroutine test_init
+
+  end subroutine test_init
+
   subroutine testbc
     !
     use bc,        only : inflowintx
@@ -220,570 +250,627 @@ module test
 
   end subroutine filtertest2
 
+  !+-------------------------------------------------------------------+
+  !| Subroutine: filtertest                                            |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   This subroutine verifies the performance of 1D compact filters  |
+  !|   in the x, y, and z directions using known smooth or perturbed   |
+  !|   test functions. It calculates the L2 error between filtered and |
+  !|   original fields to assess filter accuracy and boundary behavior.|
+  !|                                                                   |
+  !| Functionality:                                                    |
+  !|   - Initializes a grid and analytical test fields                 |
+  !|   - Applies compact filters in x/y/z directions                   |
+  !|   - Computes L2 error and reports performance                     |
+  !|                                                                   |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-05-2021  | Created by J. Fang @ Warrington                     |
+  !| 03-07-2025  | Remastered by J. Fang @ Imech, Beijing, with ChatGPT|
+  !+-------------------------------------------------------------------+
   subroutine filtertest
-    !
-    use commvar,   only : im,jm,km,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie,ia,ja,ka
-    use commarray, only : x,q,dxi
-    use bc,        only : boucon
-    use parallel,  only : dataswap,mpirankname,jrkm,jrk,mpirank,psum,ptime
-    use comsolver, only : alfa_con,fci,fcj,fck
-    use filter,    only : compact_filter,filter_i,filter_j,filter_k,filter_ii,filter_jj,filter_kk
-    !
-    ! local data
-    integer :: i,j,k,n
-    real(8) :: dx,error,time_beg,subtime
-    real(8),allocatable :: vtest(:,:,:)
-    real(8),allocatable :: dq(:),qhp(:),qhm(:),dqref(:)
-    !
-    ! print*,x(:,0,0,1)
-    !
-    time_beg=ptime() 
-
-    ! testing ddx
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      q(i,j,k,1)=sin(10.d0*x(i,j,k,1))
-      !
-    enddo
-    enddo
-    enddo
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:im))
-    !
-    ! dq(:)=spafilter10(q(:,0,0,1),npdci,im,alfa_filter,fci)
-    dq(:)=compact_filter(afilter=filter_i,f=q(:,0,0,1),dim=im)
-
-    error=0.d0
-    do i=1,im
-      error=error+(dq(i)-q(i,0,0,1))**2
-    enddo
-
-    error=psum(error)/(ia)
-
-    if(mpirank==0) then
-      print*,' ** filtering a smooth function in x direction,         error:',error
-    endif
-    ! open(18,file='testout/filterx'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'x','q','q~'
-    ! write(18,'(3(1X,E15.7E3))')(x(i,0,0,1),q(i,0,0,1),dq(i),i=0,im)
-    ! close(18)
-    ! print*,' << testout/filterx.dat'
-    ! !
-    deallocate(dq)
-
-    ! testing ddy
-    do k=0,km
-    do j=0,jm
-      !
-      i=0
-      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))+0.1d0*sin((dble(j)+0.5d0)*pi)
-      !
-      i=1
-      q(i,j,k,1)=sin(0.5d0*pi*x(i,j,k,2))
-    enddo
-    enddo
-    if(jrk==0) q(:, 0,:,1)=0.d0
-    if(jrk==jrkm) q(:,jm,:,1)=0.d0
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:jm))
-    !
-    ! dq(:)=compact_filter(afilter=filter_jj,f=q(0,:,0,1),ntype=npdcj,dim=jm,note='boundary_no_filter')
-    dq(:)=compact_filter(afilter=filter_j,f=q(0,:,0,1),dim=jm)
-    
-    error=0.d0
-    do j=1,jm
-      error=error+(dq(j)-q(1,j,0,1))**2
-    enddo
-
-    error=psum(error)/(ja)
-
-    if(mpirank==0) then
-      print*,' ** filtering a smooth+wiggled function in y direction, error:',error
-    endif
-
-    ! open(18,file='testout/filtery'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'y','q','q~'
-    ! write(18,'(3(1X,E15.7E3))')(x(0,j,0,2),q(0,j,0,1),dq(j),j=0,jm)
-    ! close(18)
-    ! print*,' << testout/filtery.dat'
-    !
-    deallocate(dq)
-    !
-    ! testing ddz
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      q(i,j,k,1)=sin(6.d0*x(i,j,k,3))
-      !
-    enddo
-    enddo
-    enddo
-    !
-    call dataswap(q)
-    !
-    allocate(dq(0:km))
-    !
-    dq(:)=compact_filter(afilter=filter_k,f=q(0,0,:,1),dim=km)
-    ! dq(:)=compact_filter(afilter=filter_kk,f=q(0,0,:,1),ntype=npdck,dim=km,note='boundary_no_filter')
-    !
-    error=0.d0
-    do k=1,km
-      error=error+(dq(k)-q(0,0,k,1))**2
-    enddo
-
-    error=psum(error)/(ka)
-
-    if(mpirank==0) then
-      print*,' ** filtering a smooth function in z direction,         error:',error
-    endif
-
-    subtime=subtime+ptime()-time_beg
-    !
-    if(mpirank==0) print*,' ** time cost:',subtime
-    ! open(18,file='testout/filterz'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'y','q','q~'
-    ! write(18,'(3(1X,E15.7E3))')(x(0,0,k,3),q(0,0,k,1),dq(k),k=0,km)
-    ! close(18)
-    ! print*,' << testout/filterz.dat'
-    !
-    deallocate(dq)
-    !
-  end subroutine filtertest
   
+    use commvar,   only : im, jm, km, npdci, npdcj, npdck, ia, ja, ka, hm, &
+                          alfa_filter, lihomo, ljhomo, lkhomo
+    use commarray, only : x
+    use parallel,  only : mpisizedis, parapp, parallelini, dataswap,      &
+                          mpirankname, mpirank, psum, ptime, jrk, jrkm
+    use solver,    only : refcal
+    use gridgeneration, only : gridcube
+    use filter,    only : compact_filter_initiate, filter_coefficient_cal, &
+                          filter_i, filter_j, filter_k, compact_filter
+  
+    implicit none
+  
+    ! Local variables
+    integer :: i, j, k, n
+    real(8) :: dx, error, time_beg, subtime
+    real(8), allocatable :: fv(:,:,:)
+    real(8), allocatable :: ffv(:)
+  
+    !---------------------------------------------------------------
+    ! Initialization
+    !---------------------------------------------------------------
+    ia = 128
+    ja = 128
+    ka = 128
+  
+    lihomo = .true.
+    ljhomo = .false.
+    lkhomo = .true.
+  
+    alfa_filter = 0.49d0
+  
+    call mpisizedis
+    call parapp
+    call parallelini
+    call refcal
+  
+    call filter_coefficient_cal(alfa=alfa_filter, beter_halo=1.11d0, beter_bouond=0.98d0)
+    call compact_filter_initiate(afilter=filter_i, ntype=npdci, dim=im)
+    call compact_filter_initiate(afilter=filter_j, ntype=npdcj, dim=jm)
+    call compact_filter_initiate(afilter=filter_k, ntype=npdck, dim=km)
+  
+    allocate(x(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:3))
+    call gridcube(2.d0*pi, 2.d0, 2.d0*pi)
+    allocate(fv(-hm:im+hm, -hm:jm+hm, -hm:km+hm))
+  
+    !---------------------------------------------------------------
+    ! Test in x-direction
+    !---------------------------------------------------------------
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          fv(i,j,k) = sin(10.d0 * x(i,j,k,1))
+        end do
+      end do
+    end do
+  
+    time_beg = ptime()
+  
+    call dataswap(fv)
+  
+    allocate(ffv(0:im))
+    ffv(:) = compact_filter(afilter=filter_i, f=fv(:,0,0), dim=im)
+  
+    error = 0.d0
+    do i = 1, im
+      error = error + (ffv(i) - fv(i,0,0))**2
+    end do
+    error = psum(error) / ia
+  
+    if (mpirank == 0) then
+      write(*,*) ' +------------------------------------------------------------+'
+      write(*,*) ' | errors caused by compact_filter                            |'
+      write(*,*) ' +-------------------------------+----------------------------+'
+      write(*,*) ' | x (homo+smooth)               |', error,' |'
+    end if
+  
+    deallocate(ffv)
+  
+    !---------------------------------------------------------------
+    ! Test in y-direction with wiggle
+    !---------------------------------------------------------------
+    do k = 0, km
+      do j = 0, jm
+        fv(0,j,k) = sin(0.5d0 * pi * x(0,j,k,2)) + 0.1d0 * sin((dble(j)+0.5d0)*pi)
+        fv(1,j,k) = sin(0.5d0 * pi * x(1,j,k,2))
+      end do
+    end do
+  
+    if (jrk == 0)    fv(:, 0, :) = 0.d0
+    if (jrk == jrkm) fv(:, jm, :) = 0.d0
+  
+    call dataswap(fv)
+  
+    allocate(ffv(0:jm))
+    ffv(:) = compact_filter(afilter=filter_j, f=fv(0,:,0), dim=jm)
+  
+    error = 0.d0
+    do j = 1, jm
+      error = error + (ffv(j) - fv(1,j,0))**2
+    end do
+    error = psum(error) / ja
+  
+    if (mpirank == 0) then
+      write(*,*) ' | y (non-homo + wiggles)        |', error,' |'
+    end if
+  
+    deallocate(ffv)
+  
+    !---------------------------------------------------------------
+    ! Test in z-direction
+    !---------------------------------------------------------------
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          fv(i,j,k) = sin(10.d0 * x(i,j,k,3))
+        end do
+      end do
+    end do
+  
+    call dataswap(fv)
+  
+    allocate(ffv(0:km))
+    ffv(:) = compact_filter(afilter=filter_k, f=fv(0,0,:), dim=km)
+  
+    error = 0.d0
+    do k = 1, km
+      error = error + (ffv(k) - fv(0,0,k))**2
+    end do
+    error = psum(error) / ka
+  
+    if (mpirank == 0) then
+      write(*,*) ' | z (homo+smooth)               |', error,' |'
+      write(*,'(A,F11.6,A)') '  | Time cost                     |', ptime() - time_beg,' s               |'
+      write(*,*) ' +-------------------------------+----------------------------+'
+    end if
+  
+    deallocate(ffv)
+    deallocate(fv)
+  
+  end subroutine filtertest
+  !+-------------------------------------------------------------------+
+  !| End of subroutine filtertest                                      |
+  !+-------------------------------------------------------------------+
+
+  !+-------------------------------------------------------------------+
+  !| Subroutine: gradtest                                              |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   This subroutine tests the accuracy of spatial gradient          |
+  !|   computations using high-order compact finite difference schemes.|
+  !|   It computes the numerical derivatives of a known trigonometric  |
+  !|   field and compares them to analytical gradients in x, y, z.     |
+  !|   The L2 error of the derivatives is reported for validation.     |
+  !|                                                                   |
+  !| Functionality:                                                    |
+  !|   - Initializes a 3D periodic grid                                |
+  !|   - Constructs an analytic test field                             |
+  !|   - Computes reference (exact) derivatives                        |
+  !|   - Applies finite difference schemes in x/y/z directions         |
+  !|   - Computes and outputs L2-norm errors of numerical gradients    |
+  !|                                                                   |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 28-05-2021  | Created by J. Fang @ Warrington                     |
+  !| 03-07-2025  | Remastered by J. Fang @ Imech, CAS, Beijing         |
+  !+-------------------------------------------------------------------+
   subroutine gradtest
-    !
-    use commvar,   only : im,jm,km,ia,ja,ka,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie,hm,difschm
-    use commarray, only : x,q,dxi
-    use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
-    use bc,        only : boucon
-    use parallel,  only : dataswap,mpirank,mpirankname,ptime,psum,mpistop
-    use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+  
+    use commvar,   only : im,jm,km,hm,ia,ja,ka,conschm,difschm,        &
+                          lihomo,ljhomo,lkhomo
+    use commarray, only : x
+    use comsolver, only : solvrinit
+    use parallel,  only : mpiinitial,mpistop,mpisizedis,lio,           &
+                          parallelini,parapp,dataswap,mpirank,         &
+                          mpirankname,ptime,psum
+    use solver,    only : refcal
+    use derivative,only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+    use gridgeneration, only : gridcube
     use tecio
-    !
-    ! local data
-    integer :: i,j,k,n,s,asize,ncolm,counter
-    real(8) :: dx,var1
-    real(8),allocatable :: vtest(:,:,:,:),dvtes(:,:,:,:,:),dvref(:,:,:,:,:)
-    real(8),allocatable :: f1(:,:),df1(:,:)
-    real(8),allocatable :: ff(:,:,:,:),dff(:,:,:,:)
-    real(8),allocatable :: error(:,:)
-    !
+  
+    implicit none
+  
+    !-------------------------------------------------------------------
+    ! Local variables
+    !-------------------------------------------------------------------
+    integer :: i, j, k, n, s, asize, ncolm, counter
+    real(8) :: dx, dy, dz, var1
+    real(8), allocatable :: vtest(:,:,:,:), dvtes(:,:,:,:,:), dvref(:,:,:,:,:)
+    real(8), allocatable :: f1(:,:), df1(:,:)
+    real(8), allocatable :: ff(:,:,:,:), dff(:,:,:,:)
+    real(8), allocatable :: error(:,:)
     real(8) :: time_beg
-    real(8),save :: subtime=0.d0
-    !
-    ! call x3d2init(im,jm,km)
-    ! print*,x(:,0,0,1)
-    !
-    ! testing ddx
-    ncolm=1
-    allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:ncolm))
-    allocate(dvtes(0:im,0:jm,0:km,1:ncolm,1:3),dvref(0:im,0:jm,0:km,1:ncolm,1:3))
-    allocate(error(ncolm,3))
-
-    dvtes=0.d0
-    !
-    time_beg=ptime() 
-    counter=0
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      ! do n=1,ncolm
-      !   call random_number(var1)
-      !   vtest(i,j,k,n)=var1
-      ! enddo
-      ! vtest(i,j,k,1)=sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))
-      vtest(i,j,k,1)=sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
-      ! !
-      dvref(i,j,k,1,1)= cos(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
-      dvref(i,j,k,1,2)= 0.5d0*pi*sin(x(i,j,k,1))*cos(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
-      dvref(i,j,k,1,3)=-2.d0*sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*sin(2.d0*x(i,j,k,3))
-
-    enddo
-    enddo
-    enddo
-
+    real(8), save :: subtime = 0.d0
+  
+    !-------------------------------------------------------------------
+    ! Initialization
+    !-------------------------------------------------------------------
+    difschm  = '643c'
+    conschm  = '643c'
+  
+    ia = 128
+    ja = 128
+    ka = 128
+  
+    lihomo = .true.
+    ljhomo = .false.
+    lkhomo = .true.
+  
+    call mpisizedis
+    call parapp
+    call parallelini
+    call refcal
+    call solvrinit
+  
+    allocate(x(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:3))
+    call gridcube(2.d0*pi, 2.d0, 2.d0*pi)
+  
+    dx = x(1,0,0,1) - x(0,0,0,1)
+    dy = x(0,1,0,2) - x(0,0,0,2)
+    dz = x(0,0,1,3) - x(0,0,0,3)
+  
+    ncolm = 1
+    allocate(vtest(-hm:im+hm, -hm:jm+hm, -hm:km+hm, ncolm))
+    allocate(dvtes(0:im,0:jm,0:km,ncolm,3), dvref(0:im,0:jm,0:km,ncolm,3))
+    allocate(error(ncolm, 3))
+    dvtes = 0.d0
+  
+    !-------------------------------------------------------------------
+    ! Construct test field and reference derivatives
+    !-------------------------------------------------------------------
+    time_beg = ptime()
+    counter = 0
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          vtest(i,j,k,1)   = sin(x(i,j,k,1)) * sin(0.5d0*pi*x(i,j,k,2)) * sin(x(i,j,k,3))
+          dvref(i,j,k,1,1) = cos(x(i,j,k,1)) * sin(0.5d0*pi*x(i,j,k,2)) * sin(x(i,j,k,3))
+          dvref(i,j,k,1,2) = 0.5d0*pi*sin(x(i,j,k,1)) * cos(0.5d0*pi*x(i,j,k,2)) * sin(x(i,j,k,3))
+          dvref(i,j,k,1,3) = sin(x(i,j,k,1)) * sin(0.5d0*pi*x(i,j,k,2)) * cos(x(i,j,k,3))
+        end do
+      end do
+    end do
+  
     call dataswap(vtest)
-    !
+  
+    !-------------------------------------------------------------------
+    ! x-direction gradient
+    !-------------------------------------------------------------------
     allocate(dff(0:im,0:jm,0:km,ncolm))
-
     allocate(ff(-hm:im+hm,0:jm,0:km,ncolm))
-
-    ff(:,0:jm,0:km,1:ncolm)=vtest(:,0:jm,0:km,1:ncolm)
-    
-    do n=1,1
-    do k=0,km
-    do j=0,jm
-        dff(:,j,k,n)=fds%central(fds_compact_i,f=ff(:,j,k,n),dim=im)
-    enddo
-    enddo
-    enddo
-
-
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      do n=1,ncolm
-        dvtes(i,j,k,n,1)=dff(i,j,k,n)*dxi(i,j,k,1,1)
-        dvtes(i,j,k,n,2)=dff(i,j,k,n)*dxi(i,j,k,1,2)
-        dvtes(i,j,k,n,3)=dff(i,j,k,n)*dxi(i,j,k,1,3)
-      enddo
-    enddo
-    enddo
-    enddo
-
+    ff(:,0:jm,0:km,:) = vtest(:,0:jm,0:km,:)
+  
+    do n = 1, ncolm
+      do k = 0, km
+        do j = 0, jm
+          dff(:,j,k,n) = fds%central(fds_compact_i, f=ff(:,j,k,n), dim=im)
+        end do
+      end do
+    end do
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          do n = 1, ncolm
+            dvtes(i,j,k,n,1) = dff(i,j,k,n) / dx
+          end do
+        end do
+      end do
+    end do
+  
     deallocate(ff)
-
+  
+    !-------------------------------------------------------------------
+    ! y-direction gradient
+    !-------------------------------------------------------------------
     allocate(ff(0:im,-hm:jm+hm,0:km,ncolm))
-
-    ff(0:im,:,0:km,1:ncolm)=vtest(0:im,:,0:km,1:ncolm)
-    
-    do n=1,1
-    do k=0,km
-    do i=0,im
-        dff(i,:,k,n)=fds%central(fds_compact_j,f=ff(i,:,k,n),dim=jm)
-    enddo
-    enddo
-    enddo
-
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      do n=1,ncolm
-        dvtes(i,j,k,n,1)=dvtes(i,j,k,n,1)+dff(i,j,k,n)*dxi(i,j,k,2,1)
-        dvtes(i,j,k,n,2)=dvtes(i,j,k,n,2)+dff(i,j,k,n)*dxi(i,j,k,2,2)
-        dvtes(i,j,k,n,3)=dvtes(i,j,k,n,3)+dff(i,j,k,n)*dxi(i,j,k,2,3)
-      enddo
-    enddo
-    enddo
-    enddo
-
+    ff(0:im,:,0:km,:) = vtest(0:im,:,0:km,:)
+  
+    do n = 1, ncolm
+      do k = 0, km
+        do i = 0, im
+          dff(i,:,k,n) = fds%central(fds_compact_j, f=ff(i,:,k,n), dim=jm)
+        end do
+      end do
+    end do
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          do n = 1, ncolm
+            dvtes(i,j,k,n,2) = dff(i,j,k,n) / dy
+          end do
+        end do
+      end do
+    end do
+  
     deallocate(ff)
-
-    ! i=im
-    ! k=km/4
-    ! open(18,file='testout/test'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'x','f','df'
-    ! write(18,'(3(1X,E15.7E3))')(x(i,j,k,2),ff(i,j,k,1),dff(i,j,k,1),j=0,jm)
-    ! close(18)
-    ! print*,' << testout/test'//mpirankname//'.dat'
-
+  
+    i=im/4
+    k=km/4
+    open(18,file='testout/grad_y'//mpirankname//'.dat')
+    write(18,'(3(1X,A15))')'y','f','df'
+    write(18,'(3(1X,E15.7E3))')(x(i,j,k,2),dvref(i,j,k,1,2),dvtes(i,j,k,1,2),j=0,jm)
+    close(18)
+    print*,' << testout/grad_y'//mpirankname//'.dat'
+  
+    !-------------------------------------------------------------------
+    ! z-direction gradient
+    !-------------------------------------------------------------------
     allocate(ff(0:im,0:jm,-hm:km+hm,ncolm))
-
-    ff(0:im,0:jm,:,1:ncolm)=vtest(0:im,0:jm,:,1:ncolm)
-
-    do n=1,1
-    do j=0,jm
-    do i=0,im
-        ! dff(i,j,:,n)=ddfc(ff(i,j,:,n),conschm,npdck,km,alfa_con,cck)
-        dff(i,j,:,n)=fds%central(fds_compact_k,f=ff(i,j,:,n),dim=km)
-    enddo
-    enddo
-    enddo
-
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      do n=1,ncolm
-        dvtes(i,j,k,n,1)=dvtes(i,j,k,n,1)+dff(i,j,k,n)*dxi(i,j,k,3,1)
-        dvtes(i,j,k,n,2)=dvtes(i,j,k,n,2)+dff(i,j,k,n)*dxi(i,j,k,3,2)
-        dvtes(i,j,k,n,3)=dvtes(i,j,k,n,3)+dff(i,j,k,n)*dxi(i,j,k,3,3)
-      enddo
-    enddo
-    enddo
-    enddo
+    ff(0:im,0:jm,:,:) = vtest(0:im,0:jm,:,:)
+  
+    do n = 1, ncolm
+      do j = 0, jm
+        do i = 0, im
+          dff(i,j,:,n) = fds%central(fds_compact_k, f=ff(i,j,:,n), dim=km)
+        end do
+      end do
+    end do
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          do n = 1, ncolm
+            dvtes(i,j,k,n,3) = dff(i,j,k,n) / dz
+          end do
+        end do
+      end do
+    end do
+  
     deallocate(ff)
+  
+    !-------------------------------------------------------------------
+    ! Compute L2 error
+    !-------------------------------------------------------------------
+    error = 0.d0
+    do k = 1, km
+      do j = 1, jm
+        do i = 1, im
+          do n = 1, ncolm
+            error(n,1) = error(n,1) + (dvtes(i,j,k,n,1) - dvref(i,j,k,n,1))**2
+            error(n,2) = error(n,2) + (dvtes(i,j,k,n,2) - dvref(i,j,k,n,2))**2
+            error(n,3) = error(n,3) + (dvtes(i,j,k,n,3) - dvref(i,j,k,n,3))**2
+          end do
+        end do
+      end do
+    end do
+  
+    error = psum(error)
+  
+    if (mpirank == 0) then
+      error = sqrt(error / (ia * ja * ka))
 
-    error=0.d0
-    do k=1,km
-    do j=1,jm
-    do i=1,im
-      do n=1,ncolm
-        error(n,1)=error(n,1)+(dvtes(i,j,k,n,1)-dvref(i,j,k,n,1))**2
-        error(n,2)=error(n,2)+(dvtes(i,j,k,n,2)-dvref(i,j,k,n,2))**2
-        error(n,3)=error(n,3)+(dvtes(i,j,k,n,3)-dvref(i,j,k,n,3))**2
-      enddo
-    enddo
-    enddo
-    enddo
+      write(*,*) ' +------------------------------------------------------------+'
+      write(*,*) ' | errors of gradient calculation by fds%central              |'
+      write(*,*) ' +-------------------------------+----------------------------+'
+      write(*,*) ' | Error in x gradient           |', error(:,1),' |'
+      write(*,*) ' | Error in y gradient (non-homo)|', error(:,2),' |'
+      write(*,*) ' | Error in z gradient           |', error(:,3),' |'
+      write(*,'(A,F11.6,A)') '  | Time cost                     |', ptime() - time_beg,' s               |'
+      write(*,*) ' +-------------------------------+----------------------------+'
 
-    error=psum(error)
-    ! error=sqrt(error)
-
-    if(mpirank==0) then
-      error=sqrt(error/(ia*ja*ka))
-
-      print*,' ** error in x gradient',error(:,1)
-      print*,' ** error in y gradient',error(:,2)
-      print*,' ** error in z gradient',error(:,3)
-    endif
-
-    subtime=subtime+ptime()-time_beg
-    !
-    if(mpirank==0) print*,' ** time cost:',subtime
-
-
-    ! call tecbin('testout/tectest'//mpirankname//'.plt',            &
-    !                                   x(0:im,0:jm,0:km,1),'x',     &
-    !                                   x(0:im,0:jm,0:km,2),'y',     &
-    !                                   x(0:im,0:jm,0:km,3),'z',     &
-    !                               vtest(0:im,0:jm,0:km,1),'v1',    &
-    !                               dvtes(0:im,0:jm,0:km,1,1),'dv1dy',    &
-    !                               dvref(0:im,0:jm,0:km,1,2),'dv1dy_ref' )
+    end if
+  
+    ! Uncomment for Tecplot output
+    ! call tecbin('testout/tectest'//mpirankname//'.plt',                 &
+    !             x(0:im,0:jm,0:km,1), 'x',                              &
+    !             x(0:im,0:jm,0:km,2), 'y',                              &
+    !             x(0:im,0:jm,0:km,3), 'z',                              &
+    !             vtest(0:im,0:jm,0:km,1), 'v1',                         &
+    !             dvtes(0:im,0:jm,0:km,1,2), 'dv1dy',                    &
+    !             dvref(0:im,0:jm,0:km,1,2), 'dv1dy_ref')
+  
   end subroutine gradtest
+  !+-------------------------------------------------------------------+
+  !| End of subroutine gradtest                                        |
+  !+-------------------------------------------------------------------+
 
+  !+-------------------------------------------------------------------+
+  !| Subroutine: fluxtest                                              |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   This subroutine tests the accuracy of flux-difference-based     |
+  !|   derivative approximations using high-order compact flux schemes.|
+  !|                                                                   |
+  !| Functionality:                                                    |
+  !|   - Constructs a 3D periodic analytical field                     |
+  !|   - Computes reference (analytical) derivatives in x, y, z        |
+  !|   - Applies upwind flux schemes in each direction to evaluate     |
+  !|     numerical derivatives using flux differences                  |
+  !|   - Computes L2 error between numerical and analytical results    |
+  !|                                                                   |
+  !| Author: Fang Jian                                                 |
+  !| Date  : 2021                                                      |
+  !+-------------------------------------------------------------------+
   subroutine fluxtest
-    !
-    use commvar,   only : im,jm,km,ia,ja,ka,npdci,npdcj,npdck,conschm,          &
-                          alfa_filter,numq,is,ie,hm,difschm,is,ie,js,je,ks,ke
-    use commarray, only : x,q,dxi
-    use comsolver, only : alfa_con,alfa_dif,cci,ccj,cck,dci,dcj,dck
-    use bc,        only : boucon
-    use parallel,  only : dataswap,mpirank,mpirankname,ptime,psum,mpistop
-    use derivative,only : fds
-    use flux,      only : flux_compact,flux_uw_i,flux_dw_i,flux_uw_j,flux_dw_j, &
-                          flux_uw_k,flux_dw_k
-
+  
+    use commvar,   only : im, jm, km, hm, ia, ja, ka, conschm, difschm, &
+                          lihomo, ljhomo, lkhomo, bfacmpld
+    use commarray, only : x
+    use comsolver, only : solvrinit
+    use parallel,  only : mpiinitial, mpistop, mpisizedis, lio,         &
+                          parallelini, parapp, dataswap, mpirank,       &
+                          mpirankname, ptime, psum
+    use solver,    only : refcal
+    use flux,      only : flux_compact, flux_uw_i, flux_dw_i,          &
+                          flux_uw_j, flux_dw_j, flux_uw_k, flux_dw_k
+    use gridgeneration, only : gridcube
     use tecio
-    !
-    ! local data
-    integer :: i,j,k,n,s,asize,ncolm,counter
-    real(8) :: dx,var1
-    real(8),allocatable :: vtest(:,:,:,:),dvtes(:,:,:,:,:),dvref(:,:,:,:,:)
-    real(8),allocatable :: f1(:,:),df1(:,:)
-    real(8),allocatable :: ff(:,:,:,:),dff(:,:,:,:),fh(:,:,:,:)
-    real(8),allocatable :: error(:,:)
-    !
-    real(8) :: time_beg
-    real(8),save :: subtime=0.d0
-    !
-    ! call x3d2init(im,jm,km)
-    ! print*,x(:,0,0,1)
-    !
-    ! testing ddx
-    ncolm=1
-    allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:ncolm))
-    allocate(dvtes(0:im,0:jm,0:km,1:ncolm,1:3),dvref(0:im,0:jm,0:km,1:ncolm,1:3))
+  
+    implicit none
+  
+    ! Local variables
+    integer :: i, j, k, n, ncolm, counter
+    real(8) :: dx, dy, dz, time_beg
+    real(8), save :: subtime = 0.d0
+    real(8), allocatable :: vtest(:,:,:,:), dvtes(:,:,:,:,:), dvref(:,:,:,:,:)
+    real(8), allocatable :: ff(:,:,:,:), dff(:,:,:,:), fh(:,:,:,:)
+    real(8), allocatable :: error(:,:)
+  
+    !---------------------------------------------------------------
+    ! Initialization
+    !---------------------------------------------------------------
+    conschm = '543c'
+    difschm = '643c'
+  
+    ia = 128
+    ja = 128
+    ka = 128
+  
+    lihomo = .true.
+    ljhomo = .false.
+    lkhomo = .true.
+
+    bfacmpld=1.d0
+  
+    call mpisizedis
+    call parapp
+    call parallelini
+    call refcal
+    call solvrinit
+  
+    allocate(x(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:3))
+    call gridcube(2.d0*pi, 2.d0, 2.d0*pi)
+  
+    dx = x(1,0,0,1) - x(0,0,0,1)
+    dy = x(0,1,0,2) - x(0,0,0,2)
+    dz = x(0,0,1,3) - x(0,0,0,3)
+  
+    ncolm = 1
+    allocate(vtest(-hm:im+hm,-hm:jm+hm,-hm:km+hm,ncolm))
+    allocate(dvtes(0:im,0:jm,0:km,ncolm,3), dvref(0:im,0:jm,0:km,ncolm,3))
     allocate(error(ncolm,3))
-
-    dvtes=0.d0
-    !
-    time_beg=ptime() 
-    counter=0
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      !
-      ! do n=1,ncolm
-      !   call random_number(var1)
-      !   vtest(i,j,k,n)=var1
-      ! enddo
-      ! vtest(i,j,k,1)=sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))
-      vtest(i,j,k,1)=sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
-      ! !
-      dvref(i,j,k,1,1)= cos(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
-      dvref(i,j,k,1,2)= 0.5d0*pi*sin(x(i,j,k,1))*cos(0.5d0*pi*x(i,j,k,2))*cos(2.d0*x(i,j,k,3))
-      dvref(i,j,k,1,3)=-2.d0*sin(x(i,j,k,1))*sin(0.5d0*pi*x(i,j,k,2))*sin(2.d0*x(i,j,k,3))
-
-    enddo
-    enddo
-    enddo
-
+    dvtes = 0.d0
+  
+    time_beg = ptime()
+    counter = 0
+  
+    !---------------------------------------------------------------
+    ! Construct test function and analytical gradient
+    !---------------------------------------------------------------
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          vtest(i,j,k,1)   = sin(x(i,j,k,1)) * sin(0.5d0*pi*x(i,j,k,2)) * sin(x(i,j,k,3))
+          dvref(i,j,k,1,1) = cos(x(i,j,k,1)) * sin(0.5d0*pi*x(i,j,k,2)) * sin(x(i,j,k,3))
+          dvref(i,j,k,1,2) = 0.5d0*pi*sin(x(i,j,k,1)) * cos(0.5d0*pi*x(i,j,k,2)) * sin(x(i,j,k,3))
+          dvref(i,j,k,1,3) = sin(x(i,j,k,1)) * sin(0.5d0*pi*x(i,j,k,2)) * cos(x(i,j,k,3))
+        end do
+      end do
+    end do
+  
     call dataswap(vtest)
-    !
-    allocate(dff(0:im,0:jm,0:km,ncolm),fh(-1:im,-1:jm,-1:km,ncolm))
-
+  
+    !---------------------------------------------------------------
+    ! X-direction flux computation
+    !---------------------------------------------------------------
+    allocate(dff(0:im,0:jm,0:km,ncolm), fh(-1:im,-1:jm,-1:km,ncolm))
     allocate(ff(-hm:im+hm,0:jm,0:km,ncolm))
-
-    ff(:,0:jm,0:km,1:ncolm)=vtest(:,0:jm,0:km,1:ncolm)
-    
-    do n=1,1
-    do k=0,km
-    do j=0,jm
-        fh(:,j,k,n)=flux_compact(asolver=flux_uw_i,f=ff(:,j,k,n),dim=im)
-        do i=0,im
-            dff(i,j,k,1)=fh(i,j,k,1)-fh(i-1,j,k,1)
-        enddo
-    enddo
-    enddo
-    enddo
-
-    ! j=jm/2
-    ! k=km/4
-    ! open(18,file='testout/fh_i'//mpirankname//'.dat')
-    ! write(18,'(5(1X,A15))')'x','f','df','xh','fh'
-    ! do i=0,im
-    !   write(18,'(5(1X,E15.7E3))')x(i,j,k,1),ff(i,j,k,1),0.5d0*(x(i,j,k,1)+x(i+1,j,k,1)),fh(i,j,k,1)
-    ! enddo
-    ! close(18)
-    ! print*,' << testout/fh_i'//mpirankname//'.dat'
-
-    ! open(18,file='testout/dfh_i'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'x','df_ref','df'
-    ! do i=0,im
-    !   write(18,'(3(1X,E15.7E3))')x(i,j,k,1),dvref(i,j,k,1,1),dff(i,j,k,1)*dxi(i,j,k,1,1)
-    ! enddo
-    ! close(18)
-    ! print*,' << testout/dfh_i'//mpirankname//'.dat'
-
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      do n=1,ncolm
-        dvtes(i,j,k,n,1)=dff(i,j,k,n)*dxi(i,j,k,1,1)
-        dvtes(i,j,k,n,2)=dff(i,j,k,n)*dxi(i,j,k,1,2)
-        dvtes(i,j,k,n,3)=dff(i,j,k,n)*dxi(i,j,k,1,3)
-      enddo
-    enddo
-    enddo
-    enddo
-
+    ff(:,0:jm,0:km,:) = vtest(:,0:jm,0:km,:)
+  
+    do n = 1, 1
+      do k = 0, km
+        do j = 0, jm
+          fh(:,j,k,n) = flux_compact(asolver=flux_uw_i, f=ff(:,j,k,n), dim=im)
+          do i = 0, im
+            dff(i,j,k,n) = fh(i,j,k,n) - fh(i-1,j,k,n)
+          end do
+        end do
+      end do
+    end do
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          dvtes(i,j,k,1,1) = dff(i,j,k,1) / dx
+        end do
+      end do
+    end do
     deallocate(ff)
-
+  
+    !---------------------------------------------------------------
+    ! Y-direction flux computation
+    !---------------------------------------------------------------
     allocate(ff(0:im,-hm:jm+hm,0:km,ncolm))
-
-    ff(0:im,:,0:km,1:ncolm)=vtest(0:im,:,0:km,1:ncolm)
-    
-
-    do n=1,1
-    do k=0,km
-    do i=0,im
-        fh(i,:,k,n)=flux_compact(asolver=flux_uw_j,f=ff(i,:,k,n),dim=jm)
-        do j=0,jm
-            dff(i,j,k,1)=fh(i,j,k,1)-fh(i,j-1,k,1)
-        enddo
-    enddo
-    enddo
-    enddo
+    ff(0:im,:,0:km,:) = vtest(0:im,:,0:km,:)
+  
+    do n = 1, 1
+      do k = 0, km
+        do i = 0, im
+          fh(i,:,k,n) = flux_compact(asolver=flux_uw_j, f=ff(i,:,k,n), dim=jm)
+          do j = 0, jm
+            dff(i,j,k,n) = fh(i,j,k,n) - fh(i,j-1,k,n)
+          end do
+        end do
+      end do
+    end do
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          dvtes(i,j,k,1,2) = dff(i,j,k,1) / dy
+        end do
+      end do
+    end do
+    deallocate(ff)
 
     i=im/4
-    k=0
-    ! open(18,file='testout/fh_j'//mpirankname//'.dat')
-    ! write(18,'(4(1X,A15))')'x','f','xh','fh'
-    ! do j=0,jm
-    !   write(18,'(4(1X,E15.7E3))')x(i,j,k,2),ff(i,j,k,1),0.5d0*(x(i,j,k,2)+x(i,j+1,k,2)),fh(i,j,k,1)
-    ! enddo
-    ! close(18)
-    ! print*,' << testout/fh_j'//mpirankname//'.dat'
-    open(18,file='testout/dfh_j'//mpirankname//'.dat')
-    write(18,'(3(1X,A15))')'x','df_ref','df'
-    do j=js,je
-      write(18,'(3(1X,E15.7E3))')x(i,j,k,2),dvref(i,j,k,1,2),dff(i,j,k,1)*dxi(i,j,k,2,2)
-    enddo
+    k=km/4
+    open(18,file='testout/flux_y'//mpirankname//'.dat')
+    write(18,'(3(1X,A15))')'y','f','df'
+    write(18,'(3(1X,E15.7E3))')(x(i,j,k,2),dvref(i,j,k,1,2),dvtes(i,j,k,1,2),j=0,jm)
     close(18)
-    print*,' << testout/dfh_j'//mpirankname//'.dat'
-
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      do n=1,ncolm
-        dvtes(i,j,k,n,1)=dvtes(i,j,k,n,1)+dff(i,j,k,n)*dxi(i,j,k,2,1)
-        dvtes(i,j,k,n,2)=dvtes(i,j,k,n,2)+dff(i,j,k,n)*dxi(i,j,k,2,2)
-        dvtes(i,j,k,n,3)=dvtes(i,j,k,n,3)+dff(i,j,k,n)*dxi(i,j,k,2,3)
-      enddo
-    enddo
-    enddo
-    enddo
-
-
-    deallocate(ff)
-
-
+    print*,' << testout/flux_y'//mpirankname//'.dat'
+  
+    !---------------------------------------------------------------
+    ! Z-direction flux computation
+    !---------------------------------------------------------------
     allocate(ff(0:im,0:jm,-hm:km+hm,ncolm))
-
-    ff(0:im,0:jm,:,1:ncolm)=vtest(0:im,0:jm,:,1:ncolm)
-
-    do n=1,1
-    do j=0,jm
-    do i=0,im
-        ! dff(i,j,:,n)=ddfc(ff(i,j,:,n),conschm,npdck,km,alfa_con,cck)
-        fh(i,j,:,n)=flux_compact(asolver=flux_uw_k,f=ff(i,j,:,n),dim=km)
-        do k=0,km
-            dff(i,j,k,1)=fh(i,j,k,1)-fh(i,j,k-1,1)
-        enddo
-    enddo
-    enddo
-    enddo
-
-    ! i=im/2
-    ! j=jm/2
-    ! open(18,file='testout/fh_k'//mpirankname//'.dat')
-    ! write(18,'(4(1X,A15))')'x','f','xh','fh'
-    ! do k=0,km
-    !   write(18,'(4(1X,E15.7E3))')x(i,j,k,3),ff(i,j,k,1),0.5d0*(x(i,j,k,3)+x(i,j,k+1,3)),fh(i,j,k,1)
-    ! enddo
-    ! close(18)
-    ! print*,' << testout/fh_k'//mpirankname//'.dat'
-
-    ! open(18,file='testout/dfh_k'//mpirankname//'.dat')
-    ! write(18,'(3(1X,A15))')'x','df_ref','df'
-    ! do k=0,km
-    !   write(18,'(3(1X,E15.7E3))')x(i,j,k,3),dvref(i,j,k,1,3),dff(i,j,k,1)*dxi(i,j,k,3,3)
-    ! enddo
-    ! close(18)
-    ! print*,' << testout/dfh_k'//mpirankname//'.dat'
-
-    do k=0,km
-    do j=0,jm
-    do i=0,im
-      do n=1,ncolm
-        dvtes(i,j,k,n,1)=dvtes(i,j,k,n,1)+dff(i,j,k,n)*dxi(i,j,k,3,1)
-        dvtes(i,j,k,n,2)=dvtes(i,j,k,n,2)+dff(i,j,k,n)*dxi(i,j,k,3,2)
-        dvtes(i,j,k,n,3)=dvtes(i,j,k,n,3)+dff(i,j,k,n)*dxi(i,j,k,3,3)
-      enddo
-    enddo
-    enddo
-    enddo
-
+    ff(0:im,0:jm,:,:) = vtest(0:im,0:jm,:,:)
+  
+    do n = 1, 1
+      do j = 0, jm
+        do i = 0, im
+          fh(i,j,:,n) = flux_compact(asolver=flux_uw_k, f=ff(i,j,:,n), dim=km)
+          do k = 0, km
+            dff(i,j,k,n) = fh(i,j,k,n) - fh(i,j,k-1,n)
+          end do
+        end do
+      end do
+    end do
+  
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          dvtes(i,j,k,1,3) = dff(i,j,k,1) / dz
+        end do
+      end do
+    end do
     deallocate(ff)
+  
+    !---------------------------------------------------------------
+    ! Compute L2 error against analytical gradient
+    !---------------------------------------------------------------
+    error = 0.d0
+    do k = 1, km
+      do j = 1, jm
+        do i = 1, im
+          error(1,1) = error(1,1) + (dvtes(i,j,k,1,1) - dvref(i,j,k,1,1))**2
+          error(1,2) = error(1,2) + (dvtes(i,j,k,1,2) - dvref(i,j,k,1,2))**2
+          error(1,3) = error(1,3) + (dvtes(i,j,k,1,3) - dvref(i,j,k,1,3))**2
+        end do
+      end do
+    end do
+  
+    error = psum(error)
+  
+    if (mpirank == 0) then
 
-    error=0.d0
-    do k=ks,ke
-    do j=js,je
-    do i=is,ie
-      do n=1,ncolm
-        error(n,1)=error(n,1)+(dvtes(i,j,k,n,1)-dvref(i,j,k,n,1))**2
-        error(n,2)=error(n,2)+(dvtes(i,j,k,n,2)-dvref(i,j,k,n,2))**2
-        error(n,3)=error(n,3)+(dvtes(i,j,k,n,3)-dvref(i,j,k,n,3))**2
-      enddo
-    enddo
-    enddo
-    enddo
+      error = sqrt(error / (ia * ja * ka))
 
-    error=psum(error)
-    ! error=sqrt(error)
+      write(*,*) ' +------------------------------------------------------------+'
+      write(*,*) ' | errors of gradient calculation by flux_compact             |'
+      write(*,*) ' +-------------------------------+----------------------------+'
+      write(*,*) ' | Error in x gradient           |', error(:,1),' |'
+      write(*,*) ' | Error in y gradient (non-homo)|', error(:,2),' |'
+      write(*,*) ' | Error in z gradient           |', error(:,3),' |'
+      write(*,'(A,F11.6,A)') '  | Time cost                     |', ptime() - time_beg,' s               |'
+      write(*,*) ' +-------------------------------+----------------------------+'
 
-    if(mpirank==0) then
-      error=sqrt(error/(ia*ja*ka))
-
-      print*,' ** error in x gradient',error(:,1)
-      print*,' ** error in y gradient',error(:,2)
-      print*,' ** error in z gradient',error(:,3)
-    endif
-
-    subtime=subtime+ptime()-time_beg
-    !
-    if(mpirank==0) print*,' ** time cost:',subtime
-
-    ! call tecbin('testout/tectest'//mpirankname//'.plt',            &
-    !                                   x(0:im,0:jm,0:km,1),'x',     &
-    !                                   x(0:im,0:jm,0:km,2),'y',     &
-    !                                   x(0:im,0:jm,0:km,3),'z',     &
-    !                               vtest(0:im,0:jm,0:km,1),'v1',    &
-    !                               dvtes(0:im,0:jm,0:km,1,2),'dv1dy',    &
-    !                               dvref(0:im,0:jm,0:km,1,2),'dv1dy_ref' )
+    end if
+  
+    subtime = subtime + ptime() - time_beg
+  
   end subroutine fluxtest
+  !+-------------------------------------------------------------------+
+  !| End of subroutine fluxtest                                        |
+  !+-------------------------------------------------------------------+
+
 
 end module test
 !+---------------------------------------------------------------------+

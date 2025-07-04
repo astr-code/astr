@@ -15,93 +15,106 @@ module pp
   !
   contains
   !
-  !+-------------------------------------------------------------------+
-  !| This subroutine is the entrance of post/pre-process.              |
-  !+-------------------------------------------------------------------+
-  !| CHANGE RECORD                                                     |
-  !| -------------                                                     |
-  !| 05-07-2021  | Created by J. Fang @ Warrington                     |
-  !+-------------------------------------------------------------------+
-  subroutine ppentrance
-    !
-    use cmdefne
-    use readwrite,       only : readinput
-    use gridgeneration,  only : gridgen
-    use solver,          only : refcal
-    ! use udf_postprocess
-    !
-    ! local data
-    character(len=64) :: cmd,casefolder,inputfile,outputfile,viewmode, &
-                         flowfieldfile
-    !
-    call readkeyboad(cmd)
-    print*,' ** pp command: ',cmd
-    !
-    if(trim(cmd)=='init') then
-      !
-      call readkeyboad(casefolder)
-      call examplegen(trim(casefolder))
-      ! generate an example channel flow case
-      !
-    elseif(trim(cmd)=='gridgen') then
-      call readinput
-      !
-      call gridgen
-    elseif(trim(cmd)=='hitgen') then
-      call readinput
-      !
-      call hitgen
-    elseif(trim(cmd)=='solid') then
-      call solidpp
-    elseif(trim(cmd)=='datacon') then
-      !
-      call readkeyboad(inputfile)
-      !
-      if(trim(inputfile)=='all') then
-        call stream2struc('outdat/flowfield')
-        call stream2struc('outdat/meanflow')
-        call stream2struc('outdat/2ndsta')
-        call stream2struc('outdat/3rdsta')
-        call stream2struc('outdat/budget')
-      else
-        call stream2struc(trim(inputfile))
-      endif
-      !
-    elseif(trim(cmd)=='parinfo') then
-      !
-      call parallelifogen
-      !
-    elseif(trim(cmd)=='view') then
-      !
-      call readkeyboad(flowfieldfile)
-      call readkeyboad(outputfile)
-      call readkeyboad(viewmode)
-      call readkeyboad(inputfile)
-      !
-      call fieldview(trim(flowfieldfile),trim(outputfile),trim(viewmode),trim(inputfile))
-      !
-    elseif(trim(cmd)=='flamegen') then
-        !
-      call readkeyboad(flowfieldfile)
-      call readkeyboad(viewmode)
-      call readkeyboad(inputfile)
-        !
-      call flamegen(trim(flowfieldfile),trim(viewmode),trim(inputfile))
-        !
-    elseif(trim(cmd)=='udf') then
-        !
-        call readkeyboad(inputfile)
-        !
-        ! call flame2d_pp(trim(inputfile))
+!+-------------------------------------------------------------------+
+!| This subroutine is the entrance of post/pre-process.              |
+!|                                                                   |
+!| CHANGE RECORD                                                     |
+!| -------------                                                     |
+!| 05-07-2021  | Created by J. Fang @ Warrington                     |
+!+-------------------------------------------------------------------+
+subroutine ppentrance
+
+  !-------------------------------------------------------------------
+  ! Module usage
+  !-------------------------------------------------------------------
+  use cmdefne
+  use readwrite,       only : readinput
+  use gridgeneration,  only : gridgen
+  use solver,          only : refcal
+  ! use udf_postprocess
+
+  !-------------------------------------------------------------------
+  ! Local variables
+  !-------------------------------------------------------------------
+  character(len=64) :: cmd, casefolder, inputfile, outputfile, viewmode, &
+                       flowfieldfile
+
+  !-------------------------------------------------------------------
+  ! Command interpretation
+  !-------------------------------------------------------------------
+  call readkeyboad(cmd)
+  print *, ' ** pp command: ', cmd
+
+  select case (trim(cmd))
+
+  case ('init')
+    call readkeyboad(casefolder)
+    call examplegen(trim(casefolder))  ! Generate example channel flow case
+
+  case ('gridgen')
+    call readinput
+    call gridgen
+
+  case ('hitgen')
+    call readinput
+    call hitgen
+
+  case ('solid')
+    call solidpp
+
+  case ('datacon')
+    call readkeyboad(inputfile)
+    if (trim(inputfile) == 'all') then
+      call stream2struc('outdat/flowfield')
+      call stream2struc('outdat/meanflow')
+      call stream2struc('outdat/2ndsta')
+      call stream2struc('outdat/3rdsta')
+      call stream2struc('outdat/budget')
     else
-      stop ' !! pp command not defined. @ ppentrance'
-    endif
-    ! 
-    !
-  end subroutine ppentrance
-  !+-------------------------------------------------------------------+
-  !| The end of the subroutine preprocess.                             |
-  !+-------------------------------------------------------------------+
+      call stream2struc(trim(inputfile))
+    end if
+
+  case ('parinfo')
+    call parallelifogen
+
+  case ('view')
+    call readkeyboad(viewmode)
+    call readkeyboad(inputfile)
+    call readkeyboad(flowfieldfile)
+    call readkeyboad(outputfile)
+    call fieldview(trim(flowfieldfile), trim(outputfile), trim(viewmode), trim(inputfile))
+
+  case ('flamegen')
+    call readkeyboad(flowfieldfile)
+    call readkeyboad(viewmode)
+    call readkeyboad(inputfile)
+    call flamegen(trim(flowfieldfile), trim(viewmode), trim(inputfile))
+
+  case ('udf')
+    call readkeyboad(inputfile)
+
+  case default
+    write(*,*) ' +------------------------------------------------------------+'
+    write(*,*) ' | pp options                                                 |'
+    write(*,*) ' +------------------------------------------------------------+'
+    write(*,*) ' | init          - generate an example case                   |'
+    write(*,*) ' | gridgen       - generate a grid file                       |'
+    write(*,*) ' | solid         - process an immersed body                   |'
+    write(*,*) ' | datacon       - reconstruct flow/statistics files          |'
+    write(*,*) ' |     option: all  => reconstruct all relevant files         |'
+    write(*,*) ' | parinfo       - print info on parallelisation              |'
+    write(*,*) ' | view          - generate files for visualisation           |'
+    write(*,*) ' |     usage: view xy input.dat flowfield.h5 snapshot.plt     |'
+    write(*,*) ' | flamegen      - generate a flowfield with a flame          |'
+    write(*,*) ' | udf           - user-defined process routine               |'
+    write(*,*) ' +------------------------------------------------------------+'
+  end select
+
+end subroutine ppentrance
+!+-------------------------------------------------------------------+
+!| End of subroutine ppentrance                                      |
+!+-------------------------------------------------------------------+
+
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is to generate parallel.info file.                |

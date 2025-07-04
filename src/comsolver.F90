@@ -23,118 +23,127 @@ module comsolver
   contains
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is to initialise solver.                          |
-  !+-------------------------------------------------------------------+
+  !| Subroutine: solvrinit                                             |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   Initializes the numerical solver for both convection and        |
+  !|   diffusion terms, including:                                     |
+  !|     - Finite-difference schemes for derivatives                   |
+  !|     - Compact flux schemes for convection (if upwind-based)       |
+  !|     - Optional compact filtering                                  |
+  !|     - Optional turbulence model initialization                    |
+  !|                                                                   |
+  !| Notes:                                                            |
+  !|   - Scheme types are determined by the string suffix:             |
+  !|       'c' => compact  /  'e' => explicit                          |
+  !|   - For central schemes, convection and diffusion schemes must    |
+  !|     match to ensure consistency                                   |
+  !|                                                                   |
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 08-02-2021  | Created by J. Fang @ Warrington                     |
+  !| 22-07-2022  | Moved from  diffrsdcal6 by J. Fang @ Warrington     |
+  !| 03-07-2025  | Remastered by J. Fang @ Imech, CAS, Beijing         |
   !+-------------------------------------------------------------------+
   subroutine solvrinit
-    !
-    use commvar,    only : numq,npdci,npdcj,npdck,               &
-                           conschm,difschm,lfilter,alfa_filter,hm,turbmode
+  
+    use commvar,    only : numq, npdci, npdcj, npdck, conschm, difschm,   &
+                           lfilter, alfa_filter, hm, turbmode
     use models,     only : init_komegasst
-    use filter,     only : compact_filter_initiate,filter_coefficient_cal, &
-                           filter_i,filter_j,filter_k,filter_ii,filter_jj, &
-                           filter_kk
-    use derivative, only : fd_scheme_initiate,fds_compact_i,fds_compact_j, &
-                           fds_compact_k,explicit_central,compact_central,fds
-    use flux,       only : compact_flux_initiate,ptds_aym_ini,coeffcompac, &
-                           flux_uw_i,flux_dw_i,flux_uw_j,flux_dw_j,flux_uw_k,flux_dw_k
-
-    ! local data
-    integer :: nscheme,i
-
-    ! convectional and diffusional term
-
-    call fd_scheme_initiate(asolver=fds_compact_i,scheme=difschm,ntype=npdci,dim=im,dir=1)
-    call fd_scheme_initiate(asolver=fds_compact_j,scheme=difschm,ntype=npdcj,dim=jm,dir=2)
-    call fd_scheme_initiate(asolver=fds_compact_k,scheme=difschm,ntype=npdck,dim=km,dir=3)
-
-    if(difschm(4:4)=='e') then
-      ! a explicit scheme is used
-
+    use filter,     only : compact_filter_initiate, filter_coefficient_cal, &
+                           filter_i, filter_j, filter_k,                     &
+                           filter_ii, filter_jj, filter_kk
+    use derivative, only : fd_scheme_initiate, fds_compact_i, fds_compact_j, &
+                           fds_compact_k, explicit_central, compact_central, fds
+    use flux,       only : compact_flux_initiate, ptds_aym_ini, coeffcompac, &
+                           flux_uw_i, flux_dw_i, flux_uw_j, flux_dw_j,       &
+                           flux_uw_k, flux_dw_k
+  
+    implicit none
+  
+    !-------------------------------------------------------------------
+    ! Local variables
+    !-------------------------------------------------------------------
+    integer :: nscheme, i
+  
+    !-------------------------------------------------------------------
+    ! Initialize finite-difference schemes for diffusion terms
+    !-------------------------------------------------------------------
+    call fd_scheme_initiate(asolver=fds_compact_i, scheme=difschm, ntype=npdci, dim=im, dir=1)
+    call fd_scheme_initiate(asolver=fds_compact_j, scheme=difschm, ntype=npdcj, dim=jm, dir=2)
+    call fd_scheme_initiate(asolver=fds_compact_k, scheme=difschm, ntype=npdck, dim=km, dir=3)
+  
+    select case (difschm(4:4))
+    case ('e')  ! Explicit scheme
       allocate(explicit_central :: fds)
-
-    elseif(difschm(4:4)=='c') then
-      ! a compact scheme is used
-
+    case ('c')  ! Compact scheme
       allocate(compact_central :: fds)
-
-    else
-
-      print*,' !! error !! the definition of a scheme must end with c/e, e.g., 642c'
-
+    case default
+      print *, ' !! ERROR !! Invalid scheme suffix. Must end with "c" or "e" (e.g., 642c)'
       stop
-
-    endif
-
-    ! Extract the scheme number from the first 3 characters of conschm
+    end select
+  
+    !-------------------------------------------------------------------
+    ! Initialize convection scheme and check consistency
+    !-------------------------------------------------------------------
     read(conschm(1:3), *) nscheme
-    
-    ! Check if nscheme is a multiple of 200 (i.e., using central scheme)
-    if (mod(nscheme/100, 2) == 0) then
-        ! Central scheme is used for the convection term
-    
-        ! Check for consistency between convection and diffusion schemes
-        if (trim(conschm) /= trim(difschm)) then
-
-            print *, ' !! WARNING !! The convection and diffusion terms are both central schemes,'
-            print *, ' !! WARNING !! but they are not consistently defined.'
-            print *, ' !! WARNING !! It is recommended to use the same scheme for both terms.'
-            print *, ' !! WARNING !! Otherwise, unexpected behavior may occur.'
-
-            print*,  ' ** conschm:',conschm
-            print*,  ' ** difschm:',difschm
-
-            stop
-        end if
+  
+    if (mod(nscheme / 100, 2) == 0) then
+      ! Central convection scheme
+      if (trim(conschm) /= trim(difschm)) then
+        print *, ' !! WARNING !! Central schemes for convection and diffusion are inconsistent.'
+        print *, ' !! WARNING !! Consider using the same scheme to avoid unexpected behavior.'
+        print *, ' ** conschm:', conschm
+        print *, ' ** difschm:', difschm
+        stop
+      end if
     else
-      ! upwind-baised schemes
-      if(conschm(4:4)=='c') then
-
-        call compact_flux_initiate(asolver=flux_uw_i,scheme=nscheme,ntype=npdci,dim=im,wind='+')
-        call compact_flux_initiate(asolver=flux_dw_i,scheme=nscheme,ntype=npdci,dim=im,wind='-')
-        call compact_flux_initiate(asolver=flux_uw_j,scheme=nscheme,ntype=npdcj,dim=jm,wind='+')
-        call compact_flux_initiate(asolver=flux_dw_j,scheme=nscheme,ntype=npdcj,dim=jm,wind='-')
-        call compact_flux_initiate(asolver=flux_uw_k,scheme=nscheme,ntype=npdck,dim=km,wind='+')
-        call compact_flux_initiate(asolver=flux_dw_k,scheme=nscheme,ntype=npdck,dim=km,wind='-')
-
-        ! alfa_con=coeffcompac(nscheme)
-
-        ! call ptds_aym_ini(uci,alfa_con,im,npdci,windir='+')
-        ! call ptds_aym_ini(ucj,alfa_con,jm,npdcj,windir='+')
-        ! call ptds_aym_ini(uck,alfa_con,km,npdck,windir='+')
-        ! !
-        ! call ptds_aym_ini(bci,alfa_con,im,npdci,windir='-')
-        ! call ptds_aym_ini(bcj,alfa_con,jm,npdcj,windir='-')
-        ! call ptds_aym_ini(bck,alfa_con,km,npdck,windir='-')
-
-      endif
-
+      ! Upwind-biased convection scheme
+      if (conschm(4:4) == 'c') then
+        call compact_flux_initiate(flux_uw_i, nscheme, npdci, im, '+')
+        call compact_flux_initiate(flux_dw_i, nscheme, npdci, im, '-')
+        call compact_flux_initiate(flux_uw_j, nscheme, npdcj, jm, '+')
+        call compact_flux_initiate(flux_dw_j, nscheme, npdcj, jm, '-')
+        call compact_flux_initiate(flux_uw_k, nscheme, npdck, km, '+')
+        call compact_flux_initiate(flux_dw_k, nscheme, npdck, km, '-')
+  
+        ! Optional: legacy ptds coefficient setup (commented out)
+        ! alfa_con = coeffcompac(nscheme)
+        ! call ptds_aym_ini(...)
+  
+      end if
     end if
-
-    if(lfilter) then
-
-      call filter_coefficient_cal(alfa=alfa_filter,beter_halo=1.11d0,beter_bouond=1.09d0)
-
-      call compact_filter_initiate(afilter=filter_i,ntype=npdci,dim=im)
-      call compact_filter_initiate(afilter=filter_j,ntype=npdcj,dim=jm)
-      call compact_filter_initiate(afilter=filter_k,ntype=npdck,dim=km)
-      ! call compact_filter_initiate(afilter=filter_ii,ntype=npdci,dim=im,note='boundary_no_filter')
-      ! call compact_filter_initiate(afilter=filter_jj,ntype=npdcj,dim=jm,note='boundary_no_filter')
-      ! call compact_filter_initiate(afilter=filter_kk,ntype=npdck,dim=km,note='boundary_no_filter')
-    endif
-
-    if(trim(turbmode)=='k-omega') then
+  
+    !-------------------------------------------------------------------
+    ! Optional: Initialize compact filters
+    !-------------------------------------------------------------------
+    if (lfilter) then
+      call filter_coefficient_cal(alfa=alfa_filter, beter_halo=1.11d0, beter_bouond=0.98d0)
+  
+      call compact_filter_initiate(filter_i, npdci, im)
+      call compact_filter_initiate(filter_j, npdcj, jm)
+      call compact_filter_initiate(filter_k, npdck, km)
+  
+      ! Optional: filters without boundary application
+      ! call compact_filter_initiate(filter_ii, npdci, im, note='boundary_no_filter')
+      ! call compact_filter_initiate(filter_jj, npdcj, jm, note='boundary_no_filter')
+      ! call compact_filter_initiate(filter_kk, npdck, km, note='boundary_no_filter')
+    end if
+  
+    !-------------------------------------------------------------------
+    ! Optional: Initialize turbulence model
+    !-------------------------------------------------------------------
+    if (trim(turbmode) == 'k-omega') then
       call init_komegasst
-    endif
-    !
-    if(lio) print*,' ** numerical solver initilised.'
-    !
+    end if
+  
+    !-------------------------------------------------------------------
+    ! Final message
+    !-------------------------------------------------------------------
+    if (lio) print *, ' ** Numerical solver initialized.'
+  
   end subroutine solvrinit
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine solvrinit.                              |
+  !| End of subroutine solvrinit                                       |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+

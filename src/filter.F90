@@ -46,14 +46,14 @@ module filter
           ! the block with boundary at i==0
           i_0=0
           i_m=dim+3
-          beter_0=1.09d0
+          beter_0=0.98d0
           beter_m=1.11d0
         case (2)
           ! the block with boundary at i==im
           i_0=-3
           i_m=dim
           beter_0=1.11d0
-          beter_m=1.09d0
+          beter_m=0.98d0
         case (3)
           ! inner block
           i_0=-3
@@ -64,8 +64,8 @@ module filter
           ! the block with boundary at i=0 and i=im
           i_0=0
           i_m=dim
-          beter_0=1.09d0
-          beter_m=1.09d0
+          beter_0=0.98d0
+          beter_m=0.98d0
         case default
           print*, ' !! error 1 in subroutine compact_filter_initiate !'
         end select

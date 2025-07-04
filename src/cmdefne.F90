@@ -71,41 +71,50 @@ module cmdefne
   !+-------------------------------------------------------------------+
   !| The end of the subroutine getcmd.                                 |
   !+-------------------------------------------------------------------+
-  !
-  !+-------------------------------------------------------------------+
-  !| This subroutine is to list all command that is predefined.        |
-  !+-------------------------------------------------------------------+
+  !!+-------------------------------------------------------------------+
+  !| Subroutine: listcmd                                               |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   This subroutine prints out a list of all predefined             |
+  !|   command-line options available in the ASTR code.                |
+  !|   Only the root MPI rank (rank 0) performs the output.            |
+  !|                                                                   |
+  !| Commands supported:                                               |
+  !|   - list / help : list all available functionalities              |
+  !|   - run         : run a computation using a given input file      |
+  !|                   (usage: mpirun -np 8 ./astr run datin/input)    |
+  !|   - test        : run internal code tests                         |
+  !|   - pp          : enter pre/post-processing mode                  |
+  !|                                                                   |
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
   !| 28-05-2021  | Created by J. Fang @ Warrington                     |
+  !| 03-07-2025  | Prettify by J. Fang @ IMech, Beijing, using ChatGPT |
   !+-------------------------------------------------------------------+
   subroutine listcmd
-    !
-    use parallel, only: mpirank
-    !
-    if(mpirank==0) then
-      !
-      write(*,*)' +------------------------------------------------------------+'
-      write(*,*)' |                          command line                      |'
-      write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |        command |                                           |'
-      write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |    list / help |               to list all functionalities |'
-      write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |            run |                      to run a computation |'
-      write(*,*)' |                | inputfile                                 |'
-      write(*,*)' +----------------+-------------------------------------------+'
-      write(*,*)' |             pp |                          pre/post-process |'
-      write(*,*)' |                | init casename     generate a example case |'
-      write(*,*)' +----------------+-------------------------------------------+'
-      !
-    endif
-    !
+  
+    use parallel, only : mpirank
+  
+    if (mpirank == 0) then
+      write(*,*) ' +------------------------------------------------------------+'
+      write(*,*) ' |                        Command Line Help                   |'
+      write(*,*) ' +----------------+-------------------------------------------+'
+      write(*,*) ' |     Command    | Description                               |'
+      write(*,*) ' +----------------+-------------------------------------------+'
+      write(*,*) ' | list / help    | List all functionalities                  |'
+      write(*,*) ' | run            | Run a computation with an input file      |'
+      write(*,*) ' |     usage: mpirun -np 8 ./astr run datin/input             |'
+      write(*,*) ' | test           | Run code test routines                    |'
+      write(*,*) ' |     usage: mpirun -np 8 ./astr test grad                   |'
+      write(*,*) ' | pp             | Pre/Post-processing                       |'
+      write(*,*) ' +----------------+-------------------------------------------+'
+    end if
+  
   end subroutine listcmd
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine listcmd.                                |
+  !| End of subroutine listcmd                                         |
   !+-------------------------------------------------------------------+
-  !
+
 end module cmdefne
 !+---------------------------------------------------------------------+
 !| The end of the module  cmdefne                                      |
