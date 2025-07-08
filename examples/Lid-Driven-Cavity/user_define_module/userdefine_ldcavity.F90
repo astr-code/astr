@@ -239,6 +239,12 @@ module userdefine
     R_T  =pmax(R_T  )/pmax(A_T  )
     R_p  =pmax(R_p  )/pmax(A_p  )
 
+    if(isnan(R_rho)) R_rho=0.d0
+    if(isnan(R_u))   R_u  =0.d0
+    if(isnan(R_v))   R_v  =0.d0
+    if(isnan(R_T))   R_T  =0.d0
+    if(isnan(R_p))   R_p  =0.d0
+
     data_save(0:im,0:jm,1)=rho(0:im,0:jm,0)
     data_save(0:im,0:jm,2)=vel(0:im,0:jm,0,1)
     data_save(0:im,0:jm,3)=vel(0:im,0:jm,0,2)
