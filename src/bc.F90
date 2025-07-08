@@ -6375,7 +6375,7 @@ module bc
           tmp(i,j,k)  =tw
           !
           if(num_species>0) then
-            spc(i,j,k,1)=num1d3*(4.d0*spc(i+1,j,k,1)-spc(i,j+2,k,1))
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i+1,j,k,1)-spc(i+2,j,k,1))
           endif
           !
           if(nondimen) then
@@ -6634,7 +6634,21 @@ module bc
     endif
     !
   end subroutine noslip
-  !!
+
+  !+-------------------------------------------------------------------+
+  !| Subroutine: noslip_adibatic                                       |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   Applies no-slip adiabatic wall boundary conditions along        |
+  !|   a given normal direction (ndir). Supports optional wall         |
+  !|   blowing/suction from input file and includes k-omega turbulence |
+  !|   model variable initialization if enabled.                       |
+  !|                                                                   |
+  !| Input:                                                            |
+  !|   ndir : integer, direction index (1=Xmin, 2=Xmax, 3=Ymin, 4=Ymax)|
+  !|                                                                   |
+  !| Author: Fang Jian                                                 |
+  !|-------------------------------------------------------------------+
   subroutine noslip_adibatic(ndir)
     !
     use commvar,   only : Reynolds,turbmode,lreport,nondimen,spcinf
@@ -6658,69 +6672,171 @@ module bc
     logical,save :: lfirstcal=.true.
     !
     beta1=0.075d0
+
+    if(lreport) lfirstcal=.true.
+
+    !---------------------------------------------------------------
+    ! Read wall blowing/suction configuration
+    !---------------------------------------------------------------
+    if(lfirstcal) then
+      !
+      if(mpirank==0) then
+        !
+        filewbs='datin/wallbs.dat'
+        !
+        inquire(file=trim(filewbs), exist=lexist)
+        !
+        if(lexist) then
+          fh=get_unit()
+          open(fh,file=trim(filewbs),action='read')
+          read(fh,*)
+          read(fh,*)
+          read(fh,*)wallamplit,beter,xa,xb,xc
+          read(fh,*)
+          read(fh,*)nmod_t,nmod_z
+          close(fh)
+          print*,' >> ',trim(filewbs)
+          !
+          print*,' ------------- wall blowing & suction parameters -------------'
+          write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
+          write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
+          write(*,"(23x,3(A,1X,F12.5))")'   x extent:',xa,' ~',xb,' ~',xc
+          write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
+          write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
+          print*,' --------------------------------------------------------------'
+        else
+          wallamplit=0.d0
+          beter=1.d0
+          xa=0.d0
+          xb=0.d0
+          xc=0.d0
+          nmod_t=0
+          nmod_z=0
+        endif
+        !
+      endif
+      !
+      call bcast(wallamplit,comm=mpi_jmin)
+      call bcast(beter,comm=mpi_jmin)
+      call bcast(xa,comm=mpi_jmin)
+      call bcast(xb,comm=mpi_jmin)
+      call bcast(xc,comm=mpi_jmin)
+      call bcast(nmod_t,comm=mpi_jmin)
+      call bcast(nmod_z,comm=mpi_jmin)
+      !
+      !
+      lfirstcal=.false.
+      !
+    endif
     !
-    if(ndir==3) then
+    if(ndims==3 .and. wallamplit>1.d-10) then
+      vwall=wallbs_rand(beter,wallamplit,xa,xb,xc,nmod_t,nmod_z)
+    else
+      vwall=0.d0
+    endif
+
+    !---------------------------------------------------------------
+    ! Apply no-slip adiabatic conditions
+    !---------------------------------------------------------------
+    if(ndir==1) then
+      ! Xmin
+      !
+      if(irk==0) then
+        !
+        i=0
+        do k=0,km
+        do j=0,jm
+          pe=num1d3*(4.d0*prs(i+1,j,k)-prs(i+2,j,k))
+          te=num1d3*(4.d0*tmp(i+1,j,k)-tmp(i+2,j,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =te
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i+1,j,k,1)-spc(i+2,j,k,1))
+          endif
+          !
+          if(nondimen) then 
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        pressure=prs(i,j,k),                             &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+
+        enddo
+        enddo
+        !
+      endif
+
+    elseif(ndir==2) then
+      !
+      if(irk==irkm) then
+        !
+        i=im
+
+        do k=0,km
+        do j=0,jm
+          pe=num1d3*(4.d0*prs(i-1,j,k)-prs(i-2,j,k))
+          te=num1d3*(4.d0*tmp(i-1,j,k)-tmp(i-2,j,k))
+          !
+          vel(i,j,k,1)=0.d0
+          vel(i,j,k,2)=0.d0
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =te
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i-1,j,k,1)-spc(i,j-2,k,1))
+          endif
+          !
+          if(nondimen) then 
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        pressure=prs(i,j,k),                             &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          
+        enddo
+        enddo
+        !
+      endif
+
+    elseif(ndir==3) then
       !
       if(jrk==0) then
         !
-        if(lreport) lfirstcal=.true.
-        !
-        if(lfirstcal) then
-          !
-          if(mpirank==0) then
-            !
-            filewbs='datin/wallbs.dat'
-            !
-            inquire(file=trim(filewbs), exist=lexist)
-            !
-            if(lexist) then
-              fh=get_unit()
-              open(fh,file=trim(filewbs),action='read')
-              read(fh,*)
-              read(fh,*)
-              read(fh,*)wallamplit,beter,xa,xb,xc
-              read(fh,*)
-              read(fh,*)nmod_t,nmod_z
-              close(fh)
-              print*,' >> ',trim(filewbs)
-              !
-              print*,' ------------- wall blowing & suction parameters -------------'
-              write(*,"(38x,A,1X,F12.5)")   '  amplitude:',wallamplit
-              write(*,"(38x,A,1X,F12.5)")   '  frequency:',beter
-              write(*,"(23x,3(A,1X,F12.5))")'   x extent:',xa,' ~',xb,' ~',xc
-              write(*,"(42x,(A,1X,I0))")'    temporal modes:',nmod_t
-              write(*,"(42x,(A,1X,I0))")'    spanwise modes:',nmod_z
-              print*,' --------------------------------------------------------------'
-            else
-              wallamplit=0.d0
-              beter=1.d0
-              xa=0.d0
-              xb=0.d0
-              xc=0.d0
-              nmod_t=0
-              nmod_z=0
-            endif
-            !
-          endif
-          !
-          call bcast(wallamplit,comm=mpi_jmin)
-          call bcast(beter,comm=mpi_jmin)
-          call bcast(xa,comm=mpi_jmin)
-          call bcast(xb,comm=mpi_jmin)
-          call bcast(xc,comm=mpi_jmin)
-          call bcast(nmod_t,comm=mpi_jmin)
-          call bcast(nmod_z,comm=mpi_jmin)
-          !
-          !
-          lfirstcal=.false.
-          !
-        endif
-        !
-        if(ndims==3 .and. wallamplit>1.d-10) then
-          vwall=wallbs_rand(beter,wallamplit,xa,xb,xc,nmod_t,nmod_z)
-        else
-          vwall=0.d0
-        endif
+        
         !
         j=0
         !
