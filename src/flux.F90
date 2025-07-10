@@ -10,6 +10,7 @@ module flux
 
     use parallel, only : mpirank,mpistop
     use commtype, only : compact_scheme
+    use commvar,  only : bfacmpld
 
     implicit none
 
@@ -32,7 +33,6 @@ module flux
 
         use constdef
         use commfunc,only : tridiagonal_thomas_proprocess
-        use commvar,  only: bfacmpld
 
         type(compact_scheme) :: asolver
         integer,intent(in) :: scheme,ntype,dim
@@ -88,13 +88,13 @@ module flux
           if(scheme==543) then  
             ! set near-boundary/interface schemes
             if(ntype==1 .or. ntype==4) then
-              asolver%a(i_0)   =2.d0;    asolver%c(i_0)  =2.d0  ! 3nd-order downwind-biased scheme
+              asolver%a(i_0)   =2.d0;    asolver%c(i_0)  =2.d0    ! 3nd-order downwind-biased scheme
               asolver%a(i_0+1) =0.25d0;  asolver%c(i_0+1)=0.25d0  ! 3nd-order downwind-biased scheme
             endif
     
             if(ntype==2 .or. ntype==4) then
               asolver%a(i_m)   =2.d0;    asolver%c(i_m)  =2.d0    ! 3nd-order upwind-biased scheme        
-              asolver%a(i_m-1) =0.25d0;  asolver%c(i_m-1)=0.25d0    ! 3nd-order upwind-biased scheme
+              asolver%a(i_m-1) =0.25d0;  asolver%c(i_m-1)=0.25d0  ! 3nd-order upwind-biased scheme
             endif
           else
             print*,' scheme:',scheme
@@ -163,7 +163,7 @@ module flux
     function compact_flux_rhs(asolver,f,dim) result(d)
 
         use constdef
-        use commvar, only : hm,bfacmpld
+        use commvar, only : hm
 
         type(compact_scheme),intent(in) :: asolver
         integer,intent(in) :: dim
@@ -193,9 +193,7 @@ module flux
           ! 3rd-order flux
           j=i_0 ! i=-1
           d(j)=2.5d0*f(j+1)+0.5d0*f(j+2)
-          ! d(j)=num17d6*f(j+1)+num4d3*f(j+2)-num1d6*f(j+3)
 
-          ! 4th-order flux
           j=i_0+1 ! i=0
           d(j)=0.75d0*f(j)+0.75d0*f(j+1)
 
@@ -222,10 +220,8 @@ module flux
           j=i_m-1
           d(j)=0.75d0*f(j+1)+0.75d0*f(j)
 
-          ! 4th-order flux
           j=i_m
           d(j)=2.5d0*f(j)+0.5d0*f(j-1)
-          ! d(j)=num17d6*f(j)+num4d3*f(j-1)-num1d6*f(j-2)
 
           i_e=i_m-2
         else
@@ -271,8 +267,6 @@ module flux
     !| 08-02-2021  | Created by J. Fang @ Warrington.                    |
     !+-------------------------------------------------------------------+
     function recons_exp(f,inode,dim,ntype,reschem,shock,solid) result(fc)
-      !
-      use commvar,  only: bfacmpld
       !
       ! arguments
       real(8),intent(in) :: f(1:8)
@@ -377,7 +371,7 @@ module flux
          (ntype==1 .and. inode==1) .or. (ntype==2 .and. inode==dim-2) ) then
         fc=fl
       else
-        fc=mp5(f,fl,discont=.true.)
+        fc=mp5(f,fl,discont=shock)
       endif
       !
       return
@@ -1118,7 +1112,6 @@ function recons(f,stype,ntype,dim,af,cc,windir) result(fc)
   function coeffcompac(scheme) result(alfa)
     !
     use constdef
-    use commvar,  only: bfacmpld
     !
     integer,intent(in) :: scheme
     real(8),allocatable :: alfa(:)
@@ -1271,7 +1264,7 @@ function recons(f,stype,ntype,dim,af,cc,windir) result(fc)
   function ptds_recon_rhs(vin,dim,ns,ntype,windir) result(vout)
     !
     use constdef
-    use commvar,  only: bfacmpld,hm
+    use commvar,  only: hm
     !
     integer,intent(in) :: dim,ns,ntype
     real(8),intent(in) :: vin(-hm:dim+hm)

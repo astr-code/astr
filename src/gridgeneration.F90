@@ -42,6 +42,10 @@ module gridgeneration
         call gridcube(10.d0,1.d0,1.d0)
       elseif(trim(flowtype)=='shuosher') then
         call grid1d(-5.d0,5.d0)
+      elseif(trim(flowtype)=='sod') then
+        call grid1d(-5.d0,5.d0)
+      elseif(trim(flowtype)=='riem2d') then
+        call gridcube(1.d0,1.d0,0.d0)
       elseif(trim(flowtype)=='windtunn') then
         call gridsandbox
       elseif(trim(flowtype)=='channel') then

@@ -6716,13 +6716,13 @@ module bc
         !
       endif
       !
-      call bcast(wallamplit,comm=mpi_jmin)
-      call bcast(beter,comm=mpi_jmin)
-      call bcast(xa,comm=mpi_jmin)
-      call bcast(xb,comm=mpi_jmin)
-      call bcast(xc,comm=mpi_jmin)
-      call bcast(nmod_t,comm=mpi_jmin)
-      call bcast(nmod_z,comm=mpi_jmin)
+      call bcast(wallamplit)
+      call bcast(beter)
+      call bcast(xa)
+      call bcast(xb)
+      call bcast(xc)
+      call bcast(nmod_t)
+      call bcast(nmod_z)
       !
       !
       lfirstcal=.false.

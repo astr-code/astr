@@ -93,6 +93,10 @@ module initialisation
           call mixlayerini
         case('shuosher')
           call shuosherini
+        case('sod')
+          call sodini
+        case('riem2d')
+          call riem2dini
         case('bl')
           call blini
         case('tbl')
@@ -784,13 +788,146 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| The end of the subroutine shuosherini.                            |
   !+-------------------------------------------------------------------+
-  !
+  
+
+  !+-------------------------------------------------------------------+
+  !| Subroutine: sodini                                                |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   Generates an initial condition for the 1D Sod                   |
+  !|   shock tube problem in the x-direction.                          |
+  !|   Assumes a discontinuity at x = 0 with high-pressure gas on the  |
+  !|   left and low-pressure gas on the right.                         |
+  !|                                                                   |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-Jul-2025 | Created by J. Fang @ Imech, Beijing                 |
+  !+-------------------------------------------------------------------+
+  subroutine sodini
+  
+    use commvar,    only : mach
+    use commarray,  only : x, vel, rho, prs, spc, tmp, q, acctest_ref
+    use fludyna,    only : thermal
+  
+    implicit none
+  
+    ! Local variables
+    integer :: i, j, k
+    real(8) :: xc
+  
+    !---------------------------------------------------------------
+    ! Set initial conditions: Sod-type shock tube in x-direction
+    !---------------------------------------------------------------
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          xc = x(i,j,k,1)
+  
+          if (xc < 0.d0) then
+            rho(i,j,k)   = 1.d0
+            prs(i,j,k)   = 1.d0
+            vel(i,j,k,1) = 0.d0
+          else
+            rho(i,j,k)   = 0.125d0
+            prs(i,j,k)   = 0.1d0
+            vel(i,j,k,1) = 0.d0
+          end if
+  
+          vel(i,j,k,2) = 0.d0
+          vel(i,j,k,3) = 0.d0
+  
+          tmp(i,j,k) = thermal(density=rho(i,j,k), pressure=prs(i,j,k))
+        end do
+      end do
+    end do
+  
+    ! Output initialization confirmation
+    if (lio) write(*,'(A)') '  ** Sod profile initialised.'
+  
+  end subroutine sodini
+  !+-------------------------------------------------------------------+
+  !| End of subroutine sodini                                          |
+  !+-------------------------------------------------------------------+
+
+  !+-------------------------------------------------------------------+
+  !| Subroutine: riem2d                                                |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   Generates the initial field for the 2D Riemann problem.         |
+  !|                                                                   |
+  !| References:                                                       |
+  !|[1] Y. Wang, Y. Du, K. Zhao, and L. Yuan, ‘Modified Stencil        |
+  !|   Approximations for Fifth-Order Weighted Essentially             |
+  !|   Non-oscillatory Schemes’, J Sci Comput, vol. 81, no. 2, pp.     |
+  !|   898–922, Nov. 2019, doi: 10.1007/s10915-019-01042-w.            |
+  !|                                                                   |
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 09-Jul-2025 | Created by J. Fang @ Imech, Beijing                 |
+  !+-------------------------------------------------------------------+
+  subroutine riem2dini
+  
+    use commarray,  only : x, vel, rho, prs, tmp
+    use fludyna,    only : thermal
+  
+    implicit none
+  
+    ! Local variables
+    integer :: i, j, k
+    real(8) :: xc, yc
+  
+    !---------------------------------------------------------------
+    ! Set initial conditions for the double Mach reflection problem
+    !---------------------------------------------------------------
+    do k = 0, km
+      do j = 0, jm
+        do i = 0, im
+          xc = x(i,j,k,1)
+          yc = x(i,j,k,2)
+  
+          if (xc>=0.8d0 .and. yc>=0.8d0 ) then
+            rho(i,j,k)   = 1.5d0
+            vel(i,j,k,1) = 0.d0
+            vel(i,j,k,2) = 0.d0
+            prs(i,j,k)   = 1.5d0
+          elseif (xc<0.8d0 .and. yc>=0.8d0 ) then
+            rho(i,j,k)   = 0.5323d0
+            vel(i,j,k,1) = 1.206d0
+            vel(i,j,k,2) = 0.d0
+            prs(i,j,k)   = 0.30
+          elseif ( xc<0.8d0 .and. yc<0.8d0) then
+            rho(i,j,k)   = 0.138d0
+            vel(i,j,k,1) = 1.206d0
+            vel(i,j,k,2) = 1.206d0
+            prs(i,j,k)   = 0.029d0
+          elseif ( xc>=0.8d0 .and. yc<0.8d0) then
+            rho(i,j,k)   = 0.5323d0
+            vel(i,j,k,1) = 0.d0
+            vel(i,j,k,2) = 1.206d0
+            prs(i,j,k)   = 0.3d0
+          end if
+  
+          vel(i,j,k,3) = 0.d0
+          tmp(i,j,k) = thermal(density=rho(i,j,k), pressure=prs(i,j,k))
+        end do
+      end do
+    end do
+  
+    ! Output initialization confirmation
+    if (lio) write(*, '(A)') '  ** 2D Riemann initialised.'
+  
+  end subroutine riem2dini
+  !+-------------------------------------------------------------------+
+  !| End of subroutine riem2dini                                       |
+  !+-------------------------------------------------------------------+
+
+  
   !+-------------------------------------------------------------------+
   !| This subroutine is used to generate an initial field for the      |
   !| 2D vortex transport problem.                                      |
   !| ref: Visbal & Gaitonde, On the Use of Higher-Order Finite-        |
   !|      Difference Schemes on Curvilinear and Deforming Meshes.      |
-  !|     Journal of Computational Physics, 2002, 181: 155–185.         |                                      |
+  !|     Journal of Computational Physics, 2002, 181: 155–185.         |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
