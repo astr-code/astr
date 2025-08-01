@@ -931,6 +931,7 @@ module geom
                           ibmode,solidfile
     use commarray, only : x,nodestat,cell
     use commfunc,  only : dis2point
+    use userdefine,only : udf_immersed_solid
     !
     ! local data
     integer :: n,ncou,jsd,i,j,k,ii,jj,kk
@@ -1021,8 +1022,7 @@ module geom
         elseif(trim(solidfile)=='cavity') then
           call solid_udf_cavity(xp=x(i,j,k,:),inside=linsold)
         else
-          print*,trim(solidfile)
-          stop ' !! ib geometry not defined !!'
+          call udf_immersed_solid(xp=x(i,j,k,:),inside=linsold)
         endif
         ! call solid_udf_cavity(xp=x(i,j,k,:),inside=linsold)
         !
@@ -1500,6 +1500,7 @@ module geom
     use parallel,  only : ig0,jg0,kg0,pmerg
     use commfunc,  only : dis2point
     use readwrite, only : write_sboun
+    use userdefine,only : udf_immersed_solid
     !
     ! local data
     integer :: counter,nc_f,nc_b,nc_g,bignum,jsd,iss,jss,kss,i,j,k
@@ -1614,8 +1615,7 @@ module geom
           elseif(trim(solidfile)=='cavity') then
             call solid_udf_cavity(xp=x(i,j,k,:),bnode=bnodes(counter))
           else
-            print*,trim(solidfile)
-            stop ' !! ib geometry not defined !!'
+            call udf_immersed_solid(xp=x(i,j,k,:),bnode=bnodes(counter))
           endif
           !
           bnodes(counter)%igh(1)=i+ig0

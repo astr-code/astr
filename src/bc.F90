@@ -1388,26 +1388,26 @@ module bc
         !
         call alloinflow(ndir)
         !
-        if(trim(flowtype)=='jet') then
-          call jetinflow
-        elseif(trim(flowtype)=='mixlayer') then
-          call mixlayerinflow
-        elseif(trim(flowtype)=='channel') then
-          call channelinflow
-        elseif(trim(flowtype)=='bl' .or. trim(flowtype)=='swbli' .or. trim(flowtype)=='1dflame') then
-          !
+        if(turbinf=='prof')  then
           call profileinflow
-          !
-        else
+        elseif(turbinf=='free')  then
           call freestreaminflow 
+        else
+          if(trim(flowtype)=='jet') then
+            call jetinflow
+          elseif(trim(flowtype)=='mixlayer') then
+            call mixlayerinflow
+          else
+            stop ' inflow type not defined @ inflow'
+          endif
         endif
         !
         lfirstcal=.false.
         !
       endif
-      !
+
       i=0
-      !
+
       if(rkstep==1) then
         !
         if(turbinf=='intp')  then

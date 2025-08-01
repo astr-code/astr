@@ -1373,6 +1373,7 @@ module readwrite
     use commvar,   only : im,jm,km,num_species,nondimen,spcinf
     use commarray, only : rho,vel,prs,tmp,spc
     use fludyna,   only : thermal
+    use bc,        only : rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof
     use hdf5io
 #ifdef COMB
     use thermchem, only: spcindex
@@ -1383,42 +1384,66 @@ module readwrite
     integer :: jsp,i,j,k
     real(8) :: time_ini,nstep_ini
     character(len=3) :: spname
+    logical :: lexist
     !
-    call h5io_init(filename='datin/flowini1d.h5',mode='read')
-    !
-    call h5read(varname='ro', var=rho(0:im,0,0),  dir='i')
-    call h5read(varname='u1', var=vel(0:im,0,0,1),dir='i')
-    ! call h5read(varname='u2', var=vel(0:im,0,0,2),dir='i')
-    call h5read(varname='t',  var=tmp(0:im,0,0),  dir='i')
-    !
-    do jsp=1,num_species
-      write(spname,'(i3.3)')jsp
-      call h5read(varname='sp'//spname,var=spc(0:im,0,0,jsp),dir='i')
-    enddo
-    !
-    call h5io_end
-    !
-    do k=0,km
-    do j=0,jm
-    do i=0,im
+    inquire(file='datin/flowini1d.h5', exist=lexist)
+
+    if(lexist) then
+      call h5io_init(filename='datin/flowini1d.h5',mode='read')
       !
-      rho(i,j,k)  =rho(i,0,0)
-      vel(i,j,k,1)=vel(i,0,0,1)
-      vel(i,j,k,2)=0.d0
-      vel(i,j,k,3)=0.d0
-      tmp(i,j,k)  =tmp(i,0,0)
+      call h5read(varname='ro', var=rho(0:im,0,0),  dir='i')
+      call h5read(varname='u1', var=vel(0:im,0,0,1),dir='i')
+      ! call h5read(varname='u2', var=vel(0:im,0,0,2),dir='i')
+      call h5read(varname='t',  var=tmp(0:im,0,0),  dir='i')
       !
       do jsp=1,num_species
-        spc(i,j,k,jsp)=spc(i,0,0,jsp)
+        write(spname,'(i3.3)')jsp
+        call h5read(varname='sp'//spname,var=spc(0:im,0,0,jsp),dir='i')
       enddo
-      !
-      prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
-                          species=spc(i,j,k,:)) 
 
-    enddo
-    enddo
-    enddo
-    !
+      call h5io_end
+
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        rho(i,j,k)  =rho(i,0,0)
+        vel(i,j,k,1)=vel(i,0,0,1)
+        vel(i,j,k,2)=0.d0
+        vel(i,j,k,3)=0.d0
+        tmp(i,j,k)  =tmp(i,0,0)
+        !
+        do jsp=1,num_species
+          spc(i,j,k,jsp)=spc(i,0,0,jsp)
+        enddo
+        !
+        prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                            species=spc(i,j,k,:)) 
+  
+      enddo
+      enddo
+      enddo
+
+    else
+
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        !
+        rho(i,j,k)  = rho_prof(j)
+        vel(i,j,k,1)= vel_prof(j,1)
+        vel(i,j,k,2)= vel_prof(j,2)
+        vel(i,j,k,3)= 0.d0
+        tmp(i,j,k)  = tmp_prof(j)
+        
+        prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
+                            species=spc(i,j,k,:))
+      enddo
+      enddo
+      enddo
+
+    endif
+
   end subroutine readflowini1d
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of subroutine readflowini1d.

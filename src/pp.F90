@@ -90,6 +90,10 @@ subroutine ppentrance
     call readkeyboad(inputfile)
     call flamegen(trim(flowfieldfile), trim(viewmode), trim(inputfile))
 
+  case ('inlet')
+
+    call blasius_inlet()
+
   case ('udf')
     call readkeyboad(inputfile)
 
@@ -2223,7 +2227,7 @@ end subroutine ppentrance
     !
   end subroutine flamegen
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine flamegen.                          |
+  !| The end of the subroutine flamegen.                               |
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
@@ -2860,8 +2864,317 @@ end subroutine ppentrance
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! End of the function Ek.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !
-  !
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to generate a laminar inlet profile according  |
+  !| to Blasius solution.                                              | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-Aug-2025: created by Jian Fang @ IMECH, CAS, Beijing           |
+  !+-------------------------------------------------------------------+
+  subroutine blasius_inlet
+  
+    use bc,        only : twall
+    use commvar,   only : pinf, const2, const5, prandtl, Reynolds, ja
+    use fludyna,   only : thermal, miucal
+    use readwrite, only : readinput
+    use solver,    only : refcal
+    use utility,   only : progress_bar
+    use interp
+  
+    implicit none
+  
+    ! Declarations
+    integer :: jn, ns1, ns2, j1, j, i, ios
+    real(8) :: dye, den, miu, df2, dt, f210, f211, t00, t01
+    real(8) :: rom, rom2, utaw, lref
+    real(8) :: error1, error2, p0, p1, p2, p3, p4
+    real(8) :: q0, q1, q2, var0, var1, var2, var3, var4, var5, var6
+    real(8) :: xin,dx,thick1,thick2,thick3
+  
+    real(8), allocatable :: ye(:), y2(:), f(:), f1(:), f2(:), f3(:)
+    real(8), allocatable :: t(:), t1(:), t2(:), u(:), v(:), ro(:)
+    real(8), allocatable :: ys(:), us(:), vs(:), ros(:), ts(:)
+  
+    ! Initialization
+    call readinput
+    call refcal
+  
+    jn = 260
+  
+    allocate(ye(0:jn), y2(0:jn), f(0:jn), f1(0:jn), f2(0:jn), f3(0:jn), &
+             t(0:jn), t1(0:jn), t2(0:jn), u(0:jn), v(0:jn), ro(0:jn))
+  
+    ! Generate mesh in y-direction
+    do j = 0, jn
+      ye(j) = 20.d0 * j / jn
+    end do
+  
+    dye = ye(1) - ye(0)
+  
+    ! Initial boundary conditions
+    f(0)  = 0.d0
+    f1(0) = 0.d0
+    f2(0) = 0.33206d0
+    f3(0) = -f(0) * f2(0)
+    t(0)  = twall(3)
+    t(jn) = 1.d0
+    t1(0) = 1.588d0
+    t2(0) = 0.08d0
+    df2   = 0.01d0
+    dt    = 0.1d0
+  
+    ! Compute initial thermodynamic states
+    den = pinf / t(0) * const2
+    miu = miucal(t(0))
+    rom = den * miu
+  
+    ! Begin iteration
+    open(13, file = 'stat_laminar.dat')
+    write(13, "(A7,2(1X,A20))") 'n', 'twall', 'error'
+  
+    error1 = 1.d0
+    ns1 = 0
+  
+    do while (error1 > 1.d-5)
+      ns1 = ns1 + 1
+      error1 = 0.d0
+      f210 = f1(jn) - 1.d0
+      t00 = t(jn) - 1.d0
+  
+      error2 = 1.d0
+      ns2 = 0
+  
+      do while (error2 > 1.d-6)
+        ns2 = ns2 + 1
+        error2 = 0.d0
+  
+        do j = 1, jn
+          ! Predictor step
+          miu  = miucal(t(j-1))
+          den  = pinf / t(j-1) * const2
+          rom  = miu * den
+          rom2 = rom / prandtl
+  
+          p0 = f(j-1) + f1(j-1) * dye
+          p1 = f1(j-1) + f2(j-1) * dye
+          p2 = f2(j-1) + f3(j-1) / rom * dye
+          p3 = -p0 * p2
+  
+          q0 = t(j-1) + t1(j-1) * dye
+          miu = miucal(q0)
+          den = pinf / q0 * const2
+          rom = miu * den
+          rom2 = rom / prandtl
+          q1 = t1(j-1) + t2(j-1) / rom2 * dye
+          q2 = -p0 * q1 - const5 * rom * p2**2
+  
+          ! Corrector step
+          miu = miucal(q0)
+          den = pinf / q0 * const2
+          rom = miu * den
+          rom2 = rom / prandtl
+  
+          var0 = f(j-1) + 0.5d0 * (f1(j-1) + p1) * dye
+          var1 = f1(j-1) + 0.5d0 * (f2(j-1) + p2) * dye
+          var2 = f2(j-1) + 0.5d0 * (f3(j-1) + p3) / rom * dye
+          var3 = -f(j) * f2(j)
+  
+          var4 = t(j-1) + 0.5d0 * (t1(j-1) + q1) * dye
+          miu = miucal(var4)
+          den = pinf / var4 * const2
+          rom = miu * den
+          rom2 = rom / prandtl
+          var5 = t1(j-1) + 0.5d0 * (t2(j-1) + q2) / rom2 * dye
+          var6 = -var0 * var5 - const5 * rom * var2**2
+  
+          ! Compute max error
+          error2 = max(error2, abs(var0 - f(j)), abs(var1 - f1(j)), &
+                                abs(var2 - f2(j)), abs(var3 - f3(j)), &
+                                abs(var4 - t(j)), abs(var5 - t1(j)), &
+                                abs(var6 - t2(j)))
+  
+          ! Update solution
+          f(j)  = var0
+          f1(j) = var1
+          f2(j) = var2
+          f3(j) = var3
+          t(j)  = var4
+          t1(j) = var5
+          t2(j) = var6
+        end do
+      end do
+  
+      ! Shooting adjustment for f2(0)
+      error1 = max(error1, abs(f1(jn) - 1.d0))
+      f211 = f1(jn) - 1.d0
+      if (f210 * f211 <= 0.d0) df2 = df2 * 0.25d0
+      if (f1(jn) < 1.d0) then
+        f2(0) = f2(0) + df2
+      else
+        f2(0) = f2(0) - df2
+      end if
+  
+      ! Shooting adjustment for t1(0)
+      error1 = max(error1, abs(t(jn) - 1.d0))
+      t01 = t(jn) - 1.d0
+      if (t00 * t01 <= 0.d0) dt = dt * 0.5d0
+      if (t(jn) < 1.d0) then
+        t1(0) = t1(0) + dt
+      else
+        t1(0) = t1(0) - dt
+      end if
+  
+      write(13, "(I7,2(1X,E20.13E2))") ns1, t(0), error1
+      
+      call progress_bar(ns1,100,'  ** solving Blasius Eq',20)
+  
+    end do
+  
+    close(13)
+
+    print*,' converged '
+
+    xin=0.1d0
+    dx=0.1d0*xin
+
+    ! Calculationg of boundary thickness
+    thick1=0.d0
+    thick2=0.d0
+    thick3=0.d0
+
+    error1 = 0.d0
+    ns1 =0 
+
+    do while(abs(thick1-1.d0)>1.d-5)
+
+      var3 = thick1 - 1.d0
+
+      ns1  = ns1 +1
+  
+      var0=1.d0/sqrt(2.d0*xin*Reynolds)
+      do j=0,jn
+        u(j)=f1(j)
+        v(j)=0.d0
+        do i=1,j
+          var1=0.5d0*(t(i)+t(i-1))*dye
+          var2=0.5d0*(u(i)+u(i-1))*dye
+          v(j)=v(j)+var0*(u(j)*var1-t(j)*var2)
+        end do
+      end do
+
+      y2(0)=0.d0
+      var1=sqrt(2.d0*xin/Reynolds)
+      do j=1,jn
+        !y2(j)=var1*ye(j)
+        y2(j)=0.d0
+        do i=1,j
+          y2(j)=y2(j)+var1*0.5d0*(t(i)+t(i-1))*dye
+        end do
+      end do
+
+      var0=u(jn)*0.99d0
+      do j=1,jn
+        if(u(j-1)<=var0 .and. u(j)>=var0) then
+          thick1=(y2(j)-y2(j-1))/(u(j)-u(j-1))*(var0-u(j-1))+y2(j-1)
+          j1=j
+          exit
+        end if
+      end do
+
+      ! Shooting adjustment for f2(0)
+      error1 = abs(thick1-1.d0)
+
+      var4 = thick1 - 1.d0
+      if (var3 * var4 <= 0.d0) dx = dx * 0.5d0
+      if (thick1 < 1.d0) then
+        xin = xin + dx
+      else
+        xin = xin - dx
+      end if
+
+      call progress_bar(ns1,10000,'  ** search xin',20)
+
+      ! print*,xin,dx,thick1,error1
+
+    enddo
+    print*,' x position            =',xin
+    !
+    ro=1.d0/t
+    !
+    var0=ro(jn)*u(jn)
+    do j=1,jn
+      var1=0.5d0*(ro(j)+ro(j-1))
+      var2=0.5d0*(u(j)+u(j-1))
+      thick2=thick2+(1.d0-var1*var2/var0)*(y2(j)-y2(j-1))
+    end do
+    !
+    var0=ro(jn)*u(jn)**2
+    do j=1,jn
+      var1=0.5d0*(ro(j)+ro(j-1))
+      var2=0.5d0*(u(j)+u(j-1))
+      thick3=thick3+(var1*var2*(u(jn)-var2))/var0*(y2(j)-y2(j-1))
+    end do
+
+    print*,'norminal thickness    =',thick1
+    print*,'displacement thickness=',thick2
+    print*,'momentum thickness    =',thick3
+    !
+    print*,'Reynolds Based on x=',Reynolds*xin
+    print*,'Reynolds Based on δ=',Reynolds*thick1
+    print*,'Reynolds Based on δ*=',Reynolds*thick2
+    print*,'Reynolds Based on θ=',Reynolds*thick3
+    !
+    open(18,file='CompBlasius.dat')
+    write(18,"(5(1X,A15))")'y','yn','u','v','t'
+    do j=0,jn
+      write(18,"(5(1X,E15.7E3))")y2(j),y2(j)*sqrt(Reynolds/xin),u(j),v(j),t(j)
+    end do
+    close(18)
+    print*,' << CompBlasius.dat'
+
+    allocate(ys(0:ja), us(0:ja), vs(0:ja), ros(0:ja), ts(0:ja) )
+
+    open(12,file='gridy.dat')
+    do j=0,ja
+      read(12,*)ns1,ys(j)
+    enddo
+    close(12)
+    print*,' >> gridy.dat'
+
+    do j=0,ja
+      us(j)=linear1d_arrayin(y2,u,ys(j),'---')
+      vs(j)=linear1d_arrayin(y2,v,ys(j),'---')
+      ts(j)=linear1d_arrayin(y2,t,ys(j),'---')
+      ros(j)=1.d0/ts(j)
+    enddo
+
+    open(18,file='datin/inlet.dat')
+    write(18,"(5(1X,A15))")'y','ro','u','v','t'
+    do j=0,ja
+      write(18,"(5(1X,E15.7E3))")ys(j),ros(j),us(j),vs(j),ts(j)
+    end do
+    close(18)
+    print*,' << datin/inlet.dat'
+
+
+    open(18,file='datin/inlet.prof')
+    write(18,"((1X,A))")'# parameters of inlet flow'
+    write(18,"(4(1X,A15))")'delta','delta*','theter','utaw'
+    write(18,"(4(1X,E15.7E3))")thick1,thick2,thick3,1.d0
+    write(18,"(4(1X,A15))")'ro','u','v','t'
+    do j=0,ja
+      write(18,"(4(1X,E15.7E3))")ros(j),us(j),vs(j),ts(j)
+    end do
+    close(18)
+    print*,' << datin/inlet.prof'
+
+  end subroutine blasius_inlet
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine blasius_inlet.                          |
+  !+-------------------------------------------------------------------+
+
 end module pp
 !+---------------------------------------------------------------------+
 !| The end of the module pp                                            |

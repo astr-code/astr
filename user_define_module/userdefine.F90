@@ -388,7 +388,7 @@ module userdefine
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is to defined an output by a user.                | 
+  !| This subroutine is to defined an output by a user.                |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -404,7 +404,7 @@ module userdefine
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is to collect statistics.                         | 
+  !| This subroutine is to collect statistics.                         |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -417,9 +417,8 @@ module userdefine
   !| The end of the subroutine udf_meanflow.                           |
   !+-------------------------------------------------------------------+
 
-
   !+-------------------------------------------------------------------+
-  !| This subroutine is a user defined boundary condition              | 
+  !| This subroutine is a user defined boundary condition              |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -427,69 +426,34 @@ module userdefine
   !+-------------------------------------------------------------------+
   subroutine udf_bc(ndir)
     
-    use constdef
-    use commarray, only : prs,vel,tmp,rho,spc,q
-    use commvar,   only : nondimen,im,km,jm,num_species
-    use parallel,  only : jrk,jrkm
-    use fludyna,   only : thermal,fvar2q
-
     ! arguments
     integer,intent(in) :: ndir
-
-    ! local data
-    integer :: i,j,k
-    real(8) :: pe
-    !
-
-    if(ndir==4 .and. jrk==jrkm) then
-      
-        j=jm
-        do k=0,km
-        do i=0,im
-          pe=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
-          !
-          vel(i,j,k,1)=1.d0
-          vel(i,j,k,2)=0.d0
-          vel(i,j,k,3)=0.d0
-          prs(i,j,k)  =pe
-          tmp(i,j,k)  =1.d0
-          !
-          if(num_species>0) then
-            spc(i,j,k,1)=num1d3*(4.d0*spc(i,j-1,k,1)-spc(i,j-2,k,1))
-          endif
-          !
-          if(nondimen) then
-            !
-            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-            !
-            call fvar2q(      q=  q(i,j,k,:),                            &
-                        density=rho(i,j,k),                              &
-                      velocity=vel(i,j,k,:),                            &
-                      pressure=prs(i,j,k),                              &
-                        species=spc(i,j,k,:)                             )
-            !
-          else
-            !
-            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            !
-            call fvar2q(      q=  q(i,j,k,:),                            &
-                        density=rho(i,j,k),                              &
-                        velocity=vel(i,j,k,:),                           &
-                        temperature=tmp(i,j,k),                          &
-                        species=spc(i,j,k,:)                             )
-            !
-          endif
-          !
-        enddo
-        enddo
-
-    endif
 
   end subroutine udf_bc
   !+-------------------------------------------------------------------+
   !| The end of the subroutine udf_bc.                                 |
   !+-------------------------------------------------------------------+
+!+-------------------------------------------------------------------+
+  !| This subroutine is a user defined immersed solid body.            | 
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-Aug-2025: created by Jian Fang @ IMech, CAS, Beijing           |
+  !+-------------------------------------------------------------------+
+  subroutine udf_immersed_solid(xp,inside,bnode)
+    !
+    use commtype,  only : sboun
+    !
+    real(8),intent(in) :: xp(3)
+    logical,intent(out),optional :: inside
+    type(sboun),intent(out),optional :: bnode
+    
+    return
 
+  end subroutine udf_immersed_solid
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine udf_immersed_solid.                     |
+  !+-------------------------------------------------------------------+
 end module userdefine
 !+---------------------------------------------------------------------+
 !| The end of the module userdefine.                                   |

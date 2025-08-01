@@ -365,60 +365,82 @@ module utility
   !+-------------------------------------------------------------------+
   !
   !+-------------------------------------------------------------------+
-  !| This subroutine is to write listing data.                         |
-  !+-------------------------------------------------------------------+
+  !| Subroutine: listwrite                                             |
+  !|                                                                   |
+  !| Purpose:                                                          |
+  !|   Writes listing data (step number, physical time, and up to 14   |
+  !|   scalar variables) to the specified file handle.                 |
+  !|                                                                   |
+  !| Notes:                                                            |
+  !|   - Accepts up to 14 optional real variables.                     |
+  !|   - Time is normalized by reference time.                         |
+  !|                                                                   |
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
-  !| 17-Aug-2023: Created by J. Fang @ Appleton                        |
+  !| 17-Aug-2023  | Created by J. Fang @ Appleton                      |
   !+-------------------------------------------------------------------+
-  subroutine listwrite(handle,var1,var2,var3,var4,var5,var6,var7,var8,var9,var10)
-    !
-    use commvar, only: nstep,time,ref_tim
-    !
-    integer,intent(in) :: handle
-    real(8),intent(in),optional :: var1,var2,var3,var4,var5,var6,      &
-                                   var7,var8,var9,var10
-
-    !
-    if(present(var10)) then
-      write(handle,"(1X,I20,11(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4,var5,var6,var7,var8,var9,var10
-    elseif(present(var9)) then
-      write(handle,"(1X,I20,10(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4,var5,var6,var7,var8,var9
-    elseif(present(var8)) then
-      write(handle,"(1X,I20,9(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4,var5,var6,var7,var8
-    elseif(present(var7)) then
-      write(handle,"(1X,I20,8(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4,var5,var6,var7
-    elseif(present(var6)) then
-      write(handle,"(1X,I20,7(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4,var5,var6
-    elseif(present(var5)) then
-      write(handle,"(1X,I20,6(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4,var5
-    elseif(present(var4)) then
-      write(handle,"(1X,I20,5(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3,var4
-    elseif(present(var3)) then
-      write(handle,"(1X,I20,4(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2,var3
-    elseif(present(var2)) then
-      write(handle,"(1X,I20,3(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1,var2
-    elseif(present(var1)) then
-      write(handle,"(1X,I20,2(1X,E20.13E2))")nstep,time/ref_tim,       &
-                       var1
+  subroutine listwrite(handle, var1, var2, var3, var4, var5, var6, var7, &
+                              var8, var9, var10, var11, var12, var13, var14)
+    
+    use commvar, only: nstep, time, ref_tim
+  
+    implicit none
+  
+    integer, intent(in) :: handle
+    real(8), intent(in), optional :: var1, var2, var3, var4, var5, var6, var7, &
+                                     var8, var9, var10, var11, var12, var13, var14
+  
+    if (present(var14)) then
+      write(handle,"(1X,I20,15(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8, var9, var10, var11, var12, var13, var14
+    elseif (present(var13)) then
+      write(handle,"(1X,I20,14(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8, var9, var10, var11, var12, var13
+    elseif (present(var12)) then
+      write(handle,"(1X,I20,13(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8, var9, var10, var11, var12
+    elseif (present(var11)) then
+      write(handle,"(1X,I20,12(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8, var9, var10, var11
+    elseif (present(var10)) then
+      write(handle,"(1X,I20,11(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8, var9, var10
+    elseif (present(var9)) then
+      write(handle,"(1X,I20,10(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8, var9
+    elseif (present(var8)) then
+      write(handle,"(1X,I20,9(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7, var8
+    elseif (present(var7)) then
+      write(handle,"(1X,I20,8(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6, var7
+    elseif (present(var6)) then
+      write(handle,"(1X,I20,7(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5, var6
+    elseif (present(var5)) then
+      write(handle,"(1X,I20,6(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4, var5
+    elseif (present(var4)) then
+      write(handle,"(1X,I20,5(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3, var4
+    elseif (present(var3)) then
+      write(handle,"(1X,I20,4(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2, var3
+    elseif (present(var2)) then
+      write(handle,"(1X,I20,3(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1, var2
+    elseif (present(var1)) then
+      write(handle,"(1X,I20,2(1X,E20.13E2))") nstep, time/ref_tim, &
+           var1
     else
-      stop ' !! error @ listwrite'
-    endif
-    !
+      stop ' !! error @ listwrite: no variable provided.'
+    end if
+  
   end subroutine listwrite
   !+-------------------------------------------------------------------+
-  !| The end of the subroutine listwrite.                              |
+  !| End of subroutine listwrite                                       |
   !+-------------------------------------------------------------------+
-  !
+
   !+-------------------------------------------------------------------+
   !| This function Verifies that a character string represents a       |
   !|  numerical value                                                  |
