@@ -117,6 +117,8 @@ module initialisation
           call rtini
         case('ldcavity')
           call ldcavityini
+	case('heatbath')
+          call heatbathini
         ! case('hitflame')
         !   call hitflameini
         ! case default
@@ -1194,6 +1196,140 @@ module initialisation
   !| The end of the subroutine rtini.                                  |
   !+-------------------------------------------------------------------+
   !
+#ifdef TTP
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of N2 heat bath problem.                              |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 2-Jul-2025: Created by Xiaoyu Mao @ IMCAS                         |
+  !+-------------------------------------------------------------------+
+  subroutine heatbathini
+    !
+    use commarray,only: rho,prs,tmp,tve,vel,Ev,q,spc
+    use commvar, only : im,jm,km
+    use fludyna,  only: thermal,fvar2q
+    !
+    ! local data
+    integer :: i,j,k
+    !
+
+    
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+        tmp(i,j,k)=3000
+        tve(i,j,k)=10000
+        prs(i,j,k)=101325
+        rho(i,j,k)=thermal(temperature=tmp(i,j,k),pressure=prs(i,j,k))
+
+      !
+!      rho(i,j,k)= 1.d0
+!      prs(i,j,k)=1.d0
+!      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+  
+      vel(i,j,k,1)=  0.d0
+      vel(i,j,k,2)=  0.d0
+      vel(i,j,k,3)=  0.d0
+      !
+
+    enddo
+    enddo
+    enddo
+    !
+
+    call fvar2q(Ev=Ev(0:im,0:jm,0:km),      &
+                density=rho(0:im,0:jm,0:km),&
+                tve=tve(0:im,0:jm,0:km))
+
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                     density=rho(0:im,0:jm,0:km),                     &
+                     velocity=vel(0:im,0:jm,0:km,:),                   &
+                     pressure=prs(0:im,0:jm,0:km),                     &
+                     temperature=tmp(0:im,0:jm,0:km),                  &
+                      species=spc(0:im,0:jm,0:km,:) ,                  &
+                           Ev=Ev(0:im,0:jm,0:km)                       )    
+
+
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D two temperature initialised.'
+    !
+  end subroutine heatbathini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine heatbathini.                            |
+  !+-------------------------------------------------------------------+
+  !
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of 5-component air reaction problem.                   |
+  !| species: 1:N2 2:O2 3:N 4:O 5:NO
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 2-Jul-2025: Created by Xiaoyu Mao @ IMCAS                         |
+  !+-------------------------------------------------------------------+
+  subroutine rctairini
+    !
+    use commarray,only: rho,prs,tmp,tve,vel,Ev,q,spc
+    use commvar, only : im,jm,km,PRSATM
+    use fludyna,  only: thermal,fvar2q
+    !
+    ! local data
+    integer :: i,j,k
+    !
+
+    
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+        tmp(i,j,k)=30000
+        tve(i,j,k)=1000
+        prs(i,j,k)=0.068*PRSATM
+        rho(i,j,k)=thermal(temperature=tmp(i,j,k),pressure=prs(i,j,k))
+        spc(i,j,k,1)=0.79
+        spc(i,j,k,2)=0.21
+        spc(i,j,k,3)=0
+        spc(i,j,k,4)=0
+        spc(i,j,k,5)=0
+
+      !
+!      rho(i,j,k)= 1.d0
+!      prs(i,j,k)=1.d0
+!      tmp(i,j,k)=thermal(density=rho(i,j,k),pressure=prs(i,j,k))
+  
+      vel(i,j,k,1)=  0.d0
+      vel(i,j,k,2)=  0.d0
+      vel(i,j,k,3)=  0.d0
+      !
+
+    enddo
+    enddo
+    enddo
+    !
+
+    call fvar2q(Ev=Ev(0:im,0:jm,0:km),      &
+                density=rho(0:im,0:jm,0:km),&
+                tve=tve(0:im,0:jm,0:km))
+
+    call fvar2q(          q=  q(0:im,0:jm,0:km,:),                   &
+                     density=rho(0:im,0:jm,0:km),                     &
+                     velocity=vel(0:im,0:jm,0:km,:),                   &
+                     pressure=prs(0:im,0:jm,0:km),                     &
+                     temperature=tmp(0:im,0:jm,0:km),                  &
+                      species=spc(0:im,0:jm,0:km,:) ,                  &
+                           Ev=Ev(0:im,0:jm,0:km)                       )    
+
+
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** ',ndims,'-D 5 species reating air initialised.'
+    !
+  end subroutine rctairini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine heatbathini.                            |
+  !+-------------------------------------------------------------------+
+  !
+#endif
   !+-------------------------------------------------------------------+
   !| This subroutine is used to generate an initial field for the      |
   !| simulation of channel flow.                                       |

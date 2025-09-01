@@ -19,7 +19,7 @@ module commvar
   integer :: hm
   integer :: numq,num_species,ndims,ninit,num_modequ
   character(len=1) :: iomode
-  character(len=10) :: turbmode,ibmode
+  character(len=10) :: turbmode,ibmode,realgas
   character(len=4) :: conschm,difschm
   character(len=64) :: gridfile,solidfile
   !+---------------------+---------------------------------------------+
@@ -189,6 +189,15 @@ module commvar
   !
   parameter(hm=5)
   !
+#ifdef TTP
+  real(8), parameter :: CVT_N2=3393d0 
+  real(8), parameter :: UNIVERSAL_R=8.314d0
+  real(8), parameter :: M_N2=28.0134d-3
+  real(8), parameter :: R_N2 = UNIVERSAL_R / M_N2
+  real(8), parameter :: PRSATM = 101325d0
+  real(8), parameter :: N2N2a=221d0, N2N2b=2.9d-2
+  real(8), parameter :: Na=6.02d23
+#endif
 end module commvar
 !+---------------------------------------------------------------------+
 !| The end of the module commvar.                                      |

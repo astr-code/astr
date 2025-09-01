@@ -82,6 +82,32 @@ module models
   !| The end of the subroutine init_komegasst.                         |
   !+-------------------------------------------------------------------+
   !
+#ifdef TTP
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to allocate array for two temperature model.   |
+  !+-------------------------------------------------------------------+
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 01-Jul-2025: Created by Xiaoyu Mao @ IMCAS                        |
+  !+-------------------------------------------------------------------+
+  subroutine init_twotemp
+    !
+    use commvar,only : im,jm,km,hm
+    use commarray,only : tve, dtve, Ev, Evrhs
+    !
+    integer :: lallo
+    !
+    ! suppose to have memory allocation here, but segmentation fault.
+    ! temporarily moved to commarray.F90
+    !
+
+  end subroutine init_twotemp
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine init_twotemp.                         |
+  !+-------------------------------------------------------------------+
+#endif  
+  !
   !+-------------------------------------------------------------------+
   !| This subroutine is to obtain eddy viscousity of k-omega sst model |
   !+-------------------------------------------------------------------+

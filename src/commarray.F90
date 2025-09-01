@@ -30,6 +30,13 @@ module commarray
   real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12,ssf
   real(8),allocatable,dimension(:,:,:,:) :: dtke,domg
   !
+#ifdef TTP
+  real(8),allocatable,dimension(:,:,:) :: tve,Ev,Evrhs
+  real(8),allocatable,dimension(:,:,:,:) :: dtve
+  !+---------------------+---------------------------------------------+ 
+  !|                 tve | vibrational-electronic temperature.         |
+  !+---------------------+---------------------------------------------+
+#endif
   !+---------------------+---------------------------------------------+
   !|                   x | coordinates.                                |
   !|               jacob | geometrical Jacobian.                       |
@@ -39,6 +46,7 @@ module commarray
   !|                 rho | density.                                    |
   !|                 prs | pressure.                                   |
   !|                 tmp | temperature.                                |
+  !|                 tve | electronic-vibrational temperature.         |
   !|                 vel | velocity.                                   |
   !|                 spc | species.                                    |
   !|            lenspg_* | length of sponge layer                      |
@@ -110,6 +118,20 @@ module commarray
     allocate(crinod(0:im,0:jm,0:km),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating crinod'
     !
+#ifdef TTP
+    allocate(   tve(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating tve'
+    !
+    allocate( dtve(0:im,0:jm,0:km,1:3),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating dtve'
+    !
+    allocate(   Ev(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating Ev'
+    !
+    allocate(   Evrhs(0:im,0:jm,0:km),stat=lallo)
+    if(lallo.ne.0) stop ' !! error at allocating Evrhs'
+#endif
+
   end subroutine allocommarray
   !+-------------------------------------------------------------------+
   !| The end of the subroutine allocommarray.                          |

@@ -24,12 +24,18 @@ module fludyna
      module procedure fvar2q_sca
      module procedure fvar2q_1da
      module procedure fvar2q_3da
+#ifdef TTP
+     module procedure fvar2q_Ev
+#endif
   end interface
   !
   interface q2fvar
      module procedure q2fvar_sca
      module procedure q2fvar_1da
      module procedure q2fvar_3da
+#ifdef TTP
+     module procedure q2fvar_Ev
+#endif
   end interface
   !
   contains
@@ -44,8 +50,11 @@ module fludyna
   !+-------------------------------------------------------------------+
   function thermal_scar(density,pressure,temperature,species) result(vout)
     !
-    use commvar,only : const2,rgas
+    use commvar,only : const2,rgas,flowtype
     !
+#ifdef TTP
+    use commvar, only: M_N2,UNIVERSAL_R
+#endif
     ! arguments
     real(8) :: vout
     real(8),intent(in) ,optional :: density,pressure,temperature,species(:)
@@ -72,6 +81,10 @@ module fludyna
 #else
       rloc=rgas
 #endif
+
+      if (trim(flowtype)=='heatbath') then
+        rloc=UNIVERSAL_R/M_N2
+      endif
       !
       if(present(density).and.present(temperature)) then
         vout = density*temperature*rloc
@@ -89,8 +102,11 @@ module fludyna
   !
   function thermal_1d(density,pressure,temperature,species,dim) result(vout)
     !
-    use commvar,only : const2,rgas
+    use commvar,only : const2,rgas,flowtype
     !
+#ifdef TTP
+    use commvar, only: M_N2,UNIVERSAL_R
+#endif
     ! arguments
     integer,intent(in) :: dim
     real(8) :: vout(dim)
@@ -119,6 +135,10 @@ module fludyna
       rloc=rgas
 #endif
 
+      if (trim(flowtype)=='heatbath') then
+        rloc=UNIVERSAL_R/M_N2
+      endif
+
       if(present(density).and.present(temperature)) then
         vout = density*temperature*rloc
       elseif(present(density).and.present(pressure)) then
@@ -135,8 +155,11 @@ module fludyna
   !
   function thermal_3d(density,pressure,temperature,species,dim) result(vout)
     !
-    use commvar,only : const2,rgas
+    use commvar,only : const2,rgas,flowtype
     !
+#ifdef TTP
+    use commvar, only: M_N2,UNIVERSAL_R
+#endif
     ! arguments
     integer,intent(in) :: dim(3)
     real(8) :: vout(dim(1),dim(2),dim(3))
@@ -164,8 +187,12 @@ module fludyna
 #else
       rloc=rgas
 #endif
+
+      if (trim(flowtype)=='heatbath') then
+        rloc=UNIVERSAL_R/M_N2
+      endif
       if(present(density).and.present(temperature)) then
-        vout = density*temperature*rloc
+        vout = density*temperature*rloc  
       elseif(present(density).and.present(pressure)) then
         vout = pressure/density/rloc
       elseif(present(temperature).and.present(pressure)) then
@@ -192,6 +219,10 @@ module fludyna
     !
     use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
     use commvar,  only : im,jm,km,num_species,num_modequ,turbmode
+#ifdef TTP
+    use commarray,only : tve,Ev
+    use commvar,  only : realgas
+#endif
     !
     ! local data
     integer :: i,j,k
@@ -205,7 +236,8 @@ module fludyna
                                  temperature=tmp(0:im,0:jm,0:km),      &
                                      species=spc(0:im,0:jm,0:km,:),    &
                                          tke=tke(0:im,0:jm,0:km),      &
-                                       omega=omg(0:im,0:jm,0:km) )
+                                       omega=omg(0:im,0:jm,0:km),      &
+                                          Ev=Ev (0:im,0:jm,0:km) )
       !
       do k=0,km
       do j=0,jm
@@ -227,17 +259,28 @@ module fludyna
       !
     elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
       !
-      call q2fvar(q=q(0:im,0:jm,0:km,:),                               &
-                                     density=rho(0:im,0:jm,0:km),      &
-                                    velocity=vel(0:im,0:jm,0:km,:),    &
-                                    pressure=prs(0:im,0:jm,0:km),      &
-                                 temperature=tmp(0:im,0:jm,0:km),      &
-                                     species=spc(0:im,0:jm,0:km,:) )
+      call q2fvar(          q=  q(0:im,0:jm,0:km,:),                   &
+                      density=rho(0:im,0:jm,0:km),                     &
+                     velocity=vel(0:im,0:jm,0:km,:),                   &
+                     pressure=prs(0:im,0:jm,0:km),                     &
+                     temperature=tmp(0:im,0:jm,0:km),                  &
+                      species=spc(0:im,0:jm,0:km,:) ,                  &
+                           Ev=Ev(0:im,0:jm,0:km)                       )
       !
+
     else
       print*,' !! ERROR @ updatefvar'
       stop
     endif
+
+#ifdef TTP
+    if(trim(realgas)=='twotemp') then
+      call q2fvar(  Ev=Ev(0:im,0:jm,0:km),                             &
+                    density=rho(0:im,0:jm,0:km),                       &
+                    tve=tve(0:im,0:jm,0:km)                            )
+    endif
+
+#endif
     !
   end subroutine updatefvar
   !+-------------------------------------------------------------------+
@@ -255,6 +298,11 @@ module fludyna
     !
     use commarray,only : q,rho,vel,prs,tmp,spc,tke,omg
     use commvar,  only : im,jm,km,num_species,num_modequ,turbmode,numq
+
+#ifdef TTP
+    use commarray,only : tve,Ev
+    use commvar,  only : realgas
+#endif
     !
     integer :: i,j,k,n
     !
@@ -266,7 +314,8 @@ module fludyna
                      pressure=prs(0:im,0:jm,0:km),                     &
                       species=spc(0:im,0:jm,0:km,:),                   &
                           tke=tke(0:im,0:jm,0:km),                     &
-                        omega=omg(0:im,0:jm,0:km)                      )
+                        omega=omg(0:im,0:jm,0:km),                     &
+                           Ev=Ev(0:im,0:jm,0:km)                       )
       !
     elseif(trim(turbmode)=='none' .or. trim(turbmode)=='udf1') then
       !
@@ -275,8 +324,14 @@ module fludyna
                      velocity=vel(0:im,0:jm,0:km,:),                   &
                      pressure=prs(0:im,0:jm,0:km),                     &
                      temperature=tmp(0:im,0:jm,0:km),                  &
-                      species=spc(0:im,0:jm,0:km,:)                    )
-      !
+                      species=spc(0:im,0:jm,0:km,:) ,                  &
+                           Ev=Ev(0:im,0:jm,0:km)                       )
+#ifdef TTP
+    elseif(trim(realgas)=='twotemp') then
+      call fvar2q(  Ev=Ev(0:im,0:jm,0:km),                             &
+                    density=rho(0:im,0:jm,0:km),                       &
+                    tve=tve(0:im,0:jm,0:km)                            )
+#endif
       do k=0,km
       do j=0,jm
       do i=0,im
@@ -309,14 +364,21 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
+  !--------------------------------------------------------
+  ! scalar and 1d need two temperature implementation
+  !--------------------------------------------------------
   subroutine fvar2q_sca(q,density,velocity,pressure,temperature,       &
                        species,tke,omega)
     !
     use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
+#ifdef TTP
+    use commarray, only: Ev
+#endif
     real(8),intent(in) :: density,velocity(:)
     real(8),intent(in),optional :: pressure,temperature,species(:),tke,omega
     real(8),intent(out) :: q(:)
+
     !
     ! local data
     integer :: jspec,j
@@ -379,10 +441,15 @@ module fludyna
     !
     use commvar, only: numq,ndims,num_species,const1,const6,cv
     !
+#ifdef TTP
+    use commarray, only: Ev
+#endif
     real(8),intent(in) :: density(:),velocity(:,:)
     real(8),intent(in),optional :: pressure(:),temperature(:), &
                                    species(:,:)
     real(8),intent(out) :: q(:,:)
+
+
     !
     ! local data
     integer :: jspec,j
@@ -446,16 +513,20 @@ module fludyna
     !
   end subroutine fvar2q_1da
   !
-  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species,tke,omega)
+  subroutine fvar2q_3da(q,density,velocity,pressure,temperature,species,tke,omega,Ev)
     !
     use commvar, only: numq,ndims,num_species,const1,const6,cv
+    !
+#ifdef TTP
+    use commvar, only: realgas, R_N2
+#endif
     !
     real(8),intent(in) :: density(:,:,:),velocity(:,:,:,:)
     real(8),intent(in),optional :: pressure(:,:,:),temperature(:,:,:), &
                                    species(:,:,:,:),tke(:,:,:),        &
-                                   omega(:,:,:)
+                                   omega(:,:,:),Ev(:,:,:)
     real(8),intent(out) :: q(:,:,:,:)
-    !
+
     ! local data
     integer :: jspec,i,j,k
     real(8) :: var1,var2,cotem
@@ -494,6 +565,8 @@ module fludyna
 
     if(nondimen) then 
       cotem=const1
+    elseif(trim(realgas)=='twotemp') then
+      cotem= 5.d0/2.d0 * R_N2
     else
       cotem=cv
     endif
@@ -504,6 +577,7 @@ module fludyna
                                   velocity(:,:,:,2)**2 +         &
                                   velocity(:,:,:,3)**2) )
     elseif(present(pressure)) then
+
         q(:,:,:,5)=pressure(:,:,:)*const6+0.5d0*density(:,:,:)*(       &
                                     velocity(:,:,:,1)**2 +             &
                                     velocity(:,:,:,2)**2 +             &
@@ -530,7 +604,34 @@ module fludyna
       !
     endif
     !
+
+#ifdef TTP
+    if(trim(realgas)=='twotemp') then
+      q(:,:,:,5)=q(:,:,:,5)+Ev(:,:,:)
+      
+    endif
+#endif
   end subroutine fvar2q_3da
+
+
+#ifdef TTP
+  subroutine fvar2q_Ev(Ev,density,tve)
+    !
+    use commvar, only: CVT_N2, R_N2
+    !
+    real(8),intent(in) :: density(:,:,:),tve(:,:,:)
+    real(8),intent(out) :: Ev(:,:,:)
+    !
+    ! local data
+    integer :: jspec,j
+    real(8) :: var1,var2,cotem
+    !
+    
+    Ev(:,:,:)=density(:,:,:)*(R_N2*CVT_N2)/(exp(CVT_N2/tve(:,:,:))-1)
+    
+  end subroutine fvar2q_Ev
+#endif
+  !
   !+-------------------------------------------------------------------+
   !| The end of the subroutine fvar2q.                                 |
   !+-------------------------------------------------------------------+
@@ -542,20 +643,27 @@ module fludyna
   !| -------------                                                     |
   !| 09-02-2021: Created by J. Fang @ Warrington.                      |
   !+-------------------------------------------------------------------+
-  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species,tke,omega)
+  !-----------------------------------------------------------------------
+  ! scalar and 1d need two temperature implementation
+  ! TTP, COMB and usual calculation for temperature needs to be integrated 
+  !-----------------------------------------------------------------------
+  subroutine q2fvar_3da(q,density,velocity,pressure,temperature,species,tke,omega,Ev)
     !
-    use commvar, only: numq,ndims,num_species,const1,const6,tinf
+    use commvar, only: numq,ndims,num_species,const1,const6,tinf,cv,flowtype
     !
+#ifdef TTP
+    use commvar, only: R_N2, realgas
+#endif
     real(8),intent(inout) :: q(:,:,:,:)
     real(8),intent(out) :: density(:,:,:)
     real(8),intent(out),optional :: temperature(:,:,:),pressure(:,:,:),&
                                     species(:,:,:,:),velocity(:,:,:,:),&
-                                    tke(:,:,:),omega(:,:,:)
+                                    tke(:,:,:),omega(:,:,:),Ev(:,:,:)
     !
     ! local data
     integer :: jspec,i,j,k
     integer :: dim(3)
-    real(8) :: var1
+    real(8) :: var1,cotem
     !
     density(:,:,:)   =q(:,:,:,1)
     !
@@ -604,8 +712,39 @@ module fludyna
 
     endif
     !  
-#else
 
+#elif TTP
+    if(present(Ev) .and. trim(realgas)=='twotemp') then
+    
+    if(nondimen) then 
+      cotem=const1
+    else
+      cotem=cv
+    endif
+
+    if (trim(flowtype)=='heatbath') then
+      cotem= 5.d0/2.d0 * R_N2
+    endif
+
+
+    temperature(:,:,:)=(q(:,:,:,5)-0.5d0*density(:,:,:)*(              &
+                                         velocity(:,:,:,1)**2+         &
+                                         velocity(:,:,:,2)**2+         &
+                                        velocity(:,:,:,3)**2)          &
+                                  - Ev(:,:,:))                         &                        
+                        /(cotem * density(:,:,:)   )              
+    endif
+    if(present(pressure) .or. present(temperature)) then
+      dim(1)=size(q,1)
+      dim(2)=size(q,2)
+      dim(3)=size(q,3)
+
+    pressure=thermal (temperature=temperature,density=density, &
+                        species=species,dim=dim)
+
+    endif
+
+#else
     if(present(pressure) .or. present(temperature)) then
       pressure(:,:,:)  =( q(:,:,:,5)-0.5d0*density(:,:,:)*(              &
                                           velocity(:,:,:,1)**2+         &
@@ -780,6 +919,39 @@ module fludyna
     endif
     !
   end subroutine q2fvar_sca
+
+#ifdef TTP
+  subroutine q2fvar_Ev(Ev,density,tve)
+    !
+    use commvar, only: CVT_N2, R_N2
+    !
+    real(8),intent(in) :: density(:,:,:),Ev(:,:,:)
+    real(8),intent(out) :: tve(:,:,:)
+    !
+    ! local data
+    integer :: jspec,j,i,k
+    real(8) :: var1,var2,cotem,arg
+    !
+    do i=LBOUND(Ev,1),UBOUND(Ev,1)
+      do j=LBOUND(Ev,2),UBOUND(Ev,2)
+        do k=LBOUND(Ev,3),UBOUND(Ev,3)
+          if (Ev(i,j,k) <=0d0) then
+            print*, i,j,k,Ev(i,j,k)
+            print*, ' !! error, negative Ev value'
+          endif
+
+          arg = density(i,j,k) * (R_N2 * CVT_N2) / Ev(i,j,k) + 1
+          if (arg > 0) then
+            tve(i,j,k) = CVT_N2 / log(arg)
+          else
+            tve(i,j,k) = 0.0  ! or some default safe value
+            stop ' !! error, negative vibrational-electronic temperature'
+          end if
+        end do
+      end do
+    end do
+  end subroutine q2fvar_Ev
+#endif
   !+-------------------------------------------------------------------+
   !| The end of the subroutine q2fvar.                                 |
   !+-------------------------------------------------------------------+
