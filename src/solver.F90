@@ -185,7 +185,7 @@ module solver
     !
     use commarray, only : qrhs,x,q
     use commvar,   only : flowtype,conschm,diffterm,im,jm,             &
-                          recon_schem,limmbou,lchardecomp,lihomo
+                          recon_schem,limmbou,lchardecomp,lihomo,realgas
     use commcal,   only : ShockSolid,ducrossensor
     use comsolver, only : gradcal
     use userdefine,only : udf_src
@@ -256,6 +256,11 @@ module solver
     !
 #ifdef COMB
     call srccomb(timerept=ltimrpt)
+#endif
+#ifdef TTP
+    if(trim(realgas)=='twotemp') then
+      call srcttp(timerept=ltimrpt)
+    endif
 #endif
     !
     if(present(timerept) .and. timerept) then
@@ -536,6 +541,67 @@ module solver
     endif
     !
   end subroutine srccomb
+#endif 
+  !+-------------------------------------------------------------------+
+  !| This subroutine add a source term to the rhs of the equation to   |
+  !| calculate source for two-temperature model.                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 13-02-2021: Created by J. Fang @ STFC Daresbury Laboratory        |
+  !+-------------------------------------------------------------------+
+#ifdef TTP
+  subroutine srcttp(timerept)
+    !
+    use commvar,  only : im,jm,km,PRSATM,N2N2a,N2N2b,R_N2,M_N2,Na
+    use commarray,only : rho,tmp,jacob,Ev,tve,prs,Evrhs,q
+    use parallel, only : ptime
+    use fludyna, only : fvar2q
+    !
+    ! arguments
+    logical,intent(in),optional :: timerept
+    !
+    ! local data
+    integer :: i,j,k
+    real(8) :: time_beg
+    real(8),save :: subtime=0.d0
+    !
+    real(8) :: Eb(0:im,0:jm,0:km),tmw(0:im,0:jm,0:km),tc(0:im,0:jm,0:km),t(0:im,0:jm,0:km)
+    !
+    if(present(timerept) .and. timerept) time_beg=ptime() 
+    !
+
+    call fvar2q(Ev(0:im,0:jm,0:km),                       &
+                      rho(0:im,0:jm,0:km),                 &
+                      tve(0:im,0:jm,0:km)                      )
+
+    call fvar2q(Eb(0:im,0:jm,0:km),                          &
+                      rho(0:im,0:jm,0:km),                    &
+                      tmp(0:im,0:jm,0:km)                         )
+
+ 
+
+    tmw(0:im,0:jm,0:km)=prs(0:im,0:jm,0:km)/PRSATM*exp(N2N2a*(tmp(0:im,0:jm,0:km)**(-1d0/3d0)-N2N2b)-18.42d0)
+
+    tc(0:im,0:jm,0:km)=tmp(0:im,0:jm,0:km)**(2d0)/(sqrt(8.d0*R_N2*tmp(0:im,0:jm,0:km)/pi)* &
+                                                    rho(0:im,0:jm,0:km)/M_N2*Na* &
+                                                    3.d-21*(50000.d0)**2d0)
+
+    t(0:im,0:jm,0:km)=tmw(0:im,0:jm,0:km)+tc(0:im,0:jm,0:km)
+
+    Evrhs(0:im,0:jm,0:km)=(Eb(0:im,0:jm,0:km)-Ev(0:im,0:jm,0:km))/t(0:im,0:jm,0:km)*jacob(0:im,0:jm,0:km)
+
+
+    if(present(timerept) .and. timerept) then
+      !
+      subtime=subtime+ptime()-time_beg
+      !
+      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='srcttp', &
+                                             timecost=subtime, &
+                                              message='SRC term for two-temperature model')
+    endif
+    !
+  end subroutine srcttp
 #endif 
   !+-------------------------------------------------------------------+
   !| this subroutine is to solve the convectional term with upwind     |

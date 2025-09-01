@@ -60,6 +60,10 @@ module gridgeneration
         call gridcube(0.25d0,1.d0,0.d0)
       elseif(trim(flowtype)=='ldcavity') then
         call gridcube(1.d0,1.d0,0.d0)
+#ifdef TTP
+      elseif(trim(flowtype)=='heatbath') then
+        call gridcube(ref_len*2.d0*pi,ref_len*2.d0*pi,ref_len*2.d0*pi)
+#endif
       else
         call gridcube(0.03d0,0.03d0,0.03d0)
         ! call udf_grid

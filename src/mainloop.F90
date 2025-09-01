@@ -281,12 +281,20 @@ module mainloop
     use commvar,  only : im,jm,km,numq,deltat,lfilter,feqchkpt,hm,     &
                          lavg,feqavg,nstep,limmbou,turbmode,feqslice,  &
                          feqwsequ,lwslic,lreport,flowtype,     &
-                         ndims,num_species,maxstep,rkscheme
+                         ndims,num_species,maxstep,rkscheme,realgas
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
     use comsolver,only : filterq,spongefilter,filter2e
     use solver,   only : rhscal
     use bc,       only : boucon,immbody
+
+#ifdef TTP
+      use parallel, only : dataswap, datasync
+      use commarray,only : Ev, Evrhs
+      real(8),allocatable,save :: Evsave(:,:,:), Evrhsav(:,:,:)
+#endif
+
+
 #ifdef COMB
     use thermchem,only : imp_euler_ode,heatrate
     use fdnn
@@ -363,13 +371,22 @@ module mainloop
       endif
       !
       allocate(qsave(0:im,0:jm,0:km,1:numq))
-
-      firstcall=.false.
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+        allocate(Evsave(0:im,0:jm,0:km))
+      endif
+#endif 
+     firstcall=.false.
       !
     endif
     !
     if(rkscheme=='rk4') allocate(rhsav(0:im,0:jm,0:km,1:numq))
     !
+#ifdef TTP
+    if(trim(realgas)=='twotemp') then
+      if(rkscheme=='rk4') allocate(Evrhsav(0:im,0:jm,0:km))
+    endif
+#endif
     do rkstep=1,n_rk_steps
       
       if(lfilter) then
@@ -383,16 +400,34 @@ module mainloop
       endif
 
       qrhs=0.d0
+      
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+        Evrhs=0.d0
+      endif
+#endif
       !
       if(limmbou) then
         call immbody(timerept=ltimrpt)
 
         if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+        if(flowtype(1:2)/='0d') call dataswap(Ev)
+        if(flowtype(1:2)/='0d') call datasync(Ev(0:im,0:jm,0:km))
+      endif
+#endif
       endif
       !
       if(flowtype(1:2)/='0d') call boucon
       !
       if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+        if(flowtype(1:2)/='0d') call dataswap(Ev)
+        if(flowtype(1:2)/='0d') call datasync(Ev(0:im,0:jm,0:km))
+      endif
+#endif
       !
       call rhscal(timerept=ltimrpt)
       !
@@ -404,8 +439,17 @@ module mainloop
         !
         do m=1,numq
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
-
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+          Evsave(0:im,0:jm,0:km)=Ev(0:im,0:jm,0:km)*jacob(0:im,0:jm,0:km)
+      endif
+#endif
           if(rkscheme=='rk4') rhsav(0:im,0:jm,0:km,m)=0.d0
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+          if(rkscheme=='rk4') Evrhsav(0:im,0:jm,0:km)=0.d0
+      endif
+#endif
         enddo
         !
         call rkfirst
@@ -423,6 +467,16 @@ module mainloop
           q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
           !
         enddo
+#ifdef TTP
+        if(trim(realgas)=='twotemp') then
+          Ev(0:im,0:jm,0:km)=rkcoe(1,rkstep)*Evsave(0:im,0:jm,0:km)+      &
+                              rkcoe(2,rkstep)*Ev(0:im,0:jm,0:km)*          &
+                                       jacob(0:im,0:jm,0:km)+            &
+                              rkcoe(3,rkstep)*Evrhs(0:im,0:jm,0:km)*deltat
+          !
+          Ev(0:im,0:jm,0:km)=Ev(0:im,0:jm,0:km)/jacob(0:im,0:jm,0:km)
+        endif
+#endif
       elseif(rkscheme=='rk4') then
         if(rkstep<=3) then
           do m=1,numq
@@ -434,6 +488,17 @@ module mainloop
             rhsav(0:im,0:jm,0:km,m)=rhsav(0:im,0:jm,0:km,m)+             &
                                     rkcoe(2,rkstep)*qrhs(0:im,0:jm,0:km,m)
           enddo
+#ifdef TTP
+          if(trim(realgas)=='twotemp') then
+            Ev(0:im,0:jm,0:km)=Evsave(0:im,0:jm,0:km)+                 &
+                                rkcoe(1,rkstep)*deltat*Evrhs(0:im,0:jm,0:km)
+            !
+            Ev(0:im,0:jm,0:km)=Ev(0:im,0:jm,0:km)/jacob(0:im,0:jm,0:km)
+            !
+            Evrhsav(0:im,0:jm,0:km)=Evrhsav(0:im,0:jm,0:km)+             &
+                                    rkcoe(2,rkstep)*Evrhs(0:im,0:jm,0:km)
+          endif
+#endif
         else
           do m=1,numq
             q(0:im,0:jm,0:km,m)=qsave(0:im,0:jm,0:km,m)+                 &
@@ -444,6 +509,18 @@ module mainloop
             q(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)/jacob(0:im,0:jm,0:km)
             !
           enddo
+#ifdef TTP
+          if(trim(realgas)=='twotemp') then
+            Ev(0:im,0:jm,0:km)=Evsave(0:im,0:jm,0:km)+                 &
+                                    rkcoe(1,rkstep)*deltat*(             &
+                                   Evrhs(0:im,0:jm,0:km)+               &
+                                   Evrhsav(0:im,0:jm,0:km) )
+            !
+            Ev(0:im,0:jm,0:km)=Ev(0:im,0:jm,0:km)/jacob(0:im,0:jm,0:km)
+            !
+          endif
+#endif
+
         endif
       else
         stop ' !! error2 @ time_integration_rk'

@@ -183,6 +183,8 @@ module readwrite
         typedefine='                 Taylor-Green Vortex flame'
       case('rti')
         typedefine='               Rayleigh–Taylor instability'
+      case('heatbath')
+        typedefine='                              N2 heat bath'
       ! case('hitflame')
       !   typedefine='    homogeneous isotropic turbulence flame'
       case default
@@ -520,7 +522,7 @@ module readwrite
                         spg_k0,spg_km,spg_def,lchardecomp,             &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
-                        ltimrpt,testmode
+                        ltimrpt,testmode,realgas
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -603,6 +605,13 @@ module readwrite
         read(fh,*)num_species,(schmidt(i),i=1,num_species)
       endif
 #endif
+
+
+#ifdef TTP
+      read(fh,'(/)')
+      read(fh,*)realgas
+#endif
+
       read(fh,'(/)')
       read(fh,*)turbmode,iomode
       read(fh,'(/)')
@@ -762,6 +771,10 @@ module readwrite
       !
     endif
     !
+#endif
+
+#ifdef TTP
+    call bcast(realgas)
 #endif
   !
   end subroutine readinput
@@ -1023,7 +1036,7 @@ module readwrite
   subroutine writemon
     !
     use commvar, only: nmonitor,imon,nstep,time,pinf,deltat
-    use commarray, only : x,rho,vel,prs,tmp,dvel
+    use commarray, only : x,rho,vel,prs,tmp,dvel,tve
     !
     ! local data
     integer :: n,i,j,k,ios,ns
@@ -1055,7 +1068,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*4)
+          open(fh(n),file=trim(filename))
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1111,7 +1124,9 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+!        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        write(fh(n),'(I7, 1X, E13.6, 3(1X, E15.7))')&
+               nstep,time,tmp(i,j,k),tve(i,j,k)
         ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
@@ -1769,8 +1784,11 @@ module readwrite
   subroutine writeflfed(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax
+                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax,realgas
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
+#ifdef TTP
+      use commarray,only : tve
+#endif
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
     use bc,       only : ninflowslice
@@ -1822,6 +1840,11 @@ module readwrite
     call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),mode=iomode)
     call h5write(varname='p', var=prs(0:im,0:jm,0:km),  mode=iomode)
     call h5write(varname='t', var=tmp(0:im,0:jm,0:km),  mode=iomode)
+#ifdef TTP
+    if(trim(realgas)=='twotemp') then
+      call h5write(varname='tve', var=tve(0:im,0:jm,0:km),  mode=iomode)
+    endif
+#endif
     if(num_species>0) then
       do jsp=1,num_species
          write(spname,'(i3.3)')jsp
@@ -2486,8 +2509,11 @@ module readwrite
     !
     use parallel, only: irk_islice,jrk_jslice,krk_kslice,mpi_islice,   &
                         mpi_jslice,mpi_kslice
-    use commvar,  only: fnumslic,nstep,time,islice,jslice,kslice,im,jm,km
+    use commvar,  only: fnumslic,nstep,time,islice,jslice,kslice,im,jm,km,realgas
     use commarray,only: rho,vel,prs,tmp,dvel,dtmp
+#ifdef TTP
+      use commarray,only : tve
+#endif    
     use hdf5io
     !
     ! arguments
@@ -2522,6 +2548,11 @@ module readwrite
       call h5write(varname='u3',var=vel(i,0:jm,0:km,3),dir='i')
       call h5write(varname='p', var=prs(i,0:jm,0:km)  ,dir='i')
       call h5write(varname='t', var=tmp(i,0:jm,0:km)  ,dir='i')
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then
+        call h5write(varname='tve', var=tve(0:im,0:jm,0:km),  mode=iomode)
+      endif
+#endif
       !
       call h5write(varname='dudx',var=dvel(i,0:jm,0:km,1,1),dir='i')
       call h5write(varname='dudy',var=dvel(i,0:jm,0:km,1,2),dir='i')
@@ -2605,6 +2636,11 @@ module readwrite
       call h5write(varname='u3',var=vel(0:im,0:jm,k,3),dir='k')
       call h5write(varname='p', var=prs(0:im,0:jm,k)  ,dir='k')
       call h5write(varname='t', var=tmp(0:im,0:jm,k)  ,dir='k')
+#ifdef TTP
+      if(trim(realgas)=='twotemp') then      
+        call h5write(varname='tve', var=tve(0:im,0:jm,0:km),  mode=iomode)
+      endif
+#endif
       !
       call h5write(varname='dudx',var=dvel(0:im,0:jm,k,1,1),dir='k')
       call h5write(varname='dudy',var=dvel(0:im,0:jm,k,1,2),dir='k')
