@@ -1673,7 +1673,7 @@ module initialisation
         endif
       else
         !
-        spc(i,j,k,:)=spcinf
+        ! spc(i,j,k,:)=spcinf
 ! #ifdef COMB
 !         ! phi = 0.4 
 !         spc(i,j,k,:)=0.d0

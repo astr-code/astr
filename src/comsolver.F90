@@ -51,7 +51,8 @@ module comsolver
     use models,     only : init_komegasst
     use filter,     only : compact_filter_initiate, filter_coefficient_cal, &
                            filter_i, filter_j, filter_k,                     &
-                           filter_ii, filter_jj, filter_kk
+                           filter_ii, filter_jj, filter_kk,                 &
+                           filter_coefficient_explicit
     use derivative, only : fd_scheme_initiate, fds_compact_i, fds_compact_j, &
                            fds_compact_k, explicit_central, compact_central, fds
     use flux,       only : compact_flux_initiate, ptds_aym_ini, coeffcompac, &
@@ -128,6 +129,7 @@ module comsolver
       ! call compact_filter_initiate(filter_jj, npdcj, jm, note='boundary_no_filter')
       ! call compact_filter_initiate(filter_kk, npdck, km, note='boundary_no_filter')
     end if
+    call filter_coefficient_explicit
   
     !-------------------------------------------------------------------
     ! Optional: Initialize turbulence model

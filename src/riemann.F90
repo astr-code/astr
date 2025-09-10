@@ -51,18 +51,14 @@ module riemann
       gpd(2)=dxi(i,2)*var0
       gpd(3)=dxi(i,3)*var0
       !
-      if(nondimen) then 
-        gm2=0.5d0/gamma
-        css=sos(tmp(i))
-      else
-        !
 #ifdef COMB
-        gamma = gammarmix(tmp(i),spc(i,:))
-        gm2=0.5d0/gamma
-        call aceval(tmp(i),spc(i,:),css)
+      gamma = gammarmix(tmp(i),spc(i,:))
+      call aceval(tmp(i),spc(i,:),css)
+#else
+      css=sos(tmp(i))
 #endif
-        !
-      endif
+      gm2=0.5d0/gamma
+      
       csa=css/var0
       lmach=uu/csa
       !

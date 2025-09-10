@@ -1290,7 +1290,8 @@ module readwrite
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine readflowini2d
     !
-    use commvar,   only : im,jm,km,num_species,nondimen,spcinf
+    use commvar,   only : im,jm,km,num_species,nondimen,spcinf,ref_den, &
+                          ref_vel,ref_tem
     use commarray, only : rho,vel,prs,tmp,spc
     use fludyna,   only : thermal
     use hdf5io
@@ -1314,11 +1315,11 @@ module readwrite
     call h5io_end
     !
     if(.not.nondimen) then
-      rho(0:im,0:jm,0)  =rho(0:im,0:jm,0)*0.174395d0 
-      vel(0:im,0:jm,0,1)=vel(0:im,0:jm,0,1)*950.9810724d0
-      vel(0:im,0:jm,0,2)=vel(0:im,0:jm,0,2)*950.9810724d0
+      rho(0:im,0:jm,0)  =rho(0:im,0:jm,0)*ref_den
+      vel(0:im,0:jm,0,1)=vel(0:im,0:jm,0,1)*ref_vel
+      vel(0:im,0:jm,0,2)=vel(0:im,0:jm,0,2)*ref_vel
       vel(0:im,0:jm,0,3)=0.d0
-      tmp(0:im,0:jm,0)  =tmp(0:im,0:jm,0)*1000.0d0
+      tmp(0:im,0:jm,0)  =tmp(0:im,0:jm,0)*ref_tem
     endif
     !
     do k=0,km
@@ -1348,7 +1349,7 @@ module readwrite
 #endif
         ! non-reacting
         ! spc(i,j,k,:)=spc(i,j,0,:)
-        spc(i,j,k,:)=spcinf
+        ! spc(i,j,k,:)=spcinf
         prs(i,j,k) =thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
                             species=spc(i,j,k,:)) 
       endif

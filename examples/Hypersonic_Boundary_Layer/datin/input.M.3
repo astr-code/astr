@@ -1,0 +1,60 @@
+########################################################################
+#                     input file of ASTR code                          #
+########################################################################
+
+# flowtype                                              : The type of flow problem
+bl
+
+# im,jm,km                                              : The size of grid.
+440,260,0
+
+# lihomo,ljhomo,lkhomo                                  : The homogeneous directions
+f,f,t
+
+# nondimen,diffterm,lfilter,lreadgrid,lfftz,limmbou,ltimrpt : Parameters
+t,t,t,t,f,f,f
+
+# lrestar                                               : start mode
+f
+
+# alfa_filter, kcutoff                                  : Filter parameters
+0.49d0, 48
+
+# ref_tem,reynolds,mach,ref_vel,ref_len,ref_den                       : Reference variables
+226.65d0, 10000.d0, 0.3d0
+
+# conschm,difschm,rkscheme                              : Numerical scheme
+643c, 643c, rk3 
+
+# recon_schem, lchardecomp,bfacmpld,shkcrt              : Parameters for upwind-biased scheme
+5, f, 0.5d0, 0.001d0
+
+# num_species                                           : number of species
+0
+
+# turbmode,iomode                                       : turbulence model
+none,h
+
+# bctype                                                : Boundary condition definition 
+11, free
+22
+41, 1.01d0 
+52
+1
+1
+
+# ninit                                                 : Initial method
+0
+
+# spg_imin,spg_imax,spg_jmin,spg_jmax,spg_kmin,spg_kmax : Sponge layer range
+0, 0, 0, 0, 0, 0
+
+# gridfile                                              : grid
+./datin/grid.M.3
+
+
+ ########################################################################
+ # bctype                                                               #
+ #   1 : periodic bc,     nothing will be done.                         #
+ #  41 : isothermal wall, wall temperature input.                       #
+ ########################################################################

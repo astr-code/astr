@@ -1454,23 +1454,14 @@ module bc
           enddo
           !
           ! farfield kind of inflow
-          rho_ref = rho(i+1,j,k)
-          cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
-          !
-          prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho_ref*cs_ref*(vel_in(j,k,1)-ue)
-          rho(i,j,k)  =rho_in(j,k)+(prs(i,j,k)-prs_in(j,k))/cs_ref/cs_ref
-          !
-          vel(i,j,k,1)=vel_in(j,k,1)+(prs_in(j,k)-prs(i,j,k))/rho_ref/cs_ref
-          !
-          vel(i,j,k,2)=vel_in(j,k,2)
-          vel(i,j,k,3)=vel_in(j,k,3)
+          ! rho_ref = rho(i+1,j,k)
+          ! cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
+
+          tmp(i,j,k)   = tmp_in(j,k)
           !
           ! ! fixed temperature, pressure, and velocity
-          ! vel(i,j,k,:) = vel_in(j,k,:)
-          ! prs(i,j,k)   = pe
-          ! tmp(i,j,k)   = tmp_in(j,k)
-          !
-          ! pwave_out  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
+          vel(i,j,k,:) = vel_in(j,k,:)
+          prs(i,j,k)  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
           ! ! Rudy & Strikwerda, 1980
           ! pwave_out  = pe
           ! !
@@ -1485,14 +1476,7 @@ module bc
           ! rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gammarmix(tmp_in(j,k),spc_in(j,k,:)))
           ! prs(i,j,k) = pwave_out
           !
-          if(nondimen) then 
-            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          else
-            ! prs(i,j,k)   = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
-          endif
+          rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
           !
           ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
           ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
@@ -3485,14 +3469,14 @@ module bc
         ub =vel(i,j,k,1)*bvec_im(j,k,1)+vel(i,j,k,2)*bvec_im(j,k,2)+   &
             vel(i,j,k,3)*bvec_im(j,k,3)
         !
-        ue  =extrapolate(vel(i-1,j,k,1),vel(i-2,j,k,1),dv=0.d0)
-        ve  =extrapolate(vel(i-1,j,k,2),vel(i-2,j,k,2),dv=0.d0)
-        we  =extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
-        pe  =extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
-        te  =extrapolate(tmp(i-1,j,k),  tmp(i-2,j,k),dv=0.d0)
-        roe =extrapolate(rho(i-1,j,k),  rho(i-2,j,k),dv=0.d0)
-        csse=extrapolate(sos(tmp(i-1,j,k),spc(i-1,j,k,:)),&
-                         sos(tmp(i-2,j,k),spc(i-2,j,k,:)),dv=0.d0)
+        ue  =vel(i-1,j,k,1)!extrapolate(vel(i-1,j,k,1),vel(i-2,j,k,1),dv=0.d0)
+        ve  =vel(i-1,j,k,2)!extrapolate(vel(i-1,j,k,2),vel(i-2,j,k,2),dv=0.d0)
+        we  =vel(i-1,j,k,3)!extrapolate(vel(i-1,j,k,3),vel(i-2,j,k,3),dv=0.d0)
+        pe  =prs(i-1,j,k)  !extrapolate(prs(i-1,j,k),  prs(i-2,j,k),dv=0.d0)
+        te  =tmp(i-1,j,k)  !extrapolate(tmp(i-1,j,k),  tmp(i-2,j,k),dv=0.d0)
+        roe =rho(i-1,j,k)  !extrapolate(rho(i-1,j,k),  rho(i-2,j,k),dv=0.d0)
+        csse=sos(tmp(i-1,j,k),spc(i-1,j,k,:)) !extrapolate(sos(tmp(i-1,j,k),spc(i-1,j,k,:)),&
+                         !sos(tmp(i-2,j,k),spc(i-2,j,k,:)),dv=0.d0)
         !
         do jspec=1,num_species
           spce(jspec)=extrapolate(spc(i-1,j,k,jspec),                  &
@@ -3501,62 +3485,52 @@ module bc
         !
         vne=ue*bvec_im(j,k,1)+ve*bvec_im(j,k,2)
         vte=ue*bvec_im(j,k,2)-ve*bvec_im(j,k,1)
-        ! if(.false.) then
-        if(ub>=css) then
+        if(.true.) then
+        ! if(ub>=css) then
           ! supersonic outlet
           !
           vel(i,j,k,1)=ue 
           vel(i,j,k,2)=ve 
           vel(i,j,k,3)=we
           prs(i,j,k)  =pe
-          rho(i,j,k)  =roe
+          tmp(i,j,k)  =te
           spc(i,j,k,:)=spce(:)
           !
         else !if(ub<css .and. ub>=0.d0) then
           ! subsonic outlet
           !
-          ! prs(i,j,k)= pinf
-          ! rho(i,j,k)= roe+(prs(i,j,k)-pe)/csse/csse
-          ! vel(i,j,k,1)= ue+ (pe-prs(i,j,k))/roe/csse
-          ! vel(i,j,k,2)= ve
-          ! vel(i,j,k,3)= we
-          !
-          pwave_in = (prs(i,j,k)+alpha*deltat*pinf+rho(i,j,k)*css*(ue-vel(i,j,k,1)))/(1.d0+alpha*deltat)
-          ! RUDY & STRIKWERDA, 1981
-          ! pwave_in = pinf
-          ! pwave_out=pe
-          ! !
-          ! var1=ub/css
-          prs(i,j,k)=pwave_in !var1*pwave_out+(1.d0-var1)*pwave_in
-          ! rho(i,j,k)= roe+(pwave_in-pe)/csse/csse
-          tmp(i,j,k)=te
-          rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-          !
-          spc(i,j,k,:)=spce(:)
-          !
-          vel(i,j,k,1)= ue 
+          prs(i,j,k)  = pinf
+          rho(i,j,k)  = roe+(prs(i,j,k)-pe)/csse/csse
+          vel(i,j,k,1)= ue+ (pe-prs(i,j,k))/roe/csse
           vel(i,j,k,2)= ve
           vel(i,j,k,3)= we
+          !
+          ! pwave_in = (prs(i,j,k)+alpha*deltat*pinf+rho(i,j,k)*css*(ue-vel(i,j,k,1)))/(1.d0+alpha*deltat)
+          ! ! RUDY & STRIKWERDA, 1981
+          ! ! pwave_in = pinf
+          ! ! pwave_out=pe
+          ! ! !
+          ! ! var1=ub/css
+          ! prs(i,j,k)=pwave_in !var1*pwave_out+(1.d0-var1)*pwave_in
+          ! ! rho(i,j,k)= roe+(pwave_in-pe)/csse/csse
+          ! tmp(i,j,k)=te
+          ! rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+          ! !
+          ! spc(i,j,k,:)=spce(:)
+          ! !
+          ! vel(i,j,k,1)= ue 
+          ! vel(i,j,k,2)= ve
+          ! vel(i,j,k,3)= we
           ! !
         ! else
         !   stop ' !! velocity at outflow error !! @ outflow'
         endif
-        !
-        if(nondimen) then 
-          !
-          tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          !
-          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),         &
-                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                      species=spc(i,j,k,:)                                )
-        else
-          !
-          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),         &
-                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),     &
-                      species=spc(i,j,k,:)                                )
-        endif
-        !
-        !
+        
+        rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),         &
+                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),   &
+                      species=spc(i,j,k,:)                              )
+        
         qrhs(i,j,k,:)=0.d0
         !
         if(trim(turbmode)=='k-omega') then
@@ -4711,7 +4685,7 @@ module bc
     real(8) :: pinv(5,5),pnor(5,5),Pmult(5,5),E(5),F(5),G(5),Rest(5),  &
                jcbi(3),LODi1(5),LODi(5)
     real(8),allocatable :: Ecs(:,:),dEcs(:),fcs(:,:),dfcs(:,:),qfilt(:,:)
-    real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2,psonic,rncout
+    real(8) :: uu,css,gmachmax2,kinout,kin,var1,var2,psonic,rncout,fdamp
     !
     gmachmax2=0.d0
     !
@@ -4917,7 +4891,25 @@ module bc
     if(ndir==2 .and. irk==irkm) then
       !
       i=im
-      !
+
+      allocate(qfilt(0:jm,1:numq))
+      do k=0,km
+        !
+        do jq=1,numq
+          qfilt(:,jq)=spafilter6exp(q(i,:,k,jq),npdcj,jm)
+          q(i,0:jm,k,jq)=qfilt(:,jq)
+        enddo
+        call q2fvar(      q=  q(i,0:jm,k,:),                   &
+                    density=rho(i,0:jm,k),                     &
+                   velocity=vel(i,0:jm,k,:),                   &
+                   pressure=prs(i,0:jm,k),                     &
+                temperature=tmp(i,0:jm,k),                     &
+                    species=spc(i,0:jm,k,:)                    )
+        !
+      enddo
+      deallocate(qfilt)
+      
+
       allocate(Ecs(0:2,1:numq),dEcs(1:numq))
 
       do k=0,km
@@ -5022,8 +5014,14 @@ module bc
         !   ! endif
         !   !
         ! kinout=0.25d0*(1.d0-gmachmax2)*css/(xmax-xmin)
+        
+        var1=(uu/css-0.5d0)*10.d0
+
+        fdamp=0.5d0*(1.d0-tanh(var1))
+
         kinout=0.5d0*(1.d0-gmachmax2)*css/(xmax-xmin)
-        LODi(5)=kinout*(prs(i,j,k)-pinf)
+        LODi(5)=kinout*(prs(i,j,k)-pinf)*fdamp
+        
         ! LODi(5)=kinout*(prs(i,j,k)-pinf)
         ! LODi(5)=kinout*(pinf-prs(i,j,k))/rho(i,j,k)/css
         ! else
@@ -5063,24 +5061,7 @@ module bc
         !
         allocate(fcs(-hm:jm+hm,1:numq),dfcs(0:jm,1:numq))
         do k=ks,ke
-          !
-          ! if(jrk==jrkm) then
-          !   !
-          !   j=jm
-          !   prs(i,j,k)=num1d3*(4.d0*prs(i,j-1,k)-prs(i,j-2,k))
-          !   tmp(i,j,k)=num1d3*(4.d0*tmp(i,j-1,k)-tmp(i,j-2,k))
-          !   vel(i,j,k,:)=num1d3*(4.d0*vel(i,j-1,k,:)-vel(i,j-2,k,:))
-          !   spc(i,j,k,:)=num1d3*(4.d0*spc(i,j-1,k,:)-spc(i,j-2,k,:))
-          !   !
-          !   rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-          !   !
-          !   call fvar2q(      q=  q(i,j,k,:),                            &
-          !               density=rho(i,j,k),                              &
-          !               velocity=vel(i,j,k,:),                           &
-          !               temperature=tmp(i,j,k),                          &
-          !               species=spc(i,j,k,:)                             )
-          ! endif
-          !
+
           do j=-hm,jm+hm
             !
             uu=dxi(i,j,k,2,1)*vel(i,j,k,1)+dxi(i,j,k,2,2)*vel(i,j,k,2) + &
@@ -6348,12 +6329,12 @@ module bc
     !
     ! local data
     integer :: i,j,k,l,jspec,fh
-    real(8) :: pe,delta_d1,miu,beta1
+    real(8) :: pe,te,ue,delta_d1,miu,beta1
     real(8) :: vwall(0:im,0:km)
     character(len=64) :: filewbs
     logical :: lexist
     !
-    real(8),save :: beter,wallamplit,xa,xb,xc
+    real(8),save :: beter,wallamplit,xa,xb,xc,xtran
     integer,save :: nmod_t,nmod_z
     logical,save :: lfirstcal=.true.
     !
@@ -6515,18 +6496,33 @@ module bc
         endif
         !
         j=0
-        !
+        
+        xtran=1.d0
+
         do k=0,km
         do i=0,im
           !
           pe=num1d3*(4.d0*prs(i,1,k)-prs(i,2,k))
           !
-          vel(i,j,k,1)=0.d0
-          vel(i,j,k,2)=vwall(i,k)
+          if(x(i,j,k,1)<=0.d0) then
+            vel(i,j,k,1)=num1d3*(4.d0*vel(i,1,k,1)-vel(i,2,k,1))
+            tmp(i,j,k)  =num1d3*(4.d0*tmp(i,1,k)-tmp(i,2,k))
+          elseif(x(i,j,k,1)<=xtran) then
+            ue=num1d3*(4.d0*vel(i,1,k,1)-vel(i,2,k,1))
+            te=num1d3*(4.d0*tmp(i,1,k)-tmp(i,2,k))
+
+            vel(i,j,k,1)=0.5d0*(cos(x(i,j,k,1)/xtran*pi)+1.d0)*ue
+            tmp(i,j,k)  =0.5d0*(cos(x(i,j,k,1)/xtran*pi)+1.d0)*(te-tw)+tw
+
+          else
+            vel(i,j,k,1)=0.d0
+            tmp(i,j,k)  =tw
+          endif
+
+          vel(i,j,k,2)=0.d0
           vel(i,j,k,3)=0.d0
           prs(i,j,k)  =pe
-          tmp(i,j,k)  =tw
-          !
+
           do jspec=1,num_species
             spc(i,j,k,jspec)=num1d3*(4.d0*spc(i,1,k,jspec)-spc(i,2,k,jspec))
           enddo

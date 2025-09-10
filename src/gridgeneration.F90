@@ -61,8 +61,8 @@ module gridgeneration
       elseif(trim(flowtype)=='ldcavity') then
         call gridcube(1.d0,1.d0,0.d0)
       else
-        call gridcube(0.03d0,0.03d0,0.03d0)
-        ! call udf_grid
+        ! call gridcube(0.03d0,0.03d0,0.03d0)
+        call udf_grid
         ! print*,trim(flowtype),' is not defined @ gridgen'
         ! stop ' !! error at gridgen' 
       endif

@@ -302,8 +302,6 @@ module filter
       !
       allocate(coef2i(0:1),coef4i(0:2),coef6i(0:3),coef8i(0:4),coef10i(0:5))
       allocate(coefb(0:4,0:8),coefh(0:4,0:10))
-      allocate(coef10e(0:5),coef8e(0:4),coef6e(0:3),coef4e(0:2),coef2e(0:1))
-      allocate(coef3be(0:1,0:3),coef4be(0:1,0:4),coef6be(0:2,0:6))
       !
       ! inernal coefficent
       ! 2nd-order
@@ -430,6 +428,17 @@ module filter
       coefh(2,9)=(5.d0-10.d0*alfa)/512.d0
       coefh(2,10)=(-1.d0+2.d0*alfa)/1024.d0
   
+  
+    end subroutine filter_coefficient_cal
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! End of the Subroutine filter_coefficient_cal.
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !
+    subroutine filter_coefficient_explicit
+      
+      allocate(coef10e(0:5),coef8e(0:4),coef6e(0:3),coef4e(0:2),coef2e(0:1))
+      allocate(coef3be(0:1,0:3),coef4be(0:1,0:4),coef6be(0:2,0:6))
+
       ! explicit filter
       coef4be(0,0)=(15.d0 )/16.d0
       coef4be(0,1)=( 1.d0 )/4.d0
@@ -490,12 +499,8 @@ module filter
       coef6be(2,4)=(-15.d0 )  /64.d0
       coef6be(2,5)=(  3.d0 )  /32.d0
       coef6be(2,6)=( -1.d0 )  /64.d0
-  
-    end subroutine filter_coefficient_cal
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! End of the Subroutine filter_coefficient_cal.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
+
+    end subroutine filter_coefficient_explicit
     !+-------------------------------------------------------------------+
     !| This function is to apply 6th-order low-pass filter to a  array   |
     !+-------------------------------------------------------------------+
@@ -542,30 +547,29 @@ module filter
       ! arguments
       integer,intent(in) :: ntype,dim
       real(8),intent(in) :: f(-hm:dim+hm)
-      !
-      ! local data
       real(8) :: ff(0:dim)
       !
+      ! local data
       integer :: ii,m
       !
       ff=0.d0
       !
       select case(ntype)
       case(1)
-        !
+      
         ii=0
-        ! do m=0,4
-        !   ff(ii)=ff(ii)+coef4be(0,m)*f(m)
-        ! enddo
-        ff(ii)=f(ii)
+        do m=0,4
+          ff(ii)=ff(ii)+coef4be(0,m)*f(m)
+        enddo
+        ! ff(ii)=f(ii)
         !
         ii=1
-        ! do m=0,4
-        !   ff(ii)=ff(ii)+coef4be(1,m)*f(m)
-        ! enddo
-        do m=0,1
-          ff(ii)=ff(ii)+coef2e(m)*(f(ii-m)+f(ii+m))
+        do m=0,4
+          ff(ii)=ff(ii)+coef4be(1,m)*f(m)
         enddo
+        ! do m=0,1
+        !   ff(ii)=ff(ii)+coef2e(m)*(f(ii-m)+f(ii+m))
+        ! enddo
         !
         ii=2
         do m=0,2
@@ -578,7 +582,7 @@ module filter
           enddo
           !
         enddo
-        !
+      !   !
       case(2)
         !
         do ii=0,dim-3
@@ -595,17 +599,18 @@ module filter
         !
         ii=dim-1
         !
-        do m=0,1
-          ff(ii)=ff(ii)+coef2e(m)*(f(ii-m)+f(ii+m))
+        ! do m=0,1
+        !   ff(ii)=ff(ii)+coef2e(m)*(f(ii-m)+f(ii+m))
+        ! enddo
+        do m=0,4
+          ff(ii)=ff(ii)+coef4be(1,m)*f(dim-m)
         enddo
-        ! do m=0,4
-        !   ff(ii)=ff(ii)+coef4be(1,m)*f(dim-m)
-        ! enddo
+        
         ii=dim
-        ! do m=0,4
-        !   ff(ii)=ff(ii)+coef4be(0,m)*f(dim-m)
-        ! enddo
-        ff(ii)=f(ii)
+        do m=0,4
+          ff(ii)=ff(ii)+coef4be(0,m)*f(dim-m)
+        enddo
+        ! ff(ii)=f(ii)
         !
       case(3)
         !
