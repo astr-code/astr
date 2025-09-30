@@ -53,12 +53,12 @@ module riemann
       !
 #ifdef COMB
       gamma = gammarmix(tmp(i),spc(i,:))
+      gm2=0.5d0/gamma
       call aceval(tmp(i),spc(i,:),css)
 #else
+      gm2=0.5d0/gamma
       css=sos(tmp(i))
 #endif
-      gm2=0.5d0/gamma
-      
       csa=css/var0
       lmach=uu/csa
       !

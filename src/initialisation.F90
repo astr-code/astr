@@ -117,6 +117,8 @@ module initialisation
           call rtini
         case('ldcavity')
           call ldcavityini
+        case('airreactor')
+          call airreactorini
         ! case('hitflame')
         !   call hitflameini
         ! case default
@@ -1672,39 +1674,13 @@ module initialisation
           !
         endif
       else
-        !
-        ! spc(i,j,k,:)=spcinf
-! #ifdef COMB
-!         ! phi = 0.4 
-!         spc(i,j,k,:)=0.d0
-!         spc(i,j,k,spcindex('O2'))=0.2302d0
-!         spc(i,j,k,spcindex('H2'))=0.0116d0
-!         spc(i,j,k,spcindex('N2'))=1.d0-sum(spc(i,j,k,:))
-! #endif
+        spc(i,j,k,:)=spcinf
+
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
                            species=spc(i,j,k,:))
         !
       endif
-      !
-      if(trim(turbmode)=='k-omega') then
-        ! tke(i,j,k)=1.5d0*0.0001d0
-        !
-        tke(i,j,k)=1.5d0
-        !
-        ! omg(i,j,k)=sqrt(tke(i,j,k))/(0.09d0)**0.25d0
-        delta=dis2point2(x(i,j,k,:),x(i,j+1,k,:))
-        miu=miucal(tmp(i,j,k))/Reynolds
-        omg(i,j,k)=60.d0*miu/rho(i,j,k)/beta1/delta
-        !
-        if(x(i,j,k,2)>nomi_thick) then
-          ! add a damper for outer part of bl
-          radi=(x(i,j,k,2)-nomi_thick)**2
-          tke(i,j,k)=tke(i,j,k)*exp(-5.d0*radi)
-          omg(i,j,k)=omg(i,j,k)*exp(-5.d0*radi)
-        endif
-        !
-      endif
-      !
+      
     enddo
     enddo
     enddo
@@ -2169,7 +2145,7 @@ module initialisation
   !
   !+-------------------------------------------------------------------+
   !| This subroutine is used to generate an initial field for the      |
-  !| simulation of 0D reactor.                                                    |
+  !| simulation of 0D reactor.                                         |
   !+-------------------------------------------------------------------+
   !| CHANGE RECORD                                                     |
   !| -------------                                                     |
@@ -2250,7 +2226,60 @@ module initialisation
   !+-------------------------------------------------------------------+
   !| The end of the subroutine reactorini.                             |
   !+-------------------------------------------------------------------+
+  
+
+  !+-------------------------------------------------------------------+
+  !| This subroutine is used to generate an initial field for the      |
+  !| simulation of high temperature air reactor.                       |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 30-09-2025: Created by Created by JF @ IMECH CAS                  |
+  !+-------------------------------------------------------------------+
+  subroutine airreactorini
+    !
+    use commvar,  only: ref_den,ref_tem
+    use commarray,only: x,vel,rho,prs,spc,tmp,q
+    use fludyna,  only: thermal
+    use thermchem,only: convertxiyi,spcindex
+    !
+#ifdef COMB
+    ! local data
+    integer :: i,j,k
+    real(8) :: tmpr,specr(num_species)
+    !
+
+    specr(spcindex('N2'))=75.52d0/100.d0
+    specr(spcindex('O2'))=23.14d0/100.d0
+    specr(spcindex('Ar'))=1.d0-sum(specr)
+
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      rho(i,j,k)=ref_den
+
+      vel(i,j,k,:)= 0.d0
+
+      tmp(i,j,k)  =ref_tem
+
+      spc(i,j,k,:) =specr
+      !
+      rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k), &
+                          species=spc(i,j,k,:))
+    enddo
+    enddo
+    enddo
+    !
+    if(lio)  write(*,'(A,I1,A)')'  ** air reactor initialised.'
+    !
+#endif
   !
+  end subroutine airreactorini
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine airreactorini.                          |
+  !+-------------------------------------------------------------------+
+  
   !+-------------------------------------------------------------------+
   !| This subroutine is used to generate an initial field for the      |
   !| simulation of 1D flame.                                           |

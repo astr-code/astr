@@ -34,9 +34,13 @@ Create a case directory:
 mkdir test_case
 
 cmake path_to_the_source
+
 cmake --build .
+
 cmake --install .
+
 ctest -L nondim
+
 The binary will be installed under:
 
 test_case/bin/astr
@@ -55,8 +59,11 @@ python scons/scripts/scons.py install
 
 Configure ASTR with Cantera support:
 cmake -DCHEMISTRY=TRUE -DCANTERA_DIR=path_to_cantera path_to_the_source
+
 cmake --build .
+
 cmake --install .
+
 ctest -L combustion
 
 Running a Simulation

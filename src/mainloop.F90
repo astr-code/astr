@@ -78,6 +78,7 @@ module mainloop
     
     time_beg=ptime()
 
+
     do while(nstep<=maxstep)
 
       call crashcheck
@@ -383,15 +384,16 @@ module mainloop
       endif
 
       qrhs=0.d0
-      !
+      
+      
       if(limmbou) then
         call immbody(timerept=ltimrpt)
 
         if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
       endif
-      !
+
       if(flowtype(1:2)/='0d') call boucon
-      !
+      
       if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
       !
       call rhscal(timerept=ltimrpt)

@@ -145,51 +145,7 @@ module readwrite
     bcdir(5)='kmin'; bcdir(6)='kmax'
     !
     if(mpirank==mpirankmax) then
-      !
-      select case(trim(flowtype))
-      case('2dvort')
-        typedefine='                 2D inviscid vortical flow'
-      case('channel')
-        typedefine='                              channel flow'
-      case('tgv')
-        typedefine='                  Taylor-Green Vortex flow'
-      case('hit')
-        typedefine='          homogeneous isotropic turbulence'
-      case('jet')
-        typedefine='                                  Jet flow'
-      case('accutest')
-        typedefine='                             accuracy test'
-      case('cylinder')
-        typedefine='                      flow past a cylinder'
-      case('mixlayer')
-        typedefine='                              mixing layer'
-      case('shuosher')
-        typedefine='                         shu-osher problem'
-      case('bl')
-        typedefine='                       boundary layer flow'
-      case('tbl')
-        typedefine='                   temporal boundary layer'
-      case('swbli')
-        typedefine='     shock-wave/boundary layer interaction'
-      case('windtunn')
-        typedefine='                   a numerical wind tunnel'
-      case('0dreactor')
-        typedefine='               a perfectly stirred reactor'
-      case('1dflame')
-        typedefine='               a 1D premixed laminar flame'
-      case('h2supersonic')
-        typedefine='                     a supersonic H2 flame'
-      case('tgvflame')
-        typedefine='                 Taylor-Green Vortex flame'
-      case('rti')
-        typedefine='               Rayleigh–Taylor instability'
-      ! case('hitflame')
-      !   typedefine='    homogeneous isotropic turbulence flame'
-      case default
-        print*,trim(flowtype)
-        print*,' !! flowtype not defined, will go to default setup !!'
-      end select
-      !
+      
       write(*,'(2X,62A)')('-',i=1,62)
       write(*,'(2X,A)')'                   *** computation Setup ***'
       write(*,'(2X,62A)')('-',i=1,62)
@@ -570,10 +526,7 @@ module readwrite
       read(fh,*)lrestart
       read(fh,'(/)')
       read(fh,*)alfa_filter,kcutoff
-      !
-#ifdef COMB
-      read(fh,'(//)')
-#else 
+
       if(nondimen) then
         read(fh,'(/)')
         read(fh,*)ref_tem,reynolds,mach
@@ -581,8 +534,7 @@ module readwrite
         read(fh,'(/)')
         read(fh,*)ref_tem,ref_vel,ref_len,ref_den
       endif
-#endif
-      !
+
       read(fh,'(/)')
 
 #ifdef COMB
@@ -653,23 +605,20 @@ module readwrite
         read(fh,*)ibmode,solidfile
       endif
 #ifdef COMB
-      if(.not.nondimen) then
-        read(fh,'(/)')
-        read(fh,'(A)')chemfile  
-        if(len(trim(chemfile))>1) then
-          inquire(file=trim(chemfile),exist=lfex)
-          !
-          if(.not. lfex) then
-            print*,' !! Error ',trim(chemfile),' not exist !!'
-            stop
-          endif
-          !
-        else
-          print*,' !! Error chemfile not provided in input !!'
-            stop
+      read(fh,'(/)')
+      read(fh,'(A)')chemfile  
+      if(len(trim(chemfile))>1) then
+        inquire(file=trim(chemfile),exist=lfex)
+        !
+        if(.not. lfex) then
+          print*,' !! Error ',trim(chemfile),' not exist !!'
+          stop
         endif
-      endif 
-      !
+        !
+      else
+        print*,' !! Error chemfile not provided in input !!'
+          stop
+      endif
 #endif
       close(fh)
       print*,' >> ',trim(inputfile),' ... done'
@@ -1313,15 +1262,7 @@ module readwrite
     call h5read(varname='t',  var=tmp(0:im,0:jm,0),  dir='k')
     !
     call h5io_end
-    !
-    if(.not.nondimen) then
-      rho(0:im,0:jm,0)  =rho(0:im,0:jm,0)*ref_den
-      vel(0:im,0:jm,0,1)=vel(0:im,0:jm,0,1)*ref_vel
-      vel(0:im,0:jm,0,2)=vel(0:im,0:jm,0,2)*ref_vel
-      vel(0:im,0:jm,0,3)=0.d0
-      tmp(0:im,0:jm,0)  =tmp(0:im,0:jm,0)*ref_tem
-    endif
-    !
+    
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -1341,6 +1282,8 @@ module readwrite
         !
       else
 #ifdef COMB
+        spc(i,j,k,:)=spcinf
+
         ! phi = 0.4 
         ! spc(i,j,k,:)=0.d0
         ! spc(i,j,k,spcindex('O2'))=0.2302d0
@@ -1488,7 +1431,7 @@ module readwrite
     !
     call h5io_init(filename=trim(infilename),mode='read')
     call h5read(varname='nstep',var=nstep_1)
-    !
+    nstep=nstep_1
     if(nstep_1==nstep) then
       call h5read(varname='time',var=time)
       !

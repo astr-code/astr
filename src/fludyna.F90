@@ -329,7 +329,7 @@ module fludyna
     !
 #ifdef COMB
     if(.not.present(species))  &
-      stop ' !! error @ fvar2q - species not set for energy calculation !!'
+      stop ' !! error @ fvar2q_sca - species not set for energy calculation !!'
       !
     if(present(temperature)) then
       var1=0.5d0*sum(velocity(:)*velocity(:))
@@ -337,7 +337,7 @@ module fludyna
       q(5)=var2*density
     else
       print*,' !! temperature required for energy calculation !!'
-      stop ' !! error @ fvar2q'
+      stop ' !! error @ fvar2q_sca'
     endif 
     !
 #else
@@ -354,7 +354,7 @@ module fludyna
       q(5)=pressure*const6+density*var1
     else
       print*,' !! pressure or temperature required for energy calculation !!'
-      stop ' !! error @ fvar2q'
+      stop ' !! error @ fvar2q_sca'
     endif
 #endif
     !
@@ -396,7 +396,7 @@ module fludyna
 #ifdef COMB
 
     if(.not.present(species))  &
-      stop ' !! error @ fvar2q - species not set for energy calculation !!'
+      stop ' !! error @ fvar2q_1da - species not set for energy calculation !!'
     !
     if(present(temperature)) then
       !
@@ -408,7 +408,7 @@ module fludyna
       !
     else
       print*,' !! temperature required for energy calculation !!'
-      stop ' !! error @ fvar2q'
+      stop ' !! error @ fvar2q_1da'
     endif 
 
 #else
@@ -431,7 +431,7 @@ module fludyna
                                     velocity(:,3)**2 )
     else
       print*,' !! pressure or temperature required for energy calculation !!'
-      stop ' !! error @ fvar2q'
+      stop ' !! error @ fvar2q_1da'
     endif
 
 #endif
@@ -468,7 +468,7 @@ module fludyna
 #ifdef COMB
     
     if(.not.present(species))  &
-      stop ' !! error @ fvar2q - species not set for energy calculation !!'
+      stop ' !! error @ fvar2q_3da - species not set for energy calculation !!'
       !
     if(present(temperature)) then
       !
@@ -487,7 +487,7 @@ module fludyna
       !
     else
       print*,' !! temperature required for energy calculation !!'
-      stop ' !! error @ fvar2q'
+      stop ' !! error @ fvar2q_3da'
       endif
 
 #else
@@ -510,7 +510,7 @@ module fludyna
                                     velocity(:,:,:,3)**2 )
     else
       print*,' !! pressure or temperature required !!'
-      stop ' !! error @ fvar2q'
+      stop ' !! error @ fvar2q_3da'
     endif
 
 #endif
