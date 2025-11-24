@@ -98,6 +98,7 @@ module parallel
     module procedure pgather_int1d_array
     module procedure pgather_int
     module procedure pgather_int_comm
+    module procedure pgather_int_varray
     module procedure pgather_cha1_array
   end interface
   !
@@ -134,7 +135,7 @@ module parallel
   integer :: status(mpi_status_size) 
   integer :: mpi_imin,mpi_imax,mpi_jmin,mpi_jmax
   integer :: irk_islice,jrk_jslice,krk_kslice
-  integer :: mpi_islice,mpi_jslice,mpi_kslice
+  integer :: mpi_islice,mpi_jslice,mpi_kslice,mpi_k0group
   integer :: mpi_ibcom,cartcomm
   integer,allocatable :: mpi_ikgroup(:)
   integer :: mpi_igroup,mpi_jgroup,mpi_kgroup
@@ -287,7 +288,7 @@ module parallel
             !
           else
             !
-            if(nfactor(n3)>=1 .and. nfactor(n2)>=1 .and. nfactor(n1)>=1) then
+            if(nfactor(n3)>1 .and. nfactor(n2)>1 .and. nfactor(n1)>1) then
               nsize=nfactor(n1)*nfactor(n2)*nfactor(n3)
             else
              ! for 3D  calculation, the mpisize at k direction should not
@@ -326,7 +327,7 @@ module parallel
         end do
         end do
         end do
-        !
+
         if(.not. lallo) then
           !
           print*,' !! Size of ranks can not be allocated !!'
@@ -882,6 +883,23 @@ module parallel
     mpi_kgroup=group_use_2d(irk,jrk)
     !
     deallocate(rank_use,group_use_2d)
+    ! end of set k group
+    !
+    ! create k group from comm in i and k directions
+    allocate(rank_use(isize*jsize))
+    !
+    rank_use=-1
+    n=0
+    do nj=0,jsize-1
+    do ni=0,isize-1
+      n=n+1
+      rank_use(n)=nrank(ni,nj,0)
+    end do
+    end do
+    call mpi_group_incl(mpi_group_world,size(rank_use),rank_use,group_mpi,ierr)
+    call mpi_comm_create(mpi_comm_world,group_mpi,mpi_k0group,ierr)
+    !
+    deallocate(rank_use)
     ! end of set k group
     !
     if(lio) print*,' ** sub-communicators created'
@@ -1936,7 +1954,88 @@ module parallel
     endif
     !
   end subroutine pgather_int
-  !
+
+  subroutine pgather_int_varray(var,data,mode)
+    !
+    use commtype, only : varray
+
+    ! arguments
+    integer,intent(in) :: var(:)
+    type(varray),intent(out),allocatable :: data(:)
+    character(len=*),intent(in) :: mode
+    !
+    ! local data
+    integer,allocatable :: counts(:,:)
+    integer :: ierr,jrank,jelem,ncou
+    
+    ncou=size(var)
+    allocate(counts(0:mpirankmax,1:ncou))
+    allocate(data(ncou))
+
+    call mpi_allgather(var, ncou, mpi_integer, counts, ncou, mpi_integer,  &
+                       mpi_comm_world, ierr)
+    !
+    if(mode=='noneg') then
+
+      ! only pick >=0 values
+      do jelem=1,ncou
+
+        ncou=0
+        do jrank=0,mpirankmax
+          if(counts(jrank,jelem)>=0) then
+            ncou=ncou+1
+          endif
+        enddo
+        
+        allocate(data(jelem)%vint(ncou))
+
+        ncou=0
+        do jrank=0,mpirankmax
+          if(counts(jrank,jelem)>=0) then
+            ncou=ncou+1
+            data(jelem)%vint(ncou)=counts(jrank,jelem)
+          endif
+        enddo
+
+      enddo
+      !
+    else
+      stop ' mode error @ pgather_int_varray'
+    endif
+    !
+  end subroutine pgather_int_varray
+  
+  subroutine pgather_across_k(array,data,communicator)
+    !
+    ! arguments
+    real(8),intent(in)  :: array(:,:,:)
+    real(8),intent(out),allocatable :: data(:,:,:)
+    integer,intent(in) :: communicator
+    !
+    !
+    ! local data
+    integer :: displs(0:ksize-1),counts(0:ksize-1)
+    integer :: ierr,jrank,nrecv(1),nsize,dim1,dim2
+
+    if(krk==0) then
+      allocate(data(0:im,0:jm,1:ka))
+    endif
+
+    nrecv(1)=size(array)
+
+    call mpi_allgather(nrecv, 1, mpi_integer, counts, 1, mpi_integer,  communicator, ierr)
+
+    displs(0)=0
+    do jrank=1,ksize-1
+      displs(jrank)=displs(jrank-1)+counts(jrank-1)
+    enddo
+
+    call mpi_gatherv(array, nrecv(1), mpi_real8,              &
+                      data, counts, displs, mpi_real8, 0,  &
+                      communicator, ierr)
+  
+  end subroutine pgather_across_k
+
   subroutine pgather_rel2d_array(array,data)
     !
     ! arguments

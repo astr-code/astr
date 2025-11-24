@@ -1004,7 +1004,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*4)
+          open(fh(n),file=trim(filename),access='direct',recl=8*8)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1060,9 +1060,8 @@ module readwrite
         !     vel(i,j,k,1:3),rho(i,j,k),prs(i,j,k)/pinf,tmp(i,j,k),     &
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
-        write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
-        ! write(fh(n),rec=record(n))nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
-        !                        tmp(i,j,k),dvel(i,j,k,:,:)
+        ! write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
+        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,1:3),prs(i,j,k),dvel(i,j,k,1,2),dvel(i,j,k,2,1)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
       enddo
@@ -1756,62 +1755,63 @@ module readwrite
       outauxiname='outdat/auxiliary.'//iomode//'5'
     endif
     !
+    call write_io_tree(trim(outfilename))
     ! outfilename='outdat/flowfield.h5'
-    call h5io_init(trim(outfilename),mode='write')
-    !
-    call h5write(varname='ro',var=rho(0:im,0:jm,0:km),  mode=iomode)
-    !
-    call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),mode=iomode)
-    call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),mode=iomode)
-    call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),mode=iomode)
-    call h5write(varname='p', var=prs(0:im,0:jm,0:km),  mode=iomode)
-    call h5write(varname='t', var=tmp(0:im,0:jm,0:km),  mode=iomode)
-    if(num_species>0) then
-      do jsp=1,num_species
-         write(spname,'(i3.3)')jsp
-        call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode=iomode)
-      enddo
-    endif
-    !
-    if(allocated(ssf)) then
-      call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km),mode=iomode)
-    endif
-    if(allocated(lshock)) then
-      allocate(rshock(0:im,0:jm,0:km))
-      allocate(rcrinod(0:im,0:jm,0:km))
-      do k=0,km
-      do j=0,jm
-      do i=0,im
-        !
-        if(lshock(i,j,k)) then
-          rshock(i,j,k)=1.d0
-        else
-          rshock(i,j,k)=0.d0
-        endif
-        !
-        if(crinod(i,j,k)) then
-          rcrinod(i,j,k)=1.d0
-        else
-          rcrinod(i,j,k)=0.d0
-        endif
-        !
-      enddo
-      enddo
-      enddo
-      !
-      ! call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km),mode=iomode)
-      ! call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km),mode=iomode)
-    endif
-    !
-    if(trim(turbmode)=='k-omega') then
-      call h5write(varname='k',     var=tke(0:im,0:jm,0:km),mode=iomode)
-      call h5write(varname='omega', var=omg(0:im,0:jm,0:km),mode=iomode)
-      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
-    elseif(trim(turbmode)=='udf1') then
-      call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
-    endif
-    !
-    call h5io_end
+    ! call h5io_init(trim(outfilename),mode='write')
+    ! !
+    ! call h5write(varname='ro',var=rho(0:im,0:jm,0:km),  mode=iomode)
+    ! !
+    ! call h5write(varname='u1',var=vel(0:im,0:jm,0:km,1),mode=iomode)
+    ! call h5write(varname='u2',var=vel(0:im,0:jm,0:km,2),mode=iomode)
+    ! call h5write(varname='u3',var=vel(0:im,0:jm,0:km,3),mode=iomode)
+    ! call h5write(varname='p', var=prs(0:im,0:jm,0:km),  mode=iomode)
+    ! call h5write(varname='t', var=tmp(0:im,0:jm,0:km),  mode=iomode)
+    ! if(num_species>0) then
+    !   do jsp=1,num_species
+    !      write(spname,'(i3.3)')jsp
+    !     call h5write(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode=iomode)
+    !   enddo
+    ! endif
+    ! !
+    ! if(allocated(ssf)) then
+    !   call h5write(varname='ssf', var=ssf(0:im,0:jm,0:km),mode=iomode)
+    ! endif
+    ! if(allocated(lshock)) then
+    !   allocate(rshock(0:im,0:jm,0:km))
+    !   allocate(rcrinod(0:im,0:jm,0:km))
+    !   do k=0,km
+    !   do j=0,jm
+    !   do i=0,im
+    !     !
+    !     if(lshock(i,j,k)) then
+    !       rshock(i,j,k)=1.d0
+    !     else
+    !       rshock(i,j,k)=0.d0
+    !     endif
+    !     !
+    !     if(crinod(i,j,k)) then
+    !       rcrinod(i,j,k)=1.d0
+    !     else
+    !       rcrinod(i,j,k)=0.d0
+    !     endif
+    !     !
+    !   enddo
+    !   enddo
+    !   enddo
+    !   !
+    !   ! call h5write(varname='lshk', var=rshock(0:im,0:jm,0:km),mode=iomode)
+    !   ! call h5write(varname='crit', var=rcrinod(0:im,0:jm,0:km),mode=iomode)
+    ! endif
+    ! !
+    ! if(trim(turbmode)=='k-omega') then
+    !   call h5write(varname='k',     var=tke(0:im,0:jm,0:km),mode=iomode)
+    !   call h5write(varname='omega', var=omg(0:im,0:jm,0:km),mode=iomode)
+    !   call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
+    ! elseif(trim(turbmode)=='udf1') then
+    !   call h5write(varname='miut',  var=miut(0:im,0:jm,0:km),mode=iomode)
+    ! endif
+    ! !
+    ! call h5io_end
     !
     if(lio) then
       !
@@ -1879,16 +1879,90 @@ module readwrite
     !
     if(present(timerept) .and. timerept) then
       !
-      subtime=subtime+ptime()-time_beg
+      subtime=ptime()-time_beg
       !
-      if(lio .and. lreport .and. ltimrpt) call timereporter(routine='writeflfed', &
-                                              timecost=subtime, &
-                                              message='write flow data')
+      if(lio) print*,' ** i/o cost:',subtime
+      ! call timereporter(routine='writeflfed', &
+      !                                         timecost=subtime, &
+      !                                         message='write flow data')
       !
     endif
     !
   end subroutine writeflfed
-  !
+  
+  subroutine write_io_tree(file2write)
+
+    use commvar,  only : im,jm,km,lwsequ,turbmode,feqwsequ,force,ymin,ymax,ka
+    use commarray,only : rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
+    use models,   only : tke,omg,miut
+    use hdf5io
+    use parallel, only : pgather_across_k,mpi_kgroup,mpi_k0group,krk
+
+    character(len=*),intent(in) :: file2write
+    
+    ! local data
+    type :: dacoll
+      real(8),allocatable,dimension(:,:,:) :: data
+    end type dacoll
+
+    integer :: numvar
+    
+    type(dacoll),allocatable :: data_gather(:)
+    real(8),allocatable,dimension(:,:,:) :: data2write
+    integer(8) :: offset(3)
+
+    numvar=6
+
+    allocate(data_gather(numvar))
+
+    call pgather_across_k(array=rho(0:im,0:jm,1:km),  data=data_gather(1)%data,communicator=mpi_kgroup)
+    call pgather_across_k(array=vel(0:im,0:jm,1:km,1),data=data_gather(2)%data,communicator=mpi_kgroup)
+    call pgather_across_k(array=vel(0:im,0:jm,1:km,2),data=data_gather(3)%data,communicator=mpi_kgroup)
+    call pgather_across_k(array=vel(0:im,0:jm,1:km,3),data=data_gather(4)%data,communicator=mpi_kgroup)
+    call pgather_across_k(array=prs(0:im,0:jm,1:km),  data=data_gather(5)%data,communicator=mpi_kgroup)
+    call pgather_across_k(array=tmp(0:im,0:jm,1:km),  data=data_gather(6)%data,communicator=mpi_kgroup)
+
+    if(krk==0) then
+      offset=(/ig0,jg0,0/)
+
+      allocate(data2write(0:im,0:jm,0:ka))
+
+      call h5io_init(file2write,mode='write',comm=mpi_k0group)
+
+      data2write=add_kface(rho(0:im,0:jm,0),  data_gather(1)%data)
+      call h5wa3d_r8_struct(varname='ro',var=data2write,offset=offset)
+      data2write=add_kface(vel(0:im,0:jm,0,1),data_gather(2)%data)
+      call h5wa3d_r8_struct(varname='u1',var=data2write,offset=offset)
+      data2write=add_kface(vel(0:im,0:jm,0,2),data_gather(3)%data)
+      call h5wa3d_r8_struct(varname='u2',var=data2write,offset=offset)
+      data2write=add_kface(vel(0:im,0:jm,0,3),data_gather(4)%data)
+      call h5wa3d_r8_struct(varname='u3',var=data2write,offset=offset)
+      data2write=add_kface(prs(0:im,0:jm,0),  data_gather(5)%data)
+      call h5wa3d_r8_struct(varname='p', var=data2write,offset=offset)
+      data2write=add_kface(tmp(0:im,0:jm,0),  data_gather(6)%data)
+      call h5wa3d_r8_struct(varname='t', var=data2write,offset=offset)
+
+      call h5io_end
+
+      deallocate(data2write)
+
+      ! call writetecbin3d1var(filename='tectest'//mpirankname//'.plt',var1=data_gather_k,var1name='data')
+    endif
+
+  end subroutine write_io_tree
+
+  function add_kface(data_face,data_vol) result(data)
+
+    use commvar, only: ka
+    
+    real(8),intent(in) :: data_face(0:im,0:jm),data_vol(0:im,0:jm,1:ka)
+    real(8) :: data(0:im,0:jm,0:ka)
+    
+    data(0:im,0:jm,0)=data_face(0:im,0:jm)
+    data(0:im,0:jm,1:ka)=data_vol(0:im,0:jm,1:ka)
+
+  end function add_kface
+
   subroutine writeflfed_2d(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &

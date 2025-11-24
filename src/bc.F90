@@ -620,7 +620,7 @@ module bc
       !
       ! prs_image   =dot_product(c_neu,prs_icell)
       prs_image   =dot_product(c_dir,prs_icell)
-      prs_image   =median(prs_image,prslmin,prslmin)
+      ! prs_image   =median(prs_image,prslmin,prslmin)
       !
       if(nondimen) then 
         !
@@ -699,8 +699,9 @@ module bc
         vel(i,j,k,3)= -1.d0*var_u(3)*pb%dis2ghost/pb%dis2image
           ! tmp(i,j,k)=tinf-(var_t-tinf)*pb%dis2ghost/pb%dis2image
         ! adiabatic
-        tmp(i,j,k)=var_t
-        ! tmp(i,j,k)=twall(3)
+        ! tmp(i,j,k)=var_t
+        tmp(i,j,k)=twall(3)-(var_t-twall(3))*pb%dis2ghost/pb%dis2image
+
         prs(i,j,k)=var_p
         if(nondimen) then 
           rho(i,j,k)=thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
@@ -714,13 +715,15 @@ module bc
         !
       elseif(pb%nodetype=='b') then
         ! for boundary nodes
-        !
+        
+        ! print*,pb%x
+
         vel(i,j,k,1)=0.d0
         vel(i,j,k,2)=0.d0
         vel(i,j,k,3)=0.d0
         ! aidabatic
-        tmp(i,j,k)=var_t
-        ! tmp(i,j,k)=twall(3)
+        ! tmp(i,j,k)=var_t
+        tmp(i,j,k)=twall(3)
         prs(i,j,k)=var_p
         !
         if(nondimen) then 
@@ -1378,7 +1381,7 @@ module bc
     !
     ! local data
     integer :: i,j,k,l,jspc
-    real(8) :: css,csse,ub,pe,roe,ue,pwave_out,pwave_in,malo,rho_ref,cs_ref
+    real(8) :: css,csse,ub,pe,roe,ue,pwave_out,pwave_in,malo,rho_ref,cs_ref,blend
     !
     logical,save :: lfirstcal=.true.
     !
@@ -1423,6 +1426,7 @@ module bc
       do k=0,km
       do j=0,jm
         !
+        rho_ref = rho(i+1,j,k)
         ! css=sos(tmp(i,j,k))
         ! ub =vel_in(j,k,1)
         css=sos(tmp_prof(j),spc_prof(j,:))
@@ -1430,97 +1434,32 @@ module bc
         ub=vel_prof(j,1)
         ! ub =vel(i,j,k,1)
         !
-        ! if(.true.) then
-        if(ub>=css) then
-          ! supersonic inlet
-          !
-          vel(i,j,k,:)=vel_in(j,k,:)
-          tmp(i,j,k)  =tmp_in(j,k)
-          prs(i,j,k)  =prs_in(j,k)
-          rho(i,j,k)  =rho_in(j,k)
-          !
-          spc(i,j,k,:)=spc_in(j,k,:)
-          !
-        else
-        ! elseif(ub<css .and. ub>=0.d0) then
-          ! subsonic inlet
-          ue  =extrapolate(vel(i+1,j,k,1),vel(i+2,j,k,1),dv=0.d0)
-          pe  =extrapolate(prs(i+1,j,k),  prs(i+2,j,k),  dv=0.d0)
-          roe =extrapolate(rho(i+1,j,k),  rho(i+2,j,k),  dv=0.d0)
-          ! csse=extrapolate(sos(tmp(i+1,j,k)),sos(tmp(i+2,j,k)),dv=0.d0)
-          !
-          do jspc=1,num_species
-            spc(i,j,k,jspc)=spc_in(j,k,jspc) 
-          enddo
-          !
-          ! farfield kind of inflow
-          ! rho_ref = rho(i+1,j,k)
-          ! cs_ref  = sos(tmp(i+1,j,k),spc(i+1,j,k,:))
+        vel(i,j,k,:)=vel_in(j,k,:)
+        tmp(i,j,k)  =tmp_in(j,k)
+        
+        spc(i,j,k,:)=spc_in(j,k,:)
+        
+        pe  = extrapolate(prs(i+1,j,k),   prs(i+2,j,k),  dv=0.d0)
+        ue  = extrapolate(vel(i+1,j,k,1), vel(i+2,j,k,1),  dv=0.d0)
 
-          tmp(i,j,k)   = tmp_in(j,k)
-          !
-          ! ! fixed temperature, pressure, and velocity
-          vel(i,j,k,:) = vel_in(j,k,:)
-          prs(i,j,k)   = pe
-          !
-          ! prs(i,j,k)  = prs(i+1,j,k)-rho(i,j,k)*css*(vel(i+1,j,k,1)-vel(i,j,k,1))
-          ! ! Rudy & Strikwerda, 1980
-          ! pwave_out  = pe
-          ! !
-          ! pwave_in   = prs_in(j,k)
-          ! ! !
-          ! malo=(ub/css)
-          ! !
-          ! prs(i,j,k)=malo*pwave_in+(1.d0-malo)*pwave_out
-          ! prs(i,j,k) = pwave_out
-          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
-          !
-          ! rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gammarmix(tmp_in(j,k),spc_in(j,k,:)))
-          ! prs(i,j,k) = pwave_out
-          !
-          if(nondimen) then 
-            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
-            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          else
-            ! prs(i,j,k)   = thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            rho(i,j,k) =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-            ! tmp(i,j,k) =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
-          endif
-          !
-          ! vel(i,j,k,1)=0.5d0*(prs_in(j,k)-pe)/(rho(i,j,k)*css)+0.5d0*(vel_in(j,k,1)+ue)
-          ! prs(i,j,k)  =0.5d0*(prs_in(j,k)+pe)+0.5d0*rho(i,j,k)*css*(vel_in(j,k,1)-ue)
-          ! rho(i,j,k)  =rho_in(j,k)*(prs(i,j,k)/prs_in(j,k))**(1.d0/gamma)
-          ! !
-          ! vel(i,j,k,2)=vel_in(j,k,2)
-          ! vel(i,j,k,3)=vel_in(j,k,3)
-          ! !
-          ! tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
-          !
-          ! print*,vel_in(j,k,1),rho(i,j,k)
-          !
-        ! else
-        !   print*,mpirank,'|',i,j,k
-        !   print*,'ub=',ub,'vel_in=',vel_in(j,k,:),'css=',css
-        !   stop ' !! velocity at inflow error 1 !! @ inflow'
-        endif
-        !
-        if(nondimen) then 
-          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                      velocity=vel(i,j,k,:),  pressure=prs(i,j,k),       &
-                      species=spc(i,j,k,:)                               )
-        else
-          call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                      velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),    &
-                      species=spc(i,j,k,:)                               )
-        endif
-        !
-        if(trim(turbmode)=='k-omega') then
-          tke(i,j,k)=0.d0
-          omg(i,j,k)=0.d0
-        endif
-        !
+        pwave_in   = prs_in(j,k)
+        malo=ub/css
+        blend=0.5d0*(tanh((malo-1.d0)*6.d0)+1.d0) ! (-3~3)~0-1
+        
+        ! prs(i,j,k) = pe*(1.d0-blend)+pwave_in*blend
+
+        prs(i,j,k)  =(0.5d0*(pwave_in+pe)+0.5d0*rho_ref*css*(vel_in(j,k,1)-ue))*(1.d0-blend)+pwave_in*blend
+
+        vel(i,j,k,1)=vel_in(j,k,1)+(pinf-prs(i,j,k))/rho_ref/css
+
+        rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+
+        call fvar2q(       q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                    velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                     species=spc(i,j,k,:)                               )
+        
         qrhs(i,j,k,:)=0.d0
-        !
+        
       enddo
       enddo
       !
@@ -2121,7 +2060,18 @@ module bc
       return
       !
     endif
-    !
+    
+
+        ! call tecbin('testout/tecyz'//mpirankname//'.plt',                &
+        !                                   x(0,0:jm,0:km,1),'x',          &
+        !                                   x(0,0:jm,0:km,2),'y',          &
+        !                                   x(0,0:jm,0:km,3),'z',          &
+        !                                   rho_in(0:jm,0:km),'ro',        &
+        !                                   vel_in(0:jm,0:km,1),'u',       &
+        !                                   vel_in(0:jm,0:km,2),'v',       &
+        !                                   vel_in(0:jm,0:km,3),'w',       &
+        !                                   tmp_in(0:jm,0:km),'t')
+        ! stop
   end subroutine inflowintp
   !+-------------------------------------------------------------------+
   !| The end of the subroutine inflowintp.                             |

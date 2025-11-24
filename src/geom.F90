@@ -1626,7 +1626,7 @@ module geom
           !
           bnodes(counter)%dis2image=dis2point(bnodes(counter)%x,bnodes(counter)%ximag)
           bnodes(counter)%dis2ghost=dis2point(bnodes(counter)%x,x(i,j,k,:))
-          !
+          
           if(dis2point(bnodes(counter)%x,x(i,j,k,:))<dxyzmin*0.01d0) then
             ! the distance of node to wall is less thant 1/100 of 
             ! the min grid spacing
@@ -2136,6 +2136,7 @@ module geom
     use commvar,   only : immbond,ndims,imb_node_have,imb_node_need,   &
                           num_icell_rank,num_ighost_rank
     use parallel,  only : pgather,por,pmax,mpirankmax,psum,psuperpose,msize
+    use utility,   only : progress_bar
     !
     integer :: jb,i,j,k,icell_counter,ighost_counter,icell_all,nlocal,nonlocal
     integer,allocatable :: ighost_order(:),icell_order(:),icell_max(:), &
@@ -2225,28 +2226,34 @@ module geom
     enddo
     !
     inquire(file='ib_ghost_rank.dat',exist=lfex)
-    !
     if(lfex) then
-      !
       fhand=get_unit()
       open(fhand,file='ib_ghost_rank.dat',form='unformatted',access='direct',recl=4*11)
       frecd=1
       read(fhand,rec=frecd)total_mpiranks
+      close(fhand)
+      if(lio) print*, ' ** previous case use ',total_mpiranks,'ranks'
+    else
+      total_mpiranks=0
+    endif
+
+    if(total_mpiranks==mpirankmax) then
+      
+      fhand=get_unit()
+      open(fhand,file='ib_ghost_rank.dat',form='unformatted',access='direct',recl=4*11)
+      frecd=1
+      read(fhand,rec=frecd)total_mpiranks
+      do jb=1,size(immbond)
+        frecd=frecd+1
+        read(fhand,rec=frecd)j,ncout,immbond(jb)%icell_rank
+        !
+        if(ncout>0) then
+          allocate(immbond(jb)%ighst_rank_all(ncout))
+          read(fhand,rec=frecd)j,ncout,immbond(jb)%icell_rank,immbond(jb)%ighst_rank_all
+        endif
+        
+      enddo
       !
-      if(total_mpiranks==mpirankmax) then
-        !
-        do jb=1,size(immbond)
-          frecd=frecd+1
-          read(fhand,rec=frecd)j,ncout,immbond(jb)%icell_rank
-          !
-          if(ncout>0) then
-            allocate(immbond(jb)%ighst_rank_all(ncout))
-            read(fhand,rec=frecd)j,ncout,immbond(jb)%icell_rank,immbond(jb)%ighst_rank_all
-          endif
-          !
-        enddo
-        !
-      endif
       close(fhand)
       if(lio) print*, ' >> ib_ghost_rank.dat with ',frecd,'records'
       !
@@ -2255,16 +2262,31 @@ module geom
       icell_max  =pmax(icell_max)
       !
       ! call psuperpose(ighst_store,ighst_store_all)
-      !
+
       do jb=1,size(immbond)
         !
         pbon=>immbond(jb)
         !
         pbon%icell_rank=icell_max(jb)
-        !
+        
+        ighst_store(jb)=pbon%ighst_rank
+
         call pgather(pbon%ighst_rank,pbon%ighst_rank_all,mode='noneg')
-        !
+        
+        if(lio) call progress_bar(jb,size(immbond),'collecting icell_rank',62)
+
       enddo
+
+      ! call pgather(ighst_store,ighst_store_all,mode='noneg')
+
+      ! do jb=1,size(immbond)
+        
+      !   pbon=>immbond(jb)
+        
+      !   call move_alloc(ighst_store_all(jb)%vint, pbon%ighst_rank_all)
+
+      ! enddo
+
       !
     endif
     !
@@ -4653,9 +4675,9 @@ module geom
     real(8) :: dis1,dis2
     real(8) :: step_upper_y,step_right_x,step_left_x
     !
-    step_left_x=5.d0
-    step_right_x=25.d0
-    step_upper_y=0.d0
+    step_left_x=10.00000000005d0
+    step_right_x=20.d0
+    step_upper_y=1.d-12
     !
     if(xp(2)<step_upper_y .and. xp(1)<=step_left_x) then
       !

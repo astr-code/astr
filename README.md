@@ -1,6 +1,6 @@
 ASTR Code
 
-Version 2.5
+Version 2.6
 
 ASTR is a high-order finite-difference flow solver designed for high-fidelity simulation of compressible turbulence. It supports multi-physics extensions including combustion and is optimized for modern high-performance computing systems.
 
@@ -70,6 +70,13 @@ Running a Simulation
 To execute a simulation:
 mpirun -np 8 ./astr run ./datin/input_file
 
+To install astr for a new case, a user can use the intall astr in the script as
+path_to_astr/script/install.sh
+<replace files in user_define_module as required>
+make
+<create files in the datin>
+<run a simulation>
+
 Mini Apps
 ASTR includes lightweight mini-applications for testing and development.
 
@@ -81,12 +88,16 @@ cmake path_to_the_source/miniapps/
 cmake --build .
 ./astr.min
 
+
+
 Directory Structure Overview
 
 astr/
 ├── src/                # Core solver source code
 ├── script/             # Utility scripts (e.g. case creation)
 ├── miniapps/           # Testing and development tools
+├── pastr/              # pre and post-processing module for astr
+    ├── src/            # src of pastr
 ├── bin/                # Compiled binaries
 └── examples/           # Sample cases
 

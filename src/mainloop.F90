@@ -641,18 +641,20 @@ module mainloop
       !
     else
       !
-      if(nstep==nxtchkpt) then
+      ! if(nstep==nxtchkpt) then
+      if(mod(nstep,feqchkpt)==0) then
         !
         ! the checkpoint and flowfield may be writen in the same time
-        call writechkpt(nxtwsequ,timerept=ltimrpt)
+        call writechkpt(nxtwsequ,timerept=.true.)
         !
         call udf_write
         !
       endif
       !
-      if(lwsequ .and. nstep==nxtwsequ) then
+      ! if(lwsequ .and. nstep==nxtwsequ) then
+      if(lwsequ .and. mod(nstep,nxtwsequ)==0) then
         !
-        call writeflfed(timerept=ltimrpt)
+        call writeflfed(timerept=.true.)
         !
       endif
       !

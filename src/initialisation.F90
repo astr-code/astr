@@ -33,7 +33,7 @@ module initialisation
                         lrestart,lavg,turbmode,ymax
     use commarray,only: vel,rho,prs,spc,q,tke,omg
     use readwrite,only: readcont,readflowini3d,readflowini2d,readflowini1d,          &
-                        readcheckpoint,readmeanflow,readmonc,writeflfed
+                        readcheckpoint,readmeanflow,readmonc,writeflfed,write_io_tree
     use fludyna,  only: updateq
     use statistic,only: nsamples
     use bc,       only: ninflowslice,turbinf
@@ -152,9 +152,9 @@ module initialisation
     endif
     !
     if(lio) print*,' ** flowfield initialised.'
-    !
-    ! call writeflfed
-    !
+    
+    ! call writeflfed(timerept=.true.)
+    
     ! call mpistop
     ! !
     ! stop

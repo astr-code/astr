@@ -2164,7 +2164,7 @@ module solver
   !+-------------------------------------------------------------------+
   !| The end of the subroutine chardecomp.                             |
   !+-------------------------------------------------------------------+
-  !!
+  
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! This subroutine is used to calculate the convectional residual
   ! terms with compact six-order central scheme.

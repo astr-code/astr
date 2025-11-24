@@ -749,7 +749,7 @@ module hdf5io
     !
   end subroutine h5wa3d_r8
   !
-  subroutine h5wa3d_r8_struct(varname,var)
+  subroutine h5wa3d_r8_struct(varname,var,offset)
     !
     use commvar, only: ia,ja,ka
     use parallel,only: lio,ig0,jg0,kg0
@@ -757,11 +757,12 @@ module hdf5io
     ! arguments
     character(LEN=*),intent(in) :: varname
     real(8),intent(in) :: var(:,:,:)
+    integer(hsize_t),intent(in),optional :: offset(3)
     !
 #ifdef HDF5
     ! local data
     integer :: dim(3),dima
-    integer(hsize_t), dimension(3) :: offset
+    integer(hsize_t) :: offs(3)
     integer :: h5error
     !
     integer(hid_t) :: dset_id,filespace,memspace,plist_id
@@ -774,7 +775,12 @@ module hdf5io
     dimat=(/ia+1,ja+1,ka+1/)
     !
     dimt=dim
-    offset=(/ig0,jg0,kg0/)
+
+    if(present(offset)) then
+      offs=offset
+    else
+      offs=(/ig0,jg0,kg0/)
+    endif
     !
     call h5screate_simple_f(3,dimat,filespace,h5error)
     call h5dcreate_f(h5file_id,varname,H5T_NATIVE_DOUBLE,filespace,    &
@@ -782,7 +788,7 @@ module hdf5io
     call h5screate_simple_f(3,dimt,memspace,h5error)
     call h5sclose_f(filespace,h5error)
     call h5dget_space_f(dset_id,filespace,h5error)
-    call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,offset,     &
+    call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,offs,     &
                                                           dimt,h5error)
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,h5error) 
     !

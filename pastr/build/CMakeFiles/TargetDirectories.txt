@@ -1,0 +1,13 @@
+/mnt/c/data/ASTR/astr/pastr/build/CMakeFiles/edit_cache.dir
+/mnt/c/data/ASTR/astr/pastr/build/CMakeFiles/rebuild_cache.dir
+/mnt/c/data/ASTR/astr/pastr/build/CMakeFiles/list_install_components.dir
+/mnt/c/data/ASTR/astr/pastr/build/CMakeFiles/install.dir
+/mnt/c/data/ASTR/astr/pastr/build/CMakeFiles/install/local.dir
+/mnt/c/data/ASTR/astr/pastr/build/CMakeFiles/install/strip.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/pastr.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/edit_cache.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/rebuild_cache.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/list_install_components.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/install.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/install/local.dir
+/mnt/c/data/ASTR/astr/pastr/build/src/CMakeFiles/install/strip.dir
