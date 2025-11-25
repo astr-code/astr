@@ -10,6 +10,7 @@ module pastr_xdmf
     module procedure xdmfwriter_2drec_list_xy
     module procedure xdmfwriter_3d
     module procedure xdmfwriter_3drec
+    module procedure xdmfwriter_3drec_list
     module procedure xdmfwriter_3dbox
   end Interface xdmfwriter
 
@@ -413,6 +414,105 @@ contains
     !
     !
   end subroutine xdmfwriter_3drec
+
+
+  subroutine xdmfwriter_3drec_list(dir,filename,x,y,z,var,varname)
+    
+    use pastr_utility, only : make_dir
+    
+    ! arguments
+    character(len=*),intent(in) :: dir,filename
+    real(wp),intent(in),dimension(:) :: x,y,z
+    real(wp),intent(in),dimension(:,:,:,:) :: var
+    character(len=*),intent(in) :: varname(:)
+    !
+    real(4),allocatable :: bufr4(:,:,:)
+    !
+    ! local data
+    integer :: fh,i,n,nvar
+    integer :: im,jm,km
+    logical :: lfex
+    
+    call make_dir(dir)
+
+    im=size(var,1)
+    jm=size(var,2)
+    km=size(var,3)
+    nvar=size(var,4)
+
+    inquire(file=dir//'/grid-x.bin',exist=lfex)
+    if(.not. lfex) then
+      open(17,file=dir//'/grid-x.bin',access="stream")
+      write(17)sngl(x)
+      close(17)
+      print*,' << ',dir//'/grid-x.bin'
+    endif
+    inquire(file=dir//'/grid-y.bin',exist=lfex)
+    if(.not. lfex) then
+      open(17,file=dir//'/grid-y.bin',access="stream")
+      write(17)sngl(y)
+      close(17)
+      print*,' << ',dir//'/grid-y.bin'
+    endif
+    inquire(file=dir//'/grid-z.bin',exist=lfex)
+    if(.not. lfex) then
+      open(17,file=dir//'/grid-z.bin',access="stream")
+      write(17)sngl(z)
+      close(17)
+      print*,' << ',dir//'/grid-z.bin'
+    endif
+
+    !
+    allocate(bufr4(im,jm,km))
+    !
+    fh=18
+    !
+    ! write the head of xdmf and grid
+    open(fh,file=dir//filename//'.xdmf',form='formatted')
+    write(fh,'(A)')'<?xml version="1.0" ?>'
+    write(fh,'(A)')'<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>'
+    write(fh,'(A)')'<Xdmf xmlns:xi="http://www.w3.org/2001/XInclude" Version="2.0">'
+    write(fh,'(A)')'  <Domain>'
+    !
+    write(fh,'(A,3(1X,I0),A)')'    <Topology name="topo" TopologyType="3DRectMesh" Dimensions="',  &
+                              km,jm,im,'"> </Topology>'
+    write(fh,'(A)')'    <Geometry name="geo" Type="VXVYVZ">'
+    write(fh,'(A)')'      <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0" '
+    write(fh,'(A,1X,I0,A)') '                Dimensions=" ',im,'">grid-x.bin  </DataItem>'
+    write(fh,'(A)')'      <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0" '
+    write(fh,'(A,1X,I0,A)') '                Dimensions=" ',jm,'">grid-y.bin  </DataItem>'
+    write(fh,'(A)')'      <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0" '
+    write(fh,'(A,1X,I0,A)') '                Dimensions=" ',km,'">grid-z.bin  </DataItem>'
+    write(fh,'(A)')'    </Geometry>'
+    write(fh,*)
+    !
+    write(fh,'(A)')'    <Grid Name="001" GridType="Uniform">'
+    write(fh,'(A)')'      <Topology Reference="/Xdmf/Domain/Topology[1]"/>'
+    write(fh,'(A)')'      <Geometry Reference="/Xdmf/Domain/Geometry[1]"/>'
+    
+
+    do n=1,nvar
+      write(fh,'(3(A))')'      <Attribute Name="',varname(n),'" Center="Node">'
+      write(fh,'(A)')'        <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0"'
+      write(fh,'(A,3(1X,I0),3(A))')'                   Dimensions="',km,jm,im,'"> ',filename//'-'//varname(n),'</DataItem>'
+      write(fh,'(A)')'      </Attribute>'
+
+      bufr4=var(:,:,:,n)
+      open(fh+1,file=dir//filename//'-'//varname(n),access="stream")
+      write(fh+1)bufr4
+      close(fh+1)
+      print*,' << ',dir//filename//'-'//varname(n)
+    enddo
+
+    write(fh,'(A)')'     </Grid>'
+    !
+    write(fh,'(A)')'  </Domain>'
+    write(fh,'(A)')'</Xdmf>'
+    !
+    close(fh)
+    !
+    !
+  end subroutine xdmfwriter_3drec_list
 
   subroutine xdmfwriter_2d(dir,filename,gridfile,var1,var1name,var2,var2name, &
                                               var3,var3name,var4,var4name, &

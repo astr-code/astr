@@ -24,7 +24,9 @@ module pastr_tecio
   Interface tecbin
     !
     module procedure writetecbin2dlist_xy
+    module procedure writetecbin3dlist
 
+    module procedure writetecbin2d2var
     module procedure writetecbin2d5var
     module procedure writetecbin2d7var
     module procedure writetecbin2d8var
@@ -50,7 +52,210 @@ module pastr_tecio
   !|This subroutine is used to write bin file for 3d tecplot field.    |
   !|ifort compiler only                                                |
   !+-------------------------------------------------------------------+
-  
+  subroutine writetecbin3dlist(filename,x,y,z,var,varname)
+    !
+    character(len=*),intent(in) :: filename
+    real(wp),intent(in) :: x(:,:,:),y(:,:,:),z(:,:,:),var(:,:,:,:)
+    character(len=6),intent(in) :: varname(:)
+    !
+    integer :: imax,jmax,kmax,nbrvar
+    real(wp) :: solutiontime1
+    integer :: zonenumber1
+    character(256) :: title1
+    !
+    integer :: int32,unitf,n
+    ! ip : le point actuel
+    !
+    real(4) :: float32
+    real(wp) :: float64
+    !
+    real(4),allocatable,dimension(:,:,:,:) :: v
+    character(256),allocatable,dimension(:) :: vname
+    !
+    character(40) :: zonename1
+    character(256) :: ligne
+    !
+    solutiontime1=0._wp
+    zonenumber1=1
+    title1="Bin field for tecplot"
+
+    imax  =size(var,1)
+    jmax  =size(var,2)
+    kmax  =size(var,3)
+    nbrvar=size(var,4)+3
+
+    allocate(v(imax,jmax,kmax,nbrvar))
+    allocate(vname(nbrvar))
+    
+    v(:,:,:,1) =x(:,:,:)
+    v(:,:,:,2) =y(:,:,:)
+    v(:,:,:,3) =z(:,:,:)
+    v(:,:,:,4:)=real(var(:,:,:,:))
+    vname(1)='x'
+    vname(2)='y'
+    vname(3)='z'
+    vname(4:)=varname(:)
+
+    open(newunit=unitf,file=filename,form='unformatted',access='stream')
+      !
+      !i. header section
+      ! i. magic number, version number
+      ! +------------+
+      ! | "#!tdv112" |
+      ! +------------+
+      write(unitf)"#!TDV112"
+      ! ii. integer value of 1
+      ! +------------+
+      ! | int32      |
+      ! +------------+
+      int32=1
+      write(unitf)int32
+      ! iii. title and variable names
+      ! +------------+
+      ! | int32      | filetype: 0=full, 1=grid, 2=solution
+      ! +------------+
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32*n    | the title
+      ! +------------+?
+      call ecrirebin(unitf,title1)
+      ! +------------+
+      ! | int32      | number of variables in the datafile
+      ! +------------+
+      write(unitf)nbrvar
+      ! +------------+
+      ! | int32*n    | variable names
+      ! +------------+
+      do n=1,nbrvar
+        call ecrirebin(unitf,vname(n))
+        write(*,'(1x,A12,I2,A4,A10)')' ** Variable',n,' is ',vname(n)
+      enddo
+      ! iv. zones
+      ! +------------+
+      ! | float32    | zone marker. value = 299.0
+      ! +------------+
+      write(unitf)zonemarker
+      ! +------------+
+      ! | int32*n    | zone name
+      ! +------------+ 
+      Ligne=""
+      write(Ligne,"(A,I3.3)")"Zone",zonenumber1
+      call EcrireBin(UnitF,Ligne)
+      ! +------------+
+      ! | int32      | parentzone
+      ! +------------+
+      int32=-1
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | strandid
+      ! +------------+
+      int32=-1
+      write(unitf)int32
+      ! +------------+
+      ! | float64    | solution time
+      ! +------------+
+      write(unitf)solutiontime1
+      ! +------------+
+      ! | int32      | not used. set to -1
+      ! +------------+
+      int32=-1
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | zonetype 0=ordered,       1=felineseg,
+      ! +------------+          2=fetriangle,    3=fequadrilateral,
+      !                         4=fetetrahedron, 5=febrick,
+      !                         6=fepolygon,     7=fepolyhedron
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | specify var location
+      ! +------------+    0 = don't specify, 1 = specify
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | are raw local 1-to-1 face neighbors supplied?
+      ! +------------+
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | number of miscellaneous user-defined face neighbor connections
+      ! +------------+
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32*3    | imax,jmax,kmax
+      ! +------------+
+      write(unitf)imax
+      write(unitf)jmax
+      write(unitf)kmax
+      ! +------------+
+      ! | int32      | 1=auxiliary name/value pair to follow
+      ! +------------+ 0=no more auxiliary name/value pairs
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | float32    | eohmarker, value = 357.0, end of header section
+      ! +------------+
+      write(unitf)eohmarker
+      !ii. data section
+      ! i. for both ordered and fe zones
+      ! +------------+
+      ! | float32    | zone marker value = 299.0
+      ! +------------+
+      write(unitf)zonemarker
+      ! +------------+
+      ! | int32*n    | variable data format, n=total number of vars
+      ! +------------+     1=float,    2=double, 3=longint
+      !                    4=shortint, 5=byte,   6=bit
+      do n=1,nbrvar
+        int32=1
+        write(unitf)int32
+      enddo
+      ! +------------+
+      ! | int32      | has passive variables: 0=no, 1=yes
+      ! +------------+
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | has variable sharing: 0=no, 1=yes
+      ! +------------+
+      int32=0
+      write(unitf)int32
+      ! +------------+
+      ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
+      ! +------------+
+      int32=-1
+      write(unitf)int32
+      !
+      do n=1,nbrvar
+        !+------------+
+        !| float64    | min value
+        !+------------+
+        float32=minval(v(1:imax,1:jmax,1:kmax,n))
+        float64=real(float32,8)
+        write(unitf)float64
+        !+------------+
+        !| float64    | max value
+        !+------------+
+        float32=maxval(v(1:imax,1:jmax,1:kmax,n))
+        float64=real(float32,8)
+        write(unitf)float64
+      enddo
+      ! +------------+
+      ! | xxxxxxxxxx | zone data
+      ! +------------+
+      write(unitf)v
+      !
+      !
+    close(unitf)
+    !
+    print*,' << ',filename
+    !
+    deallocate(v)
+    !
+  end subroutine writetecbin3dlist
+
   subroutine writetecbin2dlist_xy(filename,x,y,var,varname)
     !
     character(len=*),intent(in) :: filename
@@ -251,6 +456,216 @@ module pastr_tecio
     deallocate(v)
     !
   end subroutine writetecbin2dlist_xy
+
+  subroutine writetecbin2d2var(filename,var1,var1name,var2,var2name )
+    ! 
+    character(len=*),intent(in) :: filename
+    real(8),dimension(:,:),intent(in) :: var1,var2
+    character(len=*),intent(in) :: var1name,var2name
+    !
+    ! local data
+    !
+    integer :: imax,jmax,kmax
+    real(8) :: solutiontime1
+    integer :: zonenumber1
+    character(256) :: title1
+    !
+    integer :: int32,unitf,nbrvar,n
+    ! ip : le point actuel
+    !
+    real(4) :: float32
+    real(8) :: float64
+    !
+    real(4),allocatable,dimension(:,:,:,:) :: var
+    character(256),allocatable,dimension(:) :: vname
+    !
+    character(40) :: zonename1
+    character(256) :: ligne
+    !
+    solutiontime1=0.d0
+    zonenumber1=1
+    title1="Bin field for tecplot"
+    !
+    nbrvar=2
+    !
+    imax=size(var1,1)
+    jmax=size(var1,2)
+    kmax=1
+    !
+    allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
+    allocate(vname(nbrvar))
+    !
+    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
+    !
+    vname(1)=var1name
+    vname(2)=var2name
+    !
+    
+    open(newunit=unitf,file=filename,form='unformatted',access='stream')
+    !
+      !i. header section
+    ! i. magic number, version number
+    ! +------------+
+    ! | "#!tdv112" |
+    ! +------------+
+    write(unitf)"#!TDV112"
+    ! ii. integer value of 1
+    ! +------------+
+    ! | int32      |
+    ! +------------+
+    int32=1
+    write(unitf)int32
+    ! iii. title and variable names
+    ! +------------+
+    ! | int32      | filetype: 0=full, 1=grid, 2=solution
+    ! +------------+
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32*n    | the title
+    ! +------------+?
+    call ecrirebin(unitf,title1)
+    ! +------------+
+    ! | int32      | number of variables in the datafile
+    ! +------------+
+    write(unitf)nbrvar
+    ! +------------+
+    ! | int32*n    | variable names
+    ! +------------+
+    do n=1,nbrvar
+      call ecrirebin(unitf,vname(n))
+        if(tecinfout) write(*,'(1x,A12,I2,A4,A10)')' ** Variable',n,' is ',vname(n)
+    enddo
+    ! iv. zones
+    ! +------------+
+    ! | float32    | zone marker. value = 299.0
+    ! +------------+
+    write(unitf)zonemarker
+    ! +------------+
+    ! | int32*n    | zone name
+    ! +------------+ 
+    Ligne=""
+    write(Ligne,"(A,I3.3)")"Zone",zonenumber1
+    call EcrireBin(UnitF,Ligne)
+      if(tecinfout) write(*,'(1x,A15,1X,A10)')' ** Zone name: ',Ligne
+    ! +------------+
+    ! | int32      | parentzone
+    ! +------------+
+    int32=-1
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | strandid
+    ! +------------+
+    int32=-1
+    write(unitf)int32
+    ! +------------+
+    ! | float64    | solution time
+    ! +------------+
+    write(unitf)solutiontime1
+    ! +------------+
+    ! | int32      | not used. set to -1
+    ! +------------+
+    int32=-1
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | zonetype 0=ordered,       1=felineseg,
+    ! +------------+          2=fetriangle,    3=fequadrilateral,
+    !                         4=fetetrahedron, 5=febrick,
+    !                         6=fepolygon,     7=fepolyhedron
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | specify var location
+    ! +------------+    0 = don't specify, 1 = specify
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | are raw local 1-to-1 face neighbors supplied?
+    ! +------------+
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | number of miscellaneous user-defined face neighbor connections
+    ! +------------+
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32*3    | imax,jmax,kmax
+    ! +------------+
+    write(unitf)imax
+    write(unitf)jmax
+    write(unitf)kmax
+    ! +------------+
+    ! | int32      | 1=auxiliary name/value pair to follow
+    ! +------------+ 0=no more auxiliary name/value pairs
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | float32    | eohmarker, value = 357.0, end of header section
+    ! +------------+
+    write(unitf)eohmarker
+    !ii. data section
+    ! i. for both ordered and fe zones
+    ! +------------+
+    ! | float32    | zone marker value = 299.0
+    ! +------------+
+    write(unitf)zonemarker
+    ! +------------+
+    ! | int32*n    | variable data format, n=total number of vars
+    ! +------------+     1=float,    2=double, 3=longint
+    !                    4=shortint, 5=byte,   6=bit
+    do n=1,nbrvar
+      int32=1
+      write(unitf)int32
+    enddo
+    ! +------------+
+    ! | int32      | has passive variables: 0=no, 1=yes
+    ! +------------+
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | has variable sharing: 0=no, 1=yes
+    ! +------------+
+    int32=0
+    write(unitf)int32
+    ! +------------+
+    ! | int32      | zero based zone number to share connectivity list with (-1 = no sharing)
+    ! +------------+
+    int32=-1
+    write(unitf)int32
+    !
+    do n=1,nbrvar
+      !+------------+
+      !| float64    | min value
+      !+------------+
+      float32=minval(var(:,:,:,n))
+      float64=real(float32,8)
+      write(unitf)float64
+      !+------------+
+      !| float64    | max value
+      !+------------+
+      float32=maxval(var(:,:,:,n))
+      float64=real(float32,8)
+      write(unitf)float64
+    enddo
+    ! +------------+
+    ! | xxxxxxxxxx | zone data
+    ! +------------+
+    write(unitf)var
+    !
+    !write(unitf)((((var(n,i,j,k),n=1,nbrvar),i=0,im),j=0,jm),k=0,km)
+    !do n=1,nbrvar
+    !write(unitf)((((var(i,j,k,n),i=0,imax),j=0,jmax),k=0,kmax),n=1,nbrvar)
+      
+    !end do
+      !
+    close(unitf)
+    !
+    print*,' << ',filename
+    !
+    deallocate(var)
+  end subroutine writetecbin2d2var
 
   subroutine writetecbin2d5var(filename,var1,var1name,var2,var2name,   &
                                         var3,var3name,var4,var4name,   &

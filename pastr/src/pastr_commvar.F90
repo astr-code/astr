@@ -27,4 +27,28 @@ module pastr_commvar
     real(wp), allocatable, dimension(:, :, :) :: du1_zm, du2_zm, du3_zm, dt_zm
     real(wp), allocatable, dimension(:, :) :: du1_xzm, du2_xzm, du3_xzm, dt_xzm
 
+    type :: montype
+      integer :: npoints,nvariables
+      character(len=16),allocatable :: varname(:)
+      integer,allocatable :: nstep(:)
+      real(wp),allocatable :: time(:),data(:,:)
+      contains
+      procedure :: init => alloc_monitor
+    end type montype
+
+    type(montype),allocatable :: monitors(:)
+
+contains
+
+    subroutine alloc_monitor(amonitor)
+    !
+    class(montype),target :: amonitor
+
+    allocate(amonitor%varname(amonitor%nvariables))
+    allocate(amonitor%time(amonitor%npoints))
+    allocate(amonitor%nstep(amonitor%npoints))
+    allocate(amonitor%data(amonitor%nvariables,amonitor%npoints))
+
+  end subroutine alloc_monitor
+
 end module pastr_commvar

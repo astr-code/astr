@@ -200,6 +200,7 @@ contains
       real(wp) ::rnsmin=0._wp,rnsmax=0._wp,c1=1._wp,c2=10._wp
 
       integer :: i,j
+      logical :: lfex
 
       save rnsmin,rnsmax
   
@@ -210,14 +211,22 @@ contains
       endif
 
       schl(:,:)=sqrt(dro(1,:,:)**2+dro(2,:,:)**2)
+
     
       if(rnsmax<=1.d-10 .and. rnsmin<1.d-10) then
         
-        rnsmax=maxval(schl)
-        rnsmin=minval(schl)
-        
-        print*,'rnsmin',rnsmin,'rnsmax',rnsmax
+        inquire(file='rnsdef.txt',exist=lfex)
+        if(lfex) then
+          open(12,file='rnsdef.txt')
+          read(12,*)rnsmin,rnsmax
+          close(12)
+          print*,'rnsmin',rnsmin,'rnsmax',rnsmax
+        else
+          rnsmax=maxval(schl)
+          rnsmin=minval(schl)
+        endif
       endif
+      print*,'rnsmin',rnsmin,'rnsmax',rnsmax
 
       schl=c1*exp(-c2*(schl-rnsmin)/(rnsmax-rnsmin))
   

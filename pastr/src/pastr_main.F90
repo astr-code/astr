@@ -28,9 +28,7 @@ contains
         character(len=16) :: pastr_command
 
         character(len=:), allocatable :: pastr_cfg_file
-
-        logical :: cfg_found
-
+        
         !----------------------------------------------------------
         ! 1. Command line arguments
         !----------------------------------------------------------

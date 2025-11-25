@@ -7,12 +7,13 @@ module pastr_io
     private
 
     public :: parse_command_line,read_grid
-    public :: global_n_arguments
+    public :: global_n_arguments,read_monitor_data,write_monitor_data
 
     integer :: global_n_arguments=0
 
     Interface read_grid
       module procedure read_grid_2d
+      module procedure read_grid_3d
     end Interface read_grid
     !
 contains
@@ -97,5 +98,98 @@ contains
       endif
 
     end subroutine read_grid_2d
+
+    subroutine read_grid_3d(x,y,z)
+      
+      use pastr_commvar, only: gridfile,im,jm,km
+      use pastr_h5io
+
+      real(wp),intent(inout),allocatable :: x(:,:,:),y(:,:,:),z(:,:,:)
+
+      call H5ReadArray(x,im,jm,km,'x',trim(gridfile))
+      call H5ReadArray(y,im,jm,km,'y',trim(gridfile))
+      call H5ReadArray(z,im,jm,km,'z',trim(gridfile))
+
+    end subroutine read_grid_3d
+
+    subroutine read_monitor_data(num_first_file,num_last_file,n_data,n_col,mon_data)
+
+      use pastr_commvar, only: montype
+
+      integer,intent(in) :: num_first_file,num_last_file,n_data,n_col
+      type(montype),allocatable,intent(out) :: mon_data(:)
+      integer :: recl_size,stat,nfiles
+      
+      character(len=4) :: mfname
+      character(len=16) :: varname(n_data-1)
+      integer :: i,j,n
+      
+      open(12,file='mondef.txt')
+      do i=1,n_data-1
+        read(12,*)varname(i)
+      enddo
+      close(12)
+      print*,' >> mondef.txt'
+      print*,' ** variables recorded in monitor:',(trim(varname(i)),';',i=1,n_data-1)
+
+      recl_size=8*(n_data+1)
+      nfiles=num_last_file-num_first_file+1
+      allocate(mon_data(nfiles))
+
+      do n=1,nfiles
+
+        mon_data(n)%npoints=n_col
+        mon_data(n)%nvariables=n_data-1
+        call mon_data(n)%init()
+        
+        mon_data(n)%varname=varname
+
+      enddo
+
+      do j=num_first_file,num_last_file
+
+        write(mfname,'(I4.4)')j
+        
+        open(12,file='monitor/monitor'//mfname//'.dat',access='direct',recl=recl_size,action='read')
+        do i=1,n_col
+          read(12,rec=i,iostat=stat)mon_data(j)%nstep(i),mon_data(j)%time(i),mon_data(j)%data(:,i)
+        enddo
+        close(12)
+        print*,' >> monitor/monitor'//mfname//'.dat'
+
+      enddo
+
+    end subroutine read_monitor_data
+
+    subroutine write_monitor_data(mon_data)
+      
+      use pastr_commvar, only: montype
+
+      type(montype),intent(in) :: mon_data(:)
+
+      integer :: msize,i,j,k
+      character(len=4) :: mfname
+      character(len=120) :: txtformat,datformat
+
+      msize=size(mon_data)
+
+      write(txtformat,'(A,I0,A)')'(',mon_data(1)%nvariables+1,'(1X,A20))'
+      write(datformat,'(A,I0,A)')'(',mon_data(1)%nvariables+1,'(1X,E20.13E2))'
+
+
+      do j=1,msize
+        write(mfname,'(I4.4)')j
+
+        open(18,file='monitor'//mfname//'.txt')
+        write(18,txtformat)'time',(trim(mon_data(j)%varname(k)),k=1,mon_data(j)%nvariables)
+        do i=1,mon_data(j)%npoints
+          write(18,datformat)mon_data(j)%time(i),mon_data(j)%data(:,i)
+        enddo
+        close(18)
+        print*,' << monitor'//mfname//'.txt'
+
+      enddo
+
+    end subroutine write_monitor_data
 
 end module pastr_io

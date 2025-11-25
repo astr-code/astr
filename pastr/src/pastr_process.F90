@@ -16,15 +16,21 @@ contains
     !----------------------------------------------------------------------
     subroutine run_process_entry(command)
 
+        use pastr_udf
+
         character(len=*), intent(in) :: command
 
         select case (command)
            case ('viewxy')
-              call field_view_slice('xy')
+              call field_view('xy')
            case ('viewxz')
-              call field_view_slice('xz')
+              call field_view('xz')
+           case ('view3d')
+              call field_view('3d')
+           case ('monitor')
+              call monitor_data_process()
            case default
-              write(*,*)' ** pastr command not defined:',command
+              call udf_func1()
         end select 
 
         ! !----------------------------------------------------------
@@ -49,11 +55,11 @@ contains
 
     end subroutine run_process_entry
 
-    subroutine field_view_slice(mode)
+    subroutine field_view(mode)
 
         use pastr_io,     only: parse_command_line
         use pastr_input,  only: read_astr_input
-        use pastr_field_view, only: write_xy_slice,write_xz_slice
+        use pastr_field_view, only: write_xy_slice,write_xz_slice,write_3d_field
 
         character(len=*),intent(in) :: mode
 
@@ -63,7 +69,14 @@ contains
 
         visu_format='plt'
 
-        write(*,*)' ** visulise flowfield from a ',mode,' slice'
+        if(mode=='xy') then 
+          write(*,*)' ** visulise flowfield from a xy slice'
+        elseif(mode=='xz') then 
+          write(*,*)' ** visulise flowfield from a xz slice'
+        elseif(mode=='3d') then 
+          write(*,*)' ** visulise 3d flowfield '
+        endif
+
         write(*,*)' ** input either file numbers or names of files.'
         write(*,*)' ** examples: ./pastr viewxy                   0         2 110 -input datin/input.3d xdmf kslice'
         write(*,*)'              ./pastr viewxy outdat/flowfield.h5 tecxy.plt 110 -input datin/input.3d'
@@ -86,7 +99,7 @@ contains
         elseif(trim(visu_format)=='xdmf') then
           write(*,*)' **          visu fomat: xdmf'
         else
-          stop ' error 1 @ field_view_slice'
+          stop ' error 1 @ field_view'
         endif
         
         if(num_first_file>=0 .and. num_last_file>=0) then
@@ -103,8 +116,9 @@ contains
             call write_xz_slice( nfirst=num_first_file, &
                                   nlast=num_last_file,  &
                                   slice=slice,format=trim(visu_format))
+          elseif(mode=='3d') then
           else
-            print*,' !! mode not defined @ field_view_slice ',mode
+            print*,' !! mode not defined @ field_view ',mode
             stop 2
           endif
 
@@ -123,16 +137,85 @@ contains
             call write_xz_slice( filein=trim(file_in),  &
                                 fileout=trim(file_out), &
                                   slice=slice,format=trim(visu_format))
+          elseif(mode=='3d') then
+            call write_3d_field( filein=trim(file_in),  &
+                                fileout=trim(file_out), &
+                                 format=trim(visu_format))
           else
-            print*,' !! mode not defined @ field_view_slice '
+            print*,' !! mode not defined @ field_view '
             stop 3
           endif
 
         else
-          stop ' error 4 @ field_view_slice'
+          stop ' error 4 @ field_view'
         endif
 
-    end subroutine field_view_slice
+    end subroutine field_view
+
+    subroutine monitor_data_process
+
+        use pastr_io,     only: parse_command_line,read_monitor_data,write_monitor_data
+        use pastr_input,  only: read_astr_input,read_moniter_input
+        use pastr_commvar,only: montype
+
+        integer :: num_first_file,num_last_file,recl_size
+        integer :: nr,n,n1,n2,n3,stat,n_data,n_col
+
+        integer,allocatable :: imon(:),jmon(:),kmon(:)
+        real(wp),allocatable :: data_test(:)
+        logical :: ltemp
+        character(len=16),allocatable :: data_name(:)
+        type(montype),allocatable :: data_monitor(:)
+        
+        call read_astr_input()
+
+        call read_moniter_input(imon,jmon,kmon)
+
+        call parse_command_line( inumber=num_first_file )
+        call parse_command_line( inumber=num_last_file )
+        
+        recl_size=0
+        do while(.true.)
+          recl_size=recl_size+8
+
+          open(12,file='monitor/monitor0001.dat',access='direct',recl=recl_size,action='read')
+          read(12,rec=1,iostat=stat)n1
+          read(12,rec=2,iostat=stat)n2
+          read(12,rec=3,iostat=stat)n3
+          close(12)
+          print*,n1,n2,n3
+          if(n2-n1 == n3-n2 .and. n2>n1) exit
+
+        enddo
+        n_data=(recl_size-1)/8
+        print*,' ** recl_size= ',recl_size,'data numbers:',n_data
+
+        allocate(data_test(n_data))
+        nr=1
+        n_col=1
+        open(12,file='monitor/monitor0001.dat',access='direct',recl=recl_size,action='read')
+        do while(.true.)
+          
+          read(12,rec=nr,iostat=stat)n,data_test
+          ! print*,n,data_test(1)
+          if(stat==0) then
+            nr = nr + 1
+            n_col=n_col+1
+          else
+            exit
+          endif
+          !
+        enddo
+        close(12)
+        print*,' ** last time step:',n,data_test(1)
+
+        n_col=n_col-1
+
+        call read_monitor_data(num_first_file,num_last_file,n_data,n_col,data_monitor)
+
+        call write_monitor_data(data_monitor)
+
+    end subroutine monitor_data_process
 
     subroutine refconst
       !

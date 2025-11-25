@@ -8,9 +8,185 @@ module pastr_gradients
 
     private
 
-    public ::  grad_xy
+    public ::  grad_xy,grad_3d
 
 contains
+    
+    function grad_3d(f,x,y,z) result(df)
+      ! 
+      ! arguments
+      real(wp),intent(in) :: f(0:,0:,0:)
+      real(wp),intent(in),optional :: x(0:,0:,0:),y(0:,0:,0:),&
+                                     z(0:,0:,0:)
+      real(wp) :: df(1:3,0:size(f,1)-1,0:size(f,2)-1,0:size(f,3)-1)
+      !
+  
+      ! local data
+      integer :: i,j,k
+      real(wp),allocatable :: vtemp(:)
+      real(wp),allocatable :: ddi(:,:,:,:),ddj(:,:,:,:),ddk(:,:,:,:)
+      save ddi,ddj,ddk
+      !$ SAVE vtemp
+      !$OMP THREADPRIVATE(vtemp)
+      !
+      im=size(f,1)-1
+      jm=size(f,2)-1
+      km=size(f,3)-1
+
+      if(.not. allocated(ddi)) then
+        allocate(ddi(1:3,0:im,0:jm,0:km),ddj(1:3,0:im,0:jm,0:km),        &
+                 ddk(1:3,0:im,0:jm,0:km) )
+        !
+        if(present(x) .and. present(y) .and. present(z)) then
+          call gridjacobian_3d(x,y,z,ddi,ddj,ddk)
+        else
+          stop ' !! x,y,z needed in function grad_3d !!'
+        endif
+        !
+      else
+        ! print*,' ** Use the saved grid jacobian matrix'
+      endif
+      !
+      !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k)
+      !
+      allocate(vtemp(0:im))
+      !$OMP DO
+      do k=0,km
+      do j=0,jm
+        vtemp=dfdi(f(:,j,k))
+        df(1,:,j,k)=vtemp(:)*ddi(1,:,j,k)
+        df(2,:,j,k)=vtemp(:)*ddi(2,:,j,k)
+        df(3,:,j,k)=vtemp(:)*ddi(3,:,j,k)
+      end do
+      end do
+      !$OMP END DO
+      deallocate(vtemp)
+      !
+      allocate(vtemp(0:jm))
+      !$OMP DO
+      do k=0,km
+      do i=0,im
+        vtemp=dfdj(f(i,:,k))
+        df(1,i,:,k)=df(1,i,:,k)+vtemp(:)*ddj(1,i,:,k)
+        df(2,i,:,k)=df(2,i,:,k)+vtemp(:)*ddj(2,i,:,k)
+        df(3,i,:,k)=df(3,i,:,k)+vtemp(:)*ddj(3,i,:,k)
+      end do
+      end do
+      !$OMP END DO
+      deallocate(vtemp)
+      !
+      allocate(vtemp(0:km))
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
+        vtemp=dfdk(f(i,j,:))
+        df(1,i,j,:)=df(1,i,j,:)+vtemp(:)*ddk(1,i,j,:)
+        df(2,i,j,:)=df(2,i,j,:)+vtemp(:)*ddk(2,i,j,:)
+        df(3,i,j,:)=df(3,i,j,:)+vtemp(:)*ddk(3,i,j,:)
+      end do
+      end do
+      !$OMP END DO
+      deallocate(vtemp)
+      !
+      !$OMP END PARALLEL
+      !
+      print*,' ** 3D gradient field calculated'
+      !
+    end function grad_3d
+
+    subroutine gridjacobian_3d(x,y,z,ddi,ddj,ddk)
+      !
+      ! arguments
+      real(wp),intent(in) :: x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),         &
+                             z(0:im,0:jm,0:km)
+      real(wp),intent(out) :: ddi(1:3,0:im,0:jm,0:km),                    &
+                              ddj(1:3,0:im,0:jm,0:km),                    &
+                              ddk(1:3,0:im,0:jm,0:km)
+      !
+      ! local data
+      integer :: i,j,k
+      real(wp) :: var1
+      real(wp),allocatable :: dx(:,:,:,:),dy(:,:,:,:),dz(:,:,:,:)
+      !
+      allocate(dx(1:3,0:im,0:jm,0:km),dy(1:3,0:im,0:jm,0:km),            &
+               dz(1:3,0:im,0:jm,0:km))
+      !
+      !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(i,j,k,var1)
+      !
+      !$OMP DO
+      do k=0,km
+      do j=0,jm
+        dx(1,:,j,k)=dfdi(x(:,j,k))
+        dy(1,:,j,k)=dfdi(y(:,j,k))
+        dz(1,:,j,k)=dfdi(z(:,j,k))
+      end do
+      end do
+      !$OMP END DO
+      !
+      !$OMP DO
+      do k=0,km
+      do i=0,im
+        dx(2,i,:,k)=dfdj(x(i,:,k))
+        dy(2,i,:,k)=dfdj(y(i,:,k))
+        dz(2,i,:,k)=dfdj(z(i,:,k))
+      end do
+      end do
+      !$OMP END DO
+      !
+      !$OMP DO
+      do j=0,jm
+      do i=0,im
+        dx(3,i,j,:)=dfdk(x(i,j,:))
+        dy(3,i,j,:)=dfdk(y(i,j,:))
+        dz(3,i,j,:)=dfdk(z(i,j,:))
+      end do
+      end do
+      !$OMP END DO
+      !
+      !$OMP DO
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        var1= dx(1,i,j,k)*dy(2,i,j,k)*dz(3,i,j,k)                        &
+             +dx(2,i,j,k)*dy(3,i,j,k)*dz(1,i,j,k)                        &
+             +dx(3,i,j,k)*dy(1,i,j,k)*dz(2,i,j,k)                        &
+             -dx(3,i,j,k)*dy(2,i,j,k)*dz(1,i,j,k)                        &
+             -dx(2,i,j,k)*dy(1,i,j,k)*dz(3,i,j,k)                        &
+             -dx(1,i,j,k)*dy(3,i,j,k)*dz(2,i,j,k)
+        !
+        ddi(1,i,j,k)=dy(2,i,j,k)*dz(3,i,j,k)-dy(3,i,j,k)*dz(2,i,j,k)
+        ddi(2,i,j,k)=dx(3,i,j,k)*dz(2,i,j,k)-dx(2,i,j,k)*dz(3,i,j,k)
+        ddi(3,i,j,k)=dx(2,i,j,k)*dy(3,i,j,k)-dx(3,i,j,k)*dy(2,i,j,k)
+        !
+        ddj(1,i,j,k)=dy(3,i,j,k)*dz(1,i,j,k)-dy(1,i,j,k)*dz(3,i,j,k)
+        ddj(2,i,j,k)=dx(1,i,j,k)*dz(3,i,j,k)-dx(3,i,j,k)*dz(1,i,j,k)
+        ddj(3,i,j,k)=dx(3,i,j,k)*dy(1,i,j,k)-dx(1,i,j,k)*dy(3,i,j,k)
+        !
+        ddk(1,i,j,k)=dy(1,i,j,k)*dz(2,i,j,k)-dy(2,i,j,k)*dz(1,i,j,k)
+        ddk(2,i,j,k)=dx(2,i,j,k)*dz(1,i,j,k)-dx(1,i,j,k)*dz(2,i,j,k)
+        ddk(3,i,j,k)=dx(1,i,j,k)*dy(2,i,j,k)-dx(2,i,j,k)*dy(1,i,j,k)
+        !
+        ddi(1,i,j,k)=ddi(1,i,j,k)/var1
+        ddi(2,i,j,k)=ddi(2,i,j,k)/var1
+        ddi(3,i,j,k)=ddi(3,i,j,k)/var1
+        ddj(1,i,j,k)=ddj(1,i,j,k)/var1
+        ddj(2,i,j,k)=ddj(2,i,j,k)/var1
+        ddj(3,i,j,k)=ddj(3,i,j,k)/var1
+        ddk(1,i,j,k)=ddk(1,i,j,k)/var1
+        ddk(2,i,j,k)=ddk(2,i,j,k)/var1
+        ddk(3,i,j,k)=ddk(3,i,j,k)/var1
+      end do
+      end do
+      end do
+      !$OMP END DO
+      !
+      !$OMP END PARALLEL
+      !
+      deallocate(dx,dy,dz)
+      !
+      print*, ' ** Grid Jacobian matrix is calculated'
+      !
+    end subroutine gridjacobian_3d
 
     function grad_xy(f,x,y) result(df)
 
