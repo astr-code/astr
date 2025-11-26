@@ -29,8 +29,11 @@ contains
               call field_view('3d')
            case ('monitor')
               call monitor_data_process()
-           case default
+           case ('udf')
               call udf_func1()
+           case default
+              print*,' !! command not defined @ run_process_entry',command
+              stop 1
         end select 
 
         ! !----------------------------------------------------------

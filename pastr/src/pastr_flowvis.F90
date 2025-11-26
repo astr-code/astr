@@ -197,7 +197,7 @@ contains
   
       real(wp) :: dro(1:2,0:im,0:jm)
       real(wp) ::var1
-      real(wp) ::rnsmin=0._wp,rnsmax=0._wp,c1=1._wp,c2=10._wp
+      real(wp) ::rnsmin=1.d10,rnsmax=0._wp,c1=1._wp,c2=10._wp
 
       integer :: i,j
       logical :: lfex
@@ -211,22 +211,30 @@ contains
       endif
 
       schl(:,:)=sqrt(dro(1,:,:)**2+dro(2,:,:)**2)
-
     
-      if(rnsmax<=1.d-10 .and. rnsmin<1.d-10) then
+      if(rnsmax<=1.d-10) then
         
         inquire(file='rnsdef.txt',exist=lfex)
         if(lfex) then
           open(12,file='rnsdef.txt')
           read(12,*)rnsmin,rnsmax
           close(12)
-          print*,'rnsmin',rnsmin,'rnsmax',rnsmax
+          print*,' >> rnsdef.txt'
         else
           rnsmax=maxval(schl)
-          rnsmin=minval(schl)
+          
+          do j=0,jm
+          do i=0,im
+            if(schl(i,j)>1.d-8) then
+              rnsmin=min(rnsmin,schl(i,j))
+            endif
+          enddo
+          enddo
+
         endif
+
       endif
-      print*,'rnsmin',rnsmin,'rnsmax',rnsmax
+      print*,' ** rnsmin:',rnsmin,'rnsmax:',rnsmax
 
       schl=c1*exp(-c2*(schl-rnsmin)/(rnsmax-rnsmin))
   
