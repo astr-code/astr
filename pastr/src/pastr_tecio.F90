@@ -68,8 +68,9 @@ module pastr_tecio
     !
     real(4),allocatable,dimension(:,:,:,:) :: v
     character(256),allocatable,dimension(:) :: vname
+    character(4) :: bname
     
-    open(newunit=unitf,file=filename,form='unformatted',access='stream')
+    ! open(newunit=unitf,file=filename,form='unformatted',access='stream')
 
     do n=1,size(block)
 
@@ -85,20 +86,21 @@ module pastr_tecio
       v(:,:,:,1) =block(n)%x(0:block(n)%im,0:block(n)%jm,0:block(n)%km,1)
       v(:,:,:,2) =block(n)%x(0:block(n)%im,0:block(n)%jm,0:block(n)%km,2)
       v(:,:,:,3) =block(n)%x(0:block(n)%im,0:block(n)%jm,0:block(n)%km,3)
-      v(:,:,:,4:)=real(block(n)%var(:,:,:,:))
+      v(:,:,:,4:)=real(block(n)%var(0:block(n)%im,0:block(n)%jm,0:block(n)%km,:))
       vname(1)='x'
       vname(2)='y'
       vname(3)='z'
       vname(4:)=block(n)%varname(:)
-      
-      call tec_data_writer(funit=unitf,varname=vname,var=v)
 
+      write(bname,'(i4.4)')n
+      
+      call tec_data_writer(filename=filename//bname//'.plt',varname=vname,var=v)
+
+      deallocate(v,vname)
     enddo
 
-    deallocate(v)
-
-    close(unitf)
-    print*,' << ',filename
+    ! close(unitf)
+    ! print*,' << ',filename
     
   end subroutine writetecbin3d_block
   
@@ -3852,6 +3854,7 @@ module pastr_tecio
     print*,' << ',filename
     !
     deallocate(var)
+
   end subroutine writetecbin3d8var
   !+-------------------------------------------------------------------+
   !| The end of the subroutine writetecbin3d.                          |
