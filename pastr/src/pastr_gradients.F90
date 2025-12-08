@@ -1,14 +1,10 @@
 module pastr_gradients
 
     use iso_fortran_env, only: wp => real64
-    use pastr_commvar, only: im,jm,km,lihomo,ljhomo,lkhomo
+    use pastr_commvar, only: im,jm,km,lihomo,ljhomo,lkhomo,nhalo
     use pastr_constdef
 
     implicit none
-
-    private
-
-    public ::  grad_xy,grad_3d
 
 contains
     

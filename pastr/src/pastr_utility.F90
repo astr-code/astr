@@ -4,7 +4,19 @@ module pastr_utility
 
     private
 
-    public :: get_cmd_argument,isnum,make_dir
+    public :: get_cmd_argument,isnum,make_dir,sort_unique,add_new_element,remove_element
+
+    interface sort_unique
+      module procedure  :: sort_unique_int
+    end interface sort_unique
+    interface add_new_element
+      module procedure  :: add_new_element_int
+      module procedure  :: add_new_element_patch
+      module procedure  :: add_new_element_linker
+    end interface add_new_element
+    interface remove_element
+      module procedure  :: remove_element_linker
+    end interface remove_element
 
 contains
 
@@ -397,5 +409,135 @@ contains
       end if
     end do
   end function is_numeric
+
+  subroutine sort_unique_int(arr)
+    !----------------------------------------------------------------------
+    ! Sort an integer array and remove duplicated elements.
+    !
+    ! Input/Output:
+    !   arr  : integer array, allocated; will be overwritten with unique sorted list
+    !   n    : integer; input = original size, output = size after removing duplicates
+    !
+    ! Usage:
+    !   integer, allocatable :: a(:)
+    !   integer :: n
+    !
+    !   a = [5,2,3,3,2,10]
+    !   n = size(a)
+    !   call sort_unique_int(a, n)
+    !   ! Now: a = [2,3,5,10], n = 4
+    !----------------------------------------------------------------------
+    implicit none
+    integer, allocatable, intent(inout) :: arr(:)
+
+    integer :: i, m, n
+    integer, allocatable :: tmp(:)
+
+    if(.not. allocated(arr)) return
+    n=size(arr)
+    if(n<2) return
+
+    ! ---- Sort array (Insertion Sort: simple & stable) ----
+    do i = 2, n
+        m = arr(i)
+        call insert_position(arr, i, m)
+    end do
+
+    ! ---- Remove duplicates ----
+    m = 1
+    do i = 2, n
+        if (arr(i) /= arr(m)) then
+            m = m + 1
+            arr(m) = arr(i)
+        end if
+    end do
+
+    ! ---- Resize array to new length ----
+    if (m < n) then
+        allocate(tmp(m))
+        tmp = arr(1:m)
+        call move_alloc(tmp, arr)
+    end if
+
+contains
+
+    ! insertion into sorted part arr(1:i-1)
+    subroutine insert_position(a, iend, value)
+        integer, intent(inout) :: a(:)
+        integer, intent(in) :: iend, value
+        integer :: j
+        j = iend - 1
+        do while (j >= 1 .and. a(j) > value)
+            a(j+1) = a(j)
+            j = j - 1
+        end do
+        a(j+1) = value
+    end subroutine insert_position
+
+  end subroutine sort_unique_int
+
+  subroutine add_new_element_int(array,element)
+      
+      integer,intent(inout),allocatable :: array(:)
+      integer,intent(in) :: element
+       
+      if(.not.allocated(array)) then
+        allocate(array(1))
+        array(1)=element
+      else
+        array=[array,element]
+      endif
+
+  end subroutine add_new_element_int
+  subroutine add_new_element_patch(array,element)
+
+      use pastr_multiblock_type, only: patch_type
+      
+      type(patch_type),intent(inout),allocatable :: array(:)
+      type(patch_type),intent(in) :: element
+       
+      if(.not.allocated(array)) then
+        allocate(array(1))
+        array(1)=element
+      else
+        array=[array,element]
+      endif
+
+  end subroutine add_new_element_patch
+  subroutine add_new_element_linker(array,element)
+
+      use pastr_multiblock_type, only: link_type
+      
+      type(link_type),intent(inout),allocatable :: array(:)
+      type(link_type),intent(in) :: element
+       
+      if(.not.allocated(array)) then
+        allocate(array(1))
+        array(1)=element
+      else
+        array=[array,element]
+      endif
+
+  end subroutine add_new_element_linker
+  
+  subroutine remove_element_linker(array,idx)
+
+    use pastr_multiblock_type, only: link_type
+
+    type(link_type),intent(inout), allocatable :: array(:)
+    integer,intent(in) :: idx
+    type(link_type),allocatable :: tmp(:)
+
+    integer :: n
+    
+    n = size(array)
+    allocate(tmp(n-1))
+    
+    if (idx > 1) tmp(1:idx-1) = array(1:idx-1)
+    if (idx < n) tmp(idx:n-1) = array(idx+1:n)
+    
+    call move_alloc(tmp, array)
+
+  end subroutine remove_element_linker
 
 end module pastr_utility

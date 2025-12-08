@@ -1,10 +1,12 @@
 module pastr_commvar
 
     use iso_fortran_env, only: wp => real64
+    use pastr_constdef
 
     implicit none
 
     integer :: im, jm, km
+    integer :: nhalo=4
 
     logical :: nondimen=.true.
     logical :: lihomo, ljhomo, lkhomo
@@ -16,6 +18,9 @@ module pastr_commvar
                 const2, const3, const4, const5, const6, const7, const8, roinf, &
                 uinf, vinf, tinf, pinf
     real(wp) :: deltat    
+    real(wp) :: lx,ly,lz
+
+    real(wp),pointer :: stencil_1(:)
 
     real(wp), allocatable, dimension(:, :, :) :: x, y, z, ro, u1, u2, u3, p, t
     real(wp), allocatable, dimension(:, :, :) :: ro_m, u1_m, u2_m, u3_m, p_m, t_m
@@ -36,46 +41,7 @@ module pastr_commvar
       procedure :: init => alloc_monitor
     end type montype
 
-    type :: conntype
-
-      integer :: nblock_local,npatch_local
-      integer :: nblock_remot,npatch_remot
-
-    end type conntype
-
-    type :: pachtype
-      
-      integer :: imin,imax,jmin,jmax,kmin,kmax
-
-      character(len=1) :: ntyp ! internal (i) or bc (n)
-      
-      type(conntype),allocatable :: connector(:)
-
-      character(len=6),allocatable :: varname(:)
-
-      real(wp),allocatable :: x(:,:,:,:),var(:,:,:,:)
-
-
-    end type pachtype
-
-    type :: bloktype
-
-      integer :: im,jm,km
-      integer :: nvar,nhalo,npatch
-
-      character(len=6) :: name
-
-      character(len=6),allocatable :: varname(:)
-
-      real(wp),allocatable :: x(:,:,:,:),var(:,:,:,:)
-
-      type(pachtype),allocatable :: patch(:)
-
-      contains
-
-      procedure :: init => alloc_block
-
-    end type bloktype
+    
 
 
 contains
@@ -91,24 +57,5 @@ contains
 
   end subroutine alloc_monitor
 
-    subroutine alloc_block(ablock)
-
-    class(bloktype),target :: ablock
-
-    ablock%nhalo=4
-
-    allocate(ablock%varname(ablock%nvar))
-    allocate(ablock%x( -ablock%nhalo:ablock%im+ablock%nhalo, &
-                       -ablock%nhalo:ablock%jm+ablock%nhalo, &
-                       -ablock%nhalo:ablock%km+ablock%nhalo,3) )
-    allocate(ablock%var(-ablock%nhalo:ablock%im+ablock%nhalo, &
-                        -ablock%nhalo:ablock%jm+ablock%nhalo, &
-                        -ablock%nhalo:ablock%km+ablock%nhalo, ablock%nvar))
-
-    allocate(ablock%patch(ablock%npatch))
-
-    print*,' ** block ',ablock%name,' initiated.'
-
-  end subroutine alloc_block
-
+  
 end module pastr_commvar

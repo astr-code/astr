@@ -518,11 +518,11 @@ contains
   subroutine xdmfwriter_3drec_block(dir,filename,block)
     
     use pastr_utility, only : make_dir
-    use pastr_commvar, only : bloktype
+    use pastr_multiblock_type, only : block_type
     
     ! arguments
     character(len=*),intent(in) :: dir,filename
-    type(bloktype),intent(in),dimension(:) :: block
+    type(block_type),intent(in),dimension(:) :: block
     !
     real(4),allocatable :: bufr4(:,:,:)
     !

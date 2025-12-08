@@ -101,7 +101,7 @@ contains
 
     subroutine read_grid_3d(x,y,z)
       
-      use pastr_commvar, only: gridfile,im,jm,km
+      use pastr_commvar, only: gridfile,im,jm,km,lx,ly,lz
       use pastr_h5io
 
       real(wp),intent(inout),allocatable :: x(:,:,:),y(:,:,:),z(:,:,:)
@@ -109,6 +109,10 @@ contains
       call H5ReadArray(x,im,jm,km,'x',trim(gridfile))
       call H5ReadArray(y,im,jm,km,'y',trim(gridfile))
       call H5ReadArray(z,im,jm,km,'z',trim(gridfile))
+
+      lx=x(im,0,0)-x(0,0,0)
+      ly=y(0,jm,0)-y(0,0,0)
+      lz=z(0,0,km)-z(0,0,0)
 
     end subroutine read_grid_3d
 
