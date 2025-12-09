@@ -261,8 +261,8 @@ contains
   end subroutine xdmfwriter_3dbox
   
   subroutine xdmfwriter_3drec(dir,filename,x,y,z,var1,var1name,var2,var2name, &
-                                               var3,var3name,var4,var4name, &
-                                               var5,var5name,var6,var6name)
+                                                 var3,var3name,var4,var4name, &
+                                                 var5,var5name,var6,var6name)
     !
     ! arguments
     character(len=*),intent(in) :: dir,filename
@@ -284,26 +284,26 @@ contains
     jm=size(y)
     km=size(z)
 
-    inquire(file=dir//'/grid-x.bin',exist=lfex)
+    inquire(file=dir//filename//'-grid-x.bin',exist=lfex)
     if(.not. lfex) then
-      open(17,file=dir//'/grid-x.bin',access="stream")
+      open(17,file=dir//filename//'-grid-x.bin',access="stream")
       write(17)sngl(x)
       close(17)
-      print*,' << ',dir//'/grid-x.bin'
+      print*,' << ',dir//filename//'-grid-x.bin'
     endif
-    inquire(file=dir//'/grid-y.bin',exist=lfex)
+    inquire(file=dir//filename//'-grid-y.bin',exist=lfex)
     if(.not. lfex) then
-      open(17,file=dir//'/grid-y.bin',access="stream")
+      open(17,file=dir//filename//'-grid-y.bin',access="stream")
       write(17)sngl(y)
       close(17)
-      print*,' << ',dir//'/grid-y.bin'
+      print*,' << ',dir//filename//'-grid-y.bin'
     endif
-    inquire(file=dir//'/grid-z.bin',exist=lfex)
+    inquire(file=dir//filename//'-grid-z.bin',exist=lfex)
     if(.not. lfex) then
-      open(17,file=dir//'/grid-z.bin',access="stream")
+      open(17,file=dir//filename//'-grid-z.bin',access="stream")
       write(17)sngl(z)
       close(17)
-      print*,' << ',dir//'/grid-z.bin'
+      print*,' << ',dir//filename//'-grid-z.bin'
     endif
 
     !
@@ -322,11 +322,11 @@ contains
                               km,jm,im,'"> </Topology>'
     write(fh,'(A)')'    <Geometry name="geo" Type="VXVYVZ">'
     write(fh,'(A)')'      <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0" '
-    write(fh,'(A,1X,I0,A)') '                Dimensions=" ',im,'">grid-x.bin  </DataItem>'
+    write(fh,'(A,1X,I0,3A)') '                Dimensions=" ',im,'"> '//filename//'-grid-x.bin  </DataItem>'
     write(fh,'(A)')'      <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0" '
-    write(fh,'(A,1X,I0,A)') '                Dimensions=" ',jm,'">grid-y.bin  </DataItem>'
+    write(fh,'(A,1X,I0,3A)') '                Dimensions=" ',jm,'"> '//filename//'-grid-y.bin  </DataItem>'
     write(fh,'(A)')'      <DataItem Format="Binary" DataType="Float" Precision="4" Endian="little" Seek="0" '
-    write(fh,'(A,1X,I0,A)') '                Dimensions=" ',km,'">grid-z.bin  </DataItem>'
+    write(fh,'(A,1X,I0,3A)') '                Dimensions=" ',km,'"> '//filename//'-grid-z.bin  </DataItem>'
     write(fh,'(A)')'    </Geometry>'
     write(fh,*)
     !

@@ -1,10 +1,13 @@
 module pastr_utility
 
+    use iso_fortran_env, only: wp => real64
+
     implicit none
 
     private
 
     public :: get_cmd_argument,isnum,make_dir,sort_unique,add_new_element,remove_element
+    public :: cube_root
 
     interface sort_unique
       module procedure  :: sort_unique_int
@@ -539,5 +542,23 @@ contains
     call move_alloc(tmp, array)
 
   end subroutine remove_element_linker
+
+  !+-------------------------------------------------------------------+
+  !| The subroutine is to calculate cube root of a real8 variable.     |
+  !+-------------------------------------------------------------------+
+  real(wp) function cube_root (original_value)
+    !
+     real(wp),intent(in) :: original_value
+     real(wp),parameter :: cube_root_power = 1._wp/3._wp
+     if(original_value>=0._wp) then
+       cube_root=original_value**cube_root_power
+     else
+       cube_root=-((-original_value)**cube_root_power)
+     endif
+     !
+  end function cube_root
+  !+-------------------------------------------------------------------+
+  !| The end of the function cube_root.                                |
+  !+-------------------------------------------------------------------+
 
 end module pastr_utility

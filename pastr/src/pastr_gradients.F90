@@ -132,13 +132,13 @@ contains
       !$OMP DO
       do j=0,jm
       do i=0,im
-        dx(3,i,j,:)=dfdk(x(i,j,:))
-        dy(3,i,j,:)=dfdk(y(i,j,:))
-        dz(3,i,j,:)=dfdk(z(i,j,:))
+        dx(3,i,j,:)=dfdk(x(i,j,:),geom=.true.)
+        dy(3,i,j,:)=dfdk(y(i,j,:),geom=.true.)
+        dz(3,i,j,:)=dfdk(z(i,j,:),geom=.true.)
       end do
       end do
       !$OMP END DO
-      !
+
       !$OMP DO
       do k=0,km
       do j=0,jm
@@ -177,7 +177,7 @@ contains
       !$OMP END DO
       !
       !$OMP END PARALLEL
-      !
+
       deallocate(dx,dy,dz)
       !
       print*, ' ** Grid Jacobian matrix is calculated'
@@ -316,12 +316,25 @@ contains
 
     end function dfdj
     !
-    function dfdk(var)
+    function dfdk(var,geom)
 
       real(wp) ,allocatable :: dfdk(:)
       real(wp),intent(in) :: var(0:km)
+      logical,intent(in),optional :: geom
+
+      logical :: lgeom
+
+      if(present(geom)) then
+        lgeom=geom
+      else
+        lgeom=.false.
+      endif
       
-      dfdk =diff6ec(var,km,lkhomo)
+      if(lgeom) then
+        dfdk =diff6ec_geom(var,km,lkhomo)
+      else
+        dfdk =diff6ec(var,km,lkhomo)
+      endif
 
     end function dfdk
 
@@ -384,6 +397,60 @@ contains
                   num1d60*(vin(i+3)-vin(i-3))
       enddo
     end function diff6ec
+    !+-------------------------------------------------------------------+
+    !| The end of the function diff6ec.                                  |
+    !+-------------------------------------------------------------------+
+    function diff6ec_geom(vin,dim,homo) result(vout)
+      
+      integer,intent(in) :: dim
+      logical,intent(in) :: homo
+      real(8),intent(in) :: vin(0:dim)
+      real(8) :: vout(0:dim)
+      
+      ! local data
+      integer :: i
+
+      if(homo) then
+
+        vout(0)=0.75d0 *((vin(1)-vin(0))-(vin(dim-1)-vin(dim)))-           &
+                0.15d0 *((vin(2)-vin(0))-(vin(dim-2)-vin(dim)))+           &
+                num1d60*((vin(3)-vin(0))-(vin(dim-3)-vin(dim)))     
+        vout(1)=0.75d0 *((vin(2)-vin(0))-(vin(0)-vin(0)))    -           &
+                0.15d0 *((vin(3)-vin(0))-(vin(dim-1)-vin(dim)))+           &
+                num1d60*((vin(4)-vin(0))-(vin(dim-2)-vin(dim)))       
+        vout(2)=0.75d0 *((vin(3)-vin(0))-(vin(1)-vin(0)))    -           &
+                0.15d0 *((vin(4)-vin(0))-(vin(0)-vin(0)))    +           &
+                num1d60*((vin(5)-vin(0))-(vin(dim-1)-vin(dim)))
+
+        vout(dim-2) =0.75d0 *(vin(dim-1)-vin(dim-3))-  &
+                     0.15d0 *(vin(dim)  -vin(dim-4))+  &
+                     num1d60*(vin(1)-vin(0)    -(vin(dim-5)-vin(dim)))
+        vout(dim-1)=0.75d0 *(vin(dim)-vin(dim-2))-     &
+                    0.15d0 *(vin(1)-vin(0)  +vin(dim)-vin(dim-3))+     &
+                    num1d60*(vin(2)-vin(0)  +vin(dim)-vin(dim-4))
+        vout(dim)  =0.75d0 *(vin(1)-vin(0)  +vin(dim)-vin(dim-1))-       &
+                    0.15d0 *(vin(2)-vin(0)  +vin(dim)-vin(dim-2))+       &
+                    num1d60*(vin(3)-vin(0)  +vin(dim)-vin(dim-3))
+      else
+
+        vout(0)=-0.5d0*vin(2)+2.d0*vin(1)-1.5d0*vin(0)
+        vout(1)=0.5d0*(vin(2)-vin(0))
+        vout(2)=num2d3*(vin(3)-vin(1))-num1d12*(vin(4)-vin(0))
+
+        vout(dim-2) =num2d3*(vin(dim-1)-vin(dim-3))-      &
+                     num1d12*(vin(dim)  -vin(dim-4))
+        vout(dim-1)=0.5d0*(vin(dim)-vin(dim-2))
+        vout(dim)  =0.5d0*vin(dim-2)-2.d0*vin(dim-1)+1.5d0*vin(dim)
+
+      endif
+
+      do i=3,dim-3
+        vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))-            &
+                  0.15d0 *(vin(i+2)-vin(i-2))+            &
+                  num1d60*(vin(i+3)-vin(i-3))
+      enddo
+
+    end function diff6ec_geom
     !+-------------------------------------------------------------------+
     !| The end of the function diff6ec.                                  |
     !+-------------------------------------------------------------------+

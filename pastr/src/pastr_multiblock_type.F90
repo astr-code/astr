@@ -65,6 +65,9 @@ module pastr_multiblock_type
 
       character(len=1),allocatable :: node_state(:,:,:)
       real(wp),allocatable :: x(:,:,:,:),var(:,:,:,:)
+      real(wp),allocatable :: dxi(:,:,:,:,:)
+      real(wp),allocatable :: dvel(:,:,:,:,:)
+      real(wp),allocatable :: qcriterion(:,:,:)
 
       type(patch_type),allocatable :: patch(:)
 
@@ -152,7 +155,7 @@ subroutine alloc_block(ablock)
 
     class(patch_type),target :: apatch
 
-    apatch%nvar =2
+    apatch%nvar = 4
 
     if(.not.allocated(apatch%varname)) allocate(apatch%varname(apatch%nvar))
     if(.not.allocated(apatch%x)) allocate(apatch%x( apatch%imin:apatch%imax, &
@@ -234,7 +237,7 @@ subroutine alloc_block(ablock)
       apatch%k_recv_max=apatch%kmax+nhalo
     endif
 
-    apatch%nvarmax=3
+    apatch%nvarmax=4
     allocate(apatch%dsend(apatch%i_send_min:apatch%i_send_max, &
                           apatch%j_send_min:apatch%j_send_max, &
                           apatch%k_send_min:apatch%k_send_max, 1:apatch%nvarmax))
@@ -640,62 +643,78 @@ subroutine alloc_block(ablock)
                              '-'//node_state(n)//'-'//               &
                  node_state(n+1)//node_state(n+2)//node_state(n+3)
 
-          allocate(asolver%s(n)%a(1:1))
-          ! asolver%s(n)%a(-3) =-num1d60
-          ! asolver%s(n)%a(-2) = 0.15d0
-          ! asolver%s(n)%a(-1) =-0.75d0
-
-          ! asolver%s(n)%a(0)  = 0.d0
-
+        allocate(asolver%s(n)%a(-3:3))
+        asolver%s(n)%a=0.d0
+        
+        if(cstencil(1:9)=='fff-f-fff' .or. &
+           cstencil(1:9)=='bff-f-fff' .or. &
+           cstencil(1:9)=='fff-f-ffb' .or. &
+           cstencil(1:9)=='bff-f-ffb' ) then
+          ! sixth-order central scheme
+          asolver%s(n)%a(-3) =-num1d60
+          asolver%s(n)%a(-2) = 0.15d0
+          asolver%s(n)%a(-1) =-0.75d0
+          
           asolver%s(n)%a( 1) = 0.75d0
-          ! asolver%s(n)%a( 2) =-0.15d0
-          ! asolver%s(n)%a( 3) = num1d60
+          asolver%s(n)%a( 2) =-0.15d0
+          asolver%s(n)%a( 3) = num1d60
+        elseif(cstencil(2:8)=='ff-f-ff' .or. &
+               cstencil(2:8)=='bf-f-ff' .or. &
+               cstencil(2:8)=='ff-f-fb' .or. &
+               cstencil(2:8)=='bf-f-fb' ) then
+          ! fourth-order central scheme
+          asolver%s(n)%a(-2) = num1d12
+          asolver%s(n)%a(-1) =-num2d3
 
-        ! asolver%a(:,n)=0.d0
-        ! if(cstencil(1:9)=='fff-f-fff' .or. &
-        !    cstencil(1:9)=='bff-f-fff' .or. &
-        !    cstencil(1:9)=='fff-f-ffb' .or. &
-        !    cstencil(1:9)=='bff-f-ffb') then
-        !   ! sixth-order central scheme
-        !   asolver%a(-3,n) =-num1d60
-        !   asolver%a(-2,n) = 0.15d0
-        !   asolver%a(-1,n) =-0.75d0
+          asolver%s(n)%a( 1) = num2d3
+          asolver%s(n)%a( 2) =-num1d12
+        elseif(cstencil(3:7)=='f-f-f' .or. &
+               cstencil(3:7)=='b-f-f' .or. &
+               cstencil(3:7)=='f-f-b' .or. &
+               cstencil(3:7)=='b-f-b'  ) then
+         ! second-order central scheme
+          asolver%s(n)%a(-1) =-0.5d0
+
+          asolver%s(n)%a( 1) = 0.5d0
+        elseif(cstencil(4:7)=='-f-f' .or. &
+               cstencil(4:7)=='-b-f'  ) then
+          ! second-order biased scheme, i- direction
+          asolver%s(n)%a( 0) =-1.5d0
+          asolver%s(n)%a( 1) = 2.d0
+          asolver%s(n)%a( 2) =-0.5d0
+        elseif(cstencil(3:6)=='f-f-' .or. &
+               cstencil(3:6)=='f-b-' ) then
+          ! second-order biased scheme, i+ direction
+          asolver%s(n)%a(-2) =+0.5d0
+          asolver%s(n)%a(-1) =-2.d0
+          asolver%s(n)%a( 0) = 1.5d0
+        elseif(cstencil(1:9)=='bbb-b-bbb') then
+          asolver%s(n)%a(-3) =-num1d60
+          asolver%s(n)%a(-2) = 0.15d0
+          asolver%s(n)%a(-1) =-0.75d0
           
-        !   asolver%a( 1,n) = 0.75d0
-        !   asolver%a( 2,n) =-0.15d0
-        !   asolver%a( 3,n) = num1d60
-        ! elseif(cstencil(2:8)=='ff-f-ff' .or. &
-        !        cstencil(2:8)=='bf-f-ff' .or. &
-        !        cstencil(2:8)=='ff-f-fb' .or. &
-        !        cstencil(2:8)=='bf-f-fb') then
-        !   ! fourth-order central scheme
-        !   asolver%a(-2,n) = num1d12
-        !   asolver%a(-1,n) =-num2d3
+          asolver%s(n)%a( 1) = 0.75d0
+          asolver%s(n)%a( 2) =-0.15d0
+          asolver%s(n)%a( 3) = num1d60
+        elseif(cstencil(2:8)=='bb-b-bb') then
+          asolver%s(n)%a(-2) = num1d12
+          asolver%s(n)%a(-1) =-num2d3
 
-        !   asolver%a( 1,n) = num2d3
-        !   asolver%a( 2,n) =-num1d12
-        ! elseif(cstencil(3:7)=='f-f-f' .or. &
-        !        cstencil(3:7)=='b-f-f' .or. &
-        !        cstencil(3:7)=='f-f-b' .or. &
-        !        cstencil(3:7)=='b-f-b') then
-        !  ! second-order central scheme
-        !   asolver%a(-1,n) =-0.5d0
+          asolver%s(n)%a( 1) = num2d3
+          asolver%s(n)%a( 2) =-num1d12
+        elseif(cstencil(3:7)=='b-b-b') then
+          asolver%s(n)%a(-1) =-0.5d0
 
-        !   asolver%a( 1,n) = 0.5d0
-        ! elseif(cstencil(5:7)=='f-f' .or. &
-        !        cstencil(5:7)=='b-f') then
-        !   ! second-order biased scheme, i- direction
-        !   asolver%a( 0,n) =-1.5d0
-        !   asolver%a( 1,n) = 2.d0
-        !   asolver%a( 2,n) =-0.5d0
-        ! elseif(cstencil(3:5)=='f-f' .or. &
-        !        cstencil(3:5)=='f-b') then
-        !   ! second-order biased scheme, i+ direction
-        !   asolver%a(-2,n) =+0.5d0
-        !   asolver%a(-1,n) =-2.d0
-        !   asolver%a( 0,n) = 1.5d0
-          
-        ! endif
+          asolver%s(n)%a( 1) = 0.5d0
+        elseif(cstencil(4:7)=='-b-b') then
+          asolver%s(n)%a( 0) =-1.5d0
+          asolver%s(n)%a( 1) = 2.d0
+          asolver%s(n)%a( 2) =-0.5d0
+        elseif(cstencil(3:6)=='b-b-') then
+          asolver%s(n)%a(-2) =+0.5d0
+          asolver%s(n)%a(-1) =-2.d0
+          asolver%s(n)%a( 0) = 1.5d0
+        endif
 
       enddo
 
@@ -723,7 +742,7 @@ subroutine alloc_block(ablock)
       class(fdm_type),target :: asolver
       integer :: n
 
-      do n=1,size(asolver%s)
+      do n=0,size(asolver%s)-1
         print*,asolver%s(n)%a(:)
       enddo
 

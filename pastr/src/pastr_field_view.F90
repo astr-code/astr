@@ -258,7 +258,8 @@ contains
 
           call H5ReadArray(r8dat,im,jm,km,trim(nam_var_in(m)),trim(file2read))
 
-          dat_var_in(:,:,:,m)=real(r8dat)
+          dat_var_in(:,:,:,m)=r8dat
+
         enddo
 
         dat_var_out=dat_out_cal(dat_var_in,nam_var_in,nam_var_out,x,y,z)

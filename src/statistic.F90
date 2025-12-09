@@ -162,9 +162,12 @@ module statistic
     !
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
+    integer,save :: nstep_save=0
     !
     if(present(timerept) .and. timerept) time_beg=ptime() 
-    !
+    
+    if(nstep<=nstep_save) return
+
     if(nsamples==0) then
       !
       if(.not. lmeanallocated) call allomeanflow
@@ -320,7 +323,9 @@ module statistic
     enddo
     !
     nsamples=nsamples+1
-    !
+    
+    nstep_save=nstep
+
     liosta=.true.
     !
     if(lio) print*,' ** meanflow calculated, nsamples=',nsamples,'nstep=',nstep

@@ -972,7 +972,7 @@ module readwrite
   subroutine writemon
     !
     use commvar, only: nmonitor,imon,nstep,time,pinf,deltat
-    use commarray, only : x,rho,vel,prs,tmp,dvel
+    use commarray, only : x,rho,vel,prs,tmp,dvel,dtmp
     !
     ! local data
     integer :: n,i,j,k,ios,ns
@@ -1004,7 +1004,7 @@ module readwrite
           fh(n)=get_unit()
           !
           inquire(file=trim(filename), exist=lexist)
-          open(fh(n),file=trim(filename),access='direct',recl=8*8)
+          open(fh(n),file=trim(filename),access='direct',recl=8*11)
           !
           if(nstep==0 .or. (.not.lexist)) then
             ! create new monitor files
@@ -1061,7 +1061,8 @@ module readwrite
         !     dvel(i,j,k,1,:),dvel(i,j,k,2,:),dvel(i,j,k,3,:)
         record(n)=record(n)+1
         ! write(fh(n),rec=record(n))nstep,time,prs(i,j,k),dvel(i,j,k,1,2)
-        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,1:3),prs(i,j,k),dvel(i,j,k,1,2),dvel(i,j,k,2,1)
+        write(fh(n),rec=record(n))nstep,time,vel(i,j,k,1:3),tmp(i,j,k),prs(i,j,k), &
+                                  dvel(i,j,k,1,2),dvel(i,j,k,2,1),dtmp(i,j,k,1:2)
         ! write(*,*)nstep,time,vel(i,j,k,:),rho(i,j,k),prs(i,j,k), &
         !                        tmp(i,j,k),dvel(i,j,k,:,:)
       enddo
@@ -1740,22 +1741,30 @@ module readwrite
     !
     if(present(timerept) .and. timerept) time_beg=ptime()
     !
-    if(lwsequ .and. nstep==nxtwsequ) then
-      !
+    if(lwsequ) then
+      if(lio) print*,' ** filenumb=',filenumb
       if(nstep/=0) filenumb=filenumb+1
       !
       write(stepname,'(i4.4)')filenumb
-      !
+      
       outfilename='outdat/flowfield'//stepname//'.'//iomode//'5'
       outauxiname='outdat/auxiliary'//stepname//'.'//iomode//'5'
-      !
+      
     else
       stepname=''
       outfilename='outdat/flowfield.'//iomode//'5'
       outauxiname='outdat/auxiliary.'//iomode//'5'
     endif
     !
+    if(lio) then
+      call bakupfile(trim(outfilename))
+      call bakupfile(trim(outauxiname))
+    endif
+
+    if(lio) print*,' ** filenumb=',filenumb,outfilename
+
     call write_io_tree(trim(outfilename))
+
     ! outfilename='outdat/flowfield.h5'
     ! call h5io_init(trim(outfilename),mode='write')
     ! !
@@ -1815,6 +1824,7 @@ module readwrite
     !
     if(lio) then
       !
+
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
       call h5srite(varname='time',var=time,filename=trim(outfilename))
       !
@@ -2346,7 +2356,7 @@ module readwrite
   !| -------------                                                     |
   !| 12-02-2021  | Created by J. Fang @ Warrington                     |
   !+-------------------------------------------------------------------+
-  subroutine writechkpt(stepsequ,timerept)
+  subroutine writechkpt(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
                        km,lwsequ,lavg,force,numq,imbroot,limmbou,      &
@@ -2360,7 +2370,6 @@ module readwrite
     !
     !
     ! arguments
-    integer,intent(in) :: stepsequ
     logical,intent(in),optional :: timerept
     !
     ! local data
@@ -2371,89 +2380,15 @@ module readwrite
     logical :: lfopen
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
-    !
+    integer,save :: nstep_save=0
+    
+    if(nstep<=nstep_save) return
+
     if(present(timerept) .and. timerept) time_beg=ptime() 
     !
-    ! if(lwsequ) then
-    !   write(stepname,'(i4.4)')filenumb
-    !   filenumb=filenumb+1
-    !   !
-    !   outfilename='outdat/flowfield'//stepname//'.h5'
-    ! else
-    !   stepname=''
-    !   outfilename='outdat/flowfield.h5'
-    ! endif
-    !
-    ! outfilename='outdat/flowfield'//mpirankname
-    ! open(21,file=trim(outfilename),form='unformatted')
-    ! write(21)nstep,time
-    ! write(21)rho,vel,prs,tmp
-    ! write(21)spc
-    ! close(21)
-    ! if(lio) print*,' << ',trim(outfilename)
-    ! !
-    ! outfilename='outdat/qdata'//mpirankname
-    ! open(21,file=trim(outfilename),form='unformatted')
-    ! write(21)nstep
-    ! write(21)q
-    ! close(21)
-    ! if(lio) print*,' << ',trim(outfilename)
-    ! !
-    ! outfilename='outdat/auxiliary'//mpirankname
-    ! open(21,file=trim(outfilename),form='unformatted')
-    ! write(21)nstep,filenumb
-    ! write(21)massflux,massflux_target
-    ! write(21)force
-    ! close(21)
-    ! if(lio) print*,' << ',trim(outfilename)
-    !
-    if(lio.and.(.not.lwsequ)) call bakupfile('outdat/auxiliary.h5')
-    if(lio.and.(.not.lwsequ)) call bakupfile('outdat/flowfield.'//iomode//'5')
-    !
     call writeflfed()
-    ! call writeflfed_2d()
-    !
-    ! call h5io_init('outdat/qdata.h5',mode='write')
-    ! do jsp=1,numq
-    !    write(qname,'(i2.2)')jsp
-    !   call h5write(varname='q'//qname,var=q(0:im,0:jm,0:km,jsp))
-    ! enddo
-    ! call h5io_end
-    !
-    ! if(lio) then
-    !   !
-    !   call h5srite(varname='nstep',var=nstep,                          &
-    !                       filename='outdat/auxiliary.h5',newfile=.true.)
-    !   call h5srite(varname='filenumb',var=filenumb,                    &
-    !                                      filename='outdat/auxiliary.h5')
-    !   call h5srite(varname='fnumslic',var=fnumslic,                    &
-    !                                      filename='outdat/auxiliary.h5')
-    !   call h5srite(varname='ninflowslice',var=ninflowslice,            &
-    !                                      filename='outdat/auxiliary.h5')
-    !   call h5srite(varname='massflux',var=massflux,                    &
-    !                                      filename='outdat/auxiliary.h5')
-    !   call h5srite(varname='massflux_target',var=massflux_target,      &
-    !                                      filename='outdat/auxiliary.h5')
-    !   call h5srite(varname='force',var=force,                          &
-    !                                      filename='outdat/auxiliary.h5')
-    !   call h5srite(varname='nsamples',var=nsamples,                    &
-    !                                      filename='outdat/auxiliary.h5')
-    ! endif
-    !
-    if(limmbou .and. mpirank==imbroot) then
-      ! call imboundarydata 
-      !
-      ! call writecylimmbou
-      !
-    endif
-    !
-    ! if(irk==0 .and. jrk==jrkm) then
-    !     print*,'------------------------------------'
-    !     print*,x(0,jm,0,1),prs(0,jm,0)
-    !     print*,'------------------------------------'
-    ! endif
-    !
-    if(liosta) then
+
+    if(lavg .and. liosta) then
       !
       call writemeanflow
       !
@@ -2475,7 +2410,9 @@ module readwrite
     enddo
     !
     nxtchkpt=nstep+feqchkpt
-    !
+
+    nstep_save=nstep
+
     if(present(timerept) .and. timerept) then
       !
       subtime=subtime+ptime()-time_beg
@@ -2485,7 +2422,7 @@ module readwrite
                                               message='write checkpoint')
       !
     endif
-    !
+    
     return
     !
   end subroutine writechkpt
@@ -2515,10 +2452,13 @@ module readwrite
     character(len=5) :: stepname
     character(len=14) :: filename
     integer :: i,j,k
+    integer,save :: nstep_save=0
     real(8) :: time_beg
     !
     if(present(subtime)) time_beg=ptime() 
-    !
+    
+    if(nstep<=nstep_save) return
+
     if(irk==irk_islice) then
       !
       i=islice-ig0
@@ -2576,21 +2516,21 @@ module readwrite
       call h5io_init(filename='jslice/'//filename,mode='write',        &
                                                         comm=mpi_jslice)
       ! call h5write(varname='ro',var=rho(0:im,j,0:km),  dir='j')
-      ! call h5write(varname='u1',var=vel(0:im,j,0:km,1),dir='j')
-      ! call h5write(varname='u2',var=vel(0:im,j,0:km,2),dir='j')
-      ! call h5write(varname='u3',var=vel(0:im,j,0:km,3),dir='j')
+      call h5write(varname='u1',var=vel(0:im,j,0:km,1),dir='j')
+      call h5write(varname='u2',var=vel(0:im,j,0:km,2),dir='j')
+      call h5write(varname='u3',var=vel(0:im,j,0:km,3),dir='j')
       call h5write(varname='p', var=prs(0:im,j,0:km)  ,dir='j')
-      ! call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
+      call h5write(varname='t', var=tmp(0:im,j,0:km)  ,dir='j')
       !
-      ! call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='j')
+      call h5write(varname='dudx',var=dvel(0:im,j,0:km,1,1),dir='j')
       call h5write(varname='dudy',var=dvel(0:im,j,0:km,1,2),dir='j')
-      ! call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='j')
-      ! call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='j')
+      call h5write(varname='dudz',var=dvel(0:im,j,0:km,1,3),dir='j')
+      call h5write(varname='dvdx',var=dvel(0:im,j,0:km,2,1),dir='j')
       call h5write(varname='dvdy',var=dvel(0:im,j,0:km,2,2),dir='j')
-      ! call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='j')
-      ! call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='j')
+      call h5write(varname='dvdz',var=dvel(0:im,j,0:km,2,3),dir='j')
+      call h5write(varname='dwdx',var=dvel(0:im,j,0:km,3,1),dir='j')
       call h5write(varname='dwdy',var=dvel(0:im,j,0:km,3,2),dir='j')
-      ! call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='j')
+      call h5write(varname='dwdz',var=dvel(0:im,j,0:km,3,3),dir='j')
       call h5write(varname='dtdy',var=dtmp(0:im,j,0:km,2),dir='j')
       !
       call h5io_end
@@ -2644,7 +2584,9 @@ module readwrite
     endif
     !
     fnumslic=fnumslic+1
-    !
+    
+    nstep_save=nstep
+
     if(present(subtime)) subtime=subtime+ptime()-time_beg 
     !
     return

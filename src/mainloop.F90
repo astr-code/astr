@@ -617,7 +617,8 @@ module mainloop
       call writemon
       !
       if(lavg) then
-        if(nstep==nxtavg) then
+        ! if(nstep==nxtavg) then
+        if(mod(nstep,feqavg)==0) then
           call meanflowcal(timerept=ltimrpt)
           !
           nxtavg=nstep+feqavg
@@ -644,17 +645,10 @@ module mainloop
       ! if(nstep==nxtchkpt) then
       if(mod(nstep,feqchkpt)==0) then
         !
-        ! the checkpoint and flowfield may be writen in the same time
-        call writechkpt(nxtwsequ,timerept=.true.)
+        ! the checkpoint and flowfield will be writen in the same time
+        call writechkpt()
         !
         call udf_write
-        !
-      endif
-      !
-      ! if(lwsequ .and. nstep==nxtwsequ) then
-      if(lwsequ .and. mod(nstep,nxtwsequ)==0) then
-        !
-        call writeflfed(timerept=.true.)
         !
       endif
       !
@@ -830,7 +824,7 @@ module mainloop
           dat_a%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
         endif
         !
-        if(lio) write(*,'(A,I0)')'  ** data backed at nstep= ',nstep
+        if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_a at nstep= ',nstep,'filenumb= ',filenumb
         !
         datpnt='b'
         !
@@ -853,7 +847,7 @@ module mainloop
           dat_b%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
         endif
         !
-        if(lio) write(*,'(A,I0)')'  ** data backed at nstep= ',nstep
+        if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_b at nstep= ',nstep,'filenumb= ',filenumb
         !
         datpnt='a'
         !
@@ -870,7 +864,7 @@ module mainloop
       elseif(datpnt=='a') then
         !
         nstep       =dat_a%nstep       
-        filenumb    =dat_a%filenumb    
+        ! filenumb    =dat_a%filenumb    
         fnumslic    =dat_a%fnumslic    
         ninflowslice=dat_a%ninflowslice
         time        =dat_a%time        
@@ -882,14 +876,14 @@ module mainloop
         !
         q(0:im,0:jm,0:km,1:numq)=dat_a%q(0:im,0:jm,0:km,1:numq)
         !
-        if(lio) write(*,'(A,I0,A)')'  ** data recovered to nstep= ',nstep,' from dat_a'
+        if(lio) write(*,'(2(A,I0))')'  ** data recovered to nstep= ',nstep,' from dat_a filenumb= ',filenumb
         !
         datpnt='b'
         !
       elseif(datpnt=='b') then
         !
         nstep       =dat_b%nstep       
-        filenumb    =dat_b%filenumb    
+        ! filenumb    =dat_b%filenumb    
         fnumslic    =dat_b%fnumslic    
         ninflowslice=dat_b%ninflowslice
         time        =dat_b%time        
@@ -901,7 +895,7 @@ module mainloop
         !
         q(0:im,0:jm,0:km,1:numq)=dat_b%q(0:im,0:jm,0:km,1:numq)
         !
-        if(lio) write(*,'(A,I0,A)')'  ** data recovered to nstep= ',nstep,' from dat_b'
+        if(lio) write(*,'(2(A,I0))')'  ** data recovered to nstep= ',nstep,' from dat_b filenumb= ',filenumb
         !
         datpnt='a'
         !
