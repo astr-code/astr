@@ -42,12 +42,15 @@ module mainloop
     use commcal,  only: cflcal
     use ibmethod, only: ibforce
     use userdefine,only: udf_eom_set
+    use parallel, only : bcast
     !
     ! local data
     real(8) :: time_beg,time_next_step
-    integer :: hours,minus,secod
+    integer :: hours,minus,secod,n,i,ios
     logical,save :: firstcall = .true.
+    logical :: lfex
     integer,dimension(8) :: value
+    integer,allocatable :: idata(:,:)
     real(8) :: time_total,time_dowhile,time_per_loop,time_save
     !
     time_start=ptime()
@@ -60,6 +63,7 @@ module mainloop
     if(firstcall) then
       !
       crinod=.false.
+      
       firstcall=.false.
       !
     endif
@@ -77,7 +81,6 @@ module mainloop
     !                           message='init file')
     
     time_beg=ptime()
-
 
     do while(nstep<=maxstep)
 
@@ -602,14 +605,15 @@ module mainloop
     !
     if(firstcall) then
       nxtavg=nstep+feqavg
-      firstcall = .false.
     endif
     !
-    call statcal(timerept=ltimrpt)
-    !
-    call statout(time_start)
-    !
-    call udf_stalist
+    if(.not. firstcall) then
+      call statcal(timerept=ltimrpt)
+      !
+      call statout(time_start)
+      !
+      call udf_stalist
+    endif
     !
     if(nstep==0 .or. loop_counter.ne.0) then
       ! the first step after reading ehecking out doesn't need to do this
@@ -628,32 +632,42 @@ module mainloop
         liosta=.false.
         nxtavg=nstep+feqavg
       endif
-      !
-      if(lwslic .and. mod(nstep,feqslice)==0) then
-        call writeslice(ctime(23))
+      
+      if(.not. firstcall) then
+        if(lwslic .and. mod(nstep,feqslice)==0) then
+          call writeslice(ctime(23))
+        endif
       endif
-      !
+
     endif
     !
-    ! time to write checkpoint
-    if(iomode == 'n') then
-      !
-      continue
-      !
-    else
-      !
-      ! if(nstep==nxtchkpt) then
-      if(mod(nstep,feqchkpt)==0) then
+    if(.not. firstcall) then
+      
+      ! time to write checkpoint
+      if(iomode == 'n') then
         !
-        ! the checkpoint and flowfield will be writen in the same time
-        call writechkpt()
+        continue
         !
-        call udf_write
+      else
+        !
+        ! if(nstep==nxtchkpt) then
+        if(mod(nstep,feqchkpt)==0) then
+          !
+          ! the checkpoint and flowfield will be writen in the same time
+          call writechkpt()
+          !
+          call udf_write
+          !
+        endif
         !
       endif
-      !
+
     endif
     !
+    if(firstcall) then
+      firstcall = .false.
+    endif
+
     return
     !
   end subroutine rkfirst
@@ -748,22 +762,25 @@ module mainloop
         call mpistop
       endif
       !
-    elseif(lcracon) then
-      !
-      ! if not crash, backup data
-      !
-      if(nstep==nxtbakup) then
+    else
+
+      if(lcracon) then
         !
-        call databakup('backup')
+        ! if not crash, backup data
         !
-        nxtbakup=nstep+feqbakup
-        !
-        feqbakup=feqbakup*2
-        !
-        feqbakup=min(500,feqbakup) ! the max frequency of back is set to 500
-        !
+        if(nstep==nxtbakup) then
+          !
+          call databakup('backup')
+          !
+          nxtbakup=nstep+feqbakup
+          !
+          feqbakup=feqbakup*2
+          !
+          feqbakup=min(500,feqbakup) ! the max frequency of back is set to 500
+          !
+        endif
       endif
-      !
+
     endif
     !
     return
@@ -820,9 +837,9 @@ module mainloop
         !
         if(.not. allocated(dat_a%q)) then
           allocate(dat_a%q(0:im,0:jm,0:km,1:numq))
-          !
-          dat_a%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
         endif
+
+        dat_a%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
         !
         if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_a at nstep= ',nstep,'filenumb= ',filenumb
         !
@@ -843,9 +860,8 @@ module mainloop
         !
         if(.not. allocated(dat_b%q)) then
           allocate(dat_b%q(0:im,0:jm,0:km,1:numq))
-          !
-          dat_b%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
         endif
+        dat_b%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
         !
         if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_b at nstep= ',nstep,'filenumb= ',filenumb
         !

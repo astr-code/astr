@@ -19,6 +19,7 @@ contains
       use pastr_tecio
       use pastr_xdmf
       use pastr_data_convert
+      use pastr_commtype
 
       character(len=*),intent(in), optional :: filein,fileout
       integer,intent(in), optional :: nfirst,nlast
@@ -33,6 +34,10 @@ contains
       character(len=6) :: src_of_data
       real(wp),allocatable :: r8dat(:,:)
       real(wp),allocatable,dimension(:,:,:) :: dat_var_in,dat_var_out
+      type(tblock),allocatable,target :: pblocks(:)
+      type(tblock),pointer :: b
+      integer :: nblocks
+      logical :: multi_block
 
       call parse_command_line( string=src_of_data )
 
@@ -90,13 +95,29 @@ contains
 
         dat_var_out=dat_out_cal(dat_var_in,nam_var_in,nam_var_out,x,y)
 
-        if(trim(format)=='plt') then
-          call writetecbin2dlist_xy('snapshot/'//trim(file2write),x(is:ie,js:je), &
-                                                                  y(is:ie,js:je), &
-                                                                  dat_var_out(is:ie,js:je,:),nam_var_out)
-        elseif(trim(format)=='xdmf') then
-          call xdmfwriter(dir='snapshot/',filename=trim(file2write),x=x(is:ie,0),y=y(0,js:je), &
-                                             var=dat_var_out(is:ie,js:je,:),varname=nam_var_out )
+        call block_define(multi_block,nblocks,pblocks)
+
+        do i=1,nblocks
+          b=>pblocks(i)
+          b%nvar=num_var_out
+          call b%init_data()
+          b%x(0:b%im,0:b%jm)=x(b%ilo:b%ihi,b%jlo:b%jhi)
+          b%y(0:b%im,0:b%jm)=y(b%ilo:b%ihi,b%jlo:b%jhi)
+          b%var(0:b%im,0:b%jm,1:num_var_out)=dat_var_out(b%ilo:b%ihi,b%jlo:b%jhi,1:num_var_out )
+          b%varname=nam_var_out
+        enddo
+
+        if(multi_block) then
+            call xdmfwriter(dir='snapshot/',filename=trim(file2write),blocks=pblocks )
+        else
+          if(trim(format)=='plt') then
+            call writetecbin2dlist_xy('snapshot/'//trim(file2write),x(is:ie,js:je), &
+                                                                    y(is:ie,js:je), &
+                                                                    dat_var_out(is:ie,js:je,:),nam_var_out)
+          elseif(trim(format)=='xdmf') then
+            call xdmfwriter(dir='snapshot/',filename=trim(file2write),x=x(is:ie,0),y=y(0,js:je), &
+                                               var=dat_var_out(is:ie,js:je,:),varname=nam_var_out )
+          endif
         endif
 
       enddo
@@ -263,7 +284,7 @@ contains
         enddo
 
         dat_var_out=dat_out_cal(dat_var_in,nam_var_in,nam_var_out,x,y,z)
-
+        
         if(trim(format)=='plt') then
           call writetecbin3dlist('snapshot/'//trim(file2write),x(is:ie,js:je,ks:ke), &
                                                                y(is:ie,js:je,ks:ke), &
@@ -365,5 +386,41 @@ contains
       print*,' **     variables write: ',nam_var_out
     
     end subroutine var_define
+
+    subroutine block_define(multi_block,nblocks,pblocks)
+
+      use pastr_commtype
+
+      logical,intent(out) :: multi_block
+      integer,intent(out) :: nblocks
+      type(tblock),intent(out),allocatable :: pblocks(:)
+
+      integer :: i
+      logical :: lfex
+
+      inquire(file='blockdef.txt',exist=lfex)
+      if(lfex) then
+        multi_block=.true.
+      else
+        multi_block=.false.
+        return
+      endif
+
+      open(12,file='blockdef.txt')
+      read(12,*)nblocks
+      allocate(pblocks(nblocks))
+      do i=1,nblocks
+        read(12,*)pblocks(i)%ilo,pblocks(i)%ihi,pblocks(i)%jlo,pblocks(i)%jhi
+        pblocks(i)%im=pblocks(i)%ihi-pblocks(i)%ilo
+        pblocks(i)%jm=pblocks(i)%jhi-pblocks(i)%jlo
+      enddo
+      close(12)
+      print*,' >> blockdef.txt'
+
+      print*,' ** nblocks: ',nblocks
+
+      return
+
+    end subroutine block_define
 
 end module pastr_field_view

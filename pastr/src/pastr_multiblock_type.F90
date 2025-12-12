@@ -6,6 +6,22 @@ module pastr_multiblock_type
 
     implicit none
 
+    type :: stencil_type
+      real(wp),pointer :: a(:)
+    end type stencil_type
+    
+    type :: fdm_type
+      integer :: first_node,last_node,dim
+      type(stencil_type),allocatable :: s(:)
+
+      contains
+
+      procedure :: init =>fdm_solver_init
+      procedure :: cal=>fdm_solver_operator
+      procedure :: info=>fdm_solver_print
+
+    end type fdm_type
+
   type :: link_type
 
       logical :: active=.false.
@@ -83,21 +99,7 @@ module pastr_multiblock_type
 
     end type block_type
 
-    type :: stencil_type
-      real(wp),pointer :: a(:)
-    end type stencil_type
 
-    type :: fdm_type
-      integer :: first_node,last_node,dim
-      type(stencil_type),allocatable :: s(:)
-
-      contains
-
-      procedure :: init =>fdm_solver_init
-      procedure :: cal=>fdm_solver_operator
-      procedure :: info=>fdm_solver_print
-
-    end type fdm_type
 contains
 subroutine alloc_block(ablock)
 

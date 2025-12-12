@@ -1400,26 +1400,33 @@ module readwrite
     character(len=128) :: infilename
     character(len=4) :: stepname
     logical :: lexist
-    !
+
+    NAMELIST /restart/ nstep, filenumb,fnumslic,ninflowslice,nsamples
+
     if(present(mode)) then
       modeio=mode
     else
       modeio=iomode
     endif
     !
-    call h5io_init(filename=folder//'/auxiliary.h5',mode='read')
-    call h5read(varname='nstep',var=nstep)
-    call h5read(varname='filenumb',var=filenumb)
-    call h5read(varname='fnumslic',var=fnumslic)
-    call h5read(varname='ninflowslice',var=ninflowslice)
-    if(flowtype=='channel') then
-      call h5read(varname='massflux',var=massflux)
-      call h5read(varname='massflux_target',var=massflux_target)
-      call h5read(varname='force',var=force,dim=3)
-    endif
-    call h5read(varname='nsamples',var=nsamples)
-    call h5io_end
-    !
+    ! call h5io_init(filename=folder//'/auxiliary.h5',mode='read')
+    ! call h5read(varname='nstep',var=nstep)
+    ! call h5read(varname='filenumb',var=filenumb)
+    ! call h5read(varname='fnumslic',var=fnumslic)
+    ! call h5read(varname='ninflowslice',var=ninflowslice)
+    ! if(flowtype=='channel') then
+    !   call h5read(varname='massflux',var=massflux)
+    !   call h5read(varname='massflux_target',var=massflux_target)
+    !   call h5read(varname='force',var=force,dim=3)
+    ! endif
+    ! call h5read(varname='nsamples',var=nsamples)
+    ! call h5io_end
+
+    open(16, file=folder//'/auxiliary.txt')
+    read(16, nml=restart)
+    close(16)
+    if(lio) print*, ' >> '//folder//'/auxiliary.txt'
+
     write(stepname,'(i4.4)')filenumb
     infilename='outdat/flowfield'//stepname//'.'//modeio//'5'
     !
@@ -1738,6 +1745,7 @@ module readwrite
     logical :: lwprofile
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
+    NAMELIST /restart/ nstep, filenumb,fnumslic,ninflowslice,nsamples
     !
     if(present(timerept) .and. timerept) time_beg=ptime()
     !
@@ -1748,12 +1756,12 @@ module readwrite
       write(stepname,'(i4.4)')filenumb
       
       outfilename='outdat/flowfield'//stepname//'.'//iomode//'5'
-      outauxiname='outdat/auxiliary'//stepname//'.'//iomode//'5'
+      outauxiname='outdat/auxiliary'//stepname//'.txt'
       
     else
       stepname=''
       outfilename='outdat/flowfield.'//iomode//'5'
-      outauxiname='outdat/auxiliary.'//iomode//'5'
+      outauxiname='outdat/auxiliary.txt'
     endif
     !
     if(lio) then
@@ -1823,28 +1831,37 @@ module readwrite
     ! call h5io_end
     !
     if(lio) then
-      !
-
       call h5srite(varname='nstep',var=nstep,filename=trim(outfilename))
       call h5srite(varname='time',var=time,filename=trim(outfilename))
-      !
-
-      call h5srite(varname='nstep',var=nstep,                          &
-                          filename=trim(outauxiname),newfile=.true.)
-      call h5srite(varname='filenumb',var=filenumb,                    &
-                      filename=trim(outauxiname))
-      call h5srite(varname='fnumslic',var=fnumslic,                    &
-                                         filename=trim(outauxiname))
-      call h5srite(varname='ninflowslice',var=ninflowslice,            &
-                                         filename=trim(outauxiname))
-      call h5srite(varname='massflux',var=massflux,                    &
-                                         filename=trim(outauxiname))
-      call h5srite(varname='massflux_target',var=massflux_target,      &
-                                         filename=trim(outauxiname))
-      call h5srite(varname='force',var=force,                          &
-                                         filename=trim(outauxiname))
-      call h5srite(varname='nsamples',var=nsamples,                    &
-                                         filename=trim(outauxiname))
+      
+      open(12,file=trim(outauxiname))
+      write(12,'(A)')'!========================='
+      write(12,'(A)')'&restart'
+      write(12,'(A)')'!========================='
+      write(12,'(A,I11)')'nstep=        ',nstep
+      write(12,'(A,I11)')'filenumb=     ',filenumb
+      write(12,'(A,I11)')'fnumslic=     ',fnumslic
+      write(12,'(A,I11)')'ninflowslice= ',ninflowslice
+      write(12,'(A,I11)')'nsamples=     ',nsamples
+      write(12,'(A,I11)')'!========================='
+      close(12)
+      print*,' << ',trim(outauxiname)
+      ! call h5srite(varname='nstep',var=nstep,                          &
+      !                     filename=trim(outauxiname),newfile=.true.)
+      ! call h5srite(varname='filenumb',var=filenumb,                    &
+      !                 filename=trim(outauxiname))
+      ! call h5srite(varname='fnumslic',var=fnumslic,                    &
+      !                                    filename=trim(outauxiname))
+      ! call h5srite(varname='ninflowslice',var=ninflowslice,            &
+      !                                    filename=trim(outauxiname))
+      ! call h5srite(varname='massflux',var=massflux,                    &
+      !                                    filename=trim(outauxiname))
+      ! call h5srite(varname='massflux_target',var=massflux_target,      &
+      !                                    filename=trim(outauxiname))
+      ! call h5srite(varname='force',var=force,                          &
+      !                                    filename=trim(outauxiname))
+      ! call h5srite(varname='nsamples',var=nsamples,                    &
+      !                                    filename=trim(outauxiname))
     endif
     !
     ! if(trim(savfilenmae)=='first' .or. savfilenmae==outfilename) then
