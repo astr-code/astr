@@ -49,6 +49,29 @@ contains
 
         enddo
 
+        if(name_out(i)=='ro') then
+
+          allocate(is(3))
+
+          is=0
+
+          do j=1,nvar_in
+            if(name_in(j)=='ro')  is(1)=j
+            if(name_in(j)=='t')   is(2)=j
+            if(name_in(j)=='p')   is(3)=j
+          enddo
+          
+
+          if(is(1)>0) then 
+            data_out(:,:,i)=data_in(:,:,is(1))
+          elseif(is(2)>0 .and. is(3)>0) then
+            data_out(:,:,i)=data_in(:,:,is(3))/data_in(:,:,is(2))*const2
+          else
+            stop ' no enough data to calcualte ro @ dat_out_cal_2d'
+          endif
+          deallocate(is)
+        endif
+
         if(name_out(i)=='Ma') then
           allocate(is(3))
           is=0

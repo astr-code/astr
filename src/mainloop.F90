@@ -813,17 +813,19 @@ module mainloop
       integer :: nstep,filenumb,fnumslic,ninflowslice
       real(8) :: time,massflux,massflux_target,force(3)
       real(8),allocatable :: q(:,:,:,:)
+      integer :: recover_counter
     end type databack
     !
     type(databack),save :: dat_a,dat_b
     character(len=1),save :: datpnt='o'
-    !
+    integer :: counter
+
     if(mode=='backup') then
-      !
+      
       if(datpnt=='o') datpnt='a'
-      !
+      
       if(datpnt=='a') then
-        !
+        
         dat_a%nstep        =nstep       
         dat_a%filenumb     =filenumb    
         dat_a%fnumslic     =fnumslic    
@@ -834,19 +836,21 @@ module mainloop
           dat_a%massflux_target=massflux_target
           dat_a%force          =force
         endif
-        !
+        
         if(.not. allocated(dat_a%q)) then
           allocate(dat_a%q(0:im,0:jm,0:km,1:numq))
         endif
 
         dat_a%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
-        !
+        
+        dat_a%recover_counter=0
+
         if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_a at nstep= ',nstep,'filenumb= ',filenumb
-        !
+        
         datpnt='b'
-        !
+        
       elseif(datpnt=='b') then
-        !
+        
         dat_b%nstep        =nstep       
         dat_b%filenumb     =filenumb    
         dat_b%fnumslic     =fnumslic    
@@ -857,31 +861,34 @@ module mainloop
           dat_b%massflux_target=massflux_target
           dat_b%force          =force
         endif
-        !
+        
         if(.not. allocated(dat_b%q)) then
           allocate(dat_b%q(0:im,0:jm,0:km,1:numq))
         endif
+
         dat_b%q(0:im,0:jm,0:km,1:numq)=q(0:im,0:jm,0:km,1:numq)
-        !
+        
+        dat_b%recover_counter=0
+        
         if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_b at nstep= ',nstep,'filenumb= ',filenumb
-        !
+        
         datpnt='a'
-        !
+        
       else
         print*,' !! datpnt: ',datpnt
         stop ' !! error 1 of datpnt @ databakup'
       endif
-      !
+
     elseif(mode=='recovery') then
-      !
+
       if(datpnt=='o') then
         print*,' !! not backup data avaliable !!'
         stop
       elseif(datpnt=='a') then
-        !
-        nstep       =dat_a%nstep       
-        ! filenumb    =dat_a%filenumb    
-        fnumslic    =dat_a%fnumslic    
+
+        nstep       =dat_a%nstep
+        ! filenumb    =dat_a%filenumb
+        fnumslic    =dat_a%fnumslic
         ninflowslice=dat_a%ninflowslice
         time        =dat_a%time        
         if(flowtype=='channel') then
@@ -889,15 +896,19 @@ module mainloop
           massflux_target=dat_a%massflux_target
           force          =dat_a%force          
         endif
-        !
+
         q(0:im,0:jm,0:km,1:numq)=dat_a%q(0:im,0:jm,0:km,1:numq)
-        !
-        if(lio) write(*,'(2(A,I0))')'  ** data recovered to nstep= ',nstep,' from dat_a filenumb= ',filenumb
-        !
+        
+        dat_a%recover_counter=dat_a%recover_counter+1
+
+        counter=dat_a%recover_counter
+
+        if(lio) write(*,'(2(A,I0),A)')'  ** data recovered to nstep= ',nstep,' from dat_a for ',counter,' times'
+
         datpnt='b'
-        !
+
       elseif(datpnt=='b') then
-        !
+
         nstep       =dat_b%nstep       
         ! filenumb    =dat_b%filenumb    
         fnumslic    =dat_b%fnumslic    
@@ -908,29 +919,96 @@ module mainloop
           massflux_target=dat_b%massflux_target
           force          =dat_b%force          
         endif
-        !
+
         q(0:im,0:jm,0:km,1:numq)=dat_b%q(0:im,0:jm,0:km,1:numq)
-        !
-        if(lio) write(*,'(2(A,I0))')'  ** data recovered to nstep= ',nstep,' from dat_b filenumb= ',filenumb
-        !
+        
+        dat_b%recover_counter=dat_b%recover_counter+1
+
+        counter=dat_b%recover_counter
+
+        if(lio) write(*,'(2(A,I0),A)')'  ** data recovered to nstep= ',nstep,' from dat_b for ',counter,' times'
+
         datpnt='a'
-        !
+
       else
         print*,' !! datpnt: ',datpnt
         stop ' !! error 2 of datpnt @ databakup'
       endif
-      !
+      
       call updatefvar
-      !
+      
+      if(counter>1) then 
+        call crinod_expansion()
+      endif
+
     else
       stop ' !! mode error @ databakup'
     endif
-    !
+
   end subroutine databakup
   !+-------------------------------------------------------------------+
   !| The end of the subroutine databakup.                              |
   !+-------------------------------------------------------------------+
-  !
+  
+  !+-------------------------------------------------------------------+
+  !| This subroutine is to expand critical nodes if computation keeps  |
+  !| crashing                                                          |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 16-12-2020: Created by J. Fang @ Warrington                       |
+  !+-------------------------------------------------------------------+
+  subroutine crinod_expansion
+
+    use parallel, only: psum
+
+    integer :: i,j,k,ilo,jlo,klo,ihi,jhi,khi,i1,j1,k1
+    logical :: cnode_temp(0:im,0:jm,0:km)
+    integer :: counter
+    integer,save :: ntimes=0
+
+    cnode_temp=.false.
+
+    counter=0
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      
+      if(crinod(i,j,k)) then
+
+        ilo=max(i-1,0);  ihi=min(i+1,im)
+        jlo=max(j-1,0);  jhi=min(j+1,jm)
+        klo=max(k-1,0);  khi=min(k+1,km)
+        
+        do k1=klo,khi
+        do j1=jlo,jhi
+        do i1=ilo,ihi
+          cnode_temp(i1,j1,k1)=.true.
+          
+          counter=counter+1
+        enddo
+        enddo
+        enddo
+
+      endif
+
+    enddo
+    enddo
+    enddo
+
+    crinod=cnode_temp
+
+    ntimes=ntimes+1
+
+    counter=psum(counter)
+
+    if(lio) write(*,'(2(A,I0),A)')'  ** crinod expanded for  ',counter,' nodes and for ',ntimes,' times'
+
+  end subroutine crinod_expansion
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine crinod_expansion.                       |
+  !+-------------------------------------------------------------------+
+
   !+-------------------------------------------------------------------+
   !| This subroutine is to wipe the point where the result is not good.|
   !+-------------------------------------------------------------------+
