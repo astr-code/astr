@@ -17,6 +17,7 @@ contains
     subroutine run_process_entry(command)
 
         use pastr_udf
+        use pastr_blasius, only: blasius_solution
 
         character(len=*), intent(in) :: command
 
@@ -29,6 +30,8 @@ contains
               call field_view('3d')
            case ('monitor')
               call monitor_data_process()
+           case ('blasius')
+              call blasius_solution()
            case ('udf')
               call udf_func1()
            case default

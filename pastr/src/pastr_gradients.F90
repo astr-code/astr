@@ -8,6 +8,31 @@ module pastr_gradients
 
 contains
     
+    function grad_y(f,y) result(df)
+
+      real(wp),intent(in) :: f(0:)
+      real(wp),intent(in),optional :: y(0:)
+      real(wp) :: df(0:size(f)-1)
+
+      integer :: jm,j
+      real(wp),allocatable :: ddj(:)
+      save ddj
+
+      jm=size(f)-1
+
+      if(.not. allocated(ddj)) then
+        allocate(ddj(0:jm) )
+        if( present(y) ) then
+          ddj=1._wp/dfdj(y)
+        else
+          ddj=1._wp
+        endif
+      endif
+
+      df=dfdj(f)*ddj
+
+    end function grad_y
+
     function grad_3d(f,x,y,z) result(df)
       ! 
       ! arguments
@@ -310,8 +335,12 @@ contains
     function dfdj(var)
 
       real(wp),allocatable :: dfdj(:)
-      real(wp),intent(in) :: var(0:jm)
-      !
+      real(wp),intent(in) :: var(0:)
+      
+      integer :: jm
+
+      jm=size(var)-1
+
       dfdj =diff6ec(var,jm,ljhomo)
 
     end function dfdj

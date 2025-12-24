@@ -1,7 +1,7 @@
 # This makefile is used to compile PASTR code.
 FC=h5pfc
 
-SRCDIR = ./astr/pastr/src
+SRCDIR = ./astr/pastr/src ./astr/pastr/user_define_module
 OBJDIR = obj_pastr
 BINDIR = bin
 # CTRDIR = /home/fangjian/opt/cantera-2.5.1
@@ -24,11 +24,11 @@ TARGET = $(BINDIR)/$(EXE)
 
 VPATH = $(SRCDIR):$(OBJDIR)
 
-srs=  pastr_constdef.F90 pastr_commtype.F90 pastr_commvar.F90 pastr_multiblock_type.F90        \
-      pastr_utility.F90 pastr_h5io.F90 pastr_io.F90 pastr_tecio.F90 pastr_xdmf.F90             \
-      pastr_gradients.F90 pastr_thermo_phys.F90 pastr_flowvis.F90 pastr_input.F90              \
-      pastr_data_convert.F90 pastr_field_view.F90 pastr_udf.F90 pastr_process.F90              \
-      pastr_main.F90
+srs=  pastr_constdef.F90 pastr_commtype.F90 pastr_commvar.F90 pastr_multiblock_type.F90      \
+      pastr_utility.F90 pastr_h5io.F90 pastr_io.F90 pastr_tecio.F90 pastr_xdmf.F90           \
+      pastr_interpolation.F90 pastr_fsolver.F90 pastr_gradients.F90 pastr_thermo_phys.F90    \
+      pastr_blasius.F90 pastr_flowvis.F90 pastr_input.F90 pastr_data_convert.F90             \
+      pastr_field_view.F90 pastr_udf.F90 pastr_process.F90 pastr_main.F90
       
 OBJS=$(srs:.F90=.o)
 
