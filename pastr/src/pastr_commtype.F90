@@ -15,11 +15,12 @@ module pastr_commtype
     end type montype
 
     type :: tblock
-      integer :: im,jm,nvar
-      integer :: ilo,ihi,jlo,jhi
+      character(len=6) :: name
+      integer :: im,jm,km,nvar
+      integer :: ilo,ihi,jlo,jhi,klo,khi
       character(len=16),allocatable :: varname(:)
-      real(wp), allocatable, dimension(:,:) :: x,y
-      real(wp), allocatable, dimension(:,:,:) :: var
+      real(wp), allocatable, dimension(:,:,:) :: x,y,z
+      real(wp), allocatable, dimension(:,:,:,:) :: var
       contains
       procedure :: init_data => alloc_block_data
     end type tblock
@@ -42,9 +43,9 @@ contains
       class(tblock),target :: ablock
 
       allocate(ablock%varname(ablock%nvar))
-      allocate(ablock%x(0:ablock%im,0:ablock%jm))
-      allocate(ablock%y(0:ablock%im,0:ablock%jm))
-      allocate(ablock%var(0:ablock%im,0:ablock%jm,1:ablock%nvar))
+      allocate(ablock%x(0:ablock%im,0:ablock%jm,0:ablock%km))
+      allocate(ablock%y(0:ablock%im,0:ablock%jm,0:ablock%km))
+      allocate(ablock%var(0:ablock%im,0:ablock%jm,0:ablock%km,1:ablock%nvar))
 
     end subroutine alloc_block_data
 

@@ -17,7 +17,7 @@ OLD="SRCDIR = ./astr/src ./astr/user_define_module"
 NEW='SRCDIR = '$ASTR_DIR'/src '$LOCAL_DIR'/user_define_module'
 echo "src path for astr: $NEW"
 sed -i "s|$OLD|$NEW|g" Makefile.astr
-OLD="SRCDIR = ./astr/pastr/src"
+OLD="SRCDIR = ./astr/pastr/src ./astr/pastr/user_define_module"
 NEW='SRCDIR = '$ASTR_DIR'/pastr/src '$LOCAL_DIR'/user_define_module'
 echo "src path for pastr: $NEW"
 sed -i "s|$OLD|$NEW|g" Makefile.pastr

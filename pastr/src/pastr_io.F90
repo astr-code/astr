@@ -8,6 +8,7 @@ module pastr_io
 
     public :: parse_command_line,read_grid
     public :: global_n_arguments,read_monitor_data,write_monitor_data
+    public :: read_stats
 
     integer :: global_n_arguments=0
 
@@ -195,5 +196,28 @@ contains
       enddo
 
     end subroutine write_monitor_data
+
+    subroutine read_stats(var,varname)
+
+      use pastr_commvar, only: im,jm,km
+      use pastr_h5io
+
+      real(wp) :: var(0:im,0:jm,0:km)
+      character(len=*),intent(in) :: varname
+
+      character(len=18) :: fname
+      integer,save :: nsamples=0
+
+      fname='outdat/meanflow.h5'
+
+      if(nsamples==0) then
+        call H5ReadArray(nsamples,'nsamples',fname)
+        print*,' ** nsamples: ',nsamples
+      endif
+
+      call H5ReadArray(var,im,jm,km,varname,fname)
+      var = var/dble(nsamples)
+
+    end subroutine read_stats
 
 end module pastr_io

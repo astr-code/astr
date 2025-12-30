@@ -14,6 +14,7 @@ contains
     subroutine write_xy_slice(filein,fileout,nfirst,nlast,slice,format)
 
       use pastr_io, only : read_grid,parse_command_line
+      use pastr_multiblock_type, only: block_define
       use pastr_commvar, only : im,jm,km
       use pastr_h5io
       use pastr_tecio
@@ -101,9 +102,9 @@ contains
           b=>pblocks(i)
           b%nvar=num_var_out
           call b%init_data()
-          b%x(0:b%im,0:b%jm)=x(b%ilo:b%ihi,b%jlo:b%jhi)
-          b%y(0:b%im,0:b%jm)=y(b%ilo:b%ihi,b%jlo:b%jhi)
-          b%var(0:b%im,0:b%jm,1:num_var_out)=dat_var_out(b%ilo:b%ihi,b%jlo:b%jhi,1:num_var_out )
+          b%x(0:b%im,0:b%jm,0)=x(b%ilo:b%ihi,b%jlo:b%jhi)
+          b%y(0:b%im,0:b%jm,0)=y(b%ilo:b%ihi,b%jlo:b%jhi)
+          b%var(0:b%im,0:b%jm,0,1:num_var_out)=dat_var_out(b%ilo:b%ihi,b%jlo:b%jhi,1:num_var_out )
           b%varname=nam_var_out
         enddo
 
@@ -386,41 +387,5 @@ contains
       print*,' **     variables write: ',nam_var_out
     
     end subroutine var_define
-
-    subroutine block_define(multi_block,nblocks,pblocks)
-
-      use pastr_commtype
-
-      logical,intent(out) :: multi_block
-      integer,intent(out) :: nblocks
-      type(tblock),intent(out),allocatable :: pblocks(:)
-
-      integer :: i
-      logical :: lfex
-
-      inquire(file='blockdef.txt',exist=lfex)
-      if(lfex) then
-        multi_block=.true.
-      else
-        multi_block=.false.
-        return
-      endif
-
-      open(12,file='blockdef.txt')
-      read(12,*)nblocks
-      allocate(pblocks(nblocks))
-      do i=1,nblocks
-        read(12,*)pblocks(i)%ilo,pblocks(i)%ihi,pblocks(i)%jlo,pblocks(i)%jhi
-        pblocks(i)%im=pblocks(i)%ihi-pblocks(i)%ilo
-        pblocks(i)%jm=pblocks(i)%jhi-pblocks(i)%jlo
-      enddo
-      close(12)
-      print*,' >> blockdef.txt'
-
-      print*,' ** nblocks: ',nblocks
-
-      return
-
-    end subroutine block_define
 
 end module pastr_field_view

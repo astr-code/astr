@@ -1052,14 +1052,14 @@ contains
       inquire(file=dir//trim(gridnamex),exist=lfex)
       if(.not. lfex) then
         open(17,file=dir//trim(gridnamex),access="stream")
-        write(17)sngl(blocks(i)%x(0:im,0))
+        write(17)sngl(blocks(i)%x(0:im,0,0))
         close(17)
         print*,' << ',dir//trim(gridnamex)
       endif
       inquire(file=dir//trim(gridnamey),exist=lfex)
       if(.not. lfex) then
         open(17,file=dir//trim(gridnamey),access="stream")
-        write(17)sngl(blocks(i)%y(0,0:jm))
+        write(17)sngl(blocks(i)%y(0,0:jm,0))
         close(17)
         print*,' << ',dir//trim(gridnamey)
       endif
@@ -1089,7 +1089,7 @@ contains
 
         write(fh,'(A)')'      </Attribute>'
         
-        bufr4=sngl(blocks(i)%var(0:im,0:jm,m))
+        bufr4=sngl(blocks(i)%var(0:im,0:jm,0,m))
         open(fh+1,file=dir//trim(filavarname),access="stream")
         write(fh+1)bufr4
         close(fh+1)

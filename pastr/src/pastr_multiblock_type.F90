@@ -101,7 +101,7 @@ module pastr_multiblock_type
 
 
 contains
-subroutine alloc_block(ablock)
+  subroutine alloc_block(ablock)
 
     class(block_type),target :: ablock
     integer :: n
@@ -749,5 +749,44 @@ subroutine alloc_block(ablock)
       enddo
 
     end subroutine fdm_solver_print
+
+    subroutine block_define(multi_block,nblocks,pblocks)
+
+      use pastr_commtype
+
+      logical,intent(out) :: multi_block
+      integer,intent(out) :: nblocks
+      type(tblock),intent(out),allocatable :: pblocks(:)
+
+      integer :: i
+      logical :: lfex
+
+      inquire(file='blockdef.txt',exist=lfex)
+      if(lfex) then
+        multi_block=.true.
+      else
+        multi_block=.false.
+        return
+      endif
+
+      open(12,file='blockdef.txt')
+      read(12,*)nblocks
+      allocate(pblocks(nblocks))
+      do i=1,nblocks
+        read(12,*)pblocks(i)%ilo,pblocks(i)%ihi, &
+                  pblocks(i)%jlo,pblocks(i)%jhi, &
+                  pblocks(i)%klo,pblocks(i)%khi
+        pblocks(i)%im=pblocks(i)%ihi-pblocks(i)%ilo
+        pblocks(i)%jm=pblocks(i)%jhi-pblocks(i)%jlo
+        pblocks(i)%km=pblocks(i)%khi-pblocks(i)%klo
+      enddo
+      close(12)
+      print*,' >> blockdef.txt'
+
+      print*,' ** nblocks: ',nblocks
+
+      return
+
+    end subroutine block_define
 
 end module pastr_multiblock_type

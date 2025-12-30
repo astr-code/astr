@@ -32,10 +32,12 @@ contains
               call monitor_data_process()
            case ('blasius')
               call blasius_solution()
+           case ('stats')
+              call stats_cal()
            case ('udf')
               call udf_func1()
            case default
-              print*,' !! command not defined @ run_process_entry',command
+              print*,' !! command not defined @ run_process_entry: ',command
               stop 1
         end select 
 
@@ -60,6 +62,26 @@ contains
         ! write(*,*) "Post-processing completed successfully."
 
     end subroutine run_process_entry
+
+    subroutine stats_cal
+
+      use pastr_io,     only: parse_command_line
+      use pastr_input,  only: read_astr_input
+      use pastr_data_process, only: stats_read_process
+
+      integer :: num_first_file,num_last_file
+
+      call parse_command_line( inumber=num_first_file )
+      call parse_command_line( inumber=num_last_file )
+
+      call read_astr_input()
+
+      if(num_first_file>0 .and. num_last_file>=num_first_file) then
+      else
+        call stats_read_process(mode='meanflow')
+      endif
+
+    end subroutine stats_cal
 
     subroutine field_view(mode)
 

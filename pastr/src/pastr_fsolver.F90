@@ -1427,6 +1427,7 @@ contains
     !*****************************************************************************80
     !
     !! fsolve() seeks a zero of N nonlinear equations in N variables.
+    !! Return the roots of the (non-linear) equations defined by fcn(x) = 0 given a starting estimate.
     !
     !  Discussion:
     !

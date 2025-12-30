@@ -1650,7 +1650,59 @@ module pastr_h5io
   !+-------------------------------------------------------------------+
   ! this subroutine is used to read a 3d array file with hdf5
   !+-------------------------------------------------------------------+
-  
+
+  subroutine h5_write_blocks(blocks,fname)
+    
+    use pastr_commtype, only : tblock
+
+    type(tblock),intent(in),target :: blocks(:)
+    character(len=*),intent(in) :: fname
+
+    logical :: lfilalive
+    integer :: i,n
+    type(tblock),pointer :: b
+    integer(hid_t) :: file_id,group_id
+    ! file identifier
+    integer(hid_t) :: dataspace_id,dset_id
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(3)
+    
+    call h5open_f(h5error)
+    !
+    inquire(file=fname, exist=lfilalive)
+    if(lfilalive) then
+      call h5fopen_f(fname,H5F_ACC_RDWR_F,file_id,h5error)
+    else
+      call h5fcreate_f(fname,H5F_ACC_TRUNC_F,file_id,h5error)
+    end if
+    if(h5error.ne.0)  stop ' !! error in h5_write_blocks 1'
+    
+    do i=1,size(blocks)
+
+      b=>blocks(i)
+
+      call h5gcreate_f(file_id, b%name, group_id, h5error)
+
+      dimt=(/b%im+1,b%jm+1,b%km+1/)
+
+      do n=1,b%nvar
+        CALL h5screate_simple_f(3, dimt, dataspace_id, h5error)
+        call h5dcreate_f(group_id, trim(b%varname(n)), h5t_native_double, &
+                         dataspace_id, dset_id, h5error)
+        call h5dwrite_f(dset_id, h5t_native_double, b%var(:,:,:,n), dimt, h5error)
+        CALL h5sclose_f(dataspace_id, h5error)
+        call h5dclose_f(dset_id, h5error)
+      enddo
+      call h5gclose_f(group_id, h5error)
+
+    enddo
+    call h5fclose_f(file_id, h5error)
+
+    call h5close_f(h5error)
+
+  end subroutine h5_write_blocks
+
   subroutine h5_writearray3d(varin,dim1,dim2,dim3,vname,fname,explicit,ierr)
     !
     integer,intent(in) :: dim1,dim2,dim3

@@ -35,6 +35,7 @@ module pastr_tecio
     module procedure writetecbin2d9var
     module procedure writetecbin2d10var
     module procedure writetecbin2d11var
+    module procedure writetecbin2d_block
 
     module procedure writetecbin3d1var
     module procedure writetecbin3d1var_char
@@ -159,6 +160,59 @@ module pastr_tecio
     ! print*,' << ',filename
     
   end subroutine writetecbin3d_block
+
+  subroutine writetecbin2d_block(filename,block)
+
+    use pastr_commtype, only : tblock
+    
+    ! arguments
+    character(len=*),intent(in) :: filename
+    type(tblock),intent(in),dimension(:) :: block(:)
+
+    integer :: imax,jmax,kmax,nbrvar
+    real(wp) :: solutiontime1
+    integer :: zonenumber1
+    character(256) :: title1
+    !
+    integer :: n,unitf
+    ! ip : le point actuel
+    !
+    real(4),allocatable,dimension(:,:,:,:) :: v
+    character(256),allocatable,dimension(:) :: vname
+    character(4) :: bname
+    
+    ! open(newunit=unitf,file=filename,form='unformatted',access='stream')
+
+    do n=1,size(block)
+
+      imax  =block(n)%im+1
+      jmax  =block(n)%jm+1
+      kmax  =1
+      nbrvar=block(n)%nvar+2
+
+      allocate(v(imax,jmax,1,nbrvar))
+
+      allocate(vname(nbrvar))
+    
+      v(:,:,1,1) =block(n)%x(0:block(n)%im,0:block(n)%jm,0)
+      v(:,:,1,2) =block(n)%y(0:block(n)%im,0:block(n)%jm,0)
+      v(:,:,1,3:)=real(block(n)%var(0:block(n)%im,0:block(n)%jm,0,:))
+      vname(1)='x'
+      vname(2)='y'
+      vname(3:)=block(n)%varname(:)
+
+      write(bname,'(i4.4)')n
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'.plt',varname=vname,var=v)
+
+      deallocate(v,vname)
+
+    enddo
+
+    ! close(unitf)
+    ! print*,' << ',filename
+    
+  end subroutine writetecbin2d_block
   
   !+-------------------------------------------------------------------+
   !|This subroutine is used to write bin file for 3d tecplot field.    |
