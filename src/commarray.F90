@@ -107,7 +107,7 @@ module commarray
     allocate(lsolid(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating lsolid'
     !
-    allocate(crinod(0:im,0:jm,0:km),stat=lallo)
+    allocate(crinod(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
     if(lallo.ne.0) stop ' !! error at allocating crinod'
     !
   end subroutine allocommarray

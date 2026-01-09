@@ -70,15 +70,17 @@ contains
       use pastr_data_process, only: stats_read_process
 
       integer :: num_first_file,num_last_file
+      character(len=16) :: mode
 
       call parse_command_line( inumber=num_first_file )
       call parse_command_line( inumber=num_last_file )
+      call parse_command_line(  string=mode )
 
       call read_astr_input()
 
       if(num_first_file>0 .and. num_last_file>=num_first_file) then
       else
-        call stats_read_process(mode='meanflow')
+        call stats_read_process(mode=trim(mode))
       endif
 
     end subroutine stats_cal

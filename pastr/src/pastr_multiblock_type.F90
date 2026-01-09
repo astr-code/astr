@@ -776,17 +776,212 @@ contains
         read(12,*)pblocks(i)%ilo,pblocks(i)%ihi, &
                   pblocks(i)%jlo,pblocks(i)%jhi, &
                   pblocks(i)%klo,pblocks(i)%khi
+        pblocks(i)%id=i
         pblocks(i)%im=pblocks(i)%ihi-pblocks(i)%ilo
         pblocks(i)%jm=pblocks(i)%jhi-pblocks(i)%jlo
         pblocks(i)%km=pblocks(i)%khi-pblocks(i)%klo
+        write(pblocks(i)%name,'(A,I5.5)')'b',i
       enddo
       close(12)
       print*,' >> blockdef.txt'
 
       print*,' ** nblocks: ',nblocks
 
+      call block_connection_build(pblocks)
+
       return
 
     end subroutine block_define
+
+    subroutine find_shared_face(A, B, has_face)
+
+      use pastr_commtype
+      use pastr_commvar, only : im,jm,km
+
+      type(tblock)  :: A, B
+      logical, intent(out)       :: has_face
+   
+      integer :: ilo, ihi, jlo, jhi, klo, khi
+      integer :: ilo_A,ihi_A,jlo_A,jhi_A,klo_A,khi_A, &
+                 ilo_B,ihi_B,jlo_B,jhi_B,klo_B,khi_B
+
+      type(tpatch) :: patmp
+      type(tpatch) :: patch
+   
+      has_face = .false.
+
+      ilo_A=A%ilo
+      jlo_A=A%jlo
+      klo_A=A%klo
+
+      ilo_B=B%ilo
+      jlo_B=B%jlo
+      klo_B=B%klo
+
+      if(lihomo .and. ilo_A==0) ilo_A=ilo_A+im
+      if(lihomo .and. ilo_B==0) ilo_B=ilo_B+im
+      if(ljhomo .and. jlo_A==0) jlo_A=jlo_A+jm
+      if(ljhomo .and. jlo_B==0) jlo_B=jlo_B+jm
+      if(lkhomo .and. klo_A==0) klo_A=klo_A+km
+      if(lkhomo .and. klo_B==0) klo_B=klo_B+km
+      
+      ! ---------- i-face ----------
+      if (A%ihi == A%ilo  .or. B%ilo == B%ihi) then
+        ! the dimension is fold
+        continue
+      elseif (A%ihi == B%ilo .or. A%ilo == B%ihi) then
+         jlo = max(A%jlo, B%jlo)
+         jhi = min(A%jhi, B%jhi)
+         klo = max(A%klo, B%klo)
+         khi = min(A%khi, B%khi)
+   
+         if (jlo <= jhi .and. klo <= khi) then
+
+            has_face = .true.
+            patmp%ilo = merge(A%ihi, A%ilo, A%ihi == B%ilo)
+            patmp%ihi = patmp%ilo
+            patmp%jlo = jlo; patmp%jhi = jhi
+            patmp%klo = klo; patmp%khi = khi
+            ! patmp%normalA = merge([1,0,0],[-1,0,0],A%ihi==B%ilo)
+
+            if(A%ihi == B%ilo) then
+              patmp%dir='i+'
+            else
+              patmp%dir='i-'
+            endif
+
+            call A%add_patch(patmp)
+
+            call reverse_dir(patmp%dir)
+
+            call B%add_patch(patmp)
+
+            A%patches(A%npatches)%nbr_block=B%id
+            A%patches(A%npatches)%nbr_patch=B%patches(B%npatches)%id
+            B%patches(B%npatches)%nbr_block=A%id
+            B%patches(B%npatches)%nbr_patch=A%patches(A%npatches)%id
+
+            return
+         end if
+      end if
+   
+      ! ---------- j-face ----------
+      if (A%jhi == A%jlo .or. B%jlo == B%jhi) then
+        continue
+      elseif (A%jhi == B%jlo .or. A%jlo == B%jhi) then
+         ilo = max(A%ilo, B%ilo)
+         ihi = min(A%ihi, B%ihi)
+         klo = max(A%klo, B%klo)
+         khi = min(A%khi, B%khi)
+   
+         if (ilo <= ihi .and. klo <= khi) then
+            has_face = .true.
+            patmp%jlo = merge(A%jhi, A%jlo, A%jhi == B%jlo)
+            patmp%jhi = patmp%jlo
+            patmp%ilo = ilo; patmp%ihi = ihi
+            patmp%klo = klo; patmp%khi = khi
+            ! patch%normalA = merge([0,1,0],[0,-1,0],A%jhi==B%jlo)
+
+            if(A%jhi == B%jlo) then
+              patmp%dir='j+'
+            else
+              patmp%dir='j-'
+            endif
+            call A%add_patch(patmp)
+
+            call reverse_dir(patmp%dir)
+
+            call B%add_patch(patmp)
+
+            A%patches(A%npatches)%nbr_block=B%id
+            A%patches(A%npatches)%nbr_patch=B%patches(B%npatches)%id
+            B%patches(B%npatches)%nbr_block=A%id
+            B%patches(B%npatches)%nbr_patch=A%patches(A%npatches)%id
+
+            return
+         end if
+      end if
+   
+      ! ---------- k-face ----------
+      if (A%khi == A%klo .or. B%klo == B%khi) then
+        continue
+      elseif (A%khi == B%klo .or. A%klo == B%khi) then
+         ilo = max(A%ilo, B%ilo)
+         ihi = min(A%ihi, B%ihi)
+         jlo = max(A%jlo, B%jlo)
+         jhi = min(A%jhi, B%jhi)
+   
+         if (ilo <= ihi .and. jlo <= jhi) then
+            has_face = .true.
+            patmp%klo = merge(A%khi, A%klo, A%khi == B%klo)
+            patmp%khi = patmp%klo
+            patmp%ilo = ilo; patmp%ihi = ihi
+            patmp%jlo = jlo; patmp%jhi = jhi
+            ! patch%normalA = merge([0,0,1],[0,0,-1],A%khi==B%klo)
+
+            if(A%khi == B%klo) then
+              patmp%dir='k+'
+            else
+              patmp%dir='k-'
+            endif
+
+            call A%add_patch(patmp)
+
+            call reverse_dir(patmp%dir)
+
+            call B%add_patch(patmp)
+
+            A%patches(A%npatches)%nbr_block=B%id
+            A%patches(A%npatches)%nbr_patch=B%patches(B%npatches)%id
+            B%patches(B%npatches)%nbr_block=A%id
+            B%patches(B%npatches)%nbr_patch=A%patches(A%npatches)%id
+
+            return
+         end if
+      end if
+
+   end subroutine find_shared_face
+
+   pure elemental subroutine reverse_dir(cdir)
+
+     character(len=2), intent(inout) :: cdir
+   
+     select case (cdir(2:2))
+     case ('+')
+        cdir(2:2) = '-'
+     case ('-')
+        cdir(2:2) = '+'
+     case default
+        error stop 'reverse_dir: invalid direction'
+     end select
+
+   end subroutine reverse_dir
+
+   subroutine block_connection_build(blocks)
+
+      use pastr_commtype
+
+      type(tblock) :: blocks(:)
+
+      integer :: i, j
+      logical :: has_face
+      type(tpatch) :: tmp
+      integer :: count,npatch,nblk
+
+      nblk=size(blocks)
+
+      ! ---- first pass: count ----
+      count = 0
+      do i = 1, nblk-1
+         do j = i+1, nblk
+
+            call find_shared_face(blocks(i), blocks(j), has_face)
+
+            if (has_face) count = count + 1
+
+         end do
+      end do
+   
+    end subroutine block_connection_build
 
 end module pastr_multiblock_type

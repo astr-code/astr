@@ -43,10 +43,11 @@ module mainloop
     use ibmethod, only: ibforce
     use userdefine,only: udf_eom_set
     use parallel, only : bcast
+    use commarray,only: x
     !
     ! local data
-    real(8) :: time_beg,time_next_step
-    integer :: hours,minus,secod,n,i,ios
+    real(8) :: time_beg,time_next_step,crange
+    integer :: hours,minus,secod,n,i,ios,j,k
     logical,save :: firstcall = .true.
     logical :: lfex
     integer,dimension(8) :: value
@@ -61,7 +62,21 @@ module mainloop
     nstep0=nstep
     !
     if(firstcall) then
-      !
+      
+      ! crange=0.01d0
+      ! do j=0,jm
+      ! do i=0,im
+      !   if( x(i,j,0,1)>=20.d0-crange .and. &
+      !       x(i,j,0,1)<=20.d0+crange .and. &
+      !       x(i,j,0,2)>=-crange .and. &
+      !       x(i,j,0,2)<= crange ) then
+      !     crinod(i,j,:)=.true.
+      !   else
+      !     crinod(i,j,:)=.false.
+      !   endif
+      ! enddo
+      ! enddo
+      
       crinod=.false.
       
       firstcall=.false.
@@ -845,7 +860,7 @@ module mainloop
         
         dat_a%recover_counter=0
 
-        if(lio) write(*,'(2(A,I0))')'  ** data backed to dat_a at nstep= ',nstep,'filenumb= ',filenumb
+        if(lio) write(*,'(A,I0)')'  ** data backed to dat_a at nstep= ',nstep
         
         datpnt='b'
         
@@ -960,25 +975,25 @@ module mainloop
   !+-------------------------------------------------------------------+
   subroutine crinod_expansion
 
-    use parallel, only: psum
+    use parallel, only: psum,dataswap
 
     integer :: i,j,k,ilo,jlo,klo,ihi,jhi,khi,i1,j1,k1
-    logical :: cnode_temp(0:im,0:jm,0:km)
+    logical :: cnode_temp(-2:im+2,-2:jm+2,-2:km+2)
     integer :: counter
     integer,save :: ntimes=0
 
     cnode_temp=.false.
 
     counter=0
-    do k=0,km
-    do j=0,jm
-    do i=0,im
+    do k=-1,km+1
+    do j=-1,jm+1
+    do i=-1,im+1
       
       if(crinod(i,j,k)) then
 
-        ilo=max(i-1,0);  ihi=min(i+1,im)
-        jlo=max(j-1,0);  jhi=min(j+1,jm)
-        klo=max(k-1,0);  khi=min(k+1,km)
+        ilo=i-1;  ihi=i+1
+        jlo=j-1;  jhi=j+1
+        klo=k-1;  khi=k+1
         
         do k1=klo,khi
         do j1=jlo,jhi
@@ -996,13 +1011,15 @@ module mainloop
     enddo
     enddo
 
-    crinod=cnode_temp
+    crinod(-2:im+2,-2:jm+2,-2:km+2)=cnode_temp(-2:im+2,-2:jm+2,-2:km+2)
+
+    call dataswap(crinod)
 
     ntimes=ntimes+1
 
     counter=psum(counter)
 
-    if(lio) write(*,'(2(A,I0),A)')'  ** crinod expanded for  ',counter,' nodes and for ',ntimes,' times'
+    if(lio) write(*,'(2(A,I0),A)')'  ** crinod expanded for  ',counter,' nodes for ',ntimes,' times'
 
   end subroutine crinod_expansion
   !+-------------------------------------------------------------------+

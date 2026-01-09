@@ -119,7 +119,7 @@ contains
 
     subroutine read_monitor_data(num_first_file,num_last_file,n_data,n_col,mon_data)
 
-      use pastr_commvar, only: montype
+      use pastr_commtype, only: montype
 
       integer,intent(in) :: num_first_file,num_last_file,n_data,n_col
       type(montype),allocatable,intent(out) :: mon_data(:)
@@ -168,7 +168,7 @@ contains
 
     subroutine write_monitor_data(mon_data)
       
-      use pastr_commvar, only: montype
+      use pastr_commtype, only: montype
 
       type(montype),intent(in) :: mon_data(:)
 
@@ -197,27 +197,24 @@ contains
 
     end subroutine write_monitor_data
 
-    subroutine read_stats(var,varname)
+    function read_stats(varname,filename) result(var)
 
       use pastr_commvar, only: im,jm,km
       use pastr_h5io
 
       real(wp) :: var(0:im,0:jm,0:km)
-      character(len=*),intent(in) :: varname
+      character(len=*),intent(in) :: varname,filename
 
-      character(len=18) :: fname
       integer,save :: nsamples=0
 
-      fname='outdat/meanflow.h5'
-
       if(nsamples==0) then
-        call H5ReadArray(nsamples,'nsamples',fname)
+        call H5ReadArray(nsamples,'nsamples',filename)
         print*,' ** nsamples: ',nsamples
       endif
 
-      call H5ReadArray(var,im,jm,km,varname,fname)
+      call H5ReadArray(var,im,jm,km,varname,filename)
       var = var/dble(nsamples)
 
-    end subroutine read_stats
+    end function read_stats
 
 end module pastr_io

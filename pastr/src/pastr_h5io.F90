@@ -1651,6 +1651,70 @@ module pastr_h5io
   ! this subroutine is used to read a 3d array file with hdf5
   !+-------------------------------------------------------------------+
 
+  subroutine h5_read_blocks(blocks,fname,namelist)
+    
+    use pastr_commtype, only : tblock
+
+    type(tblock),intent(inout),target :: blocks(:)
+    character(len=*),intent(in) :: fname
+    character(len=*),intent(in) :: namelist(:)
+
+    logical :: lfilalive
+    integer :: i,n
+    type(tblock),pointer :: b
+    integer(hid_t) :: file_id,group_id
+    ! file identifier
+    integer(hid_t) :: dataspace_id,dset_id
+    ! dataset identifier
+    integer :: h5error ! error flag
+    integer(hsize_t) :: dimt(3)
+    character(len=128) :: vname
+    
+    call h5open_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_read_blocks 1'
+    !
+    call h5fopen_f(fname,h5f_acc_rdwr_f,file_id,h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_read_blocks 2'
+
+
+    do i=1,size(blocks)
+
+      b=>blocks(i)
+
+      if(.not.allocated(b%var)) then
+        b%nvar=size(namelist)
+        allocate(b%var(0:b%im,0:b%jm,0:b%km,1:b%nvar))
+      endif
+
+      do n=1,size(namelist)
+
+        vname=b%name//'/'//trim(namelist(n))
+
+        call h5dopen_f(file_id,trim(vname),dset_id,h5error)
+        if(h5error.ne.0)  stop ' !! error in h5_read_blocks 3'
+
+        dimt=(/b%im+1,b%jm+1,b%km+1/)
+
+        call h5dread_f(dset_id,h5t_native_double,b%var(:,:,:,n),dimt,h5error)
+        if(h5error.ne.0)  stop ' !! error in h5_read_blocks 4'
+
+        call h5dclose_f(dset_id, h5error)
+        if(h5error.ne.0)  stop ' !! error in h5_read_blocks 5'
+
+        print*,' >> ',trim(vname),' from ',fname,' ... done'
+
+      enddo
+
+    enddo
+    
+    call h5fclose_f(file_id, h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_read_blocks 6'
+    
+    call h5close_f(h5error)
+    if(h5error.ne.0)  stop ' !! error in h5_read_blocks 7'
+
+  end subroutine h5_read_blocks
+
   subroutine h5_write_blocks(blocks,fname)
     
     use pastr_commtype, only : tblock
@@ -1693,6 +1757,8 @@ module pastr_h5io
         call h5dwrite_f(dset_id, h5t_native_double, b%var(:,:,:,n), dimt, h5error)
         CALL h5sclose_f(dataspace_id, h5error)
         call h5dclose_f(dset_id, h5error)
+
+        print*,' << ',trim(b%varname(n)),' of block ',b%name,' to ',fname
       enddo
       call h5gclose_f(group_id, h5error)
 
