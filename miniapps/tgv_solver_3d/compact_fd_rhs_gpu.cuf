@@ -1,0 +1,115 @@
+module gpu_compact_fd
+  use cudafor
+  use constdef
+  implicit none
+
+contains
+
+  !=============================================================
+  ! device 函数：计算紧致差分右端
+  ! 只传入必要标量，不依赖 allocatable
+  !=============================================================
+  attributes(device) function compact_fd_rhs_device(first_node, last_node, nbctype, f, dim) result(d)
+
+   use constdef
+   use commvar, only : hm
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: f(-hm:dim+hm)
+    real(8), device :: d(first_node:last_node)
+
+    integer :: i_0, i_m, ntype, i_s, i_e, j
+    real(8) :: var1, var2
+
+    i_0 = first_node
+    i_m = last_node
+    ntype = nbctype
+
+    ! 边界/接口范围
+    if (ntype==1 .or. ntype==4) then
+      i_s = i_0+2
+    else
+      i_s = i_0+1
+    endif
+
+    if (ntype==2 .or. ntype==4) then
+      i_e = i_m-2
+    else
+      i_e = i_m-1
+    endif
+
+    ! ------------------
+    ! 边界点处理
+    ! ------------------
+    d(i_0)   = -2.5d0*f(i_0) + 2.d0*f(i_0+1) + 0.5d0*f(i_0+2)
+    d(i_0+1) = 0.75d0*(f(i_0+2)-f(i_0))
+    d(i_m-1) = 0.75d0*(f(i_m)-f(i_m-2))
+    d(i_m)   = 2.5d0*f(i_m) - 2.d0*f(i_m-1) - 0.5d0*f(i_m-2)
+
+    ! ------------------
+    ! 内部点处理
+    ! ------------------
+    do j = i_s, i_e
+      var1 = f(j+1) - f(j-1)
+      var2 = f(j+2) - f(j-2)
+      d(j) = num7d9*var1 + num1d36*var2
+    end do
+
+  end function compact_fd_rhs_device
+  !----------------------------------------------------------
+  ! kernel 用来调用 device 函数
+  !----------------------------------------------------------
+  attributes(global) subroutine kernel_apply_compact_fd(first_node, last_node, nbctype, f_d, d_d, dim)
+
+   use constdef
+   use commvar, only : hm
+    integer, value :: first_node, last_node, nbctype, dim
+    real(8), device :: f_d(-hm:dim+hm)
+    real(8), device :: d_d(first_node:last_node)
+
+    d_d(:) = compact_fd_rhs_device(first_node, last_node, nbctype, f_d, dim)
+  end subroutine kernel_apply_compact_fd
+
+end module gpu_compact_fd
+
+program test_compact_fd
+  use cudafor
+  use constdef
+     use commvar, only : hm
+  use gpu_compact_fd
+  implicit none
+
+  integer, parameter :: n = 100
+  integer :: first_node, last_node, nbctype
+  integer :: i,istat
+  real(8), allocatable :: f_host(:), d_host(:)
+  real(8), device, allocatable :: f_dev(:), d_dev(:)
+
+  first_node = 0
+  last_node  = n
+  nbctype    = 4
+
+  allocate(f_host(-hm:n+hm))
+  allocate(d_host(first_node:last_node))
+
+  ! 初始化 f_host
+  f_host(-hm:n+hm) = 0.0d0
+  do i = 0, n
+     f_host(i) = sin(2.0d0*3.141592653589793d0*i/n)
+  end do
+
+  ! 分配 GPU 数组并拷贝
+  allocate(f_dev(-hm:n+hm))
+  allocate(d_dev(first_node:last_node))
+  f_dev = f_host
+
+  ! 调用 kernel（注意 <<<blocks,threads>>> 语法）
+  call kernel_apply_compact_fd<<<1,1>>>(first_node, last_node, nbctype, f_dev, d_dev, n)
+  istat=cudaDeviceSynchronize()
+
+  ! 拷贝结果回 host
+  d_host = d_dev
+
+  ! 输出前 10 个结果
+  print *, 'd_host(0:10) = ', d_host(0:10)
+
+end program test_compact_fd
