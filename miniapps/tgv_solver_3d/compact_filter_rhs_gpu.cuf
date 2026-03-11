@@ -1,0 +1,194 @@
+module compact_filter_kernel
+   use initiate_gpu_constants
+   implicit none
+contains
+
+   attributes(device) function compact_filter_rhs_gpu(first_node, last_node, nbctype, f, dim) result(d)
+      use constdef
+      use commvar, only: hm
+      use initiate_gpu_constants
+
+      integer, intent(in) :: first_node, last_node, nbctype, dim
+      real(8), device, intent(in) :: f(-hm:dim + hm)
+
+      real(8) :: d(first_node:last_node)
+      integer :: i_0, i_m, j, k, i_s, i_e, ntype
+      real(8) :: var0, var1, var2, var3, var4, var5
+
+      i_0 = first_node
+      i_m = last_node
+      ntype = nbctype
+
+      if (ntype == 1 .or. ntype == 4) then
+
+         i_s = i_0 + 5
+
+         do k = i_0, i_0 + 2
+            var0 = 0.d0
+            do j = 0, 6
+               var0 = var0 + coefb_d(k - i_0, j)*f(i_0 + j)
+            end do
+            d(k) = var0
+         end do
+
+         j = i_0 + 3
+         var0 = f(j) + f(j)
+         var1 = f(j + 1) + f(j - 1)
+         var2 = f(j + 2) + f(j - 2)
+         var3 = f(j + 3) + f(j - 3)
+
+         d(j) = coef6i_d(0)*var0 + coef6i_d(1)*var1 + coef6i_d(2)*var2 + coef6i_d(3)*var3
+
+         j = i_0 + 4
+         var0 = f(j) + f(j)
+         var1 = f(j + 1) + f(j - 1)
+         var2 = f(j + 2) + f(j - 2)
+         var3 = f(j + 3) + f(j - 3)
+         var4 = f(j + 4) + f(j - 4)
+
+         d(j) = coef8i_d(0)*var0 + coef8i_d(1)*var1 + coef8i_d(2)*var2 + &
+                coef8i_d(3)*var3 + coef8i_d(4)*var4
+
+      else
+
+         i_s = i_0 + 3
+
+         do k = i_0, i_0 + 2
+            var0 = 0.d0
+            do j = 0, 10
+               var0 = var0 + coefh_d(k - i_0, j)*f(i_0 - 2 + j)
+            end do
+            d(k) = var0
+         end do
+
+      end if
+
+      if (ntype == 2 .or. ntype == 4) then
+
+         i_e = i_m - 5
+
+         do k = i_m - 2, i_m
+            var0 = 0.d0
+            do j = 0, 6
+               var0 = var0 + coefb_d(i_m - k, j)*f(i_m - j)
+            end do
+            d(k) = var0
+         end do
+
+         j = i_m - 3
+         var0 = f(j) + f(j)
+         var1 = f(j + 1) + f(j - 1)
+         var2 = f(j + 2) + f(j - 2)
+         var3 = f(j + 3) + f(j - 3)
+
+         d(j) = coef6i_d(0)*var0 + coef6i_d(1)*var1 + coef6i_d(2)*var2 + coef6i_d(3)*var3
+
+         j = i_m - 4
+         var0 = f(j) + f(j)
+         var1 = f(j + 1) + f(j - 1)
+         var2 = f(j + 2) + f(j - 2)
+         var3 = f(j + 3) + f(j - 3)
+         var4 = f(j + 4) + f(j - 4)
+
+         d(j) = coef8i_d(0)*var0 + coef8i_d(1)*var1 + coef8i_d(2)*var2 + &
+                coef8i_d(3)*var3 + coef8i_d(4)*var4
+
+      else
+
+         i_e = i_m - 3
+
+         do k = i_m - 2, i_m
+            var0 = 0.d0
+            do j = 0, 10
+               var0 = var0 + coefh_d(i_m - k, j)*f(i_m + 2 - j)
+            end do
+            d(k) = var0
+         end do
+
+      end if
+
+      do j = i_s, i_e
+
+         var0 = f(j) + f(j)
+         var1 = f(j + 1) + f(j - 1)
+         var2 = f(j + 2) + f(j - 2)
+         var3 = f(j + 3) + f(j - 3)
+         var4 = f(j + 4) + f(j - 4)
+         var5 = f(j + 5) + f(j - 5)
+
+         d(j) = coef10i_d(0)*var0 + coef10i_d(1)*var1 + coef10i_d(2)*var2 + &
+                coef10i_d(3)*var3 + coef10i_d(4)*var4 + coef10i_d(5)*var5
+
+      end do
+
+   end function compact_filter_rhs_gpu
+
+   attributes(global) subroutine compact_filter_kernel(first_node, last_node, nbctype, f_d, d_d, dim)
+      use commvar, only: hm
+      integer, value :: first_node, last_node, nbctype, dim
+      real(8), device :: f_d(-hm:dim + hm)
+      real(8), device :: d_d(first_node:last_node)
+
+
+    d_d = compact_filter_rhs_gpu(first_node, last_node, nbctype, f_d, dim)
+
+
+   end subroutine compact_filter_kernel
+
+end module compact_filter_kernel
+
+
+
+program test_filter_gpu
+   use filter
+   use initiate_gpu_constants
+   use compact_filter_kernel
+   implicit none
+   integer, parameter :: n = 64
+   real(8) :: f_host(0:n)
+   real(8), device :: f_dev(0:n), d_dev(0:n)
+   integer :: i
+   ! -------------------------
+   ! 初始化 host 数据
+   ! -------------------------
+   do i = 0, n
+      f_host(i) = sin(2.d0*3.141592653589793d0*i/n)
+   end do
+
+   ! -------------------------
+   ! 调用 filter_coefficient_cal 初始化 host 系数
+   ! -------------------------
+   call filter_coefficient_cal(alfa=0.49d0, beter_halo=1.11d0, beter_bouond=1.09d0)
+
+   ! -------------------------
+   ! 拷贝 host 系数到 GPU constant memory  
+   ! -------------------------
+   coef2i_d = coef2i
+   coef4i_d = coef4i
+   coef6i_d = coef6i
+   coef8i_d = coef8i
+   coef10i_d = coef10i
+   coefb_d = coefb
+   coefh_d = coefh
+
+   ! -------------------------
+   ! 拷贝 f 到 GPU
+   ! -------------------------
+   f_dev = f_host
+
+   ! -------------------------
+   ! 调用 global kernel
+   ! -------------------------
+   call compact_filter_kernel <<<1,1>>>(0, n, 1, f_dev, d_dev, n)
+
+   ! -------------------------
+   ! 拷回结果到 host
+   ! -------------------------
+   f_host = d_dev
+
+   print *, "Filtered f_host:"
+do i = 0, 10
+    print "(I4,E20.10)", i, f_host(i)
+end do
+
+end program test_filter_gpu

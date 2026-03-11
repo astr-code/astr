@@ -1,0 +1,13 @@
+module initiate_gpu_constants
+  implicit none
+
+  ! constant memory 数组
+  real(8), constant :: coef2i_d(0:1)
+  real(8), constant :: coef4i_d(0:2)
+  real(8), constant :: coef6i_d(0:3)
+  real(8), constant :: coef8i_d(0:4)
+  real(8), constant :: coef10i_d(0:5)
+  real(8), constant :: coefb_d(0:4,0:8)
+  real(8), constant :: coefh_d(0:4,0:10)
+
+end module initiate_gpu_constants
