@@ -1,0 +1,288 @@
+module gpu_compact_fd
+   use cudafor
+   use constdef
+   implicit none
+
+contains
+
+   !=============================================================
+   ! device 函数：计算紧致差分右端
+   !=============================================================
+  attributes(device) function compact_fd_rhs_gpu(first_node, last_node, nbctype, f, dim) result(d)
+
+   use constdef
+   use commvar, only : hm
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: f(-hm:dim+hm)
+    real(8), device :: d(first_node:last_node)
+
+    integer :: i_0, i_m, ntype, i_s, i_e, j
+    real(8) :: var1, var2, var3
+
+    i_0 = first_node
+    i_m = last_node
+    ntype = nbctype
+
+        if(ntype==1 .or. ntype==4) then
+
+          ! physical boundary
+
+          i_s=i_0+2
+
+          ! 4th-order compact
+          j=i_0+1
+          var1=f(j+1)-f(j-1)
+          d(j)=0.75d0*var1
+    
+          ! ! 2nd-order biased compact
+          ! j=i_0
+          ! var1=f(j+1)-f(j)
+          ! d(j)=2.d0*var1
+
+          ! 3rd-order biased compact
+          j=i_0
+          d(j)=-2.5d0*f(j)+2.d0*f(j+1)+0.5d0*f(j+2)
+
+        else
+
+          ! interfaces
+          i_s=i_0+1
+
+          ! 6th-order explicit
+          j=i_0
+          var1=f(j+1)-f(j-1)
+          var2=f(j+2)-f(j-2)
+          var3=f(j+3)-f(j-3)
+          d(j)=0.75d0*var1 - 0.15d0*var2 + num1d60*var3
+
+        endif
+
+        if(ntype==2 .or. ntype==4) then
+
+          ! physical boundary
+          i_e=i_m-2
+
+          ! 4th-order compact
+          j=i_m-1
+          var1=f(j+1)-f(j-1)
+          d(j)=0.75d0*var1
+    
+          ! ! 2nd-order biased compact
+          ! j=i_m
+          ! var1=f(j)-f(j-1)
+          ! d(j)=2.d0*var1
+
+          ! 3rd-order biased compact
+          j=i_m
+          d(j)=2.5d0*f(j)-2.d0*f(j-1)-0.5d0*f(j-2)
+
+        else
+          ! interfaces
+          i_e=i_m-1
+
+          ! 6th-order explicit
+          j=i_m
+          var1=f(j+1)-f(j-1)
+          var2=f(j+2)-f(j-2)
+          var3=f(j+3)-f(j-3)
+          d(j)=0.75d0*var1 - 0.15d0*var2 + num1d60*var3
+
+        endif
+
+        do j=i_s,i_e
+
+          ! 6th-order compact
+          var1=f(j+1)-f(j-1)
+          var2=f(j+2)-f(j-2)
+
+          d(j)=num7d9*var1+   num1d36*var2
+    
+        end do
+
+  end function compact_fd_rhs_gpu
+
+   !=============================================================
+   ! device 函数：三对角 Thomas 求解
+   !=============================================================
+   attributes(device) function tridiagonal_thomas_solver_gpu(ac, d) result(x)
+      real(8), intent(in)    :: ac(:, :)      ! ac(3, n)
+      real(8), intent(inout) :: d(:)          ! d(n) - 会被修改
+      real(8) :: x(size(d))                    ! 结果
+      integer :: i, n
+
+      n = size(d)
+
+      ! forward elimination
+      do i = 2, n
+         d(i) = d(i)*ac(2, i) - d(i - 1)*ac(3, i)
+      end do
+
+      ! backward substitution
+      x(n) = d(n)
+      do i = n - 1, 1, -1
+         x(i) = d(i) - ac(1, i)*x(i + 1)
+      end do
+   end function tridiagonal_thomas_solver_gpu
+
+   !=============================================================
+   ! device 函数：完整 df_compact_device
+   !=============================================================
+attributes(device) function df_compact_gpu( first_node, last_node, nbctype, ac, f, dim ) result(df)
+
+    use constdef
+    use commvar, only : hm
+
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: f(-hm:dim+hm)
+    real(8), device, intent(in) :: ac(:, :)
+
+    real(8), device :: df(0:dim)
+
+    real(8) :: d(first_node:last_node)
+    real(8) :: xx(first_node:last_node)
+
+    !------------------------------------
+    ! RHS
+    !------------------------------------
+    d = compact_fd_rhs_gpu(first_node,last_node,nbctype,f,dim)
+
+    !------------------------------------
+    ! tridiagonal solver
+    !------------------------------------
+    xx = tridiagonal_thomas_solver_gpu(ac,d)
+
+    !------------------------------------
+    ! copy result
+    !------------------------------------
+    df(0:dim) = xx(0:dim)
+
+end function df_compact_gpu
+
+   !=============================================================
+   ! kernel: 调用 df_compact_device
+   !=============================================================
+attributes(global) subroutine df_compact_kernel( &
+        first_node, last_node, nbctype, ac, f, df, dim)
+
+    use constdef
+    use commvar, only : hm
+
+    implicit none
+
+    integer, value :: first_node, last_node, nbctype, dim
+
+    real(8), device, intent(in)  :: ac(:, :)
+    real(8), device, intent(in)  :: f(-hm:dim+hm)
+    real(8), device, intent(out) :: df(0:dim)
+
+    real(8) :: df_local(0:dim)
+    integer :: i
+
+    ! 调用 device 函数
+    df_local = df_compact_gpu(first_node, last_node, nbctype, ac, f, dim)
+
+    ! 写回全局内存
+    do i = 0, dim
+        df(i) = df_local(i)
+    end do
+
+end subroutine df_compact_kernel
+
+end module gpu_compact_fd
+
+program test_df_compact_gpu
+
+    use cudafor
+    use constdef
+    use commvar, only : hm
+    use gpu_compact_fd
+    implicit none
+
+    integer, parameter :: dim = 64
+    integer :: first_node, last_node, nbctype
+    integer :: i,istat
+
+    !-----------------------------
+    ! host arrays
+    !-----------------------------
+    real(8) :: f_host(-hm:dim+hm)
+    real(8) :: df_host(0:dim)
+    real(8) :: df_exact(0:dim)
+
+    real(8), allocatable :: ac_host(:,:)
+
+    !-----------------------------
+    ! device arrays
+    !-----------------------------
+    real(8), device, allocatable :: f_dev(:)
+    real(8), device, allocatable :: df_dev(:)
+    real(8), device, allocatable :: ac_dev(:,:)
+
+    !-----------------------------
+    ! parameters
+    !-----------------------------
+    first_node = 0
+    last_node  = dim
+    nbctype    = 1
+
+    !-----------------------------
+    ! allocate host arrays
+    !-----------------------------
+    allocate(ac_host(3,dim+1))
+
+    !-----------------------------
+    ! initialize compact matrix
+    ! (这里只是示例系数)
+    !-----------------------------
+    do i = 0, dim
+        ac_host(1,i+1) = 0.25d0
+        ac_host(2,i+1) = 1.0d0
+        ac_host(3,i+1) = 0.25d0
+    end do
+
+    !-----------------------------
+    ! initialize function
+    !-----------------------------
+    do i = -hm, dim+hm
+        f_host(i) = sin(2.0d0*pi*i/dim)
+    end do
+
+    do i = 0, dim
+        df_exact(i) = (2.0d0*pi/dim) * cos(2.0d0*pi*i/dim)
+    end do
+
+    !-----------------------------
+    ! allocate device arrays
+    !-----------------------------
+    allocate(f_dev(-hm:dim+hm))
+    allocate(df_dev(0:dim))
+    allocate(ac_dev(3,dim+1))
+
+    !-----------------------------
+    ! copy to device
+    !-----------------------------
+    f_dev  = f_host
+    ac_dev = ac_host
+
+    !-----------------------------
+    ! kernel launch
+    !-----------------------------
+    call df_compact_kernel<<<1,1>>>( &
+        first_node, last_node, nbctype, ac_dev, f_dev, df_dev, dim)
+
+    istat=cudaDeviceSynchronize()
+
+    !-----------------------------
+    ! copy back
+    !-----------------------------
+    df_host = df_dev
+
+    !-----------------------------
+    ! print results
+    !-----------------------------
+    print *, ' i        df_gpu           df_exact'
+    do i = 0, 10
+        print '(I4,2E20.10)', i, df_host(i), df_exact(i)
+    end do
+
+end program test_df_compact_gpu

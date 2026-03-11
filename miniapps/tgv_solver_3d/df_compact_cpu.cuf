@@ -1,0 +1,54 @@
+program test_df_compact_cpu
+    use derivative       ! 包含 compact_central 和 df_compact 绑定
+    use commtype         ! 包含 type(compact_scheme)
+    use commvar
+    implicit none
+
+    integer, parameter :: dim = 64
+    type(compact_scheme) :: asolver
+    type(compact_central) :: solver
+    real(8) :: f(-hm:dim+hm)
+    real(8) :: df(0:dim)
+    integer :: i
+    real(8), parameter :: pi = 3.14159265358979323846d0
+
+    !-----------------------------
+    ! 初始化紧致差分求解器
+    !-----------------------------
+    asolver%first_node = 0
+    asolver%last_node  = dim
+    asolver%nbctype    = 1
+    allocate(asolver%ac(3, dim+1))
+    do i = 0, dim
+        asolver%ac(1,i+1) = 0.25d0
+        asolver%ac(2,i+1) =  1.0d0
+        asolver%ac(3,i+1) = 0.25d0
+    end do
+
+    !-----------------------------
+    ! 初始化 compact_central 对象
+    !-----------------------------
+    solver = compact_central()   ! 如果有默认构造
+    ! 如果需要，可以初始化 solver 内部成员（通常不需要额外成员）
+
+    !-----------------------------
+    ! 初始化测试函数
+    !-----------------------------
+    do i = -hm, dim+hm
+        f(i) = sin(2.0d0*pi*i/dim)
+    end do
+
+    !-----------------------------
+    ! 调用 CPU 紧致差分
+    !-----------------------------
+    df = solver%central(asolver, f, dim)
+
+    !-----------------------------
+    ! 输出部分结果
+    !-----------------------------
+    print *, ' i    df_cpu'
+    do i = 0, 10
+        print '(I4,E20.10)', i, df(i)
+    end do
+
+end program test_df_compact_cpu
