@@ -207,7 +207,6 @@ program test_df_compact_gpu
     !-----------------------------
     real(8) :: f_host(-hm:dim+hm)
     real(8) :: df_host(0:dim)
-    real(8) :: df_exact(0:dim)
 
     real(8), allocatable :: ac_host(:,:)
 
@@ -247,9 +246,6 @@ program test_df_compact_gpu
         f_host(i) = sin(2.0d0*pi*i/dim)
     end do
 
-    do i = 0, dim
-        df_exact(i) = (2.0d0*pi/dim) * cos(2.0d0*pi*i/dim)
-    end do
 
     !-----------------------------
     ! allocate device arrays
@@ -280,9 +276,9 @@ program test_df_compact_gpu
     !-----------------------------
     ! print results
     !-----------------------------
-    print *, ' i        df_gpu           df_exact'
+    print *, ' i        df_gpu'
     do i = 0, 10
-        print '(I4,2E20.10)', i, df_host(i), df_exact(i)
+        print '(I4, 1X, E25.16)', i, df_host(i)
     end do
 
 end program test_df_compact_gpu

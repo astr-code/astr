@@ -48,7 +48,7 @@ program test_df_compact_cpu
     !-----------------------------
     print *, ' i    df_cpu'
     do i = 0, 10
-        print '(I4,E20.10)', i, df(i)
+        print '(I4, 1X, E25.16)', i, df(i)
     end do
 
 end program test_df_compact_cpu
