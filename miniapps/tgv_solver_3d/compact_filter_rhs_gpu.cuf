@@ -1,4 +1,4 @@
-module compact_filter_kernel
+module compact_filter_rhs_kernel
    use initiate_gpu_constants
    implicit none
 contains
@@ -123,7 +123,7 @@ contains
 
    end function compact_filter_rhs_gpu
 
-   attributes(global) subroutine compact_filter_kernel(first_node, last_node, nbctype, f_d, d_d, dim)
+   attributes(global) subroutine compact_filter_rhs_gpu_kernel(first_node, last_node, nbctype, f_d, d_d, dim)
       use commvar, only: hm
       integer, value :: first_node, last_node, nbctype, dim
       real(8), device :: f_d(-hm:dim + hm)
@@ -133,16 +133,16 @@ contains
     d_d = compact_filter_rhs_gpu(first_node, last_node, nbctype, f_d, dim)
 
 
-   end subroutine compact_filter_kernel
+   end subroutine compact_filter_rhs_gpu_kernel
 
-end module compact_filter_kernel
+end module compact_filter_rhs_kernel
 
 
 
 program test_filter_gpu
    use filter
    use initiate_gpu_constants
-   use compact_filter_kernel
+   use compact_filter_rhs_kernel
    implicit none
    integer, parameter :: n = 64
    real(8) :: f_host(0:n)
@@ -179,7 +179,7 @@ program test_filter_gpu
    ! -------------------------
    ! 调用 global kernel
    ! -------------------------
-   call compact_filter_kernel <<<1,1>>>(0, n, 1, f_dev, d_dev, n)
+   call compact_filter_rhs_gpu_kernel<<<1,1>>>(0, n, 1, f_dev, d_dev, n)
 
    ! -------------------------
    ! 拷回结果到 host
