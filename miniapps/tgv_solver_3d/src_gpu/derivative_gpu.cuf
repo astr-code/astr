@@ -1,0 +1,133 @@
+module derivative_gpu
+   use cudafor
+   use commfunc_gpu, only: tridiagonal_thomas_solver_gpu
+
+   implicit none
+
+contains
+
+   attributes(device) function compact_fd_rhs_gpu(first_node, last_node, nbctype, f, dim) result(d)
+
+      use constdef
+      use commvar, only: hm
+      integer, intent(in) :: first_node, last_node, nbctype, dim
+      real(8), device, intent(in) :: f(-hm:dim + hm)
+      real(8), device :: d(first_node:last_node)
+
+      integer :: i_0, i_m, ntype, i_s, i_e, j
+      real(8) :: var1, var2, var3
+
+      i_0 = first_node
+      i_m = last_node
+      ntype = nbctype
+
+      if (ntype == 1 .or. ntype == 4) then
+
+         ! physical boundary
+
+         i_s = i_0 + 2
+
+         ! 4th-order compact
+         j = i_0 + 1
+         var1 = f(j + 1) - f(j - 1)
+         d(j) = 0.75d0*var1
+
+         ! ! 2nd-order biased compact
+         ! j=i_0
+         ! var1=f(j+1)-f(j)
+         ! d(j)=2.d0*var1
+
+         ! 3rd-order biased compact
+         j = i_0
+         d(j) = -2.5d0*f(j) + 2.d0*f(j + 1) + 0.5d0*f(j + 2)
+
+      else
+
+         ! interfaces
+         i_s = i_0 + 1
+
+         ! 6th-order explicit
+         j = i_0
+         var1 = f(j + 1) - f(j - 1)
+         var2 = f(j + 2) - f(j - 2)
+         var3 = f(j + 3) - f(j - 3)
+         d(j) = 0.75d0*var1 - 0.15d0*var2 + num1d60*var3
+
+      end if
+
+      if (ntype == 2 .or. ntype == 4) then
+
+         ! physical boundary
+         i_e = i_m - 2
+
+         ! 4th-order compact
+         j = i_m - 1
+         var1 = f(j + 1) - f(j - 1)
+         d(j) = 0.75d0*var1
+
+         ! ! 2nd-order biased compact
+         ! j=i_m
+         ! var1=f(j)-f(j-1)
+         ! d(j)=2.d0*var1
+
+         ! 3rd-order biased compact
+         j = i_m
+         d(j) = 2.5d0*f(j) - 2.d0*f(j - 1) - 0.5d0*f(j - 2)
+
+      else
+         ! interfaces
+         i_e = i_m - 1
+
+         ! 6th-order explicit
+         j = i_m
+         var1 = f(j + 1) - f(j - 1)
+         var2 = f(j + 2) - f(j - 2)
+         var3 = f(j + 3) - f(j - 3)
+         d(j) = 0.75d0*var1 - 0.15d0*var2 + num1d60*var3
+
+      end if
+
+      do j = i_s, i_e
+
+         ! 6th-order compact
+         var1 = f(j + 1) - f(j - 1)
+         var2 = f(j + 2) - f(j - 2)
+
+         d(j) = num7d9*var1 + num1d36*var2
+
+      end do
+
+   end function compact_fd_rhs_gpu
+
+   attributes(device) function df_compact_gpu(first_node, last_node, nbctype, ac, f, dim) result(df)
+
+      use constdef
+      use commvar, only: hm
+
+      integer, intent(in) :: first_node, last_node, nbctype, dim
+      real(8), device, intent(in) :: f(-hm:dim + hm)
+      real(8), device, intent(in) :: ac(:, :)
+
+      real(8), device :: df(0:dim)
+
+      real(8) :: d(first_node:last_node)
+      real(8) :: xx(first_node:last_node)
+
+      !------------------------------------
+      ! RHS
+      !------------------------------------
+      d = compact_fd_rhs_gpu(first_node, last_node, nbctype, f, dim)
+
+      !------------------------------------
+      ! tridiagonal solver
+      !------------------------------------
+      xx = tridiagonal_thomas_solver_gpu(ac, d)
+
+      !------------------------------------
+      ! copy result
+      !------------------------------------
+      df(0:dim) = xx(0:dim)
+
+   end function df_compact_gpu
+
+end module derivative_gpu

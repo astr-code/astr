@@ -1,0 +1,31 @@
+module commfunc_gpu
+
+    use cudafor
+
+    implicit none
+
+    contains
+
+   attributes(device) function tridiagonal_thomas_solver_gpu(ac, d) result(x)
+      real(8), intent(in)    :: ac(:, :)      ! ac(3, n)
+      real(8), intent(inout) :: d(:)          ! d(n) - 会被修改
+      real(8) :: x(size(d))                    ! 结果
+      integer :: i, n
+
+      n = size(d)
+
+      ! forward elimination
+      do i = 2, n
+         d(i) = d(i)*ac(2, i) - d(i - 1)*ac(3, i)
+      end do
+
+      ! backward substitution
+      x(n) = d(n)
+      do i = n - 1, 1, -1
+         x(i) = d(i) - ac(1, i)*x(i + 1)
+      end do
+   end function tridiagonal_thomas_solver_gpu
+
+
+   
+end module commfunc_gpu
