@@ -242,7 +242,7 @@ contains
    attributes(global) subroutine compact_filter_2d_kernel_i(q_d, ac_d, im, jm, km, numq, first_node, last_node, nbctype)
       use commvar, only: hm
       implicit none
-      real(8), device, intent(inout) :: q_d(:, :, :, :)
+      real(8), device, intent(inout) :: q_d(-hm:, -hm:, -hm:, :)
       real(8), device, intent(in) :: ac_d(:, :)
       integer, value :: im, jm, km, numq, first_node, last_node, nbctype
       integer ::  i, j, k, n
@@ -260,17 +260,13 @@ contains
          do n = 1, numq
 
             ! gather
-            do i = -hm, im + hm
-               f(i) = q_d(i, j, k, n)
-            end do
+            f(-hm:im+hm) = q_d( -hm:im+hm, j, k, n)
 
             ! filter
             ff = compact_filter_gpu(first_node, last_node, nbctype, ac_d, f, im)
 
             ! scatter
-            do i = 0, im
-               q_d(i, j, k, n) = ff(i)
-            end do
+            q_d(0:im, j, k, n) = ff(0:im)
 
          end do
 
@@ -318,7 +314,7 @@ contains
    attributes(global) subroutine compact_filter_2d_kernel_j(q_d, ac_d, im, jm, km, numq, first_node, last_node, nbctype)
       use commvar, only: hm
       implicit none
-      real(8), device, intent(inout) :: q_d(:, :, :, :)
+      real(8), device, intent(inout) :: q_d(-hm:, -hm:, -hm:, :)
       real(8), device, intent(in) :: ac_d(:, :)
       integer, value :: im, jm, km, numq, first_node, last_node, nbctype
       integer ::  i, j, k, n
@@ -336,17 +332,13 @@ contains
          do n = 1, numq
 
             ! gather
-            do j = -hm, jm + hm
-               f(j) = q_d(i, j, k, n)
-            end do
+            f(-hm:jm+hm) = q_d(i, -hm:jm+hm, k, n)
 
             ! filter
             ff = compact_filter_gpu(first_node, last_node, nbctype, ac_d, f, jm)
 
             ! scatter
-            do j = 0, jm
-               q_d(i, j, k, n) = ff(j)
-            end do
+            q_d(i, 0:jm, k, n) = ff(0:jm)
 
          end do
 
@@ -394,7 +386,7 @@ contains
    attributes(global) subroutine compact_filter_2d_kernel_k(q_d, ac_d, im, jm, km, numq, first_node, last_node, nbctype)
       use commvar, only: hm
       implicit none
-      real(8), device, intent(inout) :: q_d(:, :, :, :)
+      real(8), device, intent(inout) :: q_d(-hm:, -hm:, -hm:, :)
       real(8), device, intent(in) :: ac_d(:, :)
       integer, value :: im, jm, km, numq, first_node, last_node, nbctype
       integer ::  i, j, k, n
@@ -412,17 +404,13 @@ contains
          do n = 1, numq
 
             ! gather
-            do k = -hm, km + hm
-               f(k) = q_d(i, j, k, n)
-            end do
+            f(-hm:km+hm) = q_d( i, j, -hm:km+hm, n)
 
             ! filter
             ff = compact_filter_gpu(first_node, last_node, nbctype, ac_d, f, jm)
 
             ! scatter
-            do k = 0, km
-               q_d(i, j, k, n) = ff(k)
-            end do
+            q_d(i, j, 0:km, n) = ff(0:km)
 
          end do
 
@@ -430,4 +418,125 @@ contains
 
    end subroutine compact_filter_2d_kernel_k
 
+   attributes(global) subroutine bchomovec_gpu(var_d, dir, im, jm, km, hm, numq)
+    implicit none
+    integer, value :: dir, im, jm, km, hm, numq
+    real(8), device :: var_d(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
+    integer :: i, j, k, n
+    integer :: gi, gj, gk  ! 全局线程索引
+
+    ! 计算线程索引
+    gi = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+    gj = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+    gk = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+    ! -------------------------------------------------
+    ! i 方向边界条件
+    if (dir == 1 .or. dir == 0) then
+        if (gj >= 0 .and. gj <= jm .and. gk >= 0 .and. gk <= km) then
+            do n = 1, numq
+                if (gi >= -hm .and. gi <= -1) then
+                    var_d(gi, gj, gk, n) = var_d(im + gi, gj, gk, n)
+                else if (gi >= im+1 .and. gi <= im+hm) then
+                    var_d(gi, gj, gk, n) = var_d(gi - im, gj, gk, n)
+                end if
+            end do
+        end if
+    end if
+
+    ! -------------------------------------------------
+    ! j 方向边界条件
+    if (dir == 2 .or. dir == 0) then
+        if (gi >= 0 .and. gi <= im .and. gk >= 0 .and. gk <= km) then
+            do n = 1, numq
+                if (gj >= -hm .and. gj <= -1) then
+                    var_d(gi, gj, gk, n) = var_d(gi, jm + gj, gk, n)
+                else if (gj >= jm+1 .and. gj <= jm+hm) then
+                    var_d(gi, gj, gk, n) = var_d(gi, gj - jm, gk, n)
+                end if
+            end do
+        end if
+    end if
+
+    ! -------------------------------------------------
+    ! k 方向边界条件
+    if (dir == 3 .or. dir == 0) then
+        if (gi >= 0 .and. gi <= im .and. gj >= 0 .and. gj <= jm) then
+            do n = 1, numq
+                if (gk >= -hm .and. gk <= -1) then
+                    var_d(gi, gj, gk, n) = var_d(gi, gj, km + gk, n)
+                else if (gk >= km+1 .and. gk <= km+hm) then
+                    var_d(gi, gj, gk, n) = var_d(gi, gj, gk - km, n)
+                end if
+            end do
+        end if
+    end if
+
+   end subroutine bchomovec_gpu
+
+      subroutine compact_filter_2d(q, filter_i,filter_j,filter_k, im, jm, km, numq)
+      use cudafor
+      use commvar, only: hm
+      use commtype, only: compact_scheme
+      implicit none
+      ! 输入输出参数
+      real(8), intent(inout) :: q(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq)
+      type(compact_scheme), intent(in) :: filter_i,filter_j,filter_k  ! filter scheme
+      integer, intent(in) :: im, jm, km, numq
+
+      integer :: first_node, last_node, nbctype, istat
+      real(8), device, allocatable::  ac_d(:, :)
+      real(8), device, allocatable :: q_d(:, :, :, :)
+
+      type(dim3) :: grid, block
+
+      allocate (ac_d(size(filter_i%ac, 1), size(filter_i%ac, 2)))
+      allocate (q_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq))
+
+      q_d = q
+      first_node = filter_i%first_node
+      last_node = filter_i%last_node
+      nbctype = filter_i%nbctype
+      ac_d = filter_i%ac
+      block = dim3(16,16,1)
+      grid = dim3((im+hm+1+15)/16, (jm+hm+1+15)/16, (km+hm+1+15)/16)
+      call bchomovec_gpu<<<grid, block>>>(q_d, 1, im, jm, km, hm, numq)
+
+      block = dim3(16, 16, 1)
+      grid = dim3((jm + 16 - 1)/16, (km + 16 - 1)/16, 1)
+      call compact_filter_2d_kernel_i <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
+                                                                   first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      first_node = filter_j%first_node
+      last_node = filter_j%last_node
+      nbctype = filter_j%nbctype
+      ac_d = filter_j%ac
+
+      block = dim3(16,16,1)
+      grid = dim3((im+hm+1+15)/16, (jm+hm+1+15)/16, (km+hm+1+15)/16)
+      call bchomovec_gpu<<<grid, block>>>(q_d, 2, im, jm, km, hm, numq)
+
+      block = dim3(16, 16, 1)
+      grid = dim3((jm + 16 - 1)/16, (km + 16 - 1)/16, 1)
+      call compact_filter_2d_kernel_j <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
+                                                                   first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+
+      first_node = filter_k%first_node
+      last_node = filter_k%last_node
+      nbctype = filter_k%nbctype
+      ac_d = filter_k%ac
+
+      block = dim3(16,16,1)
+      grid = dim3((im+hm+1+15)/16, (jm+hm+1+15)/16, (km+hm+1+15)/16)
+      call bchomovec_gpu<<<grid, block>>>(q_d, 3, im, jm, km, hm, numq)
+
+      block = dim3(16, 16, 1)
+      grid = dim3((jm + 16 - 1)/16, (km + 16 - 1)/16, 1)
+      call compact_filter_2d_kernel_k <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
+                                                                   first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      q=q_d
+   end subroutine compact_filter_2d
 end module filter_gpu

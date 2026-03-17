@@ -155,15 +155,15 @@ module initilise
 
         numq=5
 
-        im=256
-        jm=256
-        km=256
+        im=128
+        jm=128
+        km=128
 
         difschm='643c'
 
         alfa_filter=0.49d0
 
-        maxstep=100
+        maxstep=10
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -809,30 +809,7 @@ module solver
 
     istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
     !
-    ! filtering in i direction
-    call bchomovec(var=q,dir=1)
-    call compact_filter_2d_i(q, filter_i, im, jm, km, numq)
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end filter in i direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    ! filtering in j direction
-    call bchomovec(var=q,dir=2)
-    call compact_filter_2d_j(q, filter_j, im, jm, km, numq)
-    !
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end filter in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    ! filtering in k direction
-    call bchomovec(var=q,dir=3)
-    call compact_filter_2d_j(q, filter_k, im, jm, km, numq)
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end filter in k direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    call compact_filter_2d(q, filter_i,filter_j,filter_k, im, jm, km, numq)
     !
     return
     !
