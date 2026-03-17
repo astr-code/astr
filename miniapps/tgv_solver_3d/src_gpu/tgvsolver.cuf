@@ -155,9 +155,9 @@ module initilise
 
         numq=5
 
-        im=128
-        jm=128
-        km=128
+        im=256
+        jm=256
+        km=256
 
         difschm='643c'
 
@@ -819,24 +819,7 @@ module solver
     !
     ! filtering in j direction
     call bchomovec(var=q,dir=2)
-    !
-    allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
-    !
-    do k=0,km
-    do i=0,im
-      !
-      phi(:,:)=q(i,:,k,:)
-      !
-      do n=1,numq
-        fph(:,n)=compact_filter(afilter=filter_j,f=phi(:,n),dim=jm)
-      enddo
-      !
-      q(i,0:jm,k,:)=fph(0:jm,:)
-      !
-    end do
-    end do
-    !
-    deallocate(phi,fph)
+    call compact_filter_2d_j(q, filter_j, im, jm, km, numq)
     !
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -845,24 +828,7 @@ module solver
     !
     ! filtering in k direction
     call bchomovec(var=q,dir=3)
-
-    allocate(phi(-hm:km+hm,1:numq),fph(0:km,1:numq))
-    
-    do j=0,jm
-    do i=0,im
-      !
-      phi(:,:)=q(i,j,:,:)
-      !
-      do n=1,numq
-        fph(:,n)=compact_filter(afilter=filter_k,f=phi(:,n),dim=km)
-      enddo
-      !
-      q(i,j,0:km,:)=fph
-      !
-    end do
-    end do
-    !
-    deallocate(phi,fph)
+    call compact_filter_2d_j(q, filter_k, im, jm, km, numq)
     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! end filter in k direction.

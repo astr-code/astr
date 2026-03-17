@@ -230,7 +230,7 @@ contains
       q_d = q
 
       block = dim3(16, 16, 1)
-      grid = dim3((jm + 1 + 15)/16, (km + 1 + 15)/16, 1)
+      grid = dim3((jm + 16 - 1)/16, (km + 16 - 1)/16, 1)
 
       call compact_filter_2d_kernel_i <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
                                                                    first_node, last_node, nbctype)
@@ -277,5 +277,157 @@ contains
       end if
 
    end subroutine compact_filter_2d_kernel_i
+
+   subroutine compact_filter_2d_j(q, filter_j, im, jm, km, numq)
+      use cudafor
+      use commvar, only: hm
+      use commtype, only: compact_scheme
+      implicit none
+      ! 输入输出参数
+      real(8), intent(inout) :: q(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq)
+      type(compact_scheme), intent(in) :: filter_j  ! filter scheme
+      integer, intent(in) :: im, jm, km, numq
+
+      integer :: first_node, last_node, nbctype, istat
+      real(8), device, allocatable::  ac_d(:, :)
+      real(8), device, allocatable :: q_d(:, :, :, :)
+
+      type(dim3) :: grid, block
+
+      allocate (ac_d(size(filter_j%ac, 1), size(filter_j%ac, 2)))
+      allocate (q_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq))
+
+      first_node = filter_j%first_node
+      last_node = filter_j%last_node
+      nbctype = filter_j%nbctype
+
+      ac_d = filter_j%ac
+
+      q_d = q
+
+      block = dim3(16, 16, 1)
+      grid = dim3((km + 16 - 1)/16, (im + 16 - 1)/16, 1)
+
+      call compact_filter_2d_kernel_j <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
+                                                                   first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      q = q_d
+
+   end subroutine compact_filter_2d_j
+
+   attributes(global) subroutine compact_filter_2d_kernel_j(q_d, ac_d, im, jm, km, numq, first_node, last_node, nbctype)
+      use commvar, only: hm
+      implicit none
+      real(8), device, intent(inout) :: q_d(:, :, :, :)
+      real(8), device, intent(in) :: ac_d(:, :)
+      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
+      integer ::  i, j, k, n
+
+      real(8) :: f(-hm:jm + hm)
+      real(8) :: ff(0:jm)
+
+      ! 计算全局 k,i 索引
+      k = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      i = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      ! 边界判断
+      if (k >= 0 .and. k <= km .and. i >= 0 .and. i <= im) then
+
+         do n = 1, numq
+
+            ! gather
+            do j = -hm, jm + hm
+               f(j) = q_d(i, j, k, n)
+            end do
+
+            ! filter
+            ff = compact_filter_gpu(first_node, last_node, nbctype, ac_d, f, jm)
+
+            ! scatter
+            do j = 0, jm
+               q_d(i, j, k, n) = ff(j)
+            end do
+
+         end do
+
+      end if
+
+   end subroutine compact_filter_2d_kernel_j
+
+   subroutine compact_filter_2d_k(q, filter_k, im, jm, km, numq)
+      use cudafor
+      use commvar, only: hm
+      use commtype, only: compact_scheme
+      implicit none
+      ! 输入输出参数
+      real(8), intent(inout) :: q(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq)
+      type(compact_scheme), intent(in) :: filter_k  ! filter scheme
+      integer, intent(in) :: im, jm, km, numq
+
+      integer :: first_node, last_node, nbctype, istat
+      real(8), device, allocatable::  ac_d(:, :)
+      real(8), device, allocatable :: q_d(:, :, :, :)
+
+      type(dim3) :: grid, block
+
+      allocate (ac_d(size(filter_k%ac, 1), size(filter_k%ac, 2)))
+      allocate (q_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq))
+
+      first_node = filter_k%first_node
+      last_node = filter_k%last_node
+      nbctype = filter_k%nbctype
+
+      ac_d = filter_k%ac
+
+      q_d = q
+
+      block = dim3(16, 16, 1)
+      grid = dim3((im + 16 - 1)/16, (jm + 16 - 1)/16, 1)
+
+      call compact_filter_2d_kernel_k <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
+                                                                   first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      q = q_d
+
+   end subroutine compact_filter_2d_k
+
+   attributes(global) subroutine compact_filter_2d_kernel_k(q_d, ac_d, im, jm, km, numq, first_node, last_node, nbctype)
+      use commvar, only: hm
+      implicit none
+      real(8), device, intent(inout) :: q_d(:, :, :, :)
+      real(8), device, intent(in) :: ac_d(:, :)
+      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
+      integer ::  i, j, k, n
+
+      real(8) :: f(-hm:km + hm)
+      real(8) :: ff(0:km)
+
+      ! 计算全局 k,i 索引
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm) then
+
+         do n = 1, numq
+
+            ! gather
+            do k = -hm, km + hm
+               f(k) = q_d(i, j, k, n)
+            end do
+
+            ! filter
+            ff = compact_filter_gpu(first_node, last_node, nbctype, ac_d, f, jm)
+
+            ! scatter
+            do k = 0, km
+               q_d(i, j, k, n) = ff(k)
+            end do
+
+         end do
+
+      end if
+
+   end subroutine compact_filter_2d_kernel_k
 
 end module filter_gpu
