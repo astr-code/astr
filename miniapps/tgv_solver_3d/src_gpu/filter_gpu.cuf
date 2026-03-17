@@ -2,7 +2,7 @@ module filter_gpu
 
    use cudafor
    use filter
-   use commfunc_gpu,only:tridiagonal_thomas_solver_gpu
+   use commfunc_gpu, only: tridiagonal_thomas_solver_gpu
    implicit none
 
    !cal_init
@@ -176,31 +176,8 @@ contains
 
    end function compact_filter_gpu
 
-     attributes(global) subroutine compact_filter_2d_kernel(q, ac_i, ac_j, ac_k, &
-       im, jm, km, numq)
-    real(8), device, intent(inout) :: q(:,:,:,:)
-    real(8), device, intent(in)    :: ac_i(:,:), ac_j(:,:), ac_k(:,:)
-    integer, intent(in) :: im, jm, km, numq
-
-    integer :: j,k,n
-    ! 计算全局 j,k 索引
-    j = (blockIdx%x-1) * blockDim%x + threadIdx%x - 1
-    k = (blockIdx%y-1) * blockDim%y + threadIdx%y - 1
-
-    ! 边界判断
-    if (j < 0 .or. j > jm .or. k < 0 .or. k > km) return
-
-    ! 内部循环 n 处理每个变量
-    do n = 1, numq
-      ! 在 i 方向上调用 device 版本滤波
-      ! 假设 q(:,j,k,n) 是一维 f
-      q(0:im,j,k,n) = compact_filter_device( q(0:im,j,k,n), ac_i, im )
-    end do
-
-  end subroutine filter2d_kernel
-
    !call copy_coeff_to_gpu after filter_coefficient_cal and filter_coefficient_explicit
-   subroutine copy_coeff_to_gpu()
+   subroutine copy_coeff_to_gpu_cal()
 
       implicit none
 
@@ -212,6 +189,9 @@ contains
       coefb_d = coefb
       coefh_d = coefh
 
+   end subroutine copy_coeff_to_gpu_cal
+
+   subroutine copy_coeff_to_gpu_explicit()
       coef2e_d = coef2e
       coef4e_d = coef4e
       coef6e_d = coef6e
@@ -220,7 +200,82 @@ contains
       coef3be_d = coef3be
       coef4be_d = coef4be
       coef6be_d = coef6be
+   end subroutine copy_coeff_to_gpu_explicit
 
-   end subroutine copy_coeff_to_gpu
+   subroutine compact_filter_2d_i(q, filter_i, im, jm, km, numq)
+      use cudafor
+      use commvar, only: hm
+      use commtype, only: compact_scheme
+      implicit none
+      ! 输入输出参数
+      real(8), intent(inout) :: q(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq)
+      type(compact_scheme), intent(in) :: filter_i  ! filter scheme
+      integer, intent(in) :: im, jm, km, numq
+
+      integer :: first_node, last_node, nbctype, istat
+      real(8), device, allocatable::  ac_d(:, :)
+      real(8), device, allocatable :: q_d(:, :, :, :)
+
+      type(dim3) :: grid, block
+
+      allocate (ac_d(size(filter_i%ac, 1), size(filter_i%ac, 2)))
+      allocate (q_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq))
+
+      first_node = filter_i%first_node
+      last_node = filter_i%last_node
+      nbctype = filter_i%nbctype
+
+      ac_d = filter_i%ac
+
+      q_d = q
+
+      block = dim3(16, 16, 1)
+      grid = dim3((jm + 1 + 15)/16, (km + 1 + 15)/16, 1)
+
+      call compact_filter_2d_kernel_i <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
+                                                                   first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      q = q_d
+
+   end subroutine compact_filter_2d_i
+
+   attributes(global) subroutine compact_filter_2d_kernel_i(q_d, ac_d, im, jm, km, numq, first_node, last_node, nbctype)
+      use commvar, only: hm
+      implicit none
+      real(8), device, intent(inout) :: q_d(:, :, :, :)
+      real(8), device, intent(in) :: ac_d(:, :)
+      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
+      integer ::  i, j, k, n
+
+      real(8) :: f(-hm:im + hm)
+      real(8) :: ff(0:im)
+
+      ! 计算全局 j,k 索引
+      j = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      k = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      ! 边界判断
+      if (j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+
+         do n = 1, numq
+
+            ! gather
+            do i = -hm, im + hm
+               f(i) = q_d(i, j, k, n)
+            end do
+
+            ! filter
+            ff = compact_filter_gpu(first_node, last_node, nbctype, ac_d, f, im)
+
+            ! scatter
+            do i = 0, im
+               q_d(i, j, k, n) = ff(i)
+            end do
+
+         end do
+
+      end if
+
+   end subroutine compact_filter_2d_kernel_i
 
 end module filter_gpu
