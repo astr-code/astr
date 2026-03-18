@@ -793,7 +793,6 @@ module solver
     use commvar,  only : im,jm,km,hm,numq
     use commarray,only : q
     use filter,   only : compact_filter,filter_i,filter_j,filter_k
-    use bc, only : bchomovec
     use filter_gpu
     !
     ! local data
@@ -1040,9 +1039,8 @@ program boxsolver
     
     call cpu_time(tfinish)
     !
-    ! ctime(1)=tfinish-tstart
     !
-    ! call timereport
+    print *, ' ** total CPU time: ', tfinish - tstart, ' seconds **'
     !
     print*,' ** the job is done **'
     !
