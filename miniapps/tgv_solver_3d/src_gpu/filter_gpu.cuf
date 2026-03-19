@@ -372,10 +372,11 @@ contains
 
       type(dim3) :: grid, block
 
-      allocate (ac_d(size(filter_i%ac, 1), size(filter_i%ac, 2)))
       allocate (q_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq))
 
       q_d = q
+
+      allocate (ac_d(size(filter_i%ac, 1), size(filter_i%ac, 2)))
       first_node = filter_i%first_node
       last_node = filter_i%last_node
       nbctype = filter_i%nbctype
@@ -390,6 +391,8 @@ contains
                                                                    first_node, last_node, nbctype)
       istat = cudaDeviceSynchronize()
 
+      deallocate(ac_d)
+      allocate (ac_d(size(filter_j%ac, 1), size(filter_j%ac, 2)))
       first_node = filter_j%first_node
       last_node = filter_j%last_node
       nbctype = filter_j%nbctype
@@ -404,6 +407,8 @@ contains
                                                                    first_node, last_node, nbctype)
       istat = cudaDeviceSynchronize()
 
+      deallocate(ac_d)
+      allocate (ac_d(size(filter_k%ac, 1), size(filter_k%ac, 2)))
       first_node = filter_k%first_node
       last_node = filter_k%last_node
       nbctype = filter_k%nbctype
@@ -417,6 +422,7 @@ contains
       call compact_filter_2d_kernel_k <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
                                                                    first_node, last_node, nbctype)
       istat = cudaDeviceSynchronize()
+      
       q=q_d
    end subroutine compact_filter_2d
 

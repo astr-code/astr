@@ -4,6 +4,8 @@ module derivative_gpu
 
    implicit none
 
+   integer :: df_scheme_type
+   integer, parameter :: COMPACT=1, EXPLICIT=2
 contains
 
    attributes(device) function compact_fd_rhs_gpu(first_node, last_node, nbctype, f, dim) result(d)
@@ -130,4 +132,215 @@ contains
 
    end function df_compact_gpu
 
+   attributes(global) subroutine df_compact_2d_kernel_i(vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,&
+                                                   im, jm, km, ncolm, first_node, last_node, nbctype)
+      use commvar, only: hm
+      implicit none
+
+      real(8), device, intent(in) :: ac_d(:, :)
+      real(8), device, intent(in) :: vel_d(-hm:, -hm:, -hm:, :)
+      real(8), device, intent(in) :: tmp_d(-hm:, -hm:, -hm:)
+
+      real(8), device, intent(inout) :: dvel_d(0:, 0:, 0:, :, :)
+      real(8), device, intent(inout) :: dtmp_d(0:, 0:, 0:, :)
+
+      integer, value :: im, jm, km, ncolm, first_node, last_node, nbctype
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k, n
+
+      real(8) :: ff(-hm:im + hm, ncolm)
+      real(8) :: df(0:im, ncolm)
+
+      j = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      k = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      ! 边界判断
+      if (j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+            ff(:, 1) = vel_d(:, j, k, 1)
+            ff(:, 2) = vel_d(:, j, k, 2)
+            ff(:, 3) = vel_d(:, j, k, 3)
+            ff(:, 4) = tmp_d(:, j, k)
+
+         do n=1,ncolm
+            df(:, n) = df_compact_gpu(first_node, last_node, nbctype, ac_d, ff(:, n), im)
+         end do
+
+            dvel_d(:, j, k, 1, 1) = df(:, 1)/dx
+            dvel_d(:, j, k, 2, 1) = df(:, 2)/dx
+            dvel_d(:, j, k, 3, 1) = df(:, 3)/dx
+
+            dtmp_d(:, j, k, 1) = df(:, 4)/dx
+
+      end if
+
+   end subroutine df_compact_2d_kernel_i
+
+   attributes(global) subroutine df_compact_2d_kernel_j(vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,&
+                                                   im, jm, km, ncolm, first_node, last_node, nbctype)
+      use commvar, only: hm
+      implicit none
+
+      real(8), device, intent(in) :: ac_d(:, :)
+      real(8), device, intent(in) :: vel_d(-hm:, -hm:, -hm:, :)
+      real(8), device, intent(in) :: tmp_d(-hm:, -hm:, -hm:)
+
+      real(8), device, intent(inout) :: dvel_d(0:, 0:, 0:, :, :)
+      real(8), device, intent(inout) :: dtmp_d(0:, 0:, 0:, :)
+
+      integer, value :: im, jm, km, ncolm, first_node, last_node, nbctype
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k, n
+
+      real(8) :: ff(-hm:jm + hm, ncolm)
+      real(8) :: df(0:jm, ncolm)
+
+      k = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      i = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      ! 边界判断
+      if (k >= 0 .and. k <= km .and. i >= 0 .and. i <= im) then
+            ff(:, 1) = vel_d(i, :, k, 1)
+            ff(:, 2) = vel_d(i, :, k, 2)
+            ff(:, 3) = vel_d(i, :, k, 3)
+            ff(:, 4) = tmp_d(i, :, k)
+
+         do n=1,ncolm
+            df(:, n) = df_compact_gpu(first_node, last_node, nbctype, ac_d, ff(:, n), jm)
+         end do
+
+            dvel_d(i, :, k, 1, 1) = df(:, 1)/dy
+            dvel_d(i, :, k, 2, 1) = df(:, 2)/dy
+            dvel_d(i, :, k, 3, 1) = df(:, 3)/dy
+
+            dtmp_d(i, :, k, 1) = df(:, 4)/dy
+
+      end if
+
+   end subroutine df_compact_2d_kernel_j
+
+   attributes(global) subroutine df_compact_2d_kernel_k(vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,&
+                                                   im, jm, km, ncolm, first_node, last_node, nbctype)
+      use commvar, only: hm
+      implicit none
+
+      real(8), device, intent(in) :: ac_d(:, :)
+      real(8), device, intent(in) :: vel_d(-hm:, -hm:, -hm:, :)
+      real(8), device, intent(in) :: tmp_d(-hm:, -hm:, -hm:)
+
+      real(8), device, intent(inout) :: dvel_d(0:, 0:, 0:, :, :)
+      real(8), device, intent(inout) :: dtmp_d(0:, 0:, 0:, :)
+
+      integer, value :: im, jm, km, ncolm, first_node, last_node, nbctype
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k, n
+
+      real(8) :: ff(-hm:km + hm, ncolm)
+      real(8) :: df(0:km, ncolm)
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm) then
+            ff(:, 1) = vel_d(i, j, :, 1)
+            ff(:, 2) = vel_d(i, j, :, 2)
+            ff(:, 3) = vel_d(i, j, :, 3)
+            ff(:, 4) = tmp_d(i, j, :)
+
+         do n=1,ncolm
+            df(:, n) = df_compact_gpu(first_node, last_node, nbctype, ac_d, ff(:, n), km)
+         end do
+
+            dvel_d(i, j, :, 1, 1) = df(:, 1)/dz
+            dvel_d(i, j, :, 2, 1) = df(:, 2)/dz
+            dvel_d(i, j, :, 3, 1) = df(:, 3)/dz
+
+            dtmp_d(i, j, :, 1) = df(:, 4)/dz
+
+      end if
+
+   end subroutine df_compact_2d_kernel_k
+
+   subroutine df_compact_2d(vel,tmp,dx,dy,dz,dvel,dtmp, fds_compact_i, fds_compact_j, fds_compact_k, im, jm, km, ncolm)
+      use cudafor
+      use commvar, only: hm
+      use commtype, only: compact_scheme
+      implicit none
+      ! 输入输出参数
+      type(compact_scheme), intent(in) :: fds_compact_i, fds_compact_j, fds_compact_k
+      integer, intent(in) :: im, jm, km
+      integer, intent(in) :: ncolm
+      real(8), intent(in) :: vel(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:3)
+      real(8), intent(in) :: tmp(-hm:im + hm, -hm:jm + hm, -hm:km + hm)
+      real(8), intent(in) :: dx, dy, dz
+      
+      real(8), intent(inout) :: dvel(0:im, 0:jm, 0:km, 1:3, 1:3)
+      real(8), intent(inout) :: dtmp(0:im, 0:jm, 0:km, 1:3)
+
+      integer :: first_node, last_node, nbctype, istat
+
+      integer :: blksz=32
+
+      type(dim3) :: grid, block
+
+      real(8), device, allocatable :: vel_d(:, :, :, :)
+      real(8), device, allocatable :: tmp_d(:, :, :)
+      real(8), device, allocatable :: dvel_d(:, :, :, :, :)
+      real(8), device, allocatable :: dtmp_d(:, :, :, :)
+
+      real(8), device, allocatable::  ac_d(:, :)
+
+      allocate (vel_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:3))
+      allocate (tmp_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm))
+      allocate (dvel_d(0:im, 0:jm, 0:km, 1:3, 1:3))
+      allocate (dtmp_d(0:im, 0:jm, 0:km, 1:3))
+
+      vel_d=vel
+      tmp_d=tmp
+      dvel_d=dvel
+      dtmp_d=dtmp
+
+      allocate (ac_d(size(fds_compact_i%ac, 1), size(fds_compact_i%ac, 2)))
+      first_node = fds_compact_i%first_node
+      last_node = fds_compact_i%last_node
+      nbctype = fds_compact_i%nbctype
+      ac_d = fds_compact_i%ac
+
+      block = dim3(blksz, blksz, 1)
+      grid = dim3((jm + blksz - 1)/blksz, (km + blksz - 1)/blksz, 1)
+      call df_compact_2d_kernel_i <<< grid, block >>> (vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,&
+                                                   im, jm, km, ncolm, first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      
+      deallocate(ac_d)
+      allocate (ac_d(size(fds_compact_j%ac, 1), size(fds_compact_j%ac, 2)))
+      first_node = fds_compact_j%first_node
+      last_node = fds_compact_j%last_node
+      nbctype = fds_compact_j%nbctype
+      ac_d = fds_compact_j%ac
+
+      block = dim3(blksz, blksz, 1)
+      grid = dim3((km + blksz - 1)/blksz, (im + blksz - 1)/blksz, 1)
+      call df_compact_2d_kernel_j <<< grid, block >>> (vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,&
+                                                   im, jm, km, ncolm, first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      
+      deallocate(ac_d)
+      allocate (ac_d(size(fds_compact_k%ac, 1), size(fds_compact_k%ac, 2)))
+      first_node = fds_compact_k%first_node
+      last_node = fds_compact_k%last_node
+      nbctype = fds_compact_k%nbctype
+      ac_d = fds_compact_k%ac
+
+      block = dim3(blksz, blksz, 1)
+      grid = dim3((im + blksz - 1)/blksz, (jm + blksz - 1)/blksz, 1)
+      call df_compact_2d_kernel_k <<< grid, block >>> (vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,&
+                                                   im, jm, km, ncolm, first_node, last_node, nbctype)
+      istat = cudaDeviceSynchronize()
+      
+      deallocate(ac_d)
+
+      dvel=dvel_d
+      dtmp=dtmp_d
+   end subroutine
 end module derivative_gpu
