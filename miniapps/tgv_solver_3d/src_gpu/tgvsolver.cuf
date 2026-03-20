@@ -155,9 +155,9 @@ contains
 
       numq = 5
 
-      im = 256
-      jm = 256
-      km = 256
+      im = 128
+      jm = 128
+      km = 128
 
       difschm = '643c'
 
@@ -456,18 +456,24 @@ contains
       use derivative, only: fds, fds_compact_i, fds_compact_j, fds_compact_k
       use derivative_gpu
       ! local data
-      integer :: i, j, k, n, ncolm
+      integer :: i, j, k, n, ncolm, istat
       real(8), allocatable :: df(:, :), ff(:, :)
+      integer(kind=cuda_count_kind) :: heapSize
 
       real(8) :: time_beg
 
       ncolm = 4
+
+      heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*1024_cuda_count_kind
+      istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
 
       ! calculate velocity and temperature gradient
 
       select case (df_scheme_type)
 
       case (COMPACT)
+         
+
          call df_compact_2d(vel,tmp,dx,dy,dz,dvel,dtmp, fds_compact_i, fds_compact_j, fds_compact_k, im, jm, km, ncolm)
 
       case (EXPLICIT)
@@ -744,7 +750,7 @@ contains
       real(8), allocatable :: phi(:, :), fph(:, :)
 
       call copy_coeff_to_gpu_cal()
-      heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*512_cuda_count_kind
+      heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*1024_cuda_count_kind
 
       istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
       !
@@ -985,4 +991,3 @@ program boxsolver
    print *, ' ** the job is done **'
    !
 end program boxsolver
-
