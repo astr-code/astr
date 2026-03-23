@@ -302,7 +302,9 @@ contains
       ac_d = fds_compact_i%ac
 
       block = dim3(blksz, blksz, 1)
-      grid = dim3((jm + blksz - 1)/blksz, (km + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(jm+1)/blksz)
+      grid%y = ceiling(real(km+1)/blksz)
+      grid%z = 1
       call gradcal_2d_kernel_i <<< grid, block >>> (vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,im, jm, km, ncolm, first_node, last_node, nbctype)
       istat = cudaGetLastError()
       if (istat /= 0) then
@@ -323,7 +325,9 @@ contains
       ac_d = fds_compact_j%ac
 
       block = dim3(blksz, blksz, 1)
-      grid = dim3((km + blksz - 1)/blksz, (im + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(km+1)/blksz)
+      grid%y = ceiling(real(im+1)/blksz)
+      grid%z = 1
       call gradcal_2d_kernel_j <<< grid, block >>> (vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,im, jm, km, ncolm, first_node, last_node, nbctype)
       istat = cudaGetLastError()
       if (istat /= 0) then
@@ -344,7 +348,9 @@ contains
       ac_d = fds_compact_k%ac
 
       block = dim3(blksz, blksz, 1)
-      grid = dim3((im + blksz - 1)/blksz, (jm + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = 1
       call gradcal_2d_kernel_k <<< grid, block >>> (vel_d, tmp_d, dvel_d, dtmp_d, dx, dy, dz, ac_d,im, jm, km, ncolm, first_node, last_node, nbctype)
       istat = cudaGetLastError()
       if (istat /= 0) then
@@ -416,7 +422,9 @@ contains
       ac_i_d = fds_compact_i%ac
 
       block = dim3(blksz, blksz, 1)
-      grid = dim3((jm + blksz - 1)/blksz, (km + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(jm+1)/blksz)
+      grid%y = ceiling(real(km+1)/blksz)
+      grid%z = 1
       call convection_2d_kernel_i <<< grid, block >>>(q_d, vel_d, prs_d, qrhs_d, ac_i_d, dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
       istat = cudaGetLastError()
       if (istat /= 0) then
@@ -436,7 +444,9 @@ contains
       ac_j_d = fds_compact_j%ac
 
       block = dim3(blksz, blksz, 1)
-      grid = dim3((km + blksz - 1)/blksz, (im + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(km+1)/blksz)
+      grid%y = ceiling(real(im+1)/blksz)
+      grid%z = 1
       call convection_2d_kernel_j <<< grid, block >>>(q_d, vel_d, prs_d, qrhs_d, ac_j_d, dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
       istat = cudaGetLastError()
       if (istat /= 0) then
@@ -456,7 +466,9 @@ contains
       ac_k_d = fds_compact_k%ac
 
       block = dim3(blksz, blksz, 1)
-      grid = dim3((im + blksz - 1)/blksz, (jm + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = 1
       call convection_2d_kernel_k <<< grid, block >>>(q_d, vel_d, prs_d, qrhs_d, ac_k_d, dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
       istat = cudaGetLastError()
       if (istat /= 0) then

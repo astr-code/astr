@@ -366,7 +366,7 @@ contains
       integer, intent(in) :: im, jm, km, numq
 
       integer :: first_node, last_node, nbctype, istat
-      integer :: blksz=32
+      integer :: blksz=16
       real(8), device, allocatable::  ac_d(:, :)
       real(8), device, allocatable :: q_d(:, :, :, :)
 
@@ -386,7 +386,9 @@ contains
       call bchomovec_gpu<<<grid, block>>>(q_d, 1, im, jm, km, hm, numq)
       istat = cudaDeviceSynchronize()
       block = dim3(blksz, blksz, 1)
-      grid = dim3((jm + blksz - 1)/blksz, (km + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(jm+1)/blksz)
+      grid%y = ceiling(real(km+1)/blksz)
+      grid%z = 1
       call compact_filter_2d_kernel_i <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
                                                                    first_node, last_node, nbctype)
       istat = cudaDeviceSynchronize()
@@ -402,7 +404,9 @@ contains
       call bchomovec_gpu<<<grid, block>>>(q_d, 2, im, jm, km, hm, numq)
       istat = cudaDeviceSynchronize()
       block = dim3(blksz, blksz, 1)
-      grid = dim3((km + blksz - 1)/blksz, (im + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(km+1)/blksz)
+      grid%y = ceiling(real(im+1)/blksz)
+      grid%z = 1
       call compact_filter_2d_kernel_j <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
                                                                    first_node, last_node, nbctype)
       istat = cudaDeviceSynchronize()
@@ -418,7 +422,9 @@ contains
       call bchomovec_gpu<<<grid, block>>>(q_d, 3, im, jm, km, hm, numq)
       istat = cudaDeviceSynchronize()
       block = dim3(blksz, blksz, 1)
-      grid = dim3((im + blksz - 1)/blksz, (jm + blksz - 1)/blksz, 1)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = 1
       call compact_filter_2d_kernel_k <<< grid, block >>> (q_d, ac_d, im, jm, km, numq, &
                                                                    first_node, last_node, nbctype)
       istat = cudaDeviceSynchronize()

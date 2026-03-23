@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=10
+        maxstep=3
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
