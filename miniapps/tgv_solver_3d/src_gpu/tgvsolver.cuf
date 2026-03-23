@@ -241,12 +241,14 @@ module initilise
         use filter,     only : compact_filter_initiate,filter_coefficient_cal, &
                                filter_i,filter_j,filter_k,filter_ii,filter_jj, &
                                filter_kk
+        use derivative_gpu
 
         call fd_scheme_initiate(asolver=fds_compact_i,scheme=difschm,ntype=3,dim=im,dir=1)
         call fd_scheme_initiate(asolver=fds_compact_j,scheme=difschm,ntype=3,dim=jm,dir=2)
         call fd_scheme_initiate(asolver=fds_compact_k,scheme=difschm,ntype=3,dim=km,dir=3)
 
         allocate(compact_central :: fds)
+        df_scheme_type = COMPACT
 
         print*,' ** finite-difference solver initilised'
 
@@ -455,14 +457,11 @@ module solver
         use derivative_gpu
 
         ! local data
-        integer :: i,j,k,n,ncolm,istat
-        integer(kind=cuda_count_kind) :: heapSize
+        integer :: i,j,k,n,ncolm
 
         real(8) :: time_beg
 
         ncolm=4
-        heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*1024_cuda_count_kind
-        istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
         ! calculate velocity and temperature gradient
         select case (df_scheme_type)
           case (COMPACT)
@@ -481,13 +480,9 @@ module solver
         !
         !
         ! local data
-        integer :: i,j,k,n,istat
+        integer :: i,j,k,n
         !
         real(8),save :: subtime=0.d0
-        
-        integer(kind=cuda_count_kind) :: heapSize
-        heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*1024_cuda_count_kind
-        istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
 
         select case (df_scheme_type)
           case (COMPACT)
@@ -661,15 +656,11 @@ module solver
     use filter_gpu
     !
     ! local data
-    integer :: i,j,k,n,m,istat
-    integer(kind=cuda_count_kind) :: heapSize
+    integer :: i,j,k,n,m
     !
     real(8) :: time_beg
     real(8),save :: subtime=0.d0
     call copy_coeff_to_gpu_cal()
-    heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*1024_cuda_count_kind
-
-    istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
     !
     call compact_filter_2d(q, filter_i, filter_j, filter_k, im, jm, km, numq)
     !
@@ -883,10 +874,15 @@ program boxsolver
     use initilise, only: program_init,flowfield_init,solver_init
     use commarray, only: allocommarray
     use mainloop,  only: steploop
+    use cudafor
 
     implicit none
+    integer :: istat
+    integer(kind=cuda_count_kind) :: heapSize
     !
     real :: tstart,tfinish
+    heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*512_cuda_count_kind
+    istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
     !
     call cpu_time(tstart)
     
