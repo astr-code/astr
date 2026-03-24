@@ -123,7 +123,7 @@ contains
       !------------------------------------
       ! tridiagonal solver
       !------------------------------------
-      df(0:dim) = tridiagonal_thomas_solver_gpu(ac, d)
+      call tridiagonal_thomas_solver_gpu(ac, d, df(0:dim))
 
    end function df_compact_gpu
 
