@@ -7,7 +7,7 @@ module pastr_commvar
     implicit none
 
     integer :: im, jm, km
-    integer :: nhalo=4
+    integer :: nhalo=3
 
     logical :: nondimen=.true.
     logical :: lihomo, ljhomo, lkhomo

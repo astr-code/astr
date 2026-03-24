@@ -126,11 +126,11 @@ module readwrite
                         reynolds,mach,num_species,                     &
                         flowtype,ndims,lfilter,alfa_filter,            &
                         lfftk,kcutoff,ninit,rkscheme,                  &
-                        spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km,     &
                         spg_def,lchardecomp,recon_schem,               &
                         lrestart,limmbou,solidfile,bfacmpld,           &
                         turbmode,schmidt,ibmode,gridfile,testmode
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
+    use sponge_layer, only : spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
 #ifdef COMB
     use commvar, only : odetype,lcomb
 #endif
@@ -472,11 +472,11 @@ module readwrite
                         ref_den,reynolds,mach,                         &
                         num_species,flowtype,lfilter,alfa_filter,      &
                         lreadgrid,lfftk,gridfile,kcutoff,              &
-                        ninit,rkscheme,spg_i0,spg_im,spg_j0,spg_jm,    &
-                        spg_k0,spg_km,spg_def,lchardecomp,             &
+                        ninit,rkscheme,spg_def,lchardecomp,             &
                         recon_schem,lrestart,limmbou,solidfile,        &
                         bfacmpld,shkcrt,turbmode,schmidt,ibmode,       &
                         ltimrpt,testmode
+    use sponge_layer, only : spg_i0,spg_im,spg_j0,spg_jm,spg_k0,spg_km
     use parallel,only : bcast
     use cmdefne, only : readkeyboad
     use bc,      only : bctype,twall,xslip,turbinf,xrhjump,angshk
@@ -1196,16 +1196,19 @@ module readwrite
     call h5read(varname='u1', var=vel(0:im,0:jm,0:km,1),mode='h')
     call h5read(varname='u2', var=vel(0:im,0:jm,0:km,2),mode='h')
     call h5read(varname='u3', var=vel(0:im,0:jm,0:km,3),mode='h')
-    call h5read(varname='p', var=prs(0:im,0:jm,0:km)   ,mode='h')
+    !call h5read(varname='p', var=prs(0:im,0:jm,0:km)   ,mode='h')
     call h5read(varname='t', var=tmp(0:im,0:jm,0:km)   ,mode='h')
     !
-    ! rho=roinf
-    ! prs=pinf
-    ! tmp=tinf
-    do jsp=1,num_species
-      write(spname,'(i3.3)')jsp
-      call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode='h')
-    enddo
+    ! rho=1.d0
+    ! ! vel(:,:,:,1)=1.d0
+    ! vel(:,:,:,2)=0.d0
+    ! vel(:,:,:,3)=0.d0
+    ! ! prs=pinf
+    ! ! tmp=tinf
+    ! do jsp=1,num_species
+    !   write(spname,'(i3.3)')jsp
+    !   call h5read(varname='sp'//spname,var=spc(0:im,0:jm,0:km,jsp),mode='h')
+    ! enddo
     !
     call h5io_end
     !
@@ -1720,7 +1723,7 @@ module readwrite
   subroutine writeflfed(timerept)
     !
     use commvar, only: time,nstep,filenumb,fnumslic,num_species,im,jm, &
-                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax
+                       km,lwsequ,turbmode,feqwsequ,force,ymin,ymax,flowtype
     use commarray,only : x,rho,vel,prs,tmp,spc,q,ssf,lshock,crinod
     use models,   only : tke,omg,miut
     use statistic,only : nsamples,liosta,massflux,massflux_target
@@ -1843,7 +1846,18 @@ module readwrite
       write(12,'(A,I11)')'fnumslic=     ',fnumslic
       write(12,'(A,I11)')'ninflowslice= ',ninflowslice
       write(12,'(A,I11)')'nsamples=     ',nsamples
+      write(12,'(A)')'/End'
       write(12,'(A,I11)')'!========================='
+
+      if(flowtype=='channel') then
+        write(12,'(A)')'&chanell'
+        write(12,'(A)')'!========================='
+        write(12,'(A,E20.13E2)')'massflux=        ',massflux
+        write(12,'(A,E20.13E2)')'massflux_target= ',massflux_target
+        write(12,'(A,3(E20.13E2,1X))')'force=           ',force(:)
+        write(12,'(A)')'/End'
+      endif
+
       close(12)
       print*,' << ',trim(outauxiname)
       ! call h5srite(varname='nstep',var=nstep,                          &

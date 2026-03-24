@@ -44,6 +44,7 @@ module mainloop
     use userdefine,only: udf_eom_set
     use parallel, only : bcast
     use commarray,only: x
+    use userdefine, only: udf_setup_before_comp
     !
     ! local data
     real(8) :: time_beg,time_next_step,crange
@@ -82,7 +83,9 @@ module mainloop
       firstcall=.false.
       !
     endif
-    !
+    
+    call udf_setup_before_comp()
+
     nxtchkpt=nstep+feqchkpt
     nxtwsequ=nstep+feqwsequ
     nxtbakup=nstep+feqbakup
@@ -103,7 +106,7 @@ module mainloop
 
       call time_integration_rk
 
-      if(loop_counter==feqchkpt .or. loop_counter==0) then
+      if(mod(nstep,feqchkpt)==0) then
         !
         call readcont
         !
@@ -303,7 +306,8 @@ module mainloop
                          ndims,num_species,maxstep,rkscheme
     use commarray,only : x,q,qrhs,rho,vel,prs,tmp,spc,jacob
     use fludyna,  only : updatefvar
-    use comsolver,only : filterq,spongefilter,filter2e
+    use comsolver,only : filterq,filter2e,gradcal
+    use sponge_layer,only : spongefilter
     use solver,   only : rhscal
     use bc,       only : boucon,immbody
 #ifdef COMB
@@ -386,7 +390,7 @@ module mainloop
       firstcall=.false.
       !
     endif
-    !
+
     if(rkscheme=='rk4') allocate(rhsav(0:im,0:jm,0:km,1:numq))
     !
     do rkstep=1,n_rk_steps
@@ -413,25 +417,27 @@ module mainloop
       if(flowtype(1:2)/='0d') call boucon
       
       if(flowtype(1:2)/='0d') call qswap(timerept=ltimrpt)
-      !
-      call rhscal(timerept=ltimrpt)
-      !
+
+      call gradcal()
+
       if(flowtype(1:2)=='0d') jacob=1.d0
-      !
+
       time_beg_2=ptime()
-      !
+
       if(rkstep==1) then
-        !
+
         do m=1,numq
           qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)*jacob(0:im,0:jm,0:km)
 
           if(rkscheme=='rk4') rhsav(0:im,0:jm,0:km,m)=0.d0
         enddo
-        !
+
         call rkfirst
-        !
+
       endif
-      !
+
+      call rhscal( timerept=ltimrpt)
+
       if(rkscheme=='rk3') then
         do m=1,numq
           !
@@ -613,6 +619,7 @@ module mainloop
     use readwrite,only : writechkpt,writemon,writeslice,writeflfed,    &
                          nxtchkpt,nxtwsequ
     use userdefine,only: udf_stalist,udf_write
+    use parallel,  only: mpistop
     !
     ! local data
     integer,save :: nxtavg
@@ -621,13 +628,15 @@ module mainloop
     if(firstcall) then
       nxtavg=nstep+feqavg
     endif
-    !
+    
     if(.not. firstcall) then
+    
       call statcal(timerept=ltimrpt)
-      !
+
       call statout(time_start)
-      !
+
       call udf_stalist
+
     endif
     !
     if(nstep==0 .or. loop_counter.ne.0) then

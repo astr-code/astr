@@ -6587,6 +6587,98 @@ module bc
         !
       endif
       !
+    elseif(ndir==5) then
+      !
+      if(krk==0) then
+
+        k=0
+        
+        xtran=1.d0
+
+        do j=0,jm
+        do i=0,im
+          !
+          pe=num1d3*(4.d0*prs(i,j,k+1)-prs(i,j,k+2))
+
+          vel(i,j,k,:)=0.d0
+          tmp(i,j,k)  =tw
+          prs(i,j,k)  =pe
+
+          do jspec=1,num_species
+            spc(i,j,k,jspec)=num1d3*(4.d0*spc(i,j,k+1,jspec)-spc(i,j,k+2,jspec))
+          enddo
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
+    elseif(ndir==6) then
+      !
+      if(krk==krkm) then
+        !
+        k=km
+        do j=0,jm
+        do i=0,im
+          pe=num1d3*(4.d0*prs(i,j,k-1)-prs(i,j,k-2))
+          !
+          vel(i,j,k,:)=0.d0
+          prs(i,j,k)  =pe
+          tmp(i,j,k)  =tw
+          !
+          if(num_species>0) then
+            spc(i,j,k,1)=num1d3*(4.d0*spc(i,j,k-1,1)-spc(i,j,k-2,1))
+          endif
+          !
+          if(nondimen) then
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                      velocity=vel(i,j,k,:),                            &
+                      pressure=prs(i,j,k),                              &
+                        species=spc(i,j,k,:)                             )
+            !
+          else
+            !
+            rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+            !
+            call fvar2q(      q=  q(i,j,k,:),                            &
+                        density=rho(i,j,k),                              &
+                        velocity=vel(i,j,k,:),                           &
+                        temperature=tmp(i,j,k),                          &
+                        species=spc(i,j,k,:)                             )
+            !
+          endif
+          !
+        enddo
+        enddo
+        !
+      endif
+      !
     else
       print*,' !! ndir',ndir
       stop ' !! ndir not defined @ noslip'

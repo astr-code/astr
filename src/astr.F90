@@ -15,7 +15,8 @@ program astr
   use readwrite,     only: statement,readinput,fileini,infodisp
   use commarray,     only: allocommarray
   use solver,        only: refcal
-  use initialisation,only: spongelayerini,flowinit
+  use initialisation,only: flowinit
+  use sponge_layer,  only: spongelayerini
   use mainloop,      only: steploop
   use gridgeneration,only: gridgen
   use cmdefne,       only: getcmd,listcmd

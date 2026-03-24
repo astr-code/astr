@@ -28,9 +28,10 @@ module statistic
   logical :: lmeanallocated=.false.
   logical :: liosta=.false.
   real(8) :: time_sbeg
-  real(8) :: enstophy,kenergy,fbcx,massflux,massflux_target,wrms,      &
+  real(8) :: enstophy,kenergy,fbcx,massflux,wrms,      &
              wallheatflux,dissipation,nominal_thickness,xflame,vflame, &
              poutrt
+  real(8) :: massflux_target=0.d0
   real(8) :: maxT,overall_qdot,v_H2O,v_HO2
   real(8) :: vel_incom,prs_incom,rho_incom
   real(8) :: umax,rhomax,tmpmax,qdotmax
@@ -645,7 +646,7 @@ module statistic
       !
       wrms=wrmscal()
       !
-      if(nstep==0) then
+      if(abs(massflux_target)<1.d-16) then
         !
         massflux_target=massflux
         force=0.d0
@@ -655,9 +656,9 @@ module statistic
       endif
       !
       force(1)=chanfoce(force(1),massflux,fbcx,massflux_target)
-      !
+      
       call bcast(force)
-      !
+      
     elseif(trim(flowtype)=='cylinder') then
       !
       vel_incom=0.d0

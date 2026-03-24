@@ -22,11 +22,6 @@ module commarray
   logical,allocatable,dimension(:,:,:) :: lsolid,lshock,crinod
   type(nodcel),allocatable,dimension(:,:,:) :: cell
   !
-  real(8),allocatable,dimension(:,:,:) :: sponge_damp_coef_i0,sponge_damp_coef_im, &
-                                          sponge_damp_coef_j0,sponge_damp_coef_jm, &
-                                          sponge_damp_coef_k0,sponge_damp_coef_km, &
-                                          sponge_damp_coef
-  !
   real(8),allocatable,dimension(:,:,:) :: tke,omg,miut,res12,ssf
   real(8),allocatable,dimension(:,:,:,:) :: dtke,domg
   !

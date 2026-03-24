@@ -103,7 +103,7 @@ module geom
                           dxyzmax,dxyzmin
     use commarray, only : x,jacob,dxi,cell,dgrid,dis2wall,bnorm_i0,    &
                           bnorm_im,bnorm_j0,bnorm_jm,bnorm_k0,bnorm_km
-    use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin
+    use parallel,  only : gridsendrecv,jsize,ksize,psum,pmax,pmin,jrkm
     use commfunc,  only : volhex,arquad
     use tecio
     use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
@@ -896,10 +896,25 @@ module geom
     !                                 dxi(0:im,0:jm,0:km,1,1),'dxdi',    &
     !                                 dxi(0:im,0:jm,0:km,2,2),'dydj',    &
     !                                 dxi(0:im,0:jm,0:km,3,3),'dzdk')
-    ! ! ! 
-    !
 
-    !
+    ! if(jrk==0) then
+    !   call tecbin('testout/tec_bound_vec'//mpirankname//'.plt',     &
+    !                                     x(0:im,0,0:km,1),'x',    &
+    !                                     x(0:im,0,0:km,2),'y',    &
+    !                                     x(0:im,0,0:km,3),'z',    &
+    !                              bnorm_j0(0:im,0:km,1),'u',  &
+    !                              bnorm_j0(0:im,0:km,2),'v',  &
+    !                              bnorm_j0(0:im,0:km,3),'w')
+    ! elseif(jrk==jrkm) then
+    !   call tecbin('testout/tec_bound_vec'//mpirankname//'.plt',     &
+    !                                     x(0:im,jm,0:km,1),'x',    &
+    !                                     x(0:im,jm,0:km,2),'y',    &
+    !                                     x(0:im,jm,0:km,3),'z',    &
+    !                              bnorm_jm(0:im,0:km,1),'u',  &
+    !                              bnorm_jm(0:im,0:km,2),'v',  &
+    !                              bnorm_jm(0:im,0:km,3),'w')
+    ! endif
+    
     deallocate(dx,can)
     !
     !
