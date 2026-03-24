@@ -6,7 +6,7 @@
 !| 06-02-2021  | Created by J. Fang                                    |
 !+---------------------------------------------------------------------+
 module commarray
-  !
+  
   use commtype, only : nodcel
   !
   implicit none
