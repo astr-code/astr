@@ -1,0 +1,25 @@
+program memory_check
+  implicit none
+  integer, parameter :: dim_128 = 128, dim_64 = 64
+  !
+  integer,allocatable, dimension(:) :: a_host
+  integer,allocatable, dimension(:), device:: a_dev
+  integer :: i
+
+  allocate(a_host(dim_64), a_dev(dim_128))
+
+  do i = 1, dim_128
+    a_host(i) = i
+  end do
+
+  do i = 1, dim_128
+    a_dev(i) = a_host(i)
+  end do
+
+  deallocate(a_host, a_dev)
+
+  print *, "! Complete !"
+end program memory_check
+
+
+

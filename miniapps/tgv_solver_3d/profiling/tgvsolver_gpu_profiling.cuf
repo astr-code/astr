@@ -1,0 +1,2440 @@
+module comvardef
+  !
+  use cudafor
+  ! 
+  implicit none
+  !
+  ! integer :: im=384,jm=384,km=384,hm=5,numq=5
+  integer :: im=256,jm=256,km=256,hm=5,numq=5
+  ! integer :: im=128,jm=128,km=128,hm=5,numq=5
+  ! integer :: im=64,jm=64,km=64,hm=5,numq=5
+  ! integer :: im=16,jm=16,km=16,hm=5,numq=5
+
+  real(8),parameter :: pi=4.d0*atan(1.0_8),                            &
+                       num1d35 =1.d0/35.d0,  num1d3  =1.d0/3.d0,       &
+                       num2d3  =2.d0/3.d0,   num1d24 =1.d0/24.d0,      &
+                       num4d3  =4.d0/3.d0,   num1d6  =1.d0/6.d0,       &
+                       num1d12 =1.d0/12.d0,  num7d12 =7.d0/12.d0,      &
+                       num7d9  =7.d0/9.d0,   num1d36 =1.d0/36.d0,      &
+                       num1d60 =1.d0/60.d0,  num65d3 =65.d0/3.d0,      &
+                       num20d3 =20.d0/3.d0,  num1d11 =1.d0/11.d0,      &
+                       num25d12=25.d0/12.d0, num11d6 =11.d0/6.d0,      &
+                       num1d840=1.d0/840.d0, num13d60=13.d0/60.d0,     &
+                       num1d30 =1.d0/30.d0,  num47d60=47.d0/60.d0,     &
+                       num5d6  =5.d0/6.d0,   num1d18 =1.d0/18.d0,      &
+                       num19d18=19.d0/18.d0, num5d9  =5.d0/9.d0,       &
+                       num9d36 =9.d0/36.d0
+  !
+  ! logical, parameter :: performval1 = .true.
+  logical, parameter :: performval1 = .false.
+  ! logical, parameter :: performval2 = .true.
+  logical, parameter :: performval2 = .false.
+  !
+  integer :: nstep
+  real(8) :: time,deltat
+  logical :: exist
+  !
+  real(8) :: gamma,mach,reynolds,prandtl,ref_t
+  real(8) :: const1,const2,const3,const4,const5,const6,const7
+  real(8) :: dx,dy,dz
+  !
+  real :: ctime(24)
+  !
+  real(8),allocatable,dimension(:,:,:) :: rho,prs,tmp
+  real(8),allocatable,dimension(:,:,:,:) :: x,q,qrhs,vel,dtmp
+  real(8),allocatable,dimension(:,:,:,:,:) :: dvel
+  !
+  ! ---- device variables ----
+  ! 
+  ! integer, device :: im_dev=512,jm_dev=512,km_dev=512,hm_dev=5,numq_dev=5
+  integer, device :: im_dev=256,jm_dev=256,km_dev=256,hm_dev=5,numq_dev=5
+  ! integer, device :: im_dev=128,jm_dev=128,km_dev=128,hm_dev=5,numq_dev=5
+  ! integer, device :: im_dev=64,jm_dev=64,km_dev=64,hm_dev=5,numq_dev=5
+  ! integer, device :: im_dev=16,jm_dev=16,km_dev=16,hm_dev=5,numq_dev=5
+  ! 
+  real(8), device :: reynolds_dev, prandtl_dev, ref_t_dev
+  real(8), device :: const1_dev, const2_dev, const5_dev, const6_dev
+  ! 
+  real(8),allocatable,dimension(:,:,:),device :: rho_dev, prs_dev, tmp_dev
+  real(8),allocatable,dimension(:,:,:,:),device :: q_dev, qrhs_dev, qrhs_copy_dev, vel_dev, dtmp_dev
+  real(8),allocatable,dimension(:,:,:,:,:),device :: dvel_dev
+  ! 
+  real(8),allocatable,dimension(:,:,:,:),device :: sigma_dev, qflux_dev
+  real(8),allocatable,dimension(:,:,:),device :: s11_dev,s12_dev,s13_dev,s22_dev,s23_dev,s33_dev,skk_dev
+  real(8),allocatable,dimension(:,:,:),device :: miu_dev,miu2_dev,hcc_dev
+  ! 
+  real(8),allocatable,dimension(:,:,:) :: s11_host,s12_host,s13_host,s22_host,s23_host,s33_host,skk_host
+  real(8),allocatable,dimension(:,:,:) :: miu_host,miu2_host,hcc_host
+  ! 
+  real(8), device :: dx_dev, dy_dev, dz_dev
+  ! 
+  real(8), device :: deltat_dev
+  ! 
+  real(8), device :: rkcoe(3,3)
+  real(8),allocatable,device:: qsave_dev(:,:,:,:)
+  ! 
+  real(8),allocatable,dimension(:,:,:,:), device :: fcs_dev, dfcs_dev
+  real(8),allocatable,dimension(:,:,:,:) :: fcs_host, dfcs_host
+  ! 
+  real(8),allocatable,dimension(:,:,:,:),device :: phi_dev, fph_dev
+  ! 
+  ! ---- device variables ----
+  contains
+  !
+  subroutine alloarray
+    !
+    allocate( x(0:im,0:jm,0:km,1:3))
+    allocate(   q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
+    allocate(qrhs(0:im,0:jm,0:km,1:numq))
+    !
+    allocate( rho(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+    allocate( prs(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate( tmp(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate(dvel(0:im,0:jm,0:km,1:3,1:3))
+    allocate(dtmp(0:im,0:jm,0:km,1:3))
+    !
+    ! ---- device arrays allocated ----
+    ! 
+    allocate(   q_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq))
+    allocate(qrhs_dev(0:im,0:jm,0:km,1:numq))
+    allocate(qrhs_copy_dev(0:im,0:jm,0:km,1:numq))
+    ! 
+    allocate( rho_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate(vel_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+    allocate( prs_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate(tmp_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm))
+    allocate(dvel_dev(0:im,0:jm,0:km,1:3,1:3))
+    allocate(dtmp_dev(0:im,0:jm,0:km,1:3))
+    ! 
+    ! ---- device arrays allocated ----
+    !
+    ! print*,' ** common array allocated'
+    !
+  end subroutine alloarray
+  !
+end module comvardef
+!
+module utlity
+  !
+  use cudafor
+  !
+  implicit none
+  !
+  contains
+  !
+  !+-------------------------------------------------------------------+
+  !| Progress indicators library.                                      |
+  !+-------------------------------------------------------------------+
+  !| CHANGE RECORD                                                     |
+  !| -------------                                                     |
+  !| 31-01-2024  | copied by J. Fang via:                              |
+  !| https://github.com/macie/fortran-libs                             |
+  !|  Maciej Żok, 2010 MIT License                                     |
+  !+-------------------------------------------------------------------+
+  subroutine progress_bar(iteration,maximum,info2show,barlength)
+     !
+     ! Prints progress bar.
+     !
+     ! Args: 
+     !     iteration - iteration number
+     !     maximum - total iterations
+     !     barlength - length of the bar
+     !   
+     ! use iso_fortran_env
+     integer,intent(in) :: iteration,maximum
+     character(len=*),intent(in),optional :: info2show
+     integer,intent(in),optional :: barlength
+     integer :: counter,nlength
+     integer :: done
+     real(4) :: perc
+     !
+     if(present(barlength)) then
+         nlength=barlength
+     else
+         nlength=10
+     endif
+     !
+     perc = 100.0*real(iteration)/real(maximum)
+     done = floor(perc/(100.0/real(nlength)))  ! mark length
+     !
+     write(6,'(1A1,A,A)',advance='no')char(13),info2show,'['
+     if (done .LE. 0) then
+         do counter = 1, nlength
+             write(6,'(1A1,A)',advance='no')'='
+         end do
+     else if ((done .GT. 0) .and. (done .LT. nlength)) then
+         do counter = 1, done
+             write(6,'(1A1,A)',advance='no')'>'
+         end do
+         do counter = done+1, nlength
+             write(6,'(1A1,A)',advance='no')'='
+         end do 
+     else
+         do counter = 1, nlength
+             write(6,'(1A1,A)',advance='no')'>'
+         end do
+     end if
+     write(6,'(A,F5.1,A)',advance='no')'] ',perc,'%'
+     !
+     if(iteration==maximum) write(6,*)
+     !
+  end subroutine progress_bar
+  !+-------------------------------------------------------------------+
+  !| The end of the subroutine progress_bar.                           |
+  !+-------------------------------------------------------------------+
+  !
+end module utlity
+!
+module dataoper
+  !
+  use cudafor
+  !
+  implicit none
+  !
+  contains
+  !
+  function thermal_scar(density,pressure,temperature) result(vout)
+    !
+    use comvardef,only : const2
+    !
+    ! arguments
+    real(8) :: vout
+    real(8),intent(in) ,optional :: density,pressure,temperature
+    !
+    real(8) :: rloc
+    !
+    if(present(density) .and. present(temperature)) then
+      vout=density*temperature/const2
+    elseif(present(density) .and. present(pressure)) then
+      vout=pressure/density*const2
+    elseif(present(temperature) .and. present(pressure)) then
+      vout=pressure/temperature*const2
+    else
+      stop ' !! unable to get thermal variable  @ thermal_scar !!'
+    endif
+    !
+  end function thermal_scar
+  !
+  attributes(host, device) function thermal_scar_dev(density,pressure,temperature) result(vout)
+    !
+    use comvardef,only : const2_dev
+    !
+    ! arguments
+    real(8),device :: vout
+    real(8),intent(in) ,optional, device :: density,pressure,temperature
+    !
+    real(8) :: rloc
+    !
+    if(present(density) .and. present(temperature)) then
+      vout=density*temperature/const2_dev
+    elseif(present(density) .and. present(pressure)) then
+      vout=pressure/density*const2_dev
+    elseif(present(temperature) .and. present(pressure)) then
+      vout=pressure/temperature*const2_dev
+    ! else
+    !   stop ' !! unable to get thermal variable  @ thermal_scar !!'
+    endif
+    !
+  end function thermal_scar_dev
+  ! 
+  attributes(host, device) function var2q_dev(density,velocity1,velocity2,velocity3, &
+                                              pressure,temperature) &
+                                    result(q)
+    !
+    use comvardef, only: const1_dev,const6_dev,numq
+    !
+    real(8),device :: q(1:numq)
+    real(8),intent(in),device :: density,velocity1,velocity2,velocity3
+    real(8),intent(in),optional,device :: pressure,temperature
+    !
+    ! local data
+    integer,device :: jspec,j,n
+    real(8),device :: var1,var2
+    !
+    q(1)=density
+    q(2)=density*velocity1
+    q(3)=density*velocity2
+    q(4)=density*velocity3
+    q(5)=pressure*const6_dev+density*0.5d0*(velocity1**2 + velocity2**2 + velocity3**2)
+    !
+  end function var2q_dev
+  ! 
+  function var2q(density,velocity,pressure,temperature) result(q)
+    !
+    use comvardef, only: const1,const6,numq
+    !
+    real(8) :: q(1:numq)
+    real(8),intent(in) :: density,velocity(3)
+    real(8),intent(in),optional :: pressure,temperature
+    !
+    ! local data
+    integer :: jspec,j
+    real(8) :: var1,var2
+    !
+    q(1)=density
+    q(2)=density*velocity(1)
+    q(3)=density*velocity(2)
+    q(4)=density*velocity(3)
+    !
+    var1=0.5d0*sum(velocity(:)*velocity(:))
+    if(present(temperature)) then
+      q(5)=density*(temperature*const1+var1)
+    elseif(present(pressure)) then
+      q(5)=pressure*const6+density*var1
+    endif
+    !
+  end function var2q
+  !
+  subroutine q2fvar(q,density,velocity,pressure,temperature)
+    !
+    use comvardef, only: const6
+    !
+    real(8),intent(in) :: q(:)
+    real(8),intent(out) :: density
+    real(8),intent(out),optional :: velocity(:),pressure,temperature
+    !
+    density   =q(1)
+    !
+    if(present(velocity) .or. present(pressure) .or. present(temperature)) then
+      velocity(1)=q(2)/density
+      velocity(2)=q(3)/density
+      velocity(3)=q(4)/density
+    endif
+    !
+    if(present(pressure) .or. present(temperature)) then
+      pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+  &
+                                       velocity(3)**2) )/const6
+    endif
+    !
+    if(present(temperature)) then
+      temperature=thermal_scar(pressure=pressure,density=density)
+    endif
+
+  end subroutine q2fvar
+  ! 
+  pure real(8) function miucal(temper)
+    !
+    use comvardef, only :  ref_t
+    !
+    real(8),intent(in) :: temper
+    ! temper represent temperature, dimensionless
+    ! below calculate miucal using sutherland's law
+    !
+    real(8) :: tempconst,tempconst1
+    ! 
+    tempconst=110.4d0/ref_t
+    tempconst1=1.d0+tempconst
+    !
+    miucal=temper*sqrt(temper)*tempconst1/(temper+tempconst)
+    !
+    return
+    !
+  end function miucal
+  !
+  attributes(host, device) pure real(8) function miucal_dev(temper) result(miucal_out)
+    !
+    use comvardef, only :  ref_t_dev
+    !
+    real(8),intent(in), device :: temper
+    real(8), device :: miucal_out
+    ! temper represent temperature, dimensionless
+    ! below calculate miucal using sutherland's law
+    ! 
+    real(8), device :: tempconst,tempconst1,temper_dev
+    ! 
+    temper_dev=temper
+    tempconst=110.4d0/ref_t_dev
+    tempconst1=1.d0+tempconst
+    !
+    miucal_out=temper_dev*sqrt(temper_dev)*tempconst1/(temper_dev+tempconst)
+    !
+    return
+    !
+  end function miucal_dev
+  !
+  subroutine tgvinit
+    !
+    use comvardef, only: im,jm,km,pi,gamma,mach,reynolds,prandtl,dx,dy,dz,ctime, &
+                         const1,const2,const3,const4,const5,const6,    &
+                         const7,time,nstep,deltat,ref_t,               &
+                         x,qrhs,q,vel,rho,prs,tmp,ctime, &
+                         reynolds_dev, prandtl_dev, ref_t_dev, &
+                         const1_dev, const2_dev, const5_dev, const6_dev, &
+                         rho_dev, vel_dev, tmp_dev, prs_dev, q_dev, dx_dev, dy_dev, dz_dev, &
+                         deltat_dev
+    use utlity, only: progress_bar
+    !
+    integer :: i,j,k
+    real(8) :: var1,pinf
+    real :: tstart,tfinish
+    !
+    ref_t=273.15d0
+    gamma=1.4d0
+    mach =0.1d0
+    reynolds=1600.d0
+    prandtl=0.72d0
+    !
+    const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+    const2=gamma*mach**2
+    const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+    const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+    const5=(gamma-1.d0)*mach**2
+    const6=1.d0/(gamma-1.d0)
+    const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+    !
+    pinf=1.d0/const2
+    !
+    dx=2.d0*pi/dble(im)
+    dy=2.d0*pi/dble(jm)
+    dz=2.d0*pi/dble(km)
+    !
+    var1=0.d0
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      !
+      x(i,j,k,1)  =2.d0*pi/dble(im)*dble(i)
+      x(i,j,k,2)  =2.d0*pi/dble(jm)*dble(j)
+      x(i,j,k,3)  =2.d0*pi/dble(km)*dble(k)
+      !
+      rho(i,j,k)  =1.d0
+      vel(i,j,k,1)= sin(x(i,j,k,1))*cos(x(i,j,k,2))*cos(x(i,j,k,3))
+      vel(i,j,k,2)=-cos(x(i,j,k,1))*sin(x(i,j,k,2))*cos(x(i,j,k,3))
+      vel(i,j,k,3)=0.d0
+      prs(i,j,k)  =pinf+1.d0/16.d0*(cos(2.d0*x(i,j,k,1))+cos(2.d0*x(i,j,k,2)))*(cos(2.d0*x(i,j,k,3))+2.d0)
+      !
+      tmp(i,j,k)  =thermal_scar(density=rho(i,j,k),pressure=prs(i,j,k))
+      !
+      q(i,j,k,:)=var2q(density=rho(i,j,k),velocity=vel(i,j,k,:),       &
+                       pressure=prs(i,j,k))
+      !
+    enddo
+    enddo
+      !call progress_bar(k,km,'  ** initilising data ',20)
+    enddo
+    !
+    qrhs=0.d0
+    !
+    nstep=0
+    time =0.d0
+    deltat=1.d-3
+    !
+    ctime=0.0
+    !
+    ! ---- device variables ----
+    !
+    call cpu_time(tstart)
+    !
+    deltat_dev=deltat
+    !
+    const1_dev = const1
+    const2_dev = const2
+    const5_dev = const5
+    const6_dev = const6
+    !
+    reynolds_dev = reynolds
+    prandtl_dev = prandtl
+    ref_t_dev = ref_t
+    !
+    rho_dev = rho
+    vel_dev = vel
+    tmp_dev = tmp
+    prs_dev = prs
+    q_dev = q
+    dx_dev = dx
+    dy_dev = dy
+    dz_dev = dz
+    !
+    call cpu_time(tfinish)
+    !
+    ctime(13) = tfinish - tstart
+    !
+    ! ---- device variables ----
+    !
+    ! print*,' ** data initilised'
+    !
+  end subroutine tgvinit
+  !
+end module dataoper
+!
+module numerics
+  !
+  use cudafor
+  !
+  use comvardef, only : num1d60
+  implicit none
+  !
+  contains
+  !
+  subroutine diff6ec(vin,dim,n,vout,comptime)
+    !
+    integer,intent(in) :: dim,n
+    real(8),intent(in) :: vin(-n:dim+n)
+    real(8) :: vout(0:dim)
+    !
+    real,intent(inout),optional :: comptime
+    
+    ! local data
+    integer :: i
+    real :: tstart,tfinish
+
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    do i=0,dim
+      vout(i)  =0.75d0 *(vin(i+1)-vin(i-1))- &
+                0.15d0 *(vin(i+2)-vin(i-2))+ &
+               num1d60 *(vin(i+3)-vin(i-3))
+    enddo
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+  end subroutine diff6ec
+    !
+  subroutine filter10ec(vin,dim,n,vout)
+    !
+    integer,intent(in) :: dim,n
+    real(8),intent(in) :: vin(-n:dim+n)
+    real(8) :: vout(0:dim)
+    !
+    integer :: i
+    !
+    do i=0,dim
+      !
+      vout(i)=   0.376953125d0*(vin(i)  +vin(i))     &
+               + 0.205078125d0*(vin(i-1)+vin(i+1))   &
+               -   0.1171875d0*(vin(i-2)+vin(i+2))   &
+               +0.0439453125d0*(vin(i-3)+vin(i+3))   &
+               - 0.009765625d0*(vin(i-4)+vin(i+4))   &
+               +0.0009765625d0*(vin(i-5)+vin(i+5))
+    enddo
+    !
+  end subroutine filter10ec
+  !
+end module numerics
+  !
+module solver
+  !
+  use utlity,   only: progress_bar
+  use cudafor
+  !
+  implicit none
+  !
+  contains
+  !
+  subroutine bchomo_dev(comptime)
+    !
+    use comvardef, only: im,jm,km,hm,numq,nstep,rho,prs,tmp,vel,q,ctime, &
+                         rho_dev,prs_dev,tmp_dev,vel_dev,q_dev, const6_dev, &
+                         performval2
+    use dataoper,  only: var2q, var2q_dev
+    
+    real,intent(inout),optional :: comptime
+    real :: tstart,tfinish,tstart1,tfinish1
+    !
+    integer :: i,j,k,n
+    real(8), device :: q_temp(1:numq)
+    !
+    if(present(comptime)) then
+      call cpu_time(tstart)
+    endif
+    !
+    ! issues with using do loops in cuf directives #NOTES
+    !
+    ! b.c. at the i direction
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=0,km
+    do j=0,jm
+    do i=-hm,-1
+      rho_dev(i,j,k)  =rho_dev(im+i,j,k)
+
+      vel_dev(i,j,k,1)=vel_dev(im+i,j,k,1)
+      vel_dev(i,j,k,2)=vel_dev(im+i,j,k,2)
+      vel_dev(i,j,k,3)=vel_dev(im+i,j,k,3)
+
+      tmp_dev(i,j,k)  =tmp_dev(im+i,j,k)
+      prs_dev(i,j,k)  =prs_dev(im+i,j,k)
+      !
+      q_temp  =var2q_dev(density=rho_dev(i,j,k),   &
+                        velocity1=vel_dev(i,j,k,1), &
+                        velocity2=vel_dev(i,j,k,2), &
+                        velocity3=vel_dev(i,j,k,3), &
+                        pressure=prs_dev(i,j,k))
+      
+      q_dev(i,j,k,1) = q_temp(1)
+      q_dev(i,j,k,2) = q_temp(2)
+      q_dev(i,j,k,3) = q_temp(3) 
+      q_dev(i,j,k,4) = q_temp(4) 
+      q_dev(i,j,k,5) = q_temp(5) 
+    enddo
+    enddo
+    enddo
+    !
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=0,km
+    do j=0,jm
+    do i=im+1,im+hm
+      rho_dev(i,j,k)  =rho_dev(i-im,j,k)
+
+      vel_dev(i,j,k,1)=vel_dev(i-im,j,k,1)
+      vel_dev(i,j,k,2)=vel_dev(i-im,j,k,2)
+      vel_dev(i,j,k,3)=vel_dev(i-im,j,k,3)
+
+      tmp_dev(i,j,k)  =tmp_dev(i-im,j,k)
+      prs_dev(i,j,k)  =prs_dev(i-im,j,k)
+      !
+      q_temp  =var2q_dev(density=rho_dev(i,j,k),   &
+                        velocity1=vel_dev(i,j,k,1), &
+                        velocity2=vel_dev(i,j,k,2), &
+                        velocity3=vel_dev(i,j,k,3), &
+                        pressure=prs_dev(i,j,k))
+      
+      q_dev(i,j,k,1) = q_temp(1)
+      q_dev(i,j,k,2) = q_temp(2)
+      q_dev(i,j,k,3) = q_temp(3) 
+      q_dev(i,j,k,4) = q_temp(4) 
+      q_dev(i,j,k,5) = q_temp(5) 
+    enddo
+    enddo
+    enddo
+    ! end of applying b.c. along i direction
+    !
+    ! b.c. at the j direction
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=0,km
+    do j=-hm,-1
+    do i=0,jm
+      rho_dev(i,j,k)  =rho_dev(i,jm+j,k)
+
+      vel_dev(i,j,k,1)=vel_dev(i,jm+j,k,1)
+      vel_dev(i,j,k,2)=vel_dev(i,jm+j,k,2)
+      vel_dev(i,j,k,3)=vel_dev(i,jm+j,k,3)
+
+      tmp_dev(i,j,k)  =tmp_dev(i,jm+j,k)
+      prs_dev(i,j,k)  =prs_dev(i,jm+j,k)
+      !
+      q_temp  =var2q_dev(density=rho_dev(i,j,k),   &
+                        velocity1=vel_dev(i,j,k,1), &
+                        velocity2=vel_dev(i,j,k,2), &
+                        velocity3=vel_dev(i,j,k,3), &
+                        pressure=prs_dev(i,j,k))
+      
+      q_dev(i,j,k,1) = q_temp(1)
+      q_dev(i,j,k,2) = q_temp(2)
+      q_dev(i,j,k,3) = q_temp(3) 
+      q_dev(i,j,k,4) = q_temp(4) 
+      q_dev(i,j,k,5) = q_temp(5) 
+    enddo
+    enddo
+    enddo
+    !
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=0,km
+    do j=jm+1,jm+hm
+    do i=0,im
+      rho_dev(i,j,k)  =rho_dev(i,j-jm,k)
+
+      vel_dev(i,j,k,1)=vel_dev(i,j-jm,k,1)
+      vel_dev(i,j,k,2)=vel_dev(i,j-jm,k,2)
+      vel_dev(i,j,k,3)=vel_dev(i,j-jm,k,3)
+
+      tmp_dev(i,j,k)  =tmp_dev(i,j-jm,k)
+      prs_dev(i,j,k)  =prs_dev(i,j-jm,k)
+      !
+      q_temp  =var2q_dev(density=rho_dev(i,j,k),   &
+                        velocity1=vel_dev(i,j,k,1), &
+                        velocity2=vel_dev(i,j,k,2), &
+                        velocity3=vel_dev(i,j,k,3), &
+                        pressure=prs_dev(i,j,k))
+      
+      q_dev(i,j,k,1) = q_temp(1)
+      q_dev(i,j,k,2) = q_temp(2)
+      q_dev(i,j,k,3) = q_temp(3) 
+      q_dev(i,j,k,4) = q_temp(4) 
+      q_dev(i,j,k,5) = q_temp(5) 
+    enddo
+    enddo
+    enddo
+    ! end of applying b.c. along j direction
+    !
+    ! b.c. at the k direction
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=-hm,-1
+    do j=0,jm
+    do i=0,jm
+      rho_dev(i,j,k)  =rho_dev(i,j,km+k)
+
+      vel_dev(i,j,k,1)=vel_dev(i,j,km+k,1)
+      vel_dev(i,j,k,2)=vel_dev(i,j,km+k,2)
+      vel_dev(i,j,k,3)=vel_dev(i,j,km+k,3)
+
+      tmp_dev(i,j,k)  =tmp_dev(i,j,km+k)
+      prs_dev(i,j,k)  =prs_dev(i,j,km+k)
+      !
+      q_temp  =var2q_dev(density=rho_dev(i,j,k),   &
+                        velocity1=vel_dev(i,j,k,1), &
+                        velocity2=vel_dev(i,j,k,2), &
+                        velocity3=vel_dev(i,j,k,3), &
+                        pressure=prs_dev(i,j,k))
+      
+      q_dev(i,j,k,1) = q_temp(1)
+      q_dev(i,j,k,2) = q_temp(2)
+      q_dev(i,j,k,3) = q_temp(3) 
+      q_dev(i,j,k,4) = q_temp(4) 
+      q_dev(i,j,k,5) = q_temp(5) 
+    enddo
+    enddo
+    enddo
+    !
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=km+1,km+hm
+    do j=0,jm
+    do i=0,im
+      rho_dev(i,j,k)  =rho_dev(i,j,k-km)
+
+      vel_dev(i,j,k,1)=vel_dev(i,j,k-km,1)
+      vel_dev(i,j,k,2)=vel_dev(i,j,k-km,2)
+      vel_dev(i,j,k,3)=vel_dev(i,j,k-km,3)
+
+      tmp_dev(i,j,k)  =tmp_dev(i,j,k-km)
+      prs_dev(i,j,k)  =prs_dev(i,j,k-km)
+      !
+      q_temp  =var2q_dev(density=rho_dev(i,j,k),   &
+                        velocity1=vel_dev(i,j,k,1), &
+                        velocity2=vel_dev(i,j,k,2), &
+                        velocity3=vel_dev(i,j,k,3), &
+                        pressure=prs_dev(i,j,k))
+      
+      q_dev(i,j,k,1) = q_temp(1)
+      q_dev(i,j,k,2) = q_temp(2)
+      q_dev(i,j,k,3) = q_temp(3) 
+      q_dev(i,j,k,4) = q_temp(4) 
+      q_dev(i,j,k,5) = q_temp(5) 
+    enddo
+    enddo
+    enddo
+    ! end of applying b.c. along k direction
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+    if (performval2) then
+      call cpu_time(tstart1)
+      !
+      rho = rho_dev; vel = vel_dev; tmp = tmp_dev; prs = prs_dev; q = q_dev
+      ! 
+      write(94, *) nstep, "rho", rho(-hm:-hm+1,20,km+hm)
+      write(94, *) nstep, "vel", vel(hm:km+hm-4,0,10,2)
+      write(94, *) nstep, "prs", prs(-hm+1:-hm+2,10,20)
+      write(94, *) nstep, "tmp", tmp(hm+1:km+hm-3,-hm:-hm+1,3)
+      write(94, *) nstep, "q", q(-hm+2:-hm+3,10,40,:)
+      write(94, *) nstep, "rho", rho(20,-hm:-hm+1,km+hm)
+      write(94, *) nstep, "vel", vel(10,hm:km+hm-4,0,2)
+      write(94, *) nstep, "prs", prs(30,-hm+1:-hm+2,20)
+      write(94, *) nstep, "tmp", tmp(10,hm+1:km+hm-3,-hm:-hm+1)
+      write(94, *) nstep, "q", q(20,-hm+2:-hm+3,25,:)
+      write(94, *) nstep, "rho", rho(30,km+hm,-hm:-hm+1)
+      write(94, *) nstep, "vel", vel(20,10,hm:km+hm-4,2)
+      write(94, *) nstep, "prs", prs(30,20,-hm+1:-hm+2)
+      write(94, *) nstep, "tmp", tmp(10,30,hm+1:km+hm-3)
+      write(94, *) nstep, "q", q(20,20,-hm+2:-hm+3,:)
+      !
+      call cpu_time(tfinish1)
+      ctime(14)=ctime(14)+tfinish1-tstart1
+    end if
+    !
+  end subroutine bchomo_dev
+  !
+  subroutine bchomovec(var_dev, n_dim)
+    !
+    use comvardef, only: im,jm,km,hm
+    use dataoper,  only: var2q
+    use cudafor
+    !
+    integer,intent(in) :: n_dim
+    real(8),intent(inout),device :: var_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:n_dim)
+    !
+    integer :: i,j,k,n,nd4
+    !
+    ! nd4=size(var,4)
+    !
+    ! b.c. at the i direction
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,n_dim
+    do k=0,km
+    do j=0,jm
+    do i=-hm,-1
+      var_dev(i,j,k,n) = var_dev(im+i,j,k,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    !
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,n_dim
+    do k=0,km
+    do j=0,jm
+    do i=im+1,im+hm
+      var_dev(i,j,k,n) = var_dev(i-im,j,k,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    ! end of applying b.c. along i direction
+    !
+    ! b.c. at the j direction
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,n_dim
+    do k=0,km
+    do j=-hm,-1
+    do i=0,im
+      var_dev(i,j,k,n) = var_dev(i,jm+j,k,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    !
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,n_dim
+    do k=0,km
+    do j=jm+1,jm+hm
+    do i=0,im
+      var_dev(i,j,k,n) = var_dev(i,j-jm,k,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    ! end of applying b.c. along j direction
+    !
+    ! b.c. at the k direction
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,n_dim
+    do k=-hm,-1
+    do j=0,jm
+    do i=0,im
+      var_dev(i,j,k,n) = var_dev(i,j,km+k,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    !
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,n_dim
+    do k=km+1,km+hm
+    do j=0,jm
+    do i=0,im
+      var_dev(i,j,k,n) = var_dev(i,j,k-km,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    ! end of applying b.c. along k direction
+    !
+  end subroutine bchomovec
+  !
+  subroutine rhscal(comptime)
+    !
+    use cudafor
+    use comvardef, only: im,jm,km,numq,qrhs,ctime,dvel,dtmp, &
+                         dvel_dev, dtmp_dev, qrhs_dev
+    !
+    real,intent(inout),optional :: comptime
+    
+    real :: tstart,tfinish,tstart1,tfinish1
+    integer :: i,j,k,n
+
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    ! 
+    call gradcal(ctime(3))
+    ! 
+    ! deallocate(dvel_dev, dtmp_dev)
+    !
+    call convection(ctime(4))
+    !
+    !
+    !$cuf kernel do(4) <<<*,*>>>
+    do n=1,numq
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      qrhs_dev(i,j,k,n) = -qrhs_dev(i,j,k,n)
+    enddo
+    enddo
+    enddo
+    enddo
+    !
+    call diffusion(ctime(5))
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+  end subroutine rhscal
+  !
+  attributes(global) subroutine gradcal_kernel0(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+                          dx_dev, dy_dev, dz_dev, &
+                          vel_dev, tmp_dev, dvel_dev, dtmp_dev
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx, iter
+    integer, device :: i1, i2, i3, j1, j2, j3, k1, k2, k3
+    integer, device :: ind
+    real(8), device :: vout, d_dev
+    ! 
+    d_dev = 1.0
+    i1 = 0; i2 = 0; i3 = 0; j1 = 0; j2 = 0; j3 = 0; k1 = 0; k2 = 0; k3 = 0 
+    ! 
+    if (ind == 1) then
+      i1 = 1; i2 = 2; i3 = 3
+      d_dev = dx_dev
+    else if (ind == 2) then
+      j1 = 1; j2 = 2; j3 = 3
+      d_dev = dy_dev
+    else if (ind == 3) then
+      k1 = 1; k2 = 2; k3 = 3
+      d_dev = dz_dev
+    end if
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      do iter = 1,3
+        vout =0.75d0 *(vel_dev(ix+i1, jx+j1, kx+k1, iter)-vel_dev(ix-i1, jx-j1, kx-k1, iter))- &
+              0.15d0 *(vel_dev(ix+i2, jx+j2, kx+k2, iter)-vel_dev(ix-i2, jx-j2, kx-k2, iter))+ &
+              num1d60 *(vel_dev(ix+i3, jx+j3, kx+k3, iter)-vel_dev(ix-i3, jx-j3, kx-k3, iter))
+
+        dvel_dev(ix, jx, kx, iter, ind) = vout/d_dev
+      end do
+      
+      vout =0.75d0 *(tmp_dev(ix+i1, jx+j1, kx+k1)-tmp_dev(ix-i1, jx-j1, kx-k1))- &
+              0.15d0 *(tmp_dev(ix+i2, jx+j2, kx+k2)-tmp_dev(ix-i2, jx-j2, kx-k2))+ &
+              num1d60 *(tmp_dev(ix+i3, jx+j3, kx+k3)-tmp_dev(ix-i3, jx-j3, kx-k3))
+
+      dtmp_dev(ix, jx, kx, ind) = vout/d_dev
+    end if
+    return
+  end subroutine gradcal_kernel0
+  !
+  ! gradcal_kernel1, kernel2, and kernel3 have been merged into gradcal_kernel0
+  ! attributes(global) subroutine gradcal_kernel1(ind)
+  !   use cudafor
+  !   use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+  !                         dx_dev, &
+  !                         vel_dev, tmp_dev, dvel_dev, dtmp_dev
+  !   ! 
+  !   implicit none
+  !   integer, device :: ix, jx, kx, iter
+  !   integer, device :: ind
+  !   real(8), device :: vout
+  !   ! 
+  !   ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+  !   jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+  !   kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+  !   ! 
+  !   if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+  !     do iter = 1,3
+  !       vout =0.75d0 *(vel_dev(ix+1, jx, kx, iter)-vel_dev(ix-1, jx, kx, iter))- &
+  !             0.15d0 *(vel_dev(ix+2, jx, kx, iter)-vel_dev(ix-2, jx, kx, iter))+ &
+  !             num1d60 *(vel_dev(ix+3, jx, kx, iter)-vel_dev(ix-3, jx, kx, iter))
+
+  !       dvel_dev(ix, jx, kx, iter, ind) = vout/dx_dev
+  !     end do
+      
+  !     vout =0.75d0 *(tmp_dev(ix+1, jx, kx)-tmp_dev(ix-1, jx, kx))- &
+  !             0.15d0 *(tmp_dev(ix+2, jx, kx)-tmp_dev(ix-2, jx, kx))+ &
+  !             num1d60 *(tmp_dev(ix+3, jx, kx)-tmp_dev(ix-3, jx, kx))
+
+  !     dtmp_dev(ix, jx, kx, ind) = vout/dx_dev
+  !   end if
+  !   return
+  ! end subroutine gradcal_kernel1
+  ! !
+  ! attributes(global) subroutine gradcal_kernel2(ind)
+  !   use cudafor
+  !   use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+  !                         dy_dev, &
+  !                         vel_dev, tmp_dev, dvel_dev, dtmp_dev
+  !   ! 
+  !   implicit none
+  !   integer, device :: ix, jx, kx, iter
+  !   integer, device :: ind
+  !   real(8), device :: vout
+  !   ! 
+  !   ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+  !   jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+  !   kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+  !   ! 
+  !   if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+  !     do iter = 1,3
+  !       vout =0.75d0 *(vel_dev(ix, jx+1, kx, iter)-vel_dev(ix, jx-1, kx, iter))- &
+  !             0.15d0 *(vel_dev(ix, jx+2, kx, iter)-vel_dev(ix, jx-2, kx, iter))+ &
+  !             num1d60 *(vel_dev(ix, jx+3, kx, iter)-vel_dev(ix, jx-3, kx, iter))
+
+  !       dvel_dev(ix, jx, kx, iter, ind) = vout/dy_dev
+  !     end do
+      
+  !     vout =0.75d0 *(tmp_dev(ix, jx+1, kx)-tmp_dev(ix, jx-1, kx))- &
+  !             0.15d0 *(tmp_dev(ix, jx+2, kx)-tmp_dev(ix, jx-2, kx))+ &
+  !             num1d60 *(tmp_dev(ix, jx+3, kx)-tmp_dev(ix, jx-3, kx))
+
+  !     dtmp_dev(ix, jx, kx, ind) = vout/dy_dev
+  !   end if
+  !   return
+  ! end subroutine gradcal_kernel2
+  ! !
+  ! attributes(global) subroutine gradcal_kernel3(ind)
+  !   use cudafor
+  !   use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+  !                         dz_dev, &
+  !                         vel_dev, tmp_dev, dvel_dev, dtmp_dev
+  !   ! 
+  !   implicit none
+  !   integer, device :: ix, jx, kx, iter
+  !   integer, device :: ind
+  !   real(8), device :: vout
+  !   ! 
+  !   ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+  !   jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+  !   kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+  !   ! 
+  !   if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+  !     do iter = 1,3
+  !       vout =0.75d0 *(vel_dev(ix, jx, kx+1, iter)-vel_dev(ix, jx, kx-1, iter))- &
+  !             0.15d0 *(vel_dev(ix, jx, kx+2, iter)-vel_dev(ix, jx, kx-2, iter))+ &
+  !             num1d60 *(vel_dev(ix, jx, kx+3, iter)-vel_dev(ix, jx, kx-3, iter))
+
+  !       dvel_dev(ix, jx, kx, iter, ind) = vout/dz_dev
+  !     end do
+      
+  !     vout =0.75d0 *(tmp_dev(ix, jx, kx+1)-tmp_dev(ix, jx, kx-1))- &
+  !             0.15d0 *(tmp_dev(ix, jx, kx+2)-tmp_dev(ix, jx, kx-2))+ &
+  !             num1d60 *(tmp_dev(ix, jx, kx+3)-tmp_dev(ix, jx, kx-3))
+
+  !     dtmp_dev(ix, jx, kx, ind) = vout/dz_dev
+  !   end if
+  !   return
+  ! end subroutine gradcal_kernel3
+  !
+  subroutine gradcal(comptime)
+    !
+    use cudafor
+    use nvtx
+    use comvardef,only: im,jm,km,hm,vel,dvel,tmp,dtmp,dx,dy,dz,ctime,nstep, &
+                        dvel_dev, dtmp_dev, vel_dev, tmp_dev, &
+                        performval2
+    use numerics, only: diff6ec
+    !
+    integer :: i,j,k,n
+    !
+    real(8),allocatable,dimension(:,:) :: f,df
+    real,intent(inout),optional :: comptime
+    !
+    real :: tstart,tfinish,tstart1,tfinish1
+    type(dim3) :: grids1, blocks1
+    integer :: istat
+    integer, device :: ind
+    character(len=100) :: error_string
+    !
+    !call progress_bar(0,3,'  ** temperature and velocity gradient ',10)
+    !
+    blocks1 = dim3(8, 8, 8)
+    grids1 = dim3(64, 64, 64)
+    !
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    ! ---- start of differentiation in i direction ----
+    call nvtxStartRange("Gradcal")
+    call nvtxStartRange("Gradcal 1")
+    ! 
+    ind = 1
+    !
+    call gradcal_kernel0<<<grids1, blocks1>>>(ind)
+    ! 
+    ! istat = cudaDeviceSynchronize()
+    ! istat = cudaGetLastError()
+
+    ! if (istat /= cudaSuccess) then
+    !   error_string = cudaGetErrorString(istat)
+    !   print *, 'gradcal kernel1 launch failed with error: ', trim(error_string)
+    ! end if
+    !
+    ! ---- end of differentiation in i direction ----
+    !
+    ! ---- start of differentiation in j direction ----
+    !
+    call nvtxEndRange
+    call nvtxStartRange("Gradcal 2")
+    !
+    ind = 2
+    !
+    call gradcal_kernel0<<<grids1, blocks1>>>(ind)
+    ! 
+    ! istat = cudaDeviceSynchronize()
+    ! istat = cudaGetLastError()
+
+    ! if (istat /= cudaSuccess) then
+    !   error_string = cudaGetErrorString(istat)
+    !   print *, 'gradcal kernel2 launch failed with error: ', trim(error_string)
+    ! end if
+    !
+    ! ---- end of differentiation in j direction ----
+    ! 
+    ! ---- start of differentiation in k direction ----
+    ! 
+    call nvtxEndRange
+    call nvtxStartRange("Gradcal 3")
+    ! 
+    ind = 3
+    !
+    call gradcal_kernel0<<<grids1, blocks1>>>(ind)
+    ! 
+    ! istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+
+    ! if (istat /= cudaSuccess) then
+    !   error_string = cudaGetErrorString(istat)
+    !   print *, 'gradcal kernel3 launch failed with error: ', trim(error_string)
+    ! end if
+    !
+    call nvtxEndRange
+    call nvtxEndRange
+    !
+    ! ---- end of differentiation in k direction ----
+    !
+    istat = cudaDeviceSynchronize()
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+    if (performval2) then
+      call cpu_time(tstart1)
+      ! 
+      dvel = dvel_dev; dtmp = dtmp_dev
+      !
+      write(99, *) nstep, "dvel", "(i)", dvel(10:11,2,2,1,1), dvel(im-11:im-10,2,2,1,1)
+      write(99, *) nstep, "dtmp", "(i)", dtmp(10:11,2,2,1), dtmp(im-11:im-10,2,2,1)
+      write(99, *) nstep, "dvel", "(j)", dvel(30:31,5,7,2,2), dvel(im-31:im-30,5,7,2,2)
+      write(99, *) nstep, "dtmp", "(j)", dtmp(30:31,5,7,2), dtmp(im-31:im-30,5,7,2)
+      write(99, *) nstep, "dvel", "(k)", dvel(50:51,20,10,3,3), dvel(im-51:im-50,20,10,3,3)
+      write(99, *) nstep, "dtmp", "(k)", dtmp(50:51,20,10,3), dtmp(im-51:im-50,20,10,3)
+      !
+      call cpu_time(tfinish1)
+      ctime(14)=ctime(14)+tfinish1-tstart1
+    end if
+    !
+  end subroutine gradcal
+  !
+  attributes(global) subroutine convection_kernel01(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, &
+                          fcs_dev, q_dev, vel_dev, prs_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: ind
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1 - hm_dev
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    !
+    if (kx>=0 .and. kx<=km_dev .and. &
+        jx>=0 .and. jx<=jm_dev .and. &
+        ix>=-hm_dev .and. ix<=im_dev+hm_dev) then
+      fcs_dev(ix,jx,kx,1)=q_dev(ix,jx,kx,1)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,2)=q_dev(ix,jx,kx,2)*vel_dev(ix,jx,kx,ind) + prs_dev(ix,jx,kx)
+      fcs_dev(ix,jx,kx,3)=q_dev(ix,jx,kx,3)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,4)=q_dev(ix,jx,kx,4)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,5)=(q_dev(ix,jx,kx,5)+prs_dev(ix,jx,kx)) * vel_dev(ix,jx,kx,ind)
+    end if
+    return
+  end subroutine convection_kernel01
+  ! 
+  attributes(global) subroutine convection_kernel02(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, &
+                          fcs_dev, q_dev, vel_dev, prs_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: ind
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1 - hm_dev
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    !
+    if (kx>=0 .and. kx<=km_dev .and. &
+        jx>=-hm_dev .and. jx<=jm_dev+hm_dev .and. &
+        ix>=0 .and. ix<=im_dev) then
+      fcs_dev(ix,jx,kx,1)=q_dev(ix,jx,kx,1)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,2)=q_dev(ix,jx,kx,2)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,3)=q_dev(ix,jx,kx,3)*vel_dev(ix,jx,kx,ind) + prs_dev(ix,jx,kx)
+      fcs_dev(ix,jx,kx,4)=q_dev(ix,jx,kx,4)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,5)=(q_dev(ix,jx,kx,5)+prs_dev(ix,jx,kx)) * vel_dev(ix,jx,kx,ind)
+    end if
+    return
+  end subroutine convection_kernel02
+  ! 
+  attributes(global) subroutine convection_kernel03(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, &
+                          fcs_dev, q_dev, vel_dev, prs_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: ind
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1 - hm_dev
+    !
+    if (kx>=-hm_dev .and. kx<=km_dev+hm_dev .and. &
+        jx>=0 .and. jx<=jm_dev .and. &
+        ix>=0 .and. ix<=im_dev) then
+      fcs_dev(ix,jx,kx,1)=q_dev(ix,jx,kx,1)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,2)=q_dev(ix,jx,kx,2)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,3)=q_dev(ix,jx,kx,3)*vel_dev(ix,jx,kx,ind)
+      fcs_dev(ix,jx,kx,4)=q_dev(ix,jx,kx,4)*vel_dev(ix,jx,kx,ind) + prs_dev(ix,jx,kx)
+      fcs_dev(ix,jx,kx,5)=(q_dev(ix,jx,kx,5)+prs_dev(ix,jx,kx)) * vel_dev(ix,jx,kx,ind)
+    end if
+    return
+  end subroutine convection_kernel03
+  ! 
+  attributes(global) subroutine convection_kernel10(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, numq_dev, num1d60, &
+                          qrhs_dev, qrhs_copy_dev, &
+                          fcs_dev, dfcs_dev, &
+                          dx_dev, dy_dev, dz_dev
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx, n
+    integer, device :: i1, i2, i3, j1, j2, j3, k1, k2, k3
+    integer, device :: ind
+    real(8), device :: vout, d_dev
+    ! 
+    d_dev = 1.0
+    i1 = 0; i2 = 0; i3 = 0; j1 = 0; j2 = 0; j3 = 0; k1 = 0; k2 = 0; k3 = 0 
+    ! 
+    if (ind == 1) then
+      i1 = 1; i2 = 2; i3 = 3
+      d_dev = dx_dev
+    else if (ind == 2) then
+      j1 = 1; j2 = 2; j3 = 3
+      d_dev = dy_dev
+    else if (ind == 3) then
+      k1 = 1; k2 = 2; k3 = 3
+      d_dev = dz_dev
+    end if
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      do n = 1, numq_dev
+        dfcs_dev(ix, jx, kx,n) = 0.75d0 *(fcs_dev(ix+i1, jx+j1, kx+k1, n)-fcs_dev(ix-i1, jx-j1, kx-k1, n))- &
+                                 0.15d0 *(fcs_dev(ix+i2, jx+j2, kx+k2, n)-fcs_dev(ix-i2, jx-j2, kx-k2, n))+ &
+                                 num1d60 *(fcs_dev(ix+i3, jx+j3, kx+k3, n)-fcs_dev(ix-i3, jx-j3, kx-k3, n))
+                                  
+        qrhs_dev(ix,jx,kx,n) = qrhs_dev(ix,jx,kx,n)+dfcs_dev(ix,jx,kx,n)/dx_dev
+      end do
+    end if
+    return
+  end subroutine convection_kernel10
+  !
+  subroutine convection(comptime)
+    !
+    use comvardef, only: im,jm,km,hm,numq,rho,prs,tmp,vel,q,qrhs,dx,dy,dz,ctime,nstep,&
+                          q_dev, prs_dev, vel_dev, qrhs_dev, &
+                          fcs_dev, dfcs_dev, fcs_host, dfcs_host, &
+                          numq_dev, num1d60, dx_dev, dy_dev, &
+                          performval2  
+    use dataoper,  only: var2q
+    use numerics,  only: diff6ec
+    !
+    real,intent(inout),optional :: comptime
+    !
+    real(8),allocatable,dimension(:,:) :: fcs,dfcs
+    integer :: i,j,k,n
+    !
+    real :: tstart,tfinish,tstart1,tfinish1
+    !
+    type(dim3) :: grids1, blocks1
+    integer :: istat
+    integer, device :: ind
+    character(len=100) :: error_string
+    real(8), device :: vout
+    ! 
+    blocks1 = dim3(8, 8, 8)
+    grids1 = dim3(64, 64, 64)
+    !
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    ! ---- start of calculation along i direction ----
+    ! 
+    allocate(fcs_dev(-hm:hm+im,0:jm,0:km,1:numq))
+    allocate(dfcs_dev(0:im,0:jm,0:km,1:numq))
+    
+    ind = 1
+    
+    call convection_kernel01<<<grids1, blocks1>>>(ind)
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'convection (i) kernel0 launch failed with error: ', trim(error_string)
+    end if
+    !
+    call convection_kernel10<<<grids1, blocks1>>>(ind)
+    !
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    !
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'convection (i) kernel1 launch failed with error: ', trim(error_string)
+    end if
+    !
+    deallocate(fcs_dev,dfcs_dev)
+    !
+    ! ---- end of calculation along i direction ----
+    !
+    ! ---- start of calculation along j direction ----
+    ! 
+    allocate(fcs_dev(0:im,-hm:hm+jm,0:km,1:numq))
+    allocate(dfcs_dev(0:im,0:jm,0:km,1:numq))
+    
+    ind = 2
+
+    call convection_kernel02<<<grids1, blocks1>>>(ind)
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'convection (j) kernel0 launch failed with error: ', trim(error_string)
+    end if
+
+    call convection_kernel10<<<grids1, blocks1>>>(ind)
+    !
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    !
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'convection (j) kernel2 launch failed with error: ', trim(error_string)
+    end if
+    
+    deallocate(fcs_dev,dfcs_dev)
+    ! 
+    ! ---- end of calculation along j direction ----
+    ! 
+    ! ---- start of calculation along k direction ----
+    ! 
+    allocate(fcs_dev(0:im,0:jm,-hm:km+hm,1:numq))
+    allocate(dfcs_dev(0:im,0:jm,0:km,1:numq))
+    
+    ind = 3
+
+    call convection_kernel03<<<grids1, blocks1>>>(ind)
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'convection (k) kernel03 launch failed with error: ', trim(error_string)
+    end if
+
+    call convection_kernel10<<<grids1, blocks1>>>(ind)
+    !
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    !
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'convection (k) kernel3 launch failed with error: ', trim(error_string)
+    end if
+    ! 
+    deallocate(fcs_dev,dfcs_dev)
+    ! 
+    ! ---- end of calculation along k direction ----
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    ! 
+    if (performval2) then
+      call cpu_time(tstart1)
+      ! 
+      qrhs = qrhs_dev
+      ! 
+      write(98, *) nstep, "qrhs", "(i)", qrhs(10:11,2,2,1), qrhs(im-11:im-10,2,2,1)
+      write(98, *) nstep, "qrhs", "(i)", qrhs(10:11,2,2,2), qrhs(im-11:im-10,2,2,2)
+      write(98, *) nstep, "qrhs", "(i)", qrhs(10:11,2,2,3), qrhs(im-11:im-10,2,2,3)
+      write(98, *) nstep, "qrhs", "(i)", qrhs(10:11,2,2,4), qrhs(im-11:im-10,2,2,4)
+      write(98, *) nstep, "qrhs", "(i)", qrhs(10:11,2,2,5), qrhs(im-11:im-10,2,2,5)
+      write(98, *) nstep, "qrhs", "(j)", qrhs(20,40:41,30,1), qrhs(20,im-41:im-40,30,1)
+      write(98, *) nstep, "qrhs", "(j)", qrhs(20,40:41,30,2), qrhs(20,im-41:im-40,30,2)
+      write(98, *) nstep, "qrhs", "(j)", qrhs(20,40:41,30,3), qrhs(20,im-41:im-40,30,3)
+      write(98, *) nstep, "qrhs", "(j)", qrhs(20,40:41,30,4), qrhs(20,im-41:im-40,30,4)
+      write(98, *) nstep, "qrhs", "(j)", qrhs(20,40:41,30,5), qrhs(20,im-41:im-40,30,5) 
+      write(98, *) nstep, "qrhs", "(k)", qrhs(24,14,28:29,1), qrhs(24,14,im-29:im-28,1)
+      write(98, *) nstep, "qrhs", "(k)", qrhs(24,14,28:29,2), qrhs(24,14,im-29:im-28,2)
+      write(98, *) nstep, "qrhs", "(k)", qrhs(24,14,28:29,3), qrhs(24,14,im-29:im-28,3)
+      write(98, *) nstep, "qrhs", "(k)", qrhs(24,14,28:29,4), qrhs(24,14,im-29:im-28,4)
+      write(98, *) nstep, "qrhs", "(k)", qrhs(24,14,28:29,5), qrhs(24,14,im-29:im-28,5)
+      ! 
+      call cpu_time(tfinish1)
+      ctime(14)=ctime(14)+tfinish1-tstart1
+    end if
+    ! 
+    !call progress_bar(3,3,'  ** convection terms ',10)
+    !
+  end subroutine convection
+  !
+  attributes(global) subroutine diffusion_kernel01(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+                          dx_dev, &
+                          sigma_dev, qflux_dev, qrhs_dev
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: ind
+    real(8), device :: vout
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      vout =0.75d0 *(sigma_dev(ix+1, jx, kx, 1)-sigma_dev(ix-1, jx, kx, 1))- &
+            0.15d0 *(sigma_dev(ix+2, jx, kx, 1)-sigma_dev(ix-2, jx, kx, 1))+ &
+            num1d60 *(sigma_dev(ix+3, jx, kx, 1)-sigma_dev(ix-3, jx, kx, 1))
+            
+      qrhs_dev(ix, jx, kx, 2) = qrhs_dev(ix, jx, kx, 2) + vout/dx_dev
+      
+      vout =0.75d0 *(sigma_dev(ix+1, jx, kx, 2)-sigma_dev(ix-1, jx, kx, 2))- &
+            0.15d0 *(sigma_dev(ix+2, jx, kx, 2)-sigma_dev(ix-2, jx, kx, 2))+ &
+            num1d60 *(sigma_dev(ix+3, jx, kx, 2)-sigma_dev(ix-3, jx, kx, 2))
+
+      qrhs_dev(ix, jx, kx, 3) = qrhs_dev(ix, jx, kx, 3) + vout/dx_dev
+      
+      vout =0.75d0 *(sigma_dev(ix+1, jx, kx, 3)-sigma_dev(ix-1, jx, kx, 3))- &
+            0.15d0 *(sigma_dev(ix+2, jx, kx, 3)-sigma_dev(ix-2, jx, kx, 3))+ &
+            num1d60 *(sigma_dev(ix+3, jx, kx, 3)-sigma_dev(ix-3, jx, kx, 3))
+
+      qrhs_dev(ix, jx, kx, 4) = qrhs_dev(ix, jx, kx, 4) + vout/dx_dev
+      
+      vout =0.75d0 *(qflux_dev(ix+1, jx, kx, 1)-qflux_dev(ix-1, jx, kx, 1))- &
+            0.15d0 *(qflux_dev(ix+2, jx, kx, 1)-qflux_dev(ix-2, jx, kx, 1))+ &
+            num1d60 *(qflux_dev(ix+3, jx, kx, 1)-qflux_dev(ix-3, jx, kx, 1))
+
+      qrhs_dev(ix, jx, kx, 5) = qrhs_dev(ix, jx, kx, 5) + vout/dx_dev
+    end if
+    return
+  end subroutine diffusion_kernel01
+  !
+  attributes(global) subroutine diffusion_kernel02(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+                          dy_dev, &
+                          sigma_dev, qflux_dev, qrhs_dev
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: ind
+    real(8), device :: vout
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      vout =0.75d0 *(sigma_dev(ix, jx+1, kx, 2)-sigma_dev(ix, jx-1, kx, 2))- &
+            0.15d0 *(sigma_dev(ix, jx+2, kx, 2)-sigma_dev(ix, jx-2, kx, 2))+ &
+            num1d60 *(sigma_dev(ix, jx+3, kx, 2)-sigma_dev(ix, jx-3, kx, 2))
+            
+      qrhs_dev(ix, jx, kx, 2) = qrhs_dev(ix, jx, kx, 2) + vout/dy_dev
+      
+      vout =0.75d0 *(sigma_dev(ix, jx+1, kx, 4)-sigma_dev(ix, jx-1, kx, 4))- &
+            0.15d0 *(sigma_dev(ix, jx+2, kx, 4)-sigma_dev(ix, jx-2, kx, 4))+ &
+            num1d60 *(sigma_dev(ix, jx+3, kx, 4)-sigma_dev(ix, jx-3, kx, 4))
+
+      qrhs_dev(ix, jx, kx, 3) = qrhs_dev(ix, jx, kx, 3) + vout/dy_dev
+      
+      vout =0.75d0 *(sigma_dev(ix, jx+1, kx, 5)-sigma_dev(ix, jx-1, kx, 5))- &
+            0.15d0 *(sigma_dev(ix, jx+2, kx, 5)-sigma_dev(ix, jx-2, kx, 5))+ &
+            num1d60 *(sigma_dev(ix, jx+3, kx, 5)-sigma_dev(ix, jx-3, kx, 5))
+
+      qrhs_dev(ix, jx, kx, 4) = qrhs_dev(ix, jx, kx, 4) + vout/dy_dev
+      
+      vout =0.75d0 *(qflux_dev(ix, jx+1, kx, 2)-qflux_dev(ix, jx-1, kx, 2))- &
+            0.15d0 *(qflux_dev(ix, jx+2, kx, 2)-qflux_dev(ix, jx-2, kx, 2))+ &
+            num1d60 *(qflux_dev(ix, jx+3, kx, 2)-qflux_dev(ix, jx-3, kx, 2))
+
+      qrhs_dev(ix, jx, kx, 5) = qrhs_dev(ix, jx, kx, 5) + vout/dy_dev
+    end if
+    return
+  end subroutine diffusion_kernel02
+  ! !
+  attributes(global) subroutine diffusion_kernel03(ind)
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, num1d60, &
+                          dz_dev, &
+                          sigma_dev, qflux_dev, qrhs_dev
+    ! 
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: ind
+    real(8), device :: vout
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      vout =0.75d0 *(sigma_dev(ix, jx, kx+1, 3)-sigma_dev(ix, jx, kx-1, 3))- &
+            0.15d0 *(sigma_dev(ix, jx, kx+2, 3)-sigma_dev(ix, jx, kx-2, 3))+ &
+            num1d60 *(sigma_dev(ix, jx, kx+3, 3)-sigma_dev(ix, jx, kx-3, 3))
+            
+      qrhs_dev(ix, jx, kx, 2) = qrhs_dev(ix, jx, kx, 2) + vout/dz_dev
+      
+      vout =0.75d0 *(sigma_dev(ix, jx, kx+1, 5)-sigma_dev(ix, jx, kx-1, 5))- &
+            0.15d0 *(sigma_dev(ix, jx, kx+2, 5)-sigma_dev(ix, jx, kx-2, 5))+ &
+            num1d60 *(sigma_dev(ix, jx, kx+3, 5)-sigma_dev(ix, jx, kx-3, 5))
+
+      qrhs_dev(ix, jx, kx, 3) = qrhs_dev(ix, jx, kx, 3) + vout/dz_dev
+      
+      vout =0.75d0 *(sigma_dev(ix, jx, kx+1, 6)-sigma_dev(ix, jx, kx-1, 6))- &
+            0.15d0 *(sigma_dev(ix, jx, kx+2, 6)-sigma_dev(ix, jx, kx-2, 6))+ &
+            num1d60 *(sigma_dev(ix, jx, kx+3, 6)-sigma_dev(ix, jx, kx-3, 6))
+
+      qrhs_dev(ix, jx, kx, 4) = qrhs_dev(ix, jx, kx, 4) + vout/dz_dev
+      
+      vout =0.75d0 *(qflux_dev(ix, jx, kx+1, 3)-qflux_dev(ix, jx, kx-1, 3))- &
+              0.15d0 *(qflux_dev(ix, jx, kx+2, 3)-qflux_dev(ix, jx, kx-2, 3))+ &
+              num1d60 *(qflux_dev(ix, jx, kx+3, 3)-qflux_dev(ix, jx, kx-3, 3))
+
+      qrhs_dev(ix, jx, kx, 5) = qrhs_dev(ix, jx, kx, 5) + vout/dz_dev
+    end if
+    return
+  end subroutine diffusion_kernel03
+  !
+  attributes(global) subroutine diffusion_kernelm
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, num1d3, &
+                          vel_dev, tmp_dev, dvel_dev, dtmp_dev, &
+                          sigma_dev, qflux_dev, &
+                          reynolds_dev, prandtl_dev, const5_dev, &
+                          s11_dev,s12_dev,s13_dev,s22_dev,s23_dev,s33_dev,skk_dev, &
+                          miu_dev,miu2_dev,hcc_dev
+                          ! tempconst, tempconst1, ref_t_dev
+    use dataoper,  only:  miucal_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    ! real(8), device :: s11_dev,s12_dev,s13_dev,s22_dev,s23_dev,s33_dev,skk_dev
+    ! real(8), device :: miu_dev,miu2_dev,hcc_dev
+    ! 
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    ! 
+    if (kx>=0 .and. kx<=km_dev .and. jx>=0 .and. jx<=jm_dev .and. ix>=0 .and. ix<=im_dev) then
+      miu_dev(ix,jx,kx)=miucal_dev(tmp_dev(ix,jx,kx))/reynolds_dev
+
+      ! equation
+      ! miucal_out=temper_dev*sqrt(temper_dev)*tempconst1/(temper_dev+tempconst)
+
+      ! tempconst(ix,jx,kx)=110.4d0/ref_t_dev
+      ! tempconst1(ix,jx,kx)=1.d0+tempconst(ix,jx,kx)
+      ! miu_dev(ix,jx,kx)=(tmp_dev(ix,jx,kx)*sqrt(tmp_dev(ix,jx,kx))*tempconst1(ix,jx,kx)/(tmp_dev(ix,jx,kx)+tempconst(ix,jx,kx)))/reynolds_dev
+
+      hcc_dev(ix,jx,kx)=(miu_dev(ix,jx,kx)/prandtl_dev)/const5_dev
+
+      miu2_dev(ix,jx,kx)=2.d0*miu_dev(ix,jx,kx)
+      
+      s11_dev(ix,jx,kx)=dvel_dev(ix,jx,kx,1,1)
+      s12_dev(ix,jx,kx)=0.5d0*(dvel_dev(ix,jx,kx,1,2)+dvel_dev(ix,jx,kx,2,1))
+      s13_dev(ix,jx,kx)=0.5d0*(dvel_dev(ix,jx,kx,1,3)+dvel_dev(ix,jx,kx,3,1))
+      s22_dev(ix,jx,kx)=dvel_dev(ix,jx,kx,2,2)
+      s23_dev(ix,jx,kx)=0.5d0*(dvel_dev(ix,jx,kx,2,3)+dvel_dev(ix,jx,kx,3,2))
+      s33_dev(ix,jx,kx)=dvel_dev(ix,jx,kx,3,3)
+      
+      skk_dev(ix,jx,kx)=num1d3*(s11_dev(ix,jx,kx)+s22_dev(ix,jx,kx)+s33_dev(ix,jx,kx))
+
+      sigma_dev(ix,jx,kx,1)=miu2_dev(ix,jx,kx)*(s11_dev(ix,jx,kx)-skk_dev(ix,jx,kx)) !s11   
+      sigma_dev(ix,jx,kx,2)=miu2_dev(ix,jx,kx)* s12_dev(ix,jx,kx)           !s12  
+      sigma_dev(ix,jx,kx,3)=miu2_dev(ix,jx,kx)* s13_dev(ix,jx,kx)      !s13   
+      sigma_dev(ix,jx,kx,4)=miu2_dev(ix,jx,kx)*(s22_dev(ix,jx,kx)-skk_dev(ix,jx,kx)) !s22   
+      sigma_dev(ix,jx,kx,5)=miu2_dev(ix,jx,kx)* s23_dev(ix,jx,kx)      !s23  
+      sigma_dev(ix,jx,kx,6)=miu2_dev(ix,jx,kx)*(s33_dev(ix,jx,kx)-skk_dev(ix,jx,kx)) !s33 
+
+      qflux_dev(ix,jx,kx,1)=hcc_dev(ix,jx,kx)*dtmp_dev(ix,jx,kx,1)                      +   & 
+                                              sigma_dev(ix,jx,kx,1)*vel_dev(ix,jx,kx,1) +   &
+                                              sigma_dev(ix,jx,kx,2)*vel_dev(ix,jx,kx,2) +   &
+                                              sigma_dev(ix,jx,kx,3)*vel_dev(ix,jx,kx,3)
+      qflux_dev(ix,jx,kx,2)=hcc_dev(ix,jx,kx)*dtmp_dev(ix,jx,kx,2)                      +   &
+                                              sigma_dev(ix,jx,kx,2)*vel_dev(ix,jx,kx,1) +   &
+                                              sigma_dev(ix,jx,kx,4)*vel_dev(ix,jx,kx,2) +   &
+                                              sigma_dev(ix,jx,kx,5)*vel_dev(ix,jx,kx,3)
+      qflux_dev(ix,jx,kx,3)=hcc_dev(ix,jx,kx)*dtmp_dev(ix,jx,kx,3)                      +   &
+                                              sigma_dev(ix,jx,kx,3)*vel_dev(ix,jx,kx,1) +   &
+                                              sigma_dev(ix,jx,kx,5)*vel_dev(ix,jx,kx,2) +   &
+                                              sigma_dev(ix,jx,kx,6)*vel_dev(ix,jx,kx,3)
+    end if
+    return
+  end subroutine diffusion_kernelm
+  !
+  subroutine diffusion(comptime)
+    !
+    use cudafor
+    use nvtx
+    use comvardef, only: num1d3,reynolds,prandtl,const5,dx,dy,dz,nstep
+    use comvardef, only: im,jm,km,hm,vel,dvel,dtmp,qrhs,tmp,ctime
+    use comvardef, only: sigma_dev, qflux_dev, qrhs_dev, &
+                         s11_dev,s12_dev,s13_dev,s22_dev,s23_dev,s33_dev,skk_dev, &
+                         miu_dev,miu2_dev,hcc_dev, &
+                         performval2
+    use comvardef, only: vel_dev,dvel_dev,dtmp_dev,tmp_dev
+    use dataoper,  only: miucal
+    use numerics,  only: diff6ec
+    !
+    real,intent(inout),optional :: comptime
+    !
+    real(8),allocatable,dimension(:,:,:,:),save :: sigma,qflux
+    real(8),allocatable :: f(:,:),df(:,:)
+    !
+    real :: tstart,tfinish,tstart1,tfinish1
+    !
+    type(dim3) :: grids1, blocks1
+    integer :: istat
+    integer, device :: ind
+    character(len=100) :: error_string
+    !
+    integer :: i,j,k,n
+    real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
+    logical,save :: firstcall=.true.
+    !
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    if(firstcall) then
+      allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
+                qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+      allocate( sigma_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
+                qflux_dev(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3))
+      !
+      allocate(s11_dev(0:im,0:jm,0:km),s12_dev(0:im,0:jm,0:km),s13_dev(0:im,0:jm,0:km), &
+                s22_dev(0:im,0:jm,0:km),s23_dev(0:im,0:jm,0:km),s33_dev(0:im,0:jm,0:km), &
+                skk_dev(0:im,0:jm,0:km))
+      allocate(miu_dev(0:im,0:jm,0:km),miu2_dev(0:im,0:jm,0:km),hcc_dev(0:im,0:jm,0:km))
+      firstcall=.false.
+    endif
+    !
+    blocks1 = dim3(8, 8, 8)
+    grids1 = dim3(64, 64, 64)
+    !
+    ! istat = cudaDeviceSynchronize()  
+    !    
+    call diffusion_kernelm<<<grids1, blocks1>>>
+    !
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    !
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'diffusion kernel0 launch failed with error: ', trim(error_string)
+    end if
+    !
+    call bchomovec(sigma_dev, 6)
+    call bchomovec(qflux_dev, 3)
+    !
+    ! istat = cudaDeviceSynchronize()
+    !
+    call nvtxStartRange("Diffusion")
+    call nvtxStartRange("Diffusion 1")
+    !
+    ind = 1
+    !
+    call diffusion_kernel01<<<grids1, blocks1>>>(ind)
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'diffusion (i) kernel01 launch failed with error: ', trim(error_string)
+    end if
+    !
+    !call progress_bar(2,4,'  ** diffusion terms ',10)
+    !
+    call nvtxEndRange
+    call nvtxStartRange("Diffusion 2")
+    !
+    ind = 2
+    !
+    call diffusion_kernel02<<<grids1, blocks1>>>(ind)
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'diffusion (j) kernel02 launch failed with error: ', trim(error_string)
+    end if
+    ! 
+    !call progress_bar(3,4,'  ** diffusion terms ',10)
+    !
+    call nvtxEndRange
+    call nvtxStartRange("Diffusion 3")
+    ! 
+    ind = 3
+    !
+    call diffusion_kernel03<<<grids1, blocks1>>>(ind)
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'diffusion (k) kernel03 launch failed with error: ', trim(error_string)
+    end if
+    !
+    ! deallocate(sigma_dev, qflux_dev)    
+    ! deallocate(s11_dev,s12_dev,s13_dev,s22_dev,s23_dev,s33_dev,skk_dev,miu_dev,miu2_dev,hcc_dev) 
+    !
+    call nvtxEndRange
+    call nvtxEndRange
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+    if (performval2) then
+      call cpu_time(tstart1)
+      !
+      sigma = sigma_dev
+      qflux = qflux_dev
+      !
+      write(97, *) nstep, "sigma", "(1)", sigma(10:11,2,2,1), sigma(im-11:im-10,2,2,1)
+      write(97, *) nstep, "sigma", "(2)", sigma(10:11,2,2,2), sigma(im-11:im-10,2,2,2)
+      write(97, *) nstep, "sigma", "(3)", sigma(10,10:11,30,3), sigma(10,im-21:im-20,30,3)
+      write(97, *) nstep, "sigma", "(4)", sigma(10,10:11,30,4), sigma(10,im-21:im-20,30,4)
+      write(97, *) nstep, "sigma", "(5)", sigma(15,20,30,5), sigma(15,20,im-31:im-30,5)
+      write(97, *) nstep, "sigma", "(6)", sigma(15,20,30,6), sigma(15,20,im-31:im-30,6)
+      write(97, *) nstep, "qflux", "(1)", qflux(10:11,20,15,1), qflux(im-11:im-10,20,15,1)
+      write(97, *) nstep, "qflux", "(2)", qflux(30,40:41,25,2), qflux(30,im-41:im-40,25,2)
+      write(97, *) nstep, "qflux", "(3)", qflux(1,41,15:16,3), qflux(1,41,im-16:im-15,3)
+      ! 
+      qrhs = qrhs_dev
+      ! 
+      write(97, *) nstep, "qrhs", "(i)", qrhs(3:4,14,8,1), qrhs(3,14,im-49:im-48,1)
+      write(97, *) nstep, "qrhs", "(i)", qrhs(13:14,24,18,2), qrhs(13,24,im-29:im-28,2)
+      write(97, *) nstep, "qrhs", "(i)", qrhs(23,34:35,28,3), qrhs(23,im-8:im-7,34,3)
+      write(97, *) nstep, "qrhs", "(i)", qrhs(33,44:45,38,4), qrhs(33,im-39:im-38,44,4)
+      write(97, *) nstep, "qrhs", "(i)", qrhs(43,54,48:49,5), qrhs(im-29:im-28,43,54,5)
+      write(97, *) nstep, "qrhs", "(j)", qrhs(43,54,48:49,1), qrhs(im-29:im-28,43,54,1)
+      write(97, *) nstep, "qrhs", "(j)", qrhs(33,44:45,38,2), qrhs(33,im-39:im-38,44,2)
+      write(97, *) nstep, "qrhs", "(j)", qrhs(23,34:35,28,3), qrhs(23,im-8:im-7,34,3)
+      write(97, *) nstep, "qrhs", "(j)", qrhs(13:14,24,18,4), qrhs(13,24,im-29:im-28,4)
+      write(97, *) nstep, "qrhs", "(j)", qrhs(3:4,14,8,5), qrhs(3,14,im-49:im-48,5)
+      write(97, *) nstep, "qrhs", "(k)", qrhs(23,34:35,28,1), qrhs(23,im-8:im-7,34,1)
+      write(97, *) nstep, "qrhs", "(k)", qrhs(13:14,24,18,2), qrhs(13,24,im-29:im-28,2)
+      write(97, *) nstep, "qrhs", "(k)", qrhs(3:4,14,8,3), qrhs(3,14,im-49:im-48,3)
+      write(97, *) nstep, "qrhs", "(k)", qrhs(43,54,48:49,4), qrhs(im-29:im-28,43,54,4)
+      write(97, *) nstep, "qrhs", "(k)", qrhs(33,44:45,38,5), qrhs(33,im-39:im-38,44,5)
+      ! 
+      call cpu_time(tfinish1)
+      ctime(14)=ctime(14)+tfinish1-tstart1
+    end if
+    ! 
+    !call progress_bar(1,4,'  ** diffusion terms ',10)
+    !
+  end subroutine diffusion
+  !
+  attributes(global) subroutine filterq_kernel01
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, numq_dev, &
+                          q_dev, fph_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: n
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    !
+    if (kx>=0 .and. kx<=km_dev .and. &
+        jx>=0 .and. jx<=jm_dev .and. &
+        ix>=0 .and. ix<=im_dev) then
+      do n = 1, numq_dev
+        fph_dev(ix, jx, kx, n) = 0.376953125d0*(q_dev(ix, jx, kx, n)    +q_dev(ix, jx, kx, n))   &
+                               + 0.205078125d0*(q_dev(ix-1, jx, kx, n)  +q_dev(ix+1, jx, kx, n)) &
+                               - 0.1171875d0*(q_dev(ix-2, jx, kx, n)    +q_dev(ix+2, jx, kx, n)) &
+                               + 0.0439453125d0*(q_dev(ix-3, jx, kx, n) +q_dev(ix+3, jx, kx, n)) &
+                               - 0.009765625d0*(q_dev(ix-4, jx, kx, n)  +q_dev(ix+4, jx, kx, n)) &
+                               + 0.0009765625d0*(q_dev(ix-5, jx, kx, n) +q_dev(ix+5, jx, kx, n))
+      end do
+    end if
+    return
+  end subroutine filterq_kernel01
+  !
+  attributes(global) subroutine filterq_kernel02
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, numq_dev, &
+                          q_dev, fph_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: n
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    !
+    if (kx>=0 .and. kx<=km_dev .and. &
+        jx>=0 .and. jx<=jm_dev .and. &
+        ix>=0 .and. ix<=im_dev) then
+      do n = 1, numq_dev
+        fph_dev(ix, jx, kx, n) = 0.376953125d0*(q_dev(ix, jx, kx, n)    +q_dev(ix, jx, kx, n))   &
+                               + 0.205078125d0*(q_dev(ix, jx-1, kx, n)  +q_dev(ix, jx+1, kx, n)) &
+                               - 0.1171875d0*(q_dev(ix, jx-2, kx, n)    +q_dev(ix, jx+2, kx, n)) &
+                               + 0.0439453125d0*(q_dev(ix, jx-3, kx, n) +q_dev(ix, jx+3, kx, n)) &
+                               - 0.009765625d0*(q_dev(ix, jx-4, kx, n)  +q_dev(ix, jx+4, kx, n)) &
+                               + 0.0009765625d0*(q_dev(ix, jx-5, kx, n) +q_dev(ix, jx+5, kx, n))
+      end do
+    end if
+    return
+  end subroutine filterq_kernel02
+  !
+  attributes(global) subroutine filterq_kernel03
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, numq_dev, &
+                          q_dev, fph_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: n
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    !
+    if (kx>=0 .and. kx<=km_dev .and. &
+        jx>=0 .and. jx<=jm_dev .and. &
+        ix>=0 .and. ix<=im_dev) then
+      do n = 1, numq_dev
+        fph_dev(ix, jx, kx, n) = 0.376953125d0*(q_dev(ix, jx, kx, n)    +q_dev(ix, jx, kx, n))   &
+                               + 0.205078125d0*(q_dev(ix, jx, kx-1, n)  +q_dev(ix, jx, kx+1, n)) &
+                               - 0.1171875d0*(q_dev(ix, jx, kx-2, n)    +q_dev(ix, jx, kx+2, n)) &
+                               + 0.0439453125d0*(q_dev(ix, jx, kx-3, n) +q_dev(ix, jx, kx+3, n)) &
+                               - 0.009765625d0*(q_dev(ix, jx, kx-4, n)  +q_dev(ix, jx, kx+4, n)) &
+                               + 0.0009765625d0*(q_dev(ix, jx, kx-5, n) +q_dev(ix, jx, kx+5, n))
+      end do
+    end if
+    return
+  end subroutine filterq_kernel03
+  !
+  attributes(global) subroutine filterq_kernel04
+    use cudafor
+    use comvardef, only:  im_dev, jm_dev, km_dev, hm_dev, numq_dev, &
+                          q_dev, fph_dev
+    !
+    implicit none
+    integer, device :: ix, jx, kx
+    integer, device :: n
+    !
+    ix = (blockidx%x-1)*blockdim%x + threadidx%x - 1
+    jx = (blockidx%y-1)*blockdim%y + threadidx%y - 1
+    kx = (blockidx%z-1)*blockdim%z + threadidx%z - 1
+    !
+    if (kx>=0 .and. kx<=km_dev .and. &
+        jx>=0 .and. jx<=jm_dev .and. &
+        ix>=0 .and. ix<=im_dev) then
+        do n = 1, numq_dev
+          q_dev(ix, jx, kx, n) = fph_dev(ix, jx, kx, n)
+        end do
+    end if
+    return
+  end subroutine filterq_kernel04
+  !
+  subroutine filterq(comptime)
+    !
+    use comvardef, only: im,jm,km,hm,numq,q,nstep,ctime
+    use comvardef, only: q_dev, fph_dev, performval2
+    use numerics,  only: filter10ec
+    !
+    real,intent(inout),optional :: comptime
+    
+    real :: tstart,tfinish,tstart1,tfinish1
+
+    real(8),allocatable :: phi(:),fph(:)
+    !
+    integer :: i,j,k,n
+    !
+    type(dim3) :: grids1, blocks1
+    integer :: istat
+    integer, device :: ind
+    character(len=100) :: error_string
+    !
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    !call progress_bar(0,3,'  ** spatial filter ',10)
+    !
+    blocks1 = dim3(8, 8, 8)
+    grids1 = dim3(64, 64, 64)
+    !
+    ! istat = cudaDeviceSynchronize()
+    !
+    allocate(fph_dev(0:im, 0:jm, 0:km, 1:numq))
+    !
+    call filterq_kernel01<<<grids1, blocks1>>>
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'filterq (i) kernel01 launch failed with error: ', trim(error_string)
+    else
+      call filterq_kernel04<<<grids1, blocks1>>>
+      ! 
+      istat = cudaDeviceSynchronize()
+      istat = cudaGetLastError()
+      
+      if (istat /= cudaSuccess) then
+        error_string = cudaGetErrorString(istat)
+        print *, 'filterq (i) kernel04 launch failed with error: ', trim(error_string)
+      end if
+    end if
+    !
+    deallocate(fph_dev)
+    !
+    !call progress_bar(1,3,'  ** spatial filter ',10)
+    !
+    allocate(fph_dev(0:im, 0:jm, 0:km, 1:numq))
+    !
+    call filterq_kernel02<<<grids1, blocks1>>>
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'filterq (j) kernel02 launch failed with error: ', trim(error_string)
+    else
+      call filterq_kernel04<<<grids1, blocks1>>>
+      ! 
+      istat = cudaDeviceSynchronize()
+      istat = cudaGetLastError()
+      
+      if (istat /= cudaSuccess) then
+        error_string = cudaGetErrorString(istat)
+        print *, 'filterq (j) kernel04 launch failed with error: ', trim(error_string)
+      end if
+    end if
+    !
+    deallocate(fph_dev)
+    !
+    !call progress_bar(2,3,'  ** spatial filter ',10)
+    !
+    allocate(fph_dev(0:im, 0:jm, 0:km, 1:numq))
+    !
+    call filterq_kernel03<<<grids1, blocks1>>>
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'filterq (k) kernel03 launch failed with error: ', trim(error_string)
+    else
+      call filterq_kernel04<<<grids1, blocks1>>>
+      ! 
+      istat = cudaDeviceSynchronize()
+      istat = cudaGetLastError()
+      
+      if (istat /= cudaSuccess) then
+        error_string = cudaGetErrorString(istat)
+        print *, 'filterq (k) kernel04 launch failed with error: ', trim(error_string)
+      end if
+    end if
+    !
+    deallocate(fph_dev)
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+    if (performval2) then
+      call cpu_time(tstart1)
+      !
+      q = q_dev
+      !
+      write(96, *) nstep, "q", "(i)", q(10:11,2,2,1), q(im-11:im-10,2,2,1)
+      write(96, *) nstep, "q", "(i)", q(20,20:21,2,2), q(20, im-21:im-20,2,2)
+      write(96, *) nstep, "q", "(i)", q(20,30,35:36,3), q(20, 30, im-36:im-35,3)
+      write(96, *) nstep, "q", "(i)", q(10:11,2,2,4), q(im-11:im-10,2,2,4)
+      write(96, *) nstep, "q", "(i)", q(20,30,35:36,5), q(20, 30, im-36:im-35,5)
+      write(96, *) nstep, "q", "(j)", q(20,30,35:36,1), q(20, 30, im-36:im-35,1)
+      write(96, *) nstep, "q", "(j)", q(10:11,2,2,2), q(im-11:im-10,2,2,2)
+      write(96, *) nstep, "q", "(j)", q(10,20,35:36,3), q(10, 20, im-36:im-35,3)
+      write(96, *) nstep, "q", "(j)", q(20,20:21,2,4), q(20, im-21:im-20,2,4)
+      write(96, *) nstep, "q", "(j)", q(10:11,2,2,5), q(im-11:im-10,2,2,5)
+      write(96, *) nstep, "q", "(k)", q(11:12,2,10,1), q(im-12:im-11,2,10,1)
+      write(96, *) nstep, "q", "(k)", q(10,1,35:36,2), q(10, 1, im-36:im-35,2)
+      write(96, *) nstep, "q", "(k)", q(1,30,30:31,3), q(1, 30, im-31:im-30,3)
+      write(96, *) nstep, "q", "(k)", q(10:11,10,10,4), q(im-11:im-10,10,10,4)
+      write(96, *) nstep, "q", "(k)", q(20,20:21,30,5), q(20, im-21:im-20,30,5)
+      !
+      call cpu_time(tfinish1)
+      ctime(15)=ctime(15)+tfinish1-tstart1
+    end if
+    !
+    !call progress_bar(3,3,'  ** spatial filter ',10)
+    !
+  end subroutine filterq
+  !
+  subroutine q2fvar_calc(comptime)
+    !
+    use comvardef, only: im,jm,km,hm,numq,q,nstep,ctime
+    use comvardef, only: rho, vel, prs, tmp, q
+    use comvardef, only: rho_dev, vel_dev, prs_dev, tmp_dev, q_dev, performval2
+    use comvardef, only: const6, const2
+    use numerics,  only: filter10ec
+    use dataoper,  only: thermal_scar_dev
+    !
+    real,intent(inout),optional :: comptime
+    real :: tstart,tfinish,tstart1,tfinish1
+    ! 
+    real(8),allocatable :: phi(:),fph(:)
+    !
+    integer :: i,j,k,n
+    !
+    type(dim3) :: grids1, blocks1
+    integer :: istat
+    integer, device :: ind
+    character(len=100) :: error_string
+    !
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    blocks1 = dim3(8, 8, 8)
+    grids1 = dim3(64, 64, 64)
+    ! 
+    ! istat = cudaDeviceSynchronize()
+    !
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=0,km
+    do j=0,jm
+    do i=0,im
+      ! call q2fvar_dev( q=q_dev(i,j,k,:),  density=rho_dev(i,j,k),     &
+      !                                     velocity=vel_dev(i,j,k,:),  &
+      !                                     pressure=prs_dev(i,j,k),    &
+      !                                     temperature=tmp_dev(i,j,k)  )
+      ! 
+      rho_dev(i,j,k) = q_dev(i,j,k,1)
+      !
+      vel_dev(i,j,k,1)=q_dev(i,j,k,2)/rho_dev(i,j,k)
+      vel_dev(i,j,k,2)=q_dev(i,j,k,3)/rho_dev(i,j,k)
+      vel_dev(i,j,k,3)=q_dev(i,j,k,4)/rho_dev(i,j,k)
+      ! 
+      prs_dev(i,j,k)  =( q_dev(i,j,k,5)-0.5d0*rho_dev(i,j,k)*(vel_dev(i,j,k,1)**2+vel_dev(i,j,k,2)**2+  &
+                        vel_dev(i,j,k,3)**2) )/const6
+      ! 
+      ! tmp_dev(i,j,k)=prs_dev(i,j,k)/rho_dev(i,j,k)*const2
+      tmp_dev(i,j,k)=thermal_scar_dev(pressure = prs_dev(i,j,k), density = rho_dev(i,j,k))
+      ! 
+    enddo
+    enddo
+    enddo
+    ! 
+    istat = cudaDeviceSynchronize()
+    istat = cudaGetLastError()
+    
+    if (istat /= cudaSuccess) then
+      error_string = cudaGetErrorString(istat)
+      print *, 'q2fvar kernel launch failed with error: ', trim(error_string)
+    end if
+    ! 
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    ! 
+    if (performval2) then
+      call cpu_time(tstart1)
+      ! 
+      rho = rho_dev; vel = vel_dev; prs = prs_dev; tmp = tmp_dev
+      ! 
+      write(95, *) nstep, "rho", rho(5:6,10:11,10), rho(10,im-6:im-5,im-11:im-10)
+      write(95, *) nstep, "vel", vel(10:11,20:21,20, 1), vel(20,im-11:im-10,im-21:im-20, 1)
+      write(95, *) nstep, "vel", vel(15:16,25:26,30, 2), vel(30,im-16:im-15,im-26:im-25, 2)
+      write(95, *) nstep, "vel", vel(20:21,30:31,40, 3), vel(40,im-21:im-20,im-31:im-30, 3)
+      write(95, *) nstep, "prs", prs(10:11,20:21,30), rho(30,im-11:im-10,im-21:im-20)
+      write(95, *) nstep, "tmp", tmp(30:31,20:21,5), tmp(5,im-31:im-30,im-21:im-20)
+      ! 
+      call cpu_time(tfinish1)
+      ctime(15)=ctime(15)+tfinish1-tstart1
+    end if
+    ! 
+  end subroutine q2fvar_calc
+  !
+  subroutine stacal
+    !
+    use comvardef, only: im,jm,km,rho,vel,dvel,nstep,time
+    !
+    integer :: i,j,k
+    real(8) :: var1,omega(3),tke,rhom,enst
+    !
+    logical,save :: firstcall = .true.
+    integer,save :: filehand
+    !
+    if(firstcall) then
+      filehand=13
+      open(filehand,file='state.dat')
+      firstcall=.false.
+    endif
+    !
+    rhom=0.d0
+    tke =0.d0
+    enst=0.d0
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      ! 
+      rhom=rhom+rho(i,j,k)
+      !
+      var1=vel(i,j,k,1)**2+vel(i,j,k,2)**2+vel(i,j,k,3)**2
+      !
+      tke=tke+rho(i,j,k)*var1
+      !
+      omega(1)=dvel(i,j,k,3,2)-dvel(i,j,k,2,3)
+      omega(2)=dvel(i,j,k,1,3)-dvel(i,j,k,3,1)
+      omega(3)=dvel(i,j,k,2,1)-dvel(i,j,k,1,2)
+      !
+      enst=enst+rho(i,j,k)*(omega(1)**2+omega(2)**2+omega(3)**2)
+      !
+    enddo
+    enddo
+    enddo
+    rhom=rhom/dble(im*jm*km)
+    tke =0.5d0*tke/dble(im*jm*km)
+    enst=0.5d0*enst/dble(im*jm*km)
+    !
+    ! print*,' ** rho=',rhom,', tke=',tke,', enstrophy=',enst
+    !
+    write(filehand,*)nstep,time,tke,enst
+    !
+    if(mod(nstep,10)==0) flush(filehand)
+    !
+  end subroutine stacal
+  !
+  subroutine validation(comptime)
+    use comvardef, only: im,jm,km,hm, nstep, &
+                         dvel, dtmp, qrhs, q, rho, vel, prs, tmp, &
+                         dvel_dev, dtmp_dev, qrhs_dev, q_dev, rho_dev, vel_dev, prs_dev, tmp_dev
+    ! 
+    real,intent(inout),optional :: comptime
+    real :: tstart,tfinish
+    ! 
+    if(present(comptime)) then
+      call cpu_time(tstart)
+    endif
+    ! 
+    ! gradcal
+    dvel = dvel_dev; dtmp = dtmp_dev
+    !
+    write(99, *) nstep, "dvel", "(1)", dvel(:,0,0,1,1)
+    write(99, *) nstep, "dvel", "(2)", dvel(im,0,:,2,2)
+    write(99, *) nstep, "dtmp", "(1)", dtmp(:,0,0,1)
+    write(99, *) nstep, "dtmp", "(2)", dtmp(im,:,0,2)
+    ! 
+    ! convection & diffusion
+    qrhs = qrhs_dev
+    ! 
+    write(98, *) nstep, "qrhs", "(i)", qrhs(:,0,0,1)
+    write(98, *) nstep, "qrhs", "(i)", qrhs(0,:,im,4)
+    ! 
+    ! filterq
+    q = q_dev
+    ! 
+    write(96, *) nstep, "q", "(i)", q(:,0,im,1)
+    write(96, *) nstep, "q", "(i)", q(im,:,km,1)
+    ! 
+    ! q2fvar, bchomo
+    rho = rho_dev; vel = vel_dev; prs = prs_dev; tmp = tmp_dev
+    ! 
+    write(94, *) nstep, "rho", rho(:,:,km)
+    write(94, *) nstep, "vel", vel(im,0,:,2)
+    write(94, *) nstep, "prs", prs(:,:,km)
+    write(94, *) nstep, "tmp", tmp(:,jm,:)
+    ! 
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+  end subroutine validation
+  !
+  subroutine rk3(comptime)
+    !
+    use comvardef, only: im,jm,km,numq,num1d3,num2d3,q,qrhs,deltat,performval1,performval2, &
+                         rho,vel,tmp,prs,q,nstep,ctime, &
+                         vel_dev, tmp_dev, prs_dev, q_dev, rho_dev, &
+                         dvel, dtmp, &
+                         dvel_dev, dtmp_dev, qrhs_dev, &
+                         qsave_dev, deltat_dev, rkcoe
+    use dataoper,  only: q2fvar
+    !
+    real,intent(inout),optional :: comptime
+    
+    ! local data
+    logical,save :: firstcall = .true.
+    ! real(8),save :: rkcoe(3,3)
+    real(8),allocatable,save :: qsave(:,:,:,:)
+    integer :: rkstep,i,j,k,m,n
+    !
+    real :: tstart,tfinish,tstart1,tfinish1
+
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    if(firstcall) then
+      !
+      rkcoe(1,1)=1.d0
+      rkcoe(2,1)=0.d0
+      rkcoe(3,1)=1.d0
+      !
+      rkcoe(1,2)=0.75d0
+      rkcoe(2,2)=0.25d0
+      rkcoe(3,2)=0.25d0
+      !
+      rkcoe(1,3)=num1d3
+      rkcoe(2,3)=num2d3
+      rkcoe(3,3)=num2d3
+      !
+      allocate(qsave(0:im,0:jm,0:km,1:numq))
+      allocate(qsave_dev(0:im,0:jm,0:km,1:numq))
+      !
+      firstcall=.false.
+      !
+    endif
+    !
+    do rkstep=1,3
+      !
+      qrhs=0.d0
+      qrhs_dev=0.d0
+      !
+      call bchomo_dev(ctime(10))
+      ! 
+      call rhscal(ctime(7))
+      !
+      ! intermed steps
+      call cpu_time(tstart1)
+      !
+      if(rkstep==1) then
+        !
+        ! function call stacal - NOT PORTED
+        if(mod(nstep,10)==0) call stacal
+        !
+        !$cuf kernel do(4) <<<*,*>>>
+        do n=1,numq
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+          qsave_dev(i,j,k,n)=q_dev(i,j,k,n)
+        enddo
+        enddo
+        enddo
+        enddo
+        !
+      endif
+      !
+      !$cuf kernel do(4) <<<*,*>>>
+      do n=1,numq
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        q_dev(i,j,k,n)=rkcoe(1,rkstep)*qsave_dev(i,j,k,n)+   &
+                       rkcoe(2,rkstep)*q_dev(i,j,k,n)    +   &
+                       rkcoe(3,rkstep)*qrhs_dev(i,j,k,n)*deltat_dev
+      enddo
+      enddo
+      enddo
+      enddo
+      ! 
+      call cpu_time(tfinish1)
+      ! intermed steps
+      !
+      ctime(12)=ctime(12)+tfinish1-tstart1
+      !
+      call filterq(ctime(6))
+      !
+      call q2fvar_calc(ctime(9))
+    enddo
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+    if (performval2) then
+      ctime(18) = ctime(14) + ctime(15)
+    end if
+    !
+    if (performval1) then
+      if(mod(nstep,10)==0) call validation(ctime(18))
+    end if
+    !
+  end subroutine rk3
+  !
+  subroutine mainloop
+    !
+    use comvardef, only: time,nstep,deltat,ctime,performval1,performval2
+    !
+    if(performval1 .or. performval2) then
+      open(99, file = "gradcal_gpu.txt")
+      open(98, file = "convection_gpu.txt")
+      open(97, file = "diffusion_gpu.txt")
+      open(96, file = "filterq_gpu.txt")
+      open(95, file = "q2fvar_gpu.txt")
+      open(94, file = "bchomo_gpu.txt")
+    end if
+    !
+    do while(nstep<100)
+      !
+      call rk3(ctime(2))
+      !
+      nstep=nstep+1
+      time =time + deltat
+      !
+      if(performval1 .and. mod(nstep,10)==0) then
+        print*,nstep,time
+      end if
+      !
+    enddo
+    !
+    if(performval1 .or. performval2) then
+      close(99)
+      close(98)
+      close(97)
+      close(96)
+      close(95)
+      close(94)
+    end if
+    !
+  end subroutine mainloop
+  !
+end module solver
+!
+module readwrite
+  !
+  use cudafor
+  !
+  implicit none
+  !
+  contains
+  !
+  subroutine timereport
+    !
+    use comvardef, only: alloarray,ctime
+    !
+    open(14,file='time_report_gpu.txt')
+    write(14,'(A)')'-----------gpu time cost---------'
+    write(14,'(A)')'---------------------------------'
+    write(14,'(A,F13.3,A)')'     total time |',ctime(1),' s '
+    write(14,'(A,F13.3,A)')'   (solver) rk3 |',ctime(2),' s '
+    write(14,'(A,F13.3,A)')'       (io) rk3 |',ctime(13),' s '
+    write(14,'(A,F13.3,A)')'    (write) rk3 |',ctime(18),' s '
+    write(14,'(A,F13.3,A)')' intermed steps |',ctime(12),' s '
+    write(14,'(A,F13.3,A)')'         bchomo |',ctime(10),' s '
+    write(14,'(A,F13.3,A)')'         rhscal |',ctime(7),' s '
+    write(14,'(A,F13.3,A)')'        gradcal |',ctime(3),' s '
+    write(14,'(A,F13.3,A)')'     convection |',ctime(4),' s '
+    write(14,'(A,F13.3,A)')'      diffusion |',ctime(5),' s '
+    write(14,'(A,F13.3,A)')'        filterq |',ctime(6),' s '
+    write(14,'(A,F13.3,A)')'        diff6ec |',ctime(8),' s '
+    write(14,'(A,F13.3,A)')'         q2fvar |',ctime(9),' s '
+    write(14,'(A)')'--------------------------------'
+    close(14)
+    print*,' << time_report_gpu.txt'
+    !
+  end subroutine timereport
+  !
+end module readwrite
+!
+program boxsolver
+    !
+    use comvardef, only: alloarray,ctime
+    use dataoper, only: tgvinit
+    use solver,   only: mainloop
+    use readwrite,only: timereport
+    use cudafor
+    !
+    implicit none
+    !
+    real :: tstart,tfinish
+    !
+    print*,' ** job has started **'
+    !
+    call cpu_time(tstart)
+    !
+    call alloarray
+    !
+    call tgvinit
+    !
+    call mainloop
+    !
+    call cpu_time(tfinish)
+    !
+    ctime(1)=tfinish-tstart
+    !
+    call timereport
+    !
+    print*,' ** job has been completed **'
+    !
+end program boxsolver
