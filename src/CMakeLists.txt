@@ -32,6 +32,7 @@ add_executable(astr
                     riemann.F90
                     singleton.F90
                     solver.F90
+                    sponge_layer.F90
                     statistic.F90
                     stlaio.F90
                     strings.F90
