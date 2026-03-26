@@ -202,7 +202,9 @@ contains
       d = compact_filter_rhs_gpu(first_node, last_node, nbctype, f, dim)
 
       ! tridiagonal solve
-      call tridiagonal_thomas_solver_gpu(ac, d, ff)
+      call tridiagonal_thomas_solver_gpu(ac, d, xx)
+
+      ff(0:dim) = xx(0:dim)
 
       ! boundary condition
       select case(nbctype)

@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=3
+        maxstep=10
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -666,7 +666,7 @@ module solver
     !
     return
     !
-  end subroutine filterq
+    end subroutine filterq
 
 end module solver
 
@@ -904,3 +904,4 @@ program boxsolver
     print *,' ** the job is done **'
     !
 end program boxsolver
+
