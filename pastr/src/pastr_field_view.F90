@@ -101,7 +101,7 @@ contains
         do i=1,nblocks
           b=>pblocks(i)
           b%nvar=num_var_out
-          call b%init_data()
+          call b%init_var_data()
           b%x(0:b%im,0:b%jm,0)=x(b%ilo:b%ihi,b%jlo:b%jhi)
           b%y(0:b%im,0:b%jm,0)=y(b%ilo:b%ihi,b%jlo:b%jhi)
           b%var(0:b%im,0:b%jm,0,1:num_var_out)=dat_var_out(b%ilo:b%ihi,b%jlo:b%jhi,1:num_var_out )
@@ -219,12 +219,15 @@ contains
 
     subroutine write_3d_field(filein,fileout,nfirst,nlast,format)
 
+      use pastr_commtype, only : tblock
       use pastr_io, only : read_grid,parse_command_line
       use pastr_commvar, only : im,jm,km
       use pastr_h5io
       use pastr_tecio
       use pastr_xdmf
       use pastr_data_convert
+      use pastr_multiblock_type, only: block_define,block_grid_bc, &
+                                       block_grid_jacobian,block_res_cal
 
       character(len=*),intent(in), optional :: filein,fileout
       integer,intent(in), optional :: nfirst,nlast
@@ -238,16 +241,37 @@ contains
       character(len=6) :: src_of_data
       real(wp),allocatable :: r8dat(:,:,:)
       real(wp),allocatable,dimension(:,:,:,:) :: dat_var_in,dat_var_out
+      integer :: nblocks
+      logical :: multi_block
+      type(tblock),allocatable,target :: vblk(:)
 
       src_of_data='outdat'
 
+      call block_define(multi_block,nblocks,vblk)
+
       allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
 
-      call read_grid(x=x,y=y,z=z)
+      call read_grid(x=x,y=y,z=z,blocks=vblk)
+
+      call block_grid_bc(vblk)
+
+      call block_grid_jacobian(vblk)
+
+      call writetecbin3d_tblock_geom(filename='tecnds',block=vblk)
 
       call var_define(num_var_in,nam_var_in,num_var_out,nam_var_out)
 
       call range_define(is,ie,js,je,ks,ke)
+        
+      do i=1,size(vblk)
+        vblk(i)%nvar=num_var_in
+        call vblk(i)%init_var_data()
+        vblk(i)%varname(:)=nam_var_in(:)
+
+        vblk(i)%nres=num_var_out
+        call vblk(i)%init_res_data()
+        vblk(i)%resname(:)=nam_var_out(:)
+      enddo
 
       allocate(dat_var_in(0:im,0:jm,0:km,1:num_var_in),dat_var_out(0:im,0:jm,0:km,1:num_var_out))
 
@@ -284,7 +308,15 @@ contains
 
         enddo
 
+        do i=1,size(vblk)
+          call vblk(i)%data_map(dat_var_in)
+        enddo
+
         dat_var_out=dat_out_cal(dat_var_in,nam_var_in,nam_var_out,x,y,z)
+
+        call block_res_cal(vblk)
+
+        call writetecbin3d_tblock_res(trim(file2write),vblk)
         
         if(trim(format)=='plt') then
           call writetecbin3dlist('snapshot/'//trim(file2write),x(is:ie,js:je,ks:ke), &

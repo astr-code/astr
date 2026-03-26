@@ -490,6 +490,9 @@ module userdefine
   !| The end of the subroutine udf_bc.                                 |
   !+-------------------------------------------------------------------+
 
+  subroutine udf_setup_before_comp
+  end subroutine udf_setup_before_comp
+
 end module userdefine
 !+---------------------------------------------------------------------+
 !| The end of the module userdefine.                                   |

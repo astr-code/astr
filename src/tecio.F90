@@ -25,6 +25,7 @@ module tecio
   Interface tecbin
     !
     module procedure writetecbin2d5var
+    module procedure writetecbin2d6var
     module procedure writetecbin2d7var
     module procedure writetecbin2d8var
     module procedure writetecbin2d9var
@@ -270,6 +271,85 @@ module tecio
     deallocate(var)
   end subroutine writetecbin2d5var
   !
+  subroutine writetecbin2d6var(filename,var1,var1name,var2,var2name,   &
+                                        var3,var3name,var4,var4name,   &
+                                        var5,var5name,var6,var6name)
+    ! 
+    character(len=*),intent(in) :: filename
+    real(8),dimension(:,:),intent(in) :: var1,var2,var3,var4,var5,   &
+                                         var6
+    character(len=*),intent(in) :: var1name,var2name,var3name,         &
+                                   var4name,var5name,var6name
+    !
+    ! local data
+    !
+    integer :: imax,jmax,kmax
+    !
+    integer :: unitf,nbrvar,n
+    ! ip : le point actuel
+    !
+    real(4) :: float32
+    real(8) :: float64
+    !
+    real(4),allocatable,dimension(:,:,:,:) :: var
+    character(256),allocatable,dimension(:) :: vname
+    !
+    nbrvar=6
+    !
+    imax=size(var1,1)
+    jmax=size(var1,2)
+    kmax=1
+    !
+    allocate(var(1:imax,1:jmax,1:kmax,nbrvar))
+    allocate(vname(nbrvar))
+    !
+    var(1:imax,1:jmax,1,1)=sngl(var1(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,2)=sngl(var2(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,3)=sngl(var3(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,4)=sngl(var4(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,5)=sngl(var5(1:imax,1:jmax))
+    var(1:imax,1:jmax,1,6)=sngl(var6(1:imax,1:jmax))
+    !
+    vname(1)=var1name
+    vname(2)=var2name
+    vname(3)=var3name
+    vname(4)=var4name
+    vname(5)=var5name
+    vname(6)=var6name
+    !
+    unitf=get_unit()
+    !
+    open(unitf,file=filename,form='unformatted',access='stream')
+    !
+    call techeadwriter(unitf,nbrvar,vname,imax,jmax,kmax)
+    !
+    do n=1,nbrvar
+      !+------------+
+      !| float64    | min value
+      !+------------+
+      float32=minval(var(:,:,:,n))
+      float64=real(float32,8)
+      write(unitf)float64
+      !+------------+
+      !| float64    | max value
+      !+------------+
+      float32=maxval(var(:,:,:,n))
+      float64=real(float32,8)
+      write(unitf)float64
+    enddo
+    ! +------------+
+    ! | xxxxxxxxxx | zone data
+    ! +------------+
+    write(unitf)var
+    !
+    close(unitf)
+    !
+    print*,' << ',filename
+    !
+    deallocate(var)
+    !
+  end subroutine writetecbin2d6var
+
   subroutine writetecbin2d7var(filename,var1,var1name,var2,var2name,   &
                                         var3,var3name,var4,var4name,   &
                                         var5,var5name,var6,var6name,   &

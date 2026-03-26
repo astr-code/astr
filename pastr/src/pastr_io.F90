@@ -76,13 +76,17 @@ contains
 
     end subroutine parse_command_line
 
-    subroutine read_grid_2d(x,y,z,islice,jslice,kslice)
+    subroutine read_grid_2d(x,y,z,islice,jslice,kslice,blocks)
       
-      use pastr_commvar, only: gridfile,im,jm,km
+      use pastr_commvar, only: gridfile,im,jm,km,nhalo
+      use pastr_commtype, only : tblock
       use pastr_h5io
 
       real(wp),intent(inout),allocatable,optional :: x(:,:),y(:,:),z(:,:)
       integer,intent(in),optional :: islice,jslice,kslice
+      type(tblock),intent(inout),optional :: blocks(:)
+
+      integer :: i
 
       if(present(islice)) then
         if(present(x)) call h5_read2dfrom3d(x,im,jm,km,'x',trim(gridfile),islice=islice)
@@ -98,14 +102,35 @@ contains
         if(present(z)) call h5_read2dfrom3d(z,im,jm,km,'z',trim(gridfile),kslice=kslice)
       endif
 
+      if(present(blocks)) then
+        
+        do i=1,size(blocks)
+          call blocks(i)%init_grid(nhalo)
+          blocks(i)%x(0:blocks(i)%im, &
+                      0:blocks(i)%jm,0)=x(blocks(i)%ilo:blocks(i)%ihi, &
+                                          blocks(i)%jlo:blocks(i)%jhi)
+          blocks(i)%y(0:blocks(i)%im, &
+                      0:blocks(i)%jm,0)=y(blocks(i)%ilo:blocks(i)%ihi, &
+                                          blocks(i)%jlo:blocks(i)%jhi)
+          blocks(i)%z(0:blocks(i)%im, &
+                      0:blocks(i)%jm,0)=z(blocks(i)%ilo:blocks(i)%ihi, &
+                                          blocks(i)%jlo:blocks(i)%jhi)
+        enddo
+
+      endif
+
     end subroutine read_grid_2d
 
-    subroutine read_grid_3d(x,y,z)
+    subroutine read_grid_3d(x,y,z,blocks)
       
-      use pastr_commvar, only: gridfile,im,jm,km,lx,ly,lz
+      use pastr_commvar, only: gridfile,im,jm,km,lx,ly,lz,nhalo
+      use pastr_commtype, only : tblock
       use pastr_h5io
 
       real(wp),intent(inout),allocatable :: x(:,:,:),y(:,:,:),z(:,:,:)
+      type(tblock),intent(inout),optional :: blocks(:)
+
+      integer :: i
 
       call H5ReadArray(x,im,jm,km,'x',trim(gridfile))
       call H5ReadArray(y,im,jm,km,'y',trim(gridfile))
@@ -114,6 +139,40 @@ contains
       lx=x(im,0,0)-x(0,0,0)
       ly=y(0,jm,0)-y(0,0,0)
       lz=z(0,0,km)-z(0,0,0)
+
+      if(present(blocks)) then
+        
+        do i=1,size(blocks)
+          call blocks(i)%init_grid(nhalo)
+
+          blocks(i)%x(0:blocks(i)%im, &
+                      0:blocks(i)%jm, &
+                      0:blocks(i)%km)=x(blocks(i)%ilo:blocks(i)%ihi, &
+                                        blocks(i)%jlo:blocks(i)%jhi, &
+                                        blocks(i)%klo:blocks(i)%khi )
+          blocks(i)%y(0:blocks(i)%im, &
+                      0:blocks(i)%jm, &
+                      0:blocks(i)%km)=y(blocks(i)%ilo:blocks(i)%ihi, &
+                                        blocks(i)%jlo:blocks(i)%jhi, &
+                                        blocks(i)%klo:blocks(i)%khi )
+          blocks(i)%z(0:blocks(i)%im, &
+                      0:blocks(i)%jm, &
+                      0:blocks(i)%km)=z(blocks(i)%ilo:blocks(i)%ihi, &
+                                        blocks(i)%jlo:blocks(i)%jhi, &
+                                        blocks(i)%klo:blocks(i)%khi )
+          blocks(i)%xt%core(:,:,:)=x(blocks(i)%ilo:blocks(i)%ihi, &
+                                     blocks(i)%jlo:blocks(i)%jhi, &
+                                     blocks(i)%klo:blocks(i)%khi )
+          blocks(i)%yt%core(:,:,:)=y(blocks(i)%ilo:blocks(i)%ihi, &
+                                     blocks(i)%jlo:blocks(i)%jhi, &
+                                     blocks(i)%klo:blocks(i)%khi )
+          blocks(i)%zt%core(:,:,:)=z(blocks(i)%ilo:blocks(i)%ihi, &
+                                     blocks(i)%jlo:blocks(i)%jhi, &
+                                     blocks(i)%klo:blocks(i)%khi )
+        enddo
+
+      endif
+
 
     end subroutine read_grid_3d
 

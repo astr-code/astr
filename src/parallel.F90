@@ -925,8 +925,7 @@ module parallel
     integer,allocatable:: ntemp(:,:),nrank(:,:,:)
     integer,allocatable,dimension(:) :: nrect,irkg,jrkg,krkg,          &
                                         img,jmg,kmg,i0g,j0g,k0g
-    !
-    !
+ 
     if(mpirank>=0 .and. mpirank<=9)then
       write(mpirankname,'(7h.000000,i1)') mpirank
     elseif(mpirank>=10 .and. mpirank<=99)then

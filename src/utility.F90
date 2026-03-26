@@ -345,7 +345,7 @@ module utility
       enddo
       !
       backspace(handle)
-      write(*,'(A,I0)')'   ** resume'//filename//'at step: ',ns
+      write(*,'(A,I0)')'   ** resume: '//filename//'at step: ',ns
       !
     else
       ! create a file

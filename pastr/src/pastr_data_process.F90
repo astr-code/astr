@@ -59,7 +59,7 @@ contains
         do i=1,nblocks
           b=>block_mean(i)
           b%nvar=6
-          call b%init_data()
+          call b%init_var_data()
           b%var(0:b%im,0:b%jm,0,1:6)=varxy(b%ilo:b%ihi,b%jlo:b%jhi,1:6)
           b%varname(1) = 'ro'
           b%varname(2) = 'u'
@@ -123,7 +123,7 @@ contains
           b=>block_2nd(i)
           c=>block_mean(i)
           b%nvar=11
-          call b%init_data()
+          call b%init_var_data()
           b%var(0:b%im,0:b%jm,0,1:11)=varxy(b%ilo:b%ihi,b%jlo:b%jhi,1:11)
 
           b%var(:,:,:,1) =b%var(:,:,:,1) /c%var(:,:,:,1)-c%var(:,:,:,5)*c%var(:,:,:,5)
@@ -203,7 +203,7 @@ contains
           b=>block_3rd(i)
           c=>block_mean(i)
           b%nvar=10
-          call b%init_data()
+          call b%init_var_data()
           b%var(0:b%im,0:b%jm,0,1:10)=varxy(b%ilo:b%ihi,b%jlo:b%jhi,1:10)
 
           b%var(:,:,:,1) =b%var(:,:,:,1) /c%var(:,:,:,1)-c%var(:,:,:,2)*c%var(:,:,:,2)*c%var(:,:,:,2)

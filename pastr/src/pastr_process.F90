@@ -38,6 +38,14 @@ contains
               call udf_func1()
            case default
               print*,' !! command not defined @ run_process_entry: ',command
+              print*,' !! input the following options:'
+              print*,'    pastr viewxy'
+              print*,'    pastr viewxz'
+              print*,'    pastr view3d'
+              print*,'    pastr monitor'
+              print*,'    pastr blasius'
+              print*,'    pastr stats'
+              print*,'    pastr udf'
               stop 1
         end select 
 

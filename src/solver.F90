@@ -213,8 +213,6 @@ module solver
         firstcall=.false.
       endif
       !
-      call gradcal(timerept=ltimrpt)
-      !
       if(mod(nconv,2)==0) then
         call convrsdcal6(timerept=ltimrpt)
       else

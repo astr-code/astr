@@ -107,6 +107,180 @@ module pastr_tecio
     
   end subroutine writetecbin3d_patch
 
+  subroutine writetecbin3d_tblock_res(filename,block)
+
+    use pastr_commtype, only : tblock
+    use pastr_commvar,  only : nhalo
+    
+    ! arguments
+    character(len=*),intent(in) :: filename
+    type(tblock),intent(in),dimension(:) :: block(:)
+
+    integer :: imax,jmax,kmax,nbrvar
+    real(wp) :: solutiontime1
+    integer :: zonenumber1
+    character(256) :: title1
+    !
+    integer :: n,unitf,i,j,k
+    ! ip : le point actuel
+    !
+    real(4),allocatable,dimension(:,:,:,:) :: v
+    character(256),allocatable,dimension(:) :: vname
+    character(4) :: bname
+    
+    ! open(newunit=unitf,file=filename,form='unformatted',access='stream')
+
+    do n=1,size(block)
+
+      imax  =block(n)%im+1
+      jmax  =block(n)%jm+1
+      kmax  =block(n)%km+1
+      nbrvar=4 !block(n)%nvar+3
+
+      allocate(v(0:block(n)%im,0:block(n)%jm,0:block(n)%km,nbrvar))
+
+      allocate(vname(nbrvar))
+    
+      v(:,:,:,1) =block(n)%x(0:block(n)%im,0:block(n)%jm,0:block(n)%km)
+      v(:,:,:,2) =block(n)%y(0:block(n)%im,0:block(n)%jm,0:block(n)%km)
+      v(:,:,:,3) =block(n)%z(0:block(n)%im,0:block(n)%jm,0:block(n)%km)
+      v(:,:,:,4:)=real(block(n)%res(0:block(n)%im,0:block(n)%jm,0:block(n)%km,:))
+
+
+      vname(1)='x'
+      vname(2)='y'
+      vname(3)='z'
+      vname(4:)=block(n)%resname(:)
+
+      write(bname,'(i4.4)')n
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'.plt',varname=vname,var=v)
+
+      deallocate(v,vname)
+    enddo
+
+    ! close(unitf)
+    ! print*,' << ',filename
+    
+  end subroutine writetecbin3d_tblock_res
+
+  subroutine writetecbin3d_tblock_geom(filename,block)
+
+    use pastr_commtype, only : tblock
+    use pastr_commvar,  only : nhalo
+    
+    ! arguments
+    character(len=*),intent(in) :: filename
+    type(tblock),intent(in),dimension(:) :: block(:)
+
+    integer :: imax,jmax,kmax,nbrvar
+    real(wp) :: solutiontime1
+    integer :: zonenumber1
+    character(256) :: title1
+    !
+    integer :: n,unitf,i,j,k
+    ! ip : le point actuel
+    !
+    real(4),allocatable,dimension(:,:,:,:) :: v
+    character(256),allocatable,dimension(:) :: vname
+    character(4) :: bname
+    
+    ! open(newunit=unitf,file=filename,form='unformatted',access='stream')
+
+    nbrvar=3
+
+    allocate(vname(nbrvar))
+
+    vname(1)='x'
+    vname(2)='y'
+    vname(3)='z'
+
+    do n=1,size(block)
+
+      write(bname,'(i4.4)')n
+
+      imax  =block(n)%im+1
+      jmax  =block(n)%jm+1
+      kmax  =block(n)%km+1
+
+      allocate(v(0:block(n)%im,0:block(n)%jm,0:block(n)%km,nbrvar))
+
+      v(:,:,:,1) = block(n)%xt%core(:,:,:)
+      v(:,:,:,2) = block(n)%yt%core(:,:,:)
+      v(:,:,:,3) = block(n)%zt%core(:,:,:)
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'.plt',varname=vname,var=v)
+
+      deallocate(v)
+
+      imax  =nhalo
+      jmax  =block(n)%jm+1
+      kmax  =block(n)%km+1
+
+      allocate(v(nhalo,0:block(n)%jm,0:block(n)%km,nbrvar))
+
+      v(:,:,:,1) = block(n)%xt%spi0(:,:,:)
+      v(:,:,:,2) = block(n)%yt%spi0(:,:,:)
+      v(:,:,:,3) = block(n)%zt%spi0(:,:,:)
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'_spi0.plt',varname=vname,var=v)
+
+      v(:,:,:,1) = block(n)%xt%spim(:,:,:)
+      v(:,:,:,2) = block(n)%yt%spim(:,:,:)
+      v(:,:,:,3) = block(n)%zt%spim(:,:,:)
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'_spim.plt',varname=vname,var=v)
+
+      deallocate(v)
+
+      imax  =block(n)%im+1
+      jmax  =nhalo
+      kmax  =block(n)%km+1
+
+      allocate(v(0:block(n)%im,nhalo,0:block(n)%km,nbrvar))
+    
+      v(:,:,:,1) = block(n)%xt%spj0(:,:,:)
+      v(:,:,:,2) = block(n)%yt%spj0(:,:,:)
+      v(:,:,:,3) = block(n)%zt%spj0(:,:,:)
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'_spj0.plt',varname=vname,var=v)
+
+      v(:,:,:,1) = block(n)%xt%spjm(:,:,:)
+      v(:,:,:,2) = block(n)%yt%spjm(:,:,:)
+      v(:,:,:,3) = block(n)%zt%spjm(:,:,:)
+
+      call tec_data_writer(filename=filename//'-blk'//bname//'_spjm.plt',varname=vname,var=v)
+
+      deallocate(v)
+
+      imax  =block(n)%im+1
+      jmax  =block(n)%jm+1
+      kmax  =nhalo
+
+      allocate(v(0:block(n)%im,0:block(n)%jm,nhalo,nbrvar))
+    
+      v(:,:,:,1) = block(n)%xt%spk0(:,:,:)
+      v(:,:,:,2) = block(n)%yt%spk0(:,:,:)
+      v(:,:,:,3) = block(n)%zt%spk0(:,:,:)
+
+      call tec_data_writer(filename=filename//'-blk'//bname//'_spk0.plt',varname=vname,var=v)
+
+      v(:,:,:,1) = block(n)%xt%spkm(:,:,:)
+      v(:,:,:,2) = block(n)%yt%spkm(:,:,:)
+      v(:,:,:,3) = block(n)%zt%spkm(:,:,:)
+      
+      call tec_data_writer(filename=filename//'-blk'//bname//'_spkm.plt',varname=vname,var=v)
+
+      deallocate(v)
+    enddo
+    
+    deallocate(vname)
+
+    ! close(unitf)
+    ! print*,' << ',filename
+    
+  end subroutine writetecbin3d_tblock_geom
+
   subroutine writetecbin3d_block(filename,block)
 
     use pastr_multiblock_type, only : block_type
