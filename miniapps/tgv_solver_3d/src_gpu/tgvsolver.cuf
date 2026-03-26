@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=10
+        maxstep=3
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -495,9 +495,8 @@ module solver
     subroutine diffusion
 
         use constdef
-        use commvar,  only: im,jm,km,hm,reynolds,prandtl,const5
+        use commvar,  only: im,jm,km,hm,reynolds,prandtl,const5,ref_tem
         use commarray,only: vel,dvel,dtmp,qrhs,tmp,dx,dy,dz
-        use fludyna,  only: miucal
         use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
         use bc, only: bchomovec
 
@@ -529,7 +528,7 @@ module solver
 
             skk=num1d3*(s11+s22+s33)
 
-            miu=miucal(tmp(i,j,k))/reynolds
+            miu=(tmp(i,j,k)*sqrt(tmp(i,j,k))*(1.d0+110.4d0/ref_tem)/(tmp(i,j,k)+110.4d0/ref_tem))/reynolds
             miu2=2.d0*miu
             hcc=(miu/prandtl)/const5
 
@@ -745,37 +744,6 @@ module mainloop
 
   end subroutine steploop
 
-  subroutine rhscal(comptime)
-    !
-    use commvar, only: ctime
-    use commarray, only: qrhs
-    use solver,   only: gradcal,convection,diffusion
-    !
-    real,intent(inout),optional :: comptime
-    
-    real :: tstart,tfinish
-
-    if(present(comptime)) then
-        call cpu_time(tstart)
-    endif
-    !
-    qrhs=0.d0
-
-    call gradcal
-    !
-    call convection
-    !
-    qrhs=-qrhs
-    !
-    call diffusion
-    !
-    if(present(comptime)) then
-      call cpu_time(tfinish)
-      !
-      comptime=comptime+tfinish-tstart
-    endif
-
-  end subroutine rhscal
 
   subroutine rk3(comptime)
     
@@ -784,7 +752,7 @@ module mainloop
     use commarray,only: q,qrhs,rho,vel,tmp,prs
     use fludyna,  only: q2fvar
     use bc, only: bchomo
-    use solver, only: filterq
+    use solver, only: filterq,gradcal,convection,diffusion
     !
     real,intent(inout),optional :: comptime
     
@@ -824,7 +792,15 @@ module mainloop
 
       call bchomo
 
-      call rhscal
+      qrhs=0.d0
+
+      call gradcal
+      !
+      call convection
+      !
+      qrhs=-qrhs
+      !
+      call diffusion
       !
       if(rkstep==1) then
         !
