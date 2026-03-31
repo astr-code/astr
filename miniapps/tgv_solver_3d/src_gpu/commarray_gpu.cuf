@@ -1,0 +1,87 @@
+module commarray_gpu
+   use cudafor
+   use commvar, only: im, jm, km, hm, numq
+   use commarray
+
+   implicit none
+
+   real(8), device, allocatable :: q_d(:, :, :, :)
+   real(8), device, allocatable :: qrhs_d(:, :, :, :)
+   real(8), device, allocatable :: vel_d(:, :, :, :)
+
+   real(8), device, allocatable :: rho_d(:, :, :)
+   real(8), device, allocatable :: prs_d(:, :, :)
+   real(8), device, allocatable :: tmp_d(:, :, :)
+
+   real(8), device, allocatable :: dvel_d(:, :, :, :, :)
+   real(8), device, allocatable :: dtmp_d(:, :, :, :)
+
+contains
+
+   subroutine allocommarray_gpu
+
+      use commvar, only: im, jm, km, hm, numq
+      implicit none
+      integer :: lallo
+
+      ! =========================
+      ! 主变量
+      ! =========================
+      allocate (q_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq), stat=lallo)
+      allocate (qrhs_d(0:im, 0:jm, 0:km, 1:numq), stat=lallo)
+
+      ! =========================
+      ! primitive variables
+      ! =========================
+      allocate (vel_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:3), stat=lallo)
+
+      allocate (rho_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm), stat=lallo)
+      allocate (prs_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm), stat=lallo)
+      allocate (tmp_d(-hm:im + hm, -hm:jm + hm, -hm:km + hm), stat=lallo)
+
+      ! =========================
+      ! gradients
+      ! =========================
+      allocate (dvel_d(0:im, 0:jm, 0:km, 1:3, 1:3), stat=lallo)
+      allocate (dtmp_d(0:im, 0:jm, 0:km, 1:3), stat=lallo)
+
+      print *, " ** GPU global arrays allocated"
+   end subroutine allocommarray_gpu
+
+   subroutine commarray_gpu_h2d
+      use commarray, only: q, qrhs, vel, rho, prs, tmp, dvel, dtmp
+      implicit none
+
+      q_d    = q
+      qrhs_d = qrhs
+
+      vel_d  = vel
+      rho_d  = rho
+      prs_d  = prs
+      tmp_d  = tmp
+
+      dvel_d = dvel
+      dtmp_d = dtmp
+
+   end subroutine commarray_gpu_h2d
+
+   subroutine commarray_gpu_d2h
+      use commarray, only: q, qrhs, vel, rho, prs, tmp, dvel, dtmp
+      implicit none
+
+      q    = q_d
+      qrhs = qrhs_d
+
+      vel  = vel_d
+      rho  = rho_d
+      prs  = prs_d
+      tmp  = tmp_d
+
+      dvel = dvel_d
+      dtmp = dtmp_d
+
+   end subroutine commarray_gpu_d2h
+
+
+
+end module commarray_gpu

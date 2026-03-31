@@ -1,0 +1,46 @@
+module commvar_gpu
+
+  use cudafor
+  use commvar
+  implicit none
+
+  real(8), constant :: ref_tem_d, ref_vel_d, ref_len_d, ref_den_d, ref_miu_d, ref_tim_d
+  real(8), constant :: reynolds_d, mach_d, rgas_d, cp_d, cv_d, gamma_d, prandtl_d
+  real(8), constant :: const1_d, const2_d, const3_d, const4_d, const5_d, const6_d, const7_d
+  real(8), constant :: tempconst_d, tempconst1_d
+
+  contains
+
+  subroutine copy_commvar_to_gpu()
+
+    implicit none
+    
+    ref_tem_d = ref_tem
+    ref_vel_d = ref_vel
+    ref_len_d = ref_len
+    ref_den_d = ref_den
+    ref_miu_d = ref_miu
+    ref_tim_d = ref_tim
+    
+    reynolds_d = reynolds
+    mach_d = mach
+    rgas_d = rgas
+    cp_d = cp
+    cv_d = cv
+    gamma_d = gamma
+    prandtl_d = prandtl
+    
+    const1_d = const1
+    const2_d = const2
+    const3_d = const3
+    const4_d = const4
+    const5_d = const5
+    const6_d = const6
+    const7_d = const7
+    
+    tempconst_d = tempconst
+    tempconst1_d = tempconst1
+
+  end subroutine copy_commvar_to_gpu
+
+end module commvar_gpu

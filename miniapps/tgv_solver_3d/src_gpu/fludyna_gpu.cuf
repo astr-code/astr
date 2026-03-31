@@ -1,0 +1,112 @@
+module fludyna_gpu
+
+    implicit none
+
+    contains
+
+    attributes(device) subroutine fvar2q_gpu(q1,q2,q3,q4,q5,density,u,v,w,pressure,temperature)
+
+        use commvar_gpu, only: const1_d,const6_d
+        !
+        real(8),intent(in) :: density,u,v,w
+        real(8),intent(in),optional :: pressure,temperature
+        real(8),intent(out) :: q1,q2,q3,q4,q5
+        !
+        ! local data
+        real(8) :: var1
+        !
+        q1=density
+        q2=density*u
+        q3=density*v
+        q4=density*w
+        
+        var1=0.5d0*(u*u + v*v + w*w)
+        if(present(temperature)) then
+          q5=density*(temperature*const1_d+var1)
+        elseif(present(pressure)) then
+          q5=pressure*const6_d+density*var1
+        endif
+
+    end subroutine fvar2q_gpu
+
+    attributes(device) function thermal_scar_gpu(density,pressure,temperature,species) result(vout)
+
+      use commvar_gpu,only : const2_d
+      !
+      ! arguments
+      real(8) :: vout
+      real(8),intent(in) ,optional :: density,pressure,temperature,species(:)
+
+      if(present(density) .and. present(temperature)) then
+        vout=density*temperature/const2_d
+      elseif(present(density) .and. present(pressure)) then
+        vout=pressure/density*const2_d
+      elseif(present(temperature) .and. present(pressure)) then
+        vout=pressure/temperature*const2_d
+      endif
+    end function thermal_scar_gpu
+
+    attributes(device) subroutine q2fvar_gpu(q1,q2,q3,q4,q5,density,u,v,w,pressure,temperature)
+    
+        use commvar_gpu, only: const2_d,const6_d
+    
+        real(8),intent(in) :: q1,q2,q3,q4,q5
+        real(8),intent(out) :: density
+        real(8),intent(out),optional :: u,v,w,pressure,temperature
+
+
+        density=q1
+
+
+        if(present(u) .or. present(pressure) .or. present(temperature)) then
+
+        u=q2/density
+        v=q3/density
+        w=q4/density
+        endif
+
+        if(present(pressure) .or. present(temperature)) then
+        pressure  =( q5-0.5d0*density*(u**2+v**2+w**2) )/const6_d
+        endif
+        
+        if(present(temperature)) then
+        temperature=thermal_scar_gpu(pressure=pressure,density=density)
+        endif
+    end subroutine q2fvar_gpu
+
+    attributes(global) subroutine q2fvar_3d_kernel(im,jm,km)
+        use commarray_gpu,only: q_d,rho_d,vel_d,prs_d,tmp_d
+        implicit none
+        integer, value :: im, jm, km
+        integer ::  i, j, k
+
+        i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+        j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+        k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+        if (i >= 0 .and. i <= im .and.j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+            call q2fvar_gpu( q1=q_d(i,j,k,1),q2=q_d(i,j,k,2),q3=q_d(i,j,k,3),q4=q_d(i,j,k,4),q5=q_d(i,j,k,5),&
+            density=rho_d(i,j,k),u=vel_d(i,j,k,1),v=vel_d(i,j,k,2),w=vel_d(i,j,k,3),pressure=prs_d(i,j,k),temperature=tmp_d(i,j,k))
+        end if
+
+    end subroutine q2fvar_3d_kernel
+
+    subroutine q2fvar_3d
+        use cudafor
+        use commvar,only: im,jm,km
+        use commarray_gpu,only: q_d,rho_d,vel_d,prs_d,tmp_d
+
+        implicit none
+
+        type(dim3) :: grid, block
+        integer :: blksz=8
+
+        block = dim3(blksz, blksz, blksz)
+        grid%x = ceiling(real(im+1)/blksz)
+        grid%y = ceiling(real(jm+1)/blksz)
+        grid%z = ceiling(real(km+1)/blksz)
+        call q2fvar_3d_kernel<<<grid,block>>>(im,jm,km)
+
+    end subroutine q2fvar_3d
+
+end module fludyna_gpu
