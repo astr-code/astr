@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=2
+        maxstep=3
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -443,6 +443,170 @@ module bc
 
 end module
 
+module solver
+    
+    implicit none
+    
+    contains
+
+    subroutine diffusion
+
+        use constdef
+        use commvar,  only: im,jm,km,hm,reynolds,prandtl,const5
+        use commarray,only: vel,dvel,dtmp,qrhs,tmp,dx,dy,dz
+        use fludyna,  only: miucal
+        use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+        use bc, only: bchomovec
+
+        real(8),allocatable,dimension(:,:,:,:),save :: sigma,qflux
+        real(8),allocatable :: ff(:,:),df(:,:)
+
+        integer :: i,j,k,n,ncolm
+        real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
+
+        logical,save :: firstcall=.true.
+
+        if(firstcall) then
+          allocate( sigma(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
+                    qflux(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
+          !
+          firstcall=.false.
+        endif
+
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+
+            s11=dvel(i,j,k,1,1)
+            s12=0.5d0*(dvel(i,j,k,1,2)+dvel(i,j,k,2,1))
+            s13=0.5d0*(dvel(i,j,k,1,3)+dvel(i,j,k,3,1))
+            s22=dvel(i,j,k,2,2)
+            s23=0.5d0*(dvel(i,j,k,2,3)+dvel(i,j,k,3,2))
+            s33=dvel(i,j,k,3,3)
+
+            skk=num1d3*(s11+s22+s33)
+
+            miu=miucal(tmp(i,j,k))/reynolds
+            miu2=2.d0*miu
+            hcc=(miu/prandtl)/const5
+
+            sigma(i,j,k,1)=miu2*(s11-skk)
+            sigma(i,j,k,2)=miu2* s12          
+            sigma(i,j,k,3)=miu2* s13          
+            sigma(i,j,k,4)=miu2*(s22-skk)
+            sigma(i,j,k,5)=miu2* s23          
+            sigma(i,j,k,6)=miu2*(s33-skk)
+            !
+            qflux(i,j,k,1)=hcc*dtmp(i,j,k,1)+sigma(i,j,k,1)*vel(i,j,k,1) +   &
+                                             sigma(i,j,k,2)*vel(i,j,k,2) +   &
+                                             sigma(i,j,k,3)*vel(i,j,k,3)
+            qflux(i,j,k,2)=hcc*dtmp(i,j,k,2)+sigma(i,j,k,2)*vel(i,j,k,1) +   &
+                                             sigma(i,j,k,4)*vel(i,j,k,2) +   &
+                                             sigma(i,j,k,5)*vel(i,j,k,3)
+            qflux(i,j,k,3)=hcc*dtmp(i,j,k,3)+sigma(i,j,k,3)*vel(i,j,k,1) +   &
+                                             sigma(i,j,k,5)*vel(i,j,k,2) +   &
+                                             sigma(i,j,k,6)*vel(i,j,k,3)
+        enddo
+        enddo
+        enddo
+
+        call bchomovec(sigma)
+
+        call bchomovec(qflux)
+
+        ncolm=5
+
+        allocate(ff(-hm:im+hm,2:ncolm),df(0:im,2:ncolm))
+
+        do k=0,km
+        do j=0,jm
+          !
+          ff(:,2)= sigma(:,j,k,1)
+          ff(:,3)= sigma(:,j,k,2)
+          ff(:,4)= sigma(:,j,k,3)
+          ff(:,5)= qflux(:,j,k,1)
+          !
+          !+------------------------------+
+          !|    calculate derivative      |
+          !+------------------------------+
+          do n=2,ncolm
+            df(:,n)=fds%central(fds_compact_i,f=ff(:,n),dim=im)
+          enddo
+          !
+          !+------------------------------+
+          !| end of calculate derivative  |
+          !+------------------------------+
+          !
+          qrhs(0:im,j,k,2)=qrhs(0:im,j,k,2)+df(0:im,2)/dx
+          qrhs(0:im,j,k,3)=qrhs(0:im,j,k,3)+df(0:im,3)/dx
+          qrhs(0:im,j,k,4)=qrhs(0:im,j,k,4)+df(0:im,4)/dx
+          qrhs(0:im,j,k,5)=qrhs(0:im,j,k,5)+df(0:im,5)/dx
+
+        enddo
+        enddo
+        !
+        deallocate(ff,df)
+
+
+        allocate(ff(-hm:jm+hm,2:ncolm),df(0:jm,2:ncolm))
+        do k=0,km
+        do i=0,im
+          !
+          ff(:,2)= sigma(i,:,k,2)
+          ff(:,3)= sigma(i,:,k,4)
+          ff(:,4)= sigma(i,:,k,5)
+          ff(:,5)= qflux(i,:,k,2)
+
+          !+------------------------------+
+          !|    calculate derivative      |
+          !+------------------------------+
+          do n=2,ncolm
+            df(:,n)=fds%central(fds_compact_j,f=ff(:,n),dim=jm)
+          enddo
+          !+------------------------------+
+          !| end of calculate derivative  |
+          !+------------------------------+
+          !
+          qrhs(i,0:jm,k,2)=qrhs(i,0:jm,k,2)+df(0:jm,2)/dy
+          qrhs(i,0:jm,k,3)=qrhs(i,0:jm,k,3)+df(0:jm,3)/dy
+          qrhs(i,0:jm,k,4)=qrhs(i,0:jm,k,4)+df(0:jm,4)/dy
+          qrhs(i,0:jm,k,5)=qrhs(i,0:jm,k,5)+df(0:jm,5)/dy
+          !
+        enddo
+        enddo
+        !
+        deallocate(ff,df)
+
+        allocate(ff(-hm:km+hm,2:ncolm),df(0:km,2:ncolm))
+        !
+        do j=0,jm
+        do i=0,im
+          !
+          do k=-hm,km+hm
+            ff(k,2)=sigma(i,j,k,3)
+            ff(k,3)=sigma(i,j,k,5)
+            ff(k,4)=sigma(i,j,k,6)
+            ff(k,5)=qflux(i,j,k,3)
+          enddo
+
+          do n=2,ncolm
+            df(:,n)=fds%central(fds_compact_k,f=ff(:,n),dim=km)
+          enddo
+
+          qrhs(i,j,0:km,2)=qrhs(i,j,0:km,2)+df(0:km,2)/dz
+          qrhs(i,j,0:km,3)=qrhs(i,j,0:km,3)+df(0:km,3)/dz
+          qrhs(i,j,0:km,4)=qrhs(i,j,0:km,4)+df(0:km,4)/dz
+          qrhs(i,j,0:km,5)=qrhs(i,j,0:km,5)+df(0:km,5)/dz
+          !
+        enddo
+        enddo
+        !
+        deallocate(ff,df)
+
+    end subroutine diffusion
+
+
+end module solver
 
 module mainloop
 
@@ -519,6 +683,53 @@ module mainloop
 
   end subroutine steploop
 
+  subroutine rhscal(comptime)
+    !
+    use commvar, only: ctime
+    use commarray
+    use solver_gpu, only: gradcal,convection
+    use solver, only:diffusion
+    use commarray_gpu
+    !
+    real,intent(inout),optional :: comptime
+    
+    real :: tstart,tfinish
+    integer :: i,j,k,m
+
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    
+    call commarray_gpu_h2d
+
+    qrhs_d=0.d0
+
+    call gradcal
+    !
+    call convection
+    !
+      !$cuf kernel do(4) <<<*,*>>>
+      do m = 1, numq
+      do k = 0, km
+      do j = 0, jm
+      do i = 0, im
+        qrhs_d(i,j,k,m) = -qrhs_d(i,j,k,m)
+      enddo
+      enddo
+      enddo
+      enddo
+      call commarray_gpu_d2h
+    !
+    call diffusion
+
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+
+  end subroutine rhscal
 
   subroutine rk3(comptime)
     
@@ -527,20 +738,16 @@ module mainloop
     use commarray,only: q,qrhs,rho,vel,tmp,prs
     use fludyna,  only: q2fvar
     use bc, only: bchomo
-    use solver_gpu, only: filterq,gradcal,convection,diffusion
+    use solver_gpu, only: filterq
     use commarray_gpu
-    use fludyna_gpu
-    use bc_gpu
-    use filter_gpu,only:rkcoe_d
     !
     real,intent(inout),optional :: comptime
     
     ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    real(8), allocatable, device, save :: qsave_d(:,:,:,:)
-    
-    integer :: rkstep,i,j,k,m,istat
+    real(8),allocatable,save :: qsave(:,:,:,:)
+    integer :: rkstep,i,j,k,m
     !
     real :: tstart,tfinish
 
@@ -561,10 +768,8 @@ module mainloop
       rkcoe(1,3)=num1d3
       rkcoe(2,3)=num2d3
       rkcoe(3,3)=num2d3
-
-      rkcoe_d=rkcoe
       !
-      allocate(qsave_d(0:im,0:jm,0:km,1:numq))
+      allocate(qsave(0:im,0:jm,0:km,1:numq))
       !
       firstcall=.false.
       !
@@ -572,67 +777,42 @@ module mainloop
     !
     do rkstep=1,3
 
-      call bchomo_gpu
+      call bchomo
 
-      qrhs_d=0.d0
-
-      call gradcal
-      !
-      call convection
-      !
-do m = 1, numq
-!$cuf kernel do(3) <<<*,*>>>
-do k = 0, km
-do j = 0, jm
-do i = 0, im
-    qrhs_d(i,j,k,m) = -qrhs_d(i,j,k,m)
-enddo
-enddo
-enddo
-enddo
-      !
-      call diffusion
+      call rhscal
       !
       if(rkstep==1) then
-
-        call commarray_gpu_d2h
-        istat = cudaDeviceSynchronize()
-
         !
         call stacal
         !
-        
-do m = 1, numq
-!$cuf kernel do(3) <<<*,*>>>
-do k = 0, km
-do j = 0, jm
-do i = 0, im
-    qsave_d(i,j,k,m) = q_d(i,j,k,m)
-enddo
-enddo
-enddo
-enddo
+        do m=1,numq
+          qsave(0:im,0:jm,0:km,m)=q(0:im,0:jm,0:km,m)
+        enddo
         !
       endif
-      
-  do m = 1, numq
-  !$cuf kernel do(3) <<<*,*>>>
-  do k = 0, km
-      do j = 0, jm
-          do i = 0, im
-
-            q_d(i,j,k,m) = rkcoe_d(1,rkstep) * qsave_d(i,j,k,m) + &
-                         rkcoe_d(2,rkstep) * q_d(i,j,k,m)      + &
-                         rkcoe_d(3,rkstep) * qrhs_d(i,j,k,m) * deltat
-
-          end do
-      end do
-  end do
-  end do
       !
+      do m=1,numq
+        !
+        q(0:im,0:jm,0:km,m)=rkcoe(1,rkstep)*qsave(0:im,0:jm,0:km,m)+   &
+                            rkcoe(2,rkstep)*q(0:im,0:jm,0:km,m)    +   &
+                            rkcoe(3,rkstep)*qrhs(0:im,0:jm,0:km,m)*deltat
+        !
+      enddo
+      !
+      call commarray_gpu_h2d
       call filterq
+      call commarray_gpu_d2h
       !
-      call q2fvar_3d
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        call q2fvar( q=q(i,j,k,:),   density=rho(i,j,k),   &
+                                    velocity=vel(i,j,k,:), &
+                                    pressure=prs(i,j,k),   &
+                                 temperature=tmp(i,j,k) )
+      enddo
+      enddo
+      enddo
       !
     enddo
     !
@@ -670,15 +850,11 @@ program boxsolver
 
     call allocommarray
 
-    call flowfield_init
-
     call allocommarray_gpu
 
-    call commarray_gpu_h2d
+    call flowfield_init
 
     call steploop
-
-    call commarray_gpu_d2h
     
     call cpu_time(tfinish)
     !

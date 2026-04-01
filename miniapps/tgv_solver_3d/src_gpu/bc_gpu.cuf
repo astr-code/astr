@@ -8,7 +8,6 @@ module bc_gpu
         !
       use commvar, only: im,jm,km,hm
       use commarray_gpu,only: q_d,rho_d,vel_d,prs_d,tmp_d
-      use fludyna,  only: fvar2q
       use cudafor
         !
          integer :: i,j,k

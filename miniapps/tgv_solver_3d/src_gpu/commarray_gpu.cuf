@@ -51,6 +51,9 @@ contains
    subroutine commarray_gpu_h2d
       use commarray, only: q, qrhs, vel, rho, prs, tmp, dvel, dtmp
       implicit none
+      integer :: istat
+
+      istat = cudaDeviceSynchronize()
 
       q_d    = q
       qrhs_d = qrhs
@@ -63,11 +66,16 @@ contains
       dvel_d = dvel
       dtmp_d = dtmp
 
+      istat = cudaDeviceSynchronize()
+
    end subroutine commarray_gpu_h2d
 
    subroutine commarray_gpu_d2h
       use commarray, only: q, qrhs, vel, rho, prs, tmp, dvel, dtmp
       implicit none
+      integer :: istat
+
+      istat = cudaDeviceSynchronize()
 
       q    = q_d
       qrhs = qrhs_d
@@ -79,6 +87,8 @@ contains
 
       dvel = dvel_d
       dtmp = dtmp_d
+
+      istat = cudaDeviceSynchronize()
 
    end subroutine commarray_gpu_d2h
 
