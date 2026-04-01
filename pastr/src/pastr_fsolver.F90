@@ -30,6 +30,103 @@ module pastr_fsolver
      
 contains
 
+    function fxsolver(xmin,xmax,ftarget,fx) result(x)
+      !
+      use pastr_interpolation, only : interpolat
+      !
+      real(wp),intent(in) :: xmin,xmax,ftarget
+      real(wp) :: x
+      !
+      real(wp) :: fx1,fx2,xans,fxans,x1,x2
+      real(wp) :: error,ethres
+      integer :: counter
+      !
+      interface
+        !
+        function fx(xx)
+          use iso_fortran_env, only: wp => real64
+          real(wp) :: xx,fx
+        end function fx
+        !
+      end interface
+      !
+      ethres=1.d-10
+      !
+      x1=xmin
+      x2=xmax
+      fx1=fx(x1)
+      fx2=fx(x2)
+      !
+      print*,x1,fx1,x2,fx2
+      !
+      error=1._wp
+      counter=0
+      !
+      ! write(*,'(A4,1X,A15)')'n','error'
+      do while(abs(error)>ethres .and. counter<100000)
+        !
+        xans=interpolat(fx1,fx2,x1,x2,ftarget)
+        fxans=fx(xans)
+        !
+        ! to ensure the xmin,xmax is within the effective/monotonicity range
+        if(ftarget>=fx1 .and. ftarget<=fx2) then
+          !
+          ! print*,' ** xans',xans,fxans
+          !
+          if(fxans>=ftarget) then
+            x2 =xans
+            fx2=fxans
+          elseif(fxans<=ftarget) then
+            x1 =xans
+            fx1=fxans
+          endif
+          !
+        elseif(ftarget<=fx1 .and. ftarget>=fx2) then
+          ! print*,' ** xans',xans,fxans
+          !
+          if(fxans>=ftarget) then
+            x1 =xans
+            fx1=fxans
+          elseif(fxans<=ftarget) then
+            x2 =xans
+            fx2=fxans
+          endif
+          !
+        else
+          !
+          print*,' !! xmin,xmax not in the effective range '
+          print*,' ** fx1=',fx1
+          print*,' ** fx2=',fx2
+          print*,' ** ftarget=',ftarget
+          !
+          stop
+          !
+        endif
+        !
+        counter=counter+1
+        error=fxans-ftarget
+        !
+        ! write(*,'(I4,1X,E15.7E3)')counter,error
+        !
+      enddo
+      !
+      if(abs(error)>ethres) then
+         print*,' !! solution not coverged '
+         print*,' ** fx1=',fx1,'x1=',x1
+         print*,' ** fx2=',fx2,'x2=',x2
+         print*,' ** fx*=',fxans,'x*=',xans
+         print*,' ** ftarget=',ftarget
+         stop
+      endif
+      !
+      print*,' ** fxsolver: answer found x=',xans,'fx=',fxans,'error:',error,'nloops:',counter
+      !
+      x=xans
+      !
+      return
+      !
+    end function fxsolver
+
 
     subroutine backward_euler_residual ( dydt, n, to, yo, tm, ym, fm )
 

@@ -7,6 +7,7 @@ module pastr_interpolation
     interface interpolat
       module procedure linear1d_s
       module procedure linear1d_search_array
+      module procedure linear1d_array2array
     end interface interpolat
 
 contains
@@ -45,5 +46,36 @@ contains
       return
 
    end function linear1d_search_array
+
+   pure function linear1d_array2array(x,y,xx) result(yy)
+
+      real(wp),intent(in) :: x(:),y(:),xx(:)
+      real(wp) :: yy(size(xx))
+
+      integer :: i,m,n,j
+
+      m=size(x)
+      n=size(xx)
+
+      do j=1,n
+
+        if(xx(j)<=x(1)) then
+          yy(j)=linear1d_s(x(1),x(2),y(1),y(2),xx(j))
+        elseif(xx(j)>=x(m)) then
+          yy(j)=linear1d_s(x(m-1),x(m),y(m-1),y(m),xx(j))
+        else
+          do i=2,m
+            if(xx(j)>=x(i-1) .and. xx(j)<=x(i)) then
+              yy(j)=linear1d_s(x(i-1),x(i),y(i-1),y(i),xx(j))
+              exit
+            endif
+          enddo
+        endif
+
+      enddo
+
+      return
+
+   end function linear1d_array2array
 
 end module pastr_interpolation

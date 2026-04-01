@@ -96,6 +96,7 @@ module solver
     roinf=thermal(temperature=tinf,pressure=pinf,species=spcinf)
 
     ref_tim=1.d0
+    
 #else
     !
     gamma=1.4d0

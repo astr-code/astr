@@ -65,21 +65,29 @@ module interp
     !
   end function linear1d_a2
   !
-  function linear1d_arrayin(x1,y1,xx) result(yy)
+  function linear1d_arrayin(x1,y1,xx,mode) result(yy)
     !
     real(8),intent(in) :: x1(:),y1(:),xx
     real(8) :: yy
+    character(len=3),intent(in),optional :: mode
     !
     integer :: dim,i
     !
     dim=size(x1)
     !
     if(xx<x1(1)) then
-      ! yy=linear1d_s(x1(1),x1(2),y1(1),y1(2),xx)
-      yy=2.d0*y1(1)-y1(2)
+      if(mode=='---') then
+        yy=y1(1)
+      else
+        yy=2.d0*y1(1)-y1(2)
+      endif
     elseif(xx>=x1(dim)) then
       ! yy=linear1d_s(x1(dim-1),x1(dim),y1(dim-1),y1(dim),xx)
-      yy=2.d0*y1(dim)-y1(dim-1)
+      if(mode=='---') then
+        yy=y1(dim)
+      else
+        yy=2.d0*y1(dim)-y1(dim-1)
+      endif
     else
       do i=2,dim
         if(xx>=x1(i-1) .and. xx<x1(i)) then

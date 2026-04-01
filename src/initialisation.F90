@@ -153,10 +153,10 @@ module initialisation
     !
     if(lio) print*,' ** flowfield initialised.'
     
-    ! call writeflfed(timerept=.true.)
+    call writeflfed(timerept=.true.)
     
     ! call mpistop
-    ! !
+    
     ! stop
     !
   end subroutine flowinit
@@ -1226,7 +1226,7 @@ module initialisation
     enddo
     enddo
     enddo
-    !
+
     if(ndims==3) then
     endif
     ! 
@@ -1520,7 +1520,8 @@ module initialisation
           spc_prof(:,i) = spcinf(i)
         enddo
         !
-        prs_prof=thermal(density=rho_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
+        prs_prof=pinf
+        rho_prof=thermal(pressure=prs_prof,temperature=tmp_prof,species=spc_prof,dim=jm+1)
 #endif        
       endif
       !

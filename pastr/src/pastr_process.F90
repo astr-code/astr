@@ -18,6 +18,7 @@ contains
 
         use pastr_udf
         use pastr_blasius, only: blasius_solution
+        use pastr_grid,    only: gridgen
 
         character(len=*), intent(in) :: command
 
@@ -34,6 +35,8 @@ contains
               call blasius_solution()
            case ('stats')
               call stats_cal()
+           case ('gridgen')
+              call gridgen()
            case ('udf')
               call udf_func1()
            case default
