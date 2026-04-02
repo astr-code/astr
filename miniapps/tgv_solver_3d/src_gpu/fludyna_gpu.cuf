@@ -29,13 +29,13 @@ module fludyna_gpu
 
     end subroutine fvar2q_gpu
 
-    attributes(device) function thermal_scar_gpu(density,pressure,temperature,species) result(vout)
+    attributes(device) function thermal_scar_gpu(density,pressure,temperature) result(vout)
 
       use commvar_gpu,only : const2_d
       !
       ! arguments
       real(8) :: vout
-      real(8),intent(in) ,optional :: density,pressure,temperature,species(:)
+      real(8),intent(in) ,optional :: density,pressure,temperature
 
       if(present(density) .and. present(temperature)) then
         vout=density*temperature/const2_d
@@ -46,70 +46,32 @@ module fludyna_gpu
       endif
     end function thermal_scar_gpu
 
-    attributes(device) subroutine q2fvar_gpu(q,density,velocity,pressure,temperature)
+    attributes(device) subroutine q2fvar_gpu(q1,q2,q3,q4,q5,density,u,v,w,pressure,temperature)
     
-        use commvar_gpu, only: const2_d,const6_d
+        use commvar_gpu, only: const6_d
     
-        real(8),intent(in) :: q(1:5)
+        real(8),intent(in) :: q1,q2,q3,q4,q5
         real(8),intent(out) :: density
-        real(8),intent(out),optional :: velocity(1:3),pressure,temperature
+        real(8),intent(out),optional :: u,v,w,pressure,temperature
 
 
-        density=q(1)
+        density=q1
 
 
-        if(present(velocity).or. present(pressure) .or. present(temperature)) then
+        if(present(u) .or. present(pressure) .or. present(temperature)) then
 
-          velocity(1)=q(2)/density
-          velocity(2)=q(3)/density
-          velocity(3)=q(4)/density
+          u=q2/density
+          v=q3/density
+          w=q4/density
         endif
 
         if(present(pressure) .or. present(temperature)) then
-        pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+velocity(3)**2) )/const6_d
+        pressure  =( q5-0.5d0*density*(u**2+v**2+w**2) )/const6_d
         endif
         
         if(present(temperature)) then
         temperature=thermal_scar_gpu(pressure=pressure,density=density)
         endif
     end subroutine q2fvar_gpu
-
-    attributes(global) subroutine q2fvar_3d_kernel(im,jm,km)
-        use commarray_gpu,only: q_d,rho_d,vel_d,prs_d,tmp_d
-        implicit none
-        integer, value :: im, jm, km
-        integer ::  i, j, k
-        real(8) :: q(1:5),velocity(1:3)
-
-
-        i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-        j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-        k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
-
-        if (i >= 0 .and. i <= im .and.j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
-          q(1:5)=q_d(i,j,k,1:5)
-          velocity(1:3)=vel_d(i,j,k,1:3)
-          call q2fvar_gpu(q,rho_d(i,j,k),velocity,prs_d(i,j,k),tmp_d(i,j,k))
-        end if
-
-    end subroutine q2fvar_3d_kernel
-
-    subroutine q2fvar_3d
-        use cudafor
-        use commvar,only: im,jm,km
-        use commarray_gpu,only: q_d,rho_d,vel_d,prs_d,tmp_d
-
-        implicit none
-
-        type(dim3) :: grid, block
-        integer :: blksz=8
-
-        block = dim3(blksz, blksz, blksz)
-        grid%x = ceiling(real(im+1)/blksz)
-        grid%y = ceiling(real(jm+1)/blksz)
-        grid%z = ceiling(real(km+1)/blksz)
-        call q2fvar_3d_kernel<<<grid,block>>>(im,jm,km)
-
-    end subroutine q2fvar_3d
 
 end module fludyna_gpu

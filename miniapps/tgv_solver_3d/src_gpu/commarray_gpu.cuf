@@ -16,6 +16,8 @@ module commarray_gpu
    real(8), device, allocatable :: dvel_d(:, :, :, :, :)
    real(8), device, allocatable :: dtmp_d(:, :, :, :)
 
+   real(8), constant :: rkcoe_d(3,3)
+
 contains
 
    subroutine allocommarray_gpu

@@ -11,7 +11,7 @@ module commvar_gpu
 
   contains
 
-  subroutine copy_commvar_to_gpu()
+  subroutine copy_commvar_to_gpu
 
     implicit none
     
