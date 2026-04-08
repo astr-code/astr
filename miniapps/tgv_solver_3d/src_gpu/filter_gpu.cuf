@@ -5,8 +5,6 @@ module filter_gpu
    use commfunc_gpu, only: tridiagonal_thomas_solver_gpu
    implicit none
 
-   real(8), constant :: rkcoe_d(3,3)
-
    !cal_init
    real(8), constant :: coef2i_d(0:1)
    real(8), constant :: coef4i_d(0:2)

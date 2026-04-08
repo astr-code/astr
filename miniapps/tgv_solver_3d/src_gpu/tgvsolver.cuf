@@ -531,7 +531,7 @@ module mainloop
     use commarray
     use fludyna_gpu,  only: q2fvar_gpu
     use bc_gpu, only: bchomo_gpu
-    use solver_gpu, only: gradcal,convection,diffusion,filterq
+    use solver_gpu
     use commarray_gpu
     !
     real,intent(inout),optional :: comptime
@@ -564,6 +564,8 @@ module mainloop
       rkcoe(3,3)=num2d3
 
       rkcoe_d=rkcoe
+      call init_solver_ac_arrays
+      call init_solver_ac_filter_arrays
       !
       allocate(qsave_d(0:im,0:jm,0:km,1:numq))
       !

@@ -4,6 +4,8 @@
 *.h5
 *.log
 *.xdmf
+*.mod
+*.o
 bin/
 obj/
 solid_in.stl
