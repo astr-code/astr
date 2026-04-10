@@ -1,11 +1,11 @@
 module derivative_gpu
    use cudafor
-   use commfunc_gpu, only: tridiagonal_thomas_solver_gpu
+   use commfunc_gpu
 
    implicit none
 
    integer :: df_scheme_type
-   integer, parameter :: COMPACT=1, EXPLICIT=2
+   integer, parameter :: COMPACT = 1, EXPLICIT = 2
 contains
 
    attributes(device) function compact_fd_rhs_gpu(first_node, last_node, nbctype, f, dim) result(d)
@@ -28,18 +28,10 @@ contains
          ! physical boundary
 
          i_s = i_0 + 2
-
          ! 4th-order compact
          j = i_0 + 1
          var1 = f(j + 1) - f(j - 1)
          d(j) = 0.75d0*var1
-
-         ! ! 2nd-order biased compact
-         ! j=i_0
-         ! var1=f(j+1)-f(j)
-         ! d(j)=2.d0*var1
-
-         ! 3rd-order biased compact
          j = i_0
          d(j) = -2.5d0*f(j) + 2.d0*f(j + 1) + 0.5d0*f(j + 2)
 
@@ -101,7 +93,8 @@ contains
 
    end function compact_fd_rhs_gpu
 
-   attributes(device) function df_compact_gpu(first_node, last_node, nbctype, ac, f, dim) result(df)
+   !this function no use now
+   attributes(device) function df_compact_gpu_before(first_node, last_node, nbctype, ac, f, dim) result(df)
 
       use constdef
       use commvar, only: hm
@@ -126,6 +119,117 @@ contains
       call tridiagonal_thomas_solver_gpu(ac, d, xx)
 
       df(0:dim) = xx(0:dim)
+
+   end function df_compact_gpu_before
+
+   attributes(device) function df_compact_gpu(first_node, last_node, nbctype, ac, f, dim) result(df)
+      use constdef
+      use commvar, only: hm
+
+      integer, intent(in) :: first_node, last_node, nbctype, dim
+      real(8), device, intent(in) :: f(-hm:dim + hm)
+      real(8), device, intent(in) :: ac(:, :)  ! ac(1:3, 1:n) 其中 n = last_node-first_node+1
+      real(8), device :: df(0:dim)
+
+      ! 局部变量
+      integer :: i_0, i_m, ntype, i_s, i_e, j, i, n, idx
+      real(8) :: var1, var2, var3
+      real(8) :: di_prev, di_curr, xi_next, xi_curr
+
+      ! 小型临时数组 - 只存储边界外的点
+      real(8) :: d_minus1, d_plus1  ! 存储d(-1)和d(dim+1)
+      real(8) :: x_minus1, x_plus1  ! 存储x(-1)和x(dim+1)
+
+      ! 初始化
+      i_0 = first_node
+      i_m = last_node
+      ntype = nbctype
+      n = last_node - first_node + 1
+
+      ! 已知 i_0 = -1, i_m = dim + 1 的情况
+      ! 我们可以优化内存使用
+
+      ! ============================================
+      ! 第一部分：计算右端项
+      ! ============================================
+
+      ! 对于 ntype=3 的情况：first_node=-1, last_node=dim+1
+      ! 边界点使用显式格式
+
+      i_s = i_0 + 1  ! = 0
+      i_e = i_m - 1  ! = dim
+
+      ! 左边界点：i = -1
+      j = i_0  ! = -1
+      var1 = f(j + 1) - f(j - 1)      ! f(0) - f(-2)
+      var2 = f(j + 2) - f(j - 2)      ! f(1) - f(-3)
+      var3 = f(j + 3) - f(j - 3)      ! f(2) - f(-4)
+      d_minus1 = 0.75d0*var1 - 0.15d0*var2 + num1d60*var3
+
+      ! 右边界点：i = dim + 1
+      j = i_m  ! = dim + 1
+      var1 = f(j + 1) - f(j - 1)      ! f(dim+2) - f(dim)
+      var2 = f(j + 2) - f(j - 2)      ! f(dim+3) - f(dim-1)
+      var3 = f(j + 3) - f(j - 3)      ! f(dim+4) - f(dim-2)
+      d_plus1 = 0.75d0*var1 - 0.15d0*var2 + num1d60*var3
+
+      ! 内部点：0 到 dim，直接计算到 df 数组
+      do j = i_s, i_e  ! j = 0 到 dim
+         var1 = f(j + 1) - f(j - 1)
+         var2 = f(j + 2) - f(j - 2)
+         df(j) = num7d9*var1 + num1d36*var2
+      end do
+
+      ! ============================================
+      ! 第二部分：Thomas算法 - 使用混合存储
+      ! ============================================
+
+      ! 注意：我们需要处理整个三对角系统，包括边界点
+
+      ! 前向消元
+      ! 从 i = -1 开始
+      di_prev = d_minus1
+
+      ! i = 0 到 dim
+      do i = 0, dim
+         di_curr = df(i)
+         idx = i - first_node + 1  ! 映射到1-based索引：i-(-1)+1 = i+2
+         di_curr = di_curr*ac(2, idx) - di_prev*ac(3, idx)
+         df(i) = di_curr
+         di_prev = di_curr
+      end do
+
+      ! i = dim + 1
+      di_curr = d_plus1
+      idx = (dim + 1) - first_node + 1  ! (dim+1)-(-1)+1 = dim+3
+      di_curr = di_curr*ac(2, idx) - di_prev*ac(3, idx)
+      d_plus1 = di_curr  ! 更新 d_plus1
+      di_prev = di_curr
+
+      ! 后向替换
+      ! 从 i = dim + 1 开始
+      xi_next = d_plus1
+      x_plus1 = xi_next
+
+      ! i = dim 到 0
+      do i = dim, 0, -1
+         idx = i - first_node + 1  ! i+2
+         xi_curr = df(i) - ac(1, idx)*xi_next
+         df(i) = xi_curr
+         xi_next = xi_curr
+      end do
+
+      ! i = -1
+      idx = (-1) - first_node + 1  ! 1
+      xi_curr = d_minus1 - ac(1, idx)*xi_next
+      x_minus1 = xi_curr
+      ! x_minus1 不需要存储到输出中
+
+      ! ============================================
+      ! 第三部分：df(0:dim) 已经包含最终结果
+      ! ============================================
+
+      ! 不需要额外操作，df(0:dim) 已经是正确结果
 
    end function df_compact_gpu
 

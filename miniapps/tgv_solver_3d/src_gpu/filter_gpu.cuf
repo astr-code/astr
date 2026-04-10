@@ -185,7 +185,7 @@ contains
 
    end function compact_filter_rhs_gpu
 
-   attributes(device) function compact_filter_gpu(first_node, last_node, nbctype, ac, f, dim) result(ff)
+   attributes(device) function compact_filter_gpu_before(first_node, last_node, nbctype, ac, f, dim) result(ff)
 
       use commvar, only: hm
 
@@ -217,7 +217,233 @@ contains
             ff(dim) = f(dim)
       end select
 
-   end function compact_filter_gpu
+   end function compact_filter_gpu_before
+
+   attributes(device) function compact_filter_gpu(first_node, last_node, nbctype, ac, f, dim) result(ff)
+    use constdef
+    use commvar, only: hm
+    
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: f(-hm:dim + hm)
+    real(8), device, intent(in) :: ac(:, :)  ! ac(1:3, 1:n) 其中 n = last_node-first_node+1
+    real(8), device :: ff(0:dim)
+    
+    ! 局部变量
+    integer :: i_0, i_m, ntype, i_s, i_e, j, k, i, n, idx
+    real(8) :: var0, var1, var2, var3, var4, var5
+    real(8) :: di_prev, di_curr, xi_next, xi_curr
+    
+    ! 滑动窗口变量
+    real(8) :: f_m5, f_m4, f_m3, f_m2, f_m1
+    real(8) :: f_0
+    real(8) :: f_p1, f_p2, f_p3, f_p4, f_p5
+    
+    ! 小型临时数组 - 只存储边界外的点
+    ! 对于 ntype=3：first_node=-3, last_node=dim+3
+    ! 我们需要存储6个边界点：-3,-2,-1 和 dim+1,dim+2,dim+3
+    real(8) :: d_minus3, d_minus2, d_minus1
+    real(8) :: d_plus1, d_plus2, d_plus3
+    real(8) :: x_minus3, x_minus2, x_minus1
+    real(8) :: x_plus1, x_plus2, x_plus3
+    
+    ! 初始化
+    i_0 = first_node
+    i_m = last_node
+    ntype = nbctype
+    n = last_node - first_node + 1
+    
+    ! ============================================
+    ! 第一部分：计算右端项 - 针对 ntype=3 优化
+    ! ============================================
+    
+    ! 已知对于 ntype=3：first_node=-3, last_node=dim+3
+    ! i_s = i_0 + 3 = 0
+    ! i_e = i_m - 3 = dim
+    
+    i_s = i_0 + 3  ! = 0
+    i_e = i_m - 3  ! = dim
+    
+    ! 左边界点：i = -3, -2, -1
+    ! 使用 coefh_d 系数
+    do k = i_0, i_0 + 2  ! k = -3, -2, -1
+        var0 = 0.d0
+        do j = 0, 10
+            var0 = var0 + coefh_d(k - i_0, j) * f(i_0 - 2 + j)
+        end do
+        
+        ! 存储到相应的临时变量
+        if (k == -3) d_minus3 = var0
+        if (k == -2) d_minus2 = var0
+        if (k == -1) d_minus1 = var0
+    end do
+    
+    ! 右边界点：i = dim+1, dim+2, dim+3
+    do k = i_m - 2, i_m  ! k = dim+1, dim+2, dim+3
+        var0 = 0.d0
+        do j = 0, 10
+            var0 = var0 + coefh_d(i_m - k, j) * f(i_m + 2 - j)
+        end do
+        
+        ! 存储到相应的临时变量
+        if (k == dim+1) d_plus1 = var0
+        if (k == dim+2) d_plus2 = var0
+        if (k == dim+3) d_plus3 = var0
+    end do
+    
+    ! 内部点：0 到 dim，直接计算到 ff 数组
+    if (i_s <= i_e) then
+        j = i_s  ! j = 0
+        
+        ! 预加载滑动窗口
+        f_m5 = f(j-5)
+        f_m4 = f(j-4)
+        f_m3 = f(j-3)
+        f_m2 = f(j-2)
+        f_m1 = f(j-1)
+        f_0  = f(j)
+        f_p1 = f(j+1)
+        f_p2 = f(j+2)
+        f_p3 = f(j+3)
+        f_p4 = f(j+4)
+        f_p5 = f(j+5)
+        
+        do j = i_s, i_e  ! j = 0 到 dim
+            var0 = f_0  + f_0
+            var1 = f_p1 + f_m1
+            var2 = f_p2 + f_m2
+            var3 = f_p3 + f_m3
+            var4 = f_p4 + f_m4
+            var5 = f_p5 + f_m5
+            
+            ff(j) = coef10i_d(0)*var0 + coef10i_d(1)*var1 + coef10i_d(2)*var2 + &
+                    coef10i_d(3)*var3 + coef10i_d(4)*var4 + coef10i_d(5)*var5
+            
+            ! 滑动窗口
+            f_m5 = f_m4
+            f_m4 = f_m3
+            f_m3 = f_m2
+            f_m2 = f_m1
+            f_m1 = f_0
+            f_0  = f_p1
+            f_p1 = f_p2
+            f_p2 = f_p3
+            f_p3 = f_p4
+            f_p4 = f_p5
+            if (j < i_e) then
+                f_p5 = f(j+6)
+            end if
+        end do
+    end if
+    
+    ! ============================================
+    ! 第二部分：Thomas算法 - 使用混合存储
+    ! ============================================
+    
+    ! 前向消元
+    ! 从 i = -3 开始
+    di_prev = d_minus3
+    
+    ! i = -2
+    di_curr = d_minus2
+    idx = (-2) - first_node + 1  ! (-2)-(-3)+1 = 2
+    di_curr = di_curr * ac(2, idx) - di_prev * ac(3, idx)
+    d_minus2 = di_curr
+    di_prev = di_curr
+    
+    ! i = -1
+    di_curr = d_minus1
+    idx = (-1) - first_node + 1  ! (-1)-(-3)+1 = 3
+    di_curr = di_curr * ac(2, idx) - di_prev * ac(3, idx)
+    d_minus1 = di_curr
+    di_prev = di_curr
+    
+    ! i = 0 到 dim
+    do i = 0, dim
+        di_curr = ff(i)
+        idx = i - first_node + 1  ! i-(-3)+1 = i+4
+        di_curr = di_curr * ac(2, idx) - di_prev * ac(3, idx)
+        ff(i) = di_curr
+        di_prev = di_curr
+    end do
+    
+    ! i = dim+1
+    di_curr = d_plus1
+    idx = (dim+1) - first_node + 1  ! (dim+1)-(-3)+1 = dim+5
+    di_curr = di_curr * ac(2, idx) - di_prev * ac(3, idx)
+    d_plus1 = di_curr
+    di_prev = di_curr
+    
+    ! i = dim+2
+    di_curr = d_plus2
+    idx = (dim+2) - first_node + 1  ! (dim+2)-(-3)+1 = dim+6
+    di_curr = di_curr * ac(2, idx) - di_prev * ac(3, idx)
+    d_plus2 = di_curr
+    di_prev = di_curr
+    
+    ! i = dim+3
+    di_curr = d_plus3
+    idx = (dim+3) - first_node + 1  ! (dim+3)-(-3)+1 = dim+7
+    di_curr = di_curr * ac(2, idx) - di_prev * ac(3, idx)
+    d_plus3 = di_curr
+    di_prev = di_curr
+    
+    ! 后向替换
+    ! 从 i = dim+3 开始
+    xi_next = d_plus3
+    x_plus3 = xi_next
+    
+    ! i = dim+2
+    idx = (dim+2) - first_node + 1  ! dim+6
+    xi_curr = d_plus2 - ac(1, idx) * xi_next
+    x_plus2 = xi_curr
+    xi_next = xi_curr
+    
+    ! i = dim+1
+    idx = (dim+1) - first_node + 1  ! dim+5
+    xi_curr = d_plus1 - ac(1, idx) * xi_next
+    x_plus1 = xi_curr
+    xi_next = xi_curr
+    
+    ! i = dim 到 0
+    do i = dim, 0, -1
+        idx = i - first_node + 1  ! i+4
+        xi_curr = ff(i) - ac(1, idx) * xi_next
+        ff(i) = xi_curr
+        xi_next = xi_curr
+    end do
+    
+    ! i = -1
+    idx = (-1) - first_node + 1  ! 3
+    xi_curr = d_minus1 - ac(1, idx) * xi_next
+    x_minus1 = xi_curr
+    xi_next = xi_curr
+    
+    ! i = -2
+    idx = (-2) - first_node + 1  ! 2
+    xi_curr = d_minus2 - ac(1, idx) * xi_next
+    x_minus2 = xi_curr
+    xi_next = xi_curr
+    
+    ! i = -3
+    idx = (-3) - first_node + 1  ! 1
+    xi_curr = d_minus3 - ac(1, idx) * xi_next
+    x_minus3 = xi_curr
+    
+    ! ============================================
+    ! 第三部分：边界条件处理
+    ! ============================================
+    
+    select case(nbctype)
+    case(1)
+        ff(0) = f(0)
+    case(2)
+        ff(dim) = f(dim)
+    case(4)
+        ff(0)   = f(0)
+        ff(dim) = f(dim)
+    end select
+    
+end function compact_filter_gpu
 
    !call copy_coeff_to_gpu after filter_coefficient_cal and filter_coefficient_explicit
    subroutine copy_coeff_to_gpu_cal()
