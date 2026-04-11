@@ -233,4 +233,222 @@ contains
 
    end function df_compact_gpu
 
+   attributes(device) function df_compact_batch_4_gpu(first_node, last_node, nbctype, ac, ff, dim) result(df)
+    use constdef
+    use commvar, only: hm
+    
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: ff(-hm:dim+hm, 4)  ! 4个物理量
+    real(8), device, intent(in) :: ac(:, :)
+    real(8), device :: df(0:dim, 4)  ! 输出导数
+    
+    ! 局部变量
+    integer :: i_0, i_m, i_s, i_e, i, idx, ivar
+    real(8) :: var1, var2, var3
+    real(8) :: d_minus1(4), d_plus1(4)
+    real(8) :: di_prev(4), di_curr(4), xi_next(4), xi_curr(4)
+    
+    ! 初始化
+    i_0 = first_node
+    i_m = last_node
+    i_s = i_0 + 1  ! = 0
+    i_e = i_m - 1  ! = dim
+    
+    ! ============================================
+    ! 批量计算右端项
+    ! ============================================
+    
+    ! 左边界点：i = -1
+    do ivar = 1, 4
+        d_minus1(ivar) = 0.75d0*(ff(0, ivar) - ff(-2, ivar)) - &
+                         0.15d0*(ff(1, ivar) - ff(-3, ivar)) + &
+                         num1d60*(ff(2, ivar) - ff(-4, ivar))
+    end do
+    
+    ! 右边界点：i = dim+1
+    do ivar = 1, 4
+        d_plus1(ivar) = 0.75d0*(ff(dim+2, ivar) - ff(dim, ivar)) - &
+                        0.15d0*(ff(dim+3, ivar) - ff(dim-1, ivar)) + &
+                        num1d60*(ff(dim+4, ivar) - ff(dim-2, ivar))
+    end do
+    
+    ! 内部点：批量计算
+    do ivar = 1, 4
+        do i = 0, dim
+            df(i, ivar) = num7d9*(ff(i+1, ivar) - ff(i-1, ivar)) + &
+                          num1d36*(ff(i+2, ivar) - ff(i-2, ivar))
+        end do
+    end do
+    
+    ! ============================================
+    ! 批量Thomas算法
+    ! ============================================
+    
+    ! 前向消元
+    di_prev(1:4) = d_minus1(1:4)
+    
+    do i = 0, dim
+        idx = i - first_node + 1
+        
+        ! 批量计算4个物理量
+        di_curr(1) = df(i, 1) * ac(2, idx) - di_prev(1) * ac(3, idx)
+        di_curr(2) = df(i, 2) * ac(2, idx) - di_prev(2) * ac(3, idx)
+        di_curr(3) = df(i, 3) * ac(2, idx) - di_prev(3) * ac(3, idx)
+        di_curr(4) = df(i, 4) * ac(2, idx) - di_prev(4) * ac(3, idx)
+        
+        ! 存储结果
+        df(i, 1) = di_curr(1)
+        df(i, 2) = di_curr(2)
+        df(i, 3) = di_curr(3)
+        df(i, 4) = di_curr(4)
+        
+        ! 更新前一个值
+        di_prev(1:4) = di_curr(1:4)
+    end do
+    
+    ! 最后一个点：i = dim+1
+    idx = (dim + 1) - first_node + 1
+    
+    di_curr(1) = d_plus1(1) * ac(2, idx) - di_prev(1) * ac(3, idx)
+    di_curr(2) = d_plus1(2) * ac(2, idx) - di_prev(2) * ac(3, idx)
+    di_curr(3) = d_plus1(3) * ac(2, idx) - di_prev(3) * ac(3, idx)
+    di_curr(4) = d_plus1(4) * ac(2, idx) - di_prev(4) * ac(3, idx)
+    
+    d_plus1(1:4) = di_curr(1:4)
+    
+    ! 后向替换
+    xi_next(1:4) = d_plus1(1:4)
+    
+    do i = dim, 0, -1
+        idx = i - first_node + 1
+        
+        ! 批量计算4个物理量
+        xi_curr(1) = df(i, 1) - ac(1, idx) * xi_next(1)
+        xi_curr(2) = df(i, 2) - ac(1, idx) * xi_next(2)
+        xi_curr(3) = df(i, 3) - ac(1, idx) * xi_next(3)
+        xi_curr(4) = df(i, 4) - ac(1, idx) * xi_next(4)
+        
+        ! 存储结果
+        df(i, 1) = xi_curr(1)
+        df(i, 2) = xi_curr(2)
+        df(i, 3) = xi_curr(3)
+        df(i, 4) = xi_curr(4)
+        
+        ! 更新下一个值
+        xi_next(1:4) = xi_curr(1:4)
+    end do
+
+   end function df_compact_batch_4_gpu
+   
+   attributes(device) function df_compact_batch_5_gpu(first_node, last_node, nbctype, ac, ff, dim) result(df)
+    use constdef
+    use commvar, only: hm
+    
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: ff(-hm:dim+hm, 5)  ! 5个物理量
+    real(8), device, intent(in) :: ac(:, :)
+    real(8), device :: df(0:dim, 5)  ! 输出导数
+    
+    ! 局部变量
+    integer :: i_0, i_m, i_s, i_e, i, idx, ivar
+    real(8) :: var1, var2, var3
+    real(8) :: d_minus1(5), d_plus1(5)
+    real(8) :: di_prev(5), di_curr(5), xi_next(5), xi_curr(5)
+    
+    ! 初始化
+    i_0 = first_node
+    i_m = last_node
+    i_s = i_0 + 1  ! = 0
+    i_e = i_m - 1  ! = dim
+    
+    ! ============================================
+    ! 批量计算右端项
+    ! ============================================
+    
+    ! 左边界点：i = -1
+    do ivar = 1, 5
+        d_minus1(ivar) = 0.75d0*(ff(0, ivar) - ff(-2, ivar)) - &
+                         0.15d0*(ff(1, ivar) - ff(-3, ivar)) + &
+                         num1d60*(ff(2, ivar) - ff(-4, ivar))
+    end do
+    
+    ! 右边界点：i = dim+1
+    do ivar = 1, 5
+        d_plus1(ivar) = 0.75d0*(ff(dim+2, ivar) - ff(dim, ivar)) - &
+                        0.15d0*(ff(dim+3, ivar) - ff(dim-1, ivar)) + &
+                        num1d60*(ff(dim+4, ivar) - ff(dim-2, ivar))
+    end do
+    
+    ! 内部点：批量计算
+    do ivar = 1, 5
+        do i = 0, dim
+            df(i, ivar) = num7d9*(ff(i+1, ivar) - ff(i-1, ivar)) + &
+                          num1d36*(ff(i+2, ivar) - ff(i-2, ivar))
+        end do
+    end do
+    
+    ! ============================================
+    ! 批量Thomas算法
+    ! ============================================
+    
+    ! 前向消元
+    di_prev(1:5) = d_minus1(1:5)
+    
+    do i = 0, dim
+        idx = i - first_node + 1
+        
+        ! 批量计算5个物理量
+        di_curr(1) = df(i, 1) * ac(2, idx) - di_prev(1) * ac(3, idx)
+        di_curr(2) = df(i, 2) * ac(2, idx) - di_prev(2) * ac(3, idx)
+        di_curr(3) = df(i, 3) * ac(2, idx) - di_prev(3) * ac(3, idx)
+        di_curr(4) = df(i, 4) * ac(2, idx) - di_prev(4) * ac(3, idx)
+        di_curr(5) = df(i, 5) * ac(2, idx) - di_prev(5) * ac(3, idx)
+        
+        ! 存储结果
+        df(i, 1) = di_curr(1)
+        df(i, 2) = di_curr(2)
+        df(i, 3) = di_curr(3)
+        df(i, 4) = di_curr(4)
+        df(i, 5) = di_curr(5)
+        
+        ! 更新前一个值
+        di_prev(1:5) = di_curr(1:5)
+    end do
+    
+    ! 最后一个点：i = dim+1
+    idx = (dim + 1) - first_node + 1
+    
+    di_curr(1) = d_plus1(1) * ac(2, idx) - di_prev(1) * ac(3, idx)
+    di_curr(2) = d_plus1(2) * ac(2, idx) - di_prev(2) * ac(3, idx)
+    di_curr(3) = d_plus1(3) * ac(2, idx) - di_prev(3) * ac(3, idx)
+    di_curr(4) = d_plus1(4) * ac(2, idx) - di_prev(4) * ac(3, idx)
+    di_curr(5) = d_plus1(5) * ac(2, idx) - di_prev(5) * ac(3, idx)
+    
+    d_plus1(1:5) = di_curr(1:5)
+    
+    ! 后向替换
+    xi_next(1:5) = d_plus1(1:5)
+    
+    do i = dim, 0, -1
+        idx = i - first_node + 1
+        
+        ! 批量计算5个物理量
+        xi_curr(1) = df(i, 1) - ac(1, idx) * xi_next(1)
+        xi_curr(2) = df(i, 2) - ac(1, idx) * xi_next(2)
+        xi_curr(3) = df(i, 3) - ac(1, idx) * xi_next(3)
+        xi_curr(4) = df(i, 4) - ac(1, idx) * xi_next(4)
+        xi_curr(5) = df(i, 5) - ac(1, idx) * xi_next(5)
+        
+        ! 存储结果
+        df(i, 1) = xi_curr(1)
+        df(i, 2) = xi_curr(2)
+        df(i, 3) = xi_curr(3)
+        df(i, 4) = xi_curr(4)
+        df(i, 5) = xi_curr(5)
+        
+        ! 更新下一个值
+        xi_next(1:5) = xi_curr(1:5)
+    end do
+    
+   end function df_compact_batch_5_gpu
 end module derivative_gpu

@@ -443,7 +443,277 @@ contains
         ff(dim) = f(dim)
     end select
     
-end function compact_filter_gpu
+   end function compact_filter_gpu
+
+   attributes(device) function compact_filter_batch_5_gpu(first_node, last_node, nbctype, ac, f, dim) result(ff)
+    use constdef
+    use commvar, only: hm
+    
+    integer, intent(in) :: first_node, last_node, nbctype, dim
+    real(8), device, intent(in) :: f(-hm:dim+hm, 5)  ! 输入：5个物理量
+    real(8), device, intent(in) :: ac(:, :)          ! ac(1:3, 1:n)
+    real(8), device :: ff(0:dim, 5)                  ! 输出：滤波结果
+    
+    ! 局部变量
+    integer :: i_0, i_m, i_s, i_e, i, idx, ivar
+    real(8) :: var0, var1, var2, var3, var4, var5
+    
+    ! 滑动窗口变量 - 为5个物理量声明
+    real(8) :: f_m5(5), f_m4(5), f_m3(5), f_m2(5), f_m1(5)
+    real(8) :: f_0(5)
+    real(8) :: f_p1(5), f_p2(5), f_p3(5), f_p4(5), f_p5(5)
+    
+    ! 边界点存储 - 为5个物理量声明
+    real(8) :: d_minus3(5), d_minus2(5), d_minus1(5)
+    real(8) :: d_plus1(5), d_plus2(5), d_plus3(5)
+    
+    ! Thomas算法变量 - 为5个物理量声明
+    real(8) :: di_prev(5), di_curr(5), xi_next(5), xi_curr(5)
+    
+    ! 初始化
+    i_0 = first_node
+    i_m = last_node
+    i_s = i_0 + 3  ! = 0
+    i_e = i_m - 3  ! = dim
+    
+    ! ============================================
+    ! 第一部分：批量计算右端项（5个物理量）
+    ! ============================================
+    
+    ! 左边界点：i = -3, -2, -1
+    do ivar = 1, 5
+        ! i = -3
+        var0 = 0.d0
+        do idx = 0, 10
+            var0 = var0 + coefh_d(0, idx) * f(i_0 - 2 + idx, ivar)
+        end do
+        d_minus3(ivar) = var0
+        
+        ! i = -2
+        var0 = 0.d0
+        do idx = 0, 10
+            var0 = var0 + coefh_d(1, idx) * f(i_0 - 2 + idx, ivar)
+        end do
+        d_minus2(ivar) = var0
+        
+        ! i = -1
+        var0 = 0.d0
+        do idx = 0, 10
+            var0 = var0 + coefh_d(2, idx) * f(i_0 - 2 + idx, ivar)
+        end do
+        d_minus1(ivar) = var0
+    end do
+    
+    ! 右边界点：i = dim+1, dim+2, dim+3
+    do ivar = 1, 5
+        ! i = dim+1
+        var0 = 0.d0
+        do idx = 0, 10
+            var0 = var0 + coefh_d(2, idx) * f(i_m + 2 - idx, ivar)
+        end do
+        d_plus1(ivar) = var0
+        
+        ! i = dim+2
+        var0 = 0.d0
+        do idx = 0, 10
+            var0 = var0 + coefh_d(1, idx) * f(i_m + 2 - idx, ivar)
+        end do
+        d_plus2(ivar) = var0
+        
+        ! i = dim+3
+        var0 = 0.d0
+        do idx = 0, 10
+            var0 = var0 + coefh_d(0, idx) * f(i_m + 2 - idx, ivar)
+        end do
+        d_plus3(ivar) = var0
+    end do
+    
+    ! 内部点：批量计算到 ff 数组
+    if (i_s <= i_e) then
+        ! 预加载滑动窗口
+        do ivar = 1, 5
+            f_m5(ivar) = f(-5, ivar)
+            f_m4(ivar) = f(-4, ivar)
+            f_m3(ivar) = f(-3, ivar)
+            f_m2(ivar) = f(-2, ivar)
+            f_m1(ivar) = f(-1, ivar)
+            f_0(ivar)  = f(0, ivar)
+            f_p1(ivar) = f(1, ivar)
+            f_p2(ivar) = f(2, ivar)
+            f_p3(ivar) = f(3, ivar)
+            f_p4(ivar) = f(4, ivar)
+            f_p5(ivar) = f(5, ivar)
+        end do
+        
+        do i = i_s, i_e  ! i = 0 到 dim
+            ! 批量计算5个物理量
+            do ivar = 1, 5
+                var0 = f_0(ivar)  + f_0(ivar)
+                var1 = f_p1(ivar) + f_m1(ivar)
+                var2 = f_p2(ivar) + f_m2(ivar)
+                var3 = f_p3(ivar) + f_m3(ivar)
+                var4 = f_p4(ivar) + f_m4(ivar)
+                var5 = f_p5(ivar) + f_m5(ivar)
+                
+                ff(i, ivar) = coef10i_d(0)*var0 + coef10i_d(1)*var1 + &
+                              coef10i_d(2)*var2 + coef10i_d(3)*var3 + &
+                              coef10i_d(4)*var4 + coef10i_d(5)*var5
+            end do
+            
+            ! 滑动窗口更新
+            do ivar = 1, 5
+                f_m5(ivar) = f_m4(ivar)
+                f_m4(ivar) = f_m3(ivar)
+                f_m3(ivar) = f_m2(ivar)
+                f_m2(ivar) = f_m1(ivar)
+                f_m1(ivar) = f_0(ivar)
+                f_0(ivar)  = f_p1(ivar)
+                f_p1(ivar) = f_p2(ivar)
+                f_p2(ivar) = f_p3(ivar)
+                f_p3(ivar) = f_p4(ivar)
+                f_p4(ivar) = f_p5(ivar)
+                if (i < i_e) then
+                    f_p5(ivar) = f(i+6, ivar)
+                end if
+            end do
+        end do
+    end if
+    
+    ! ============================================
+    ! 第二部分：批量Thomas算法（5个物理量）
+    ! ============================================
+    
+    ! 前向消元
+    ! 从 i = -3 开始
+    do ivar = 1, 5
+        di_prev(ivar) = d_minus3(ivar)
+    end do
+    
+    ! i = -2
+    idx = (-2) - first_node + 1  ! 2
+    do ivar = 1, 5
+        di_curr(ivar) = d_minus2(ivar) * ac(2, idx) - di_prev(ivar) * ac(3, idx)
+        d_minus2(ivar) = di_curr(ivar)
+        di_prev(ivar) = di_curr(ivar)
+    end do
+    
+    ! i = -1
+    idx = (-1) - first_node + 1  ! 3
+    do ivar = 1, 5
+        di_curr(ivar) = d_minus1(ivar) * ac(2, idx) - di_prev(ivar) * ac(3, idx)
+        d_minus1(ivar) = di_curr(ivar)
+        di_prev(ivar) = di_curr(ivar)
+    end do
+    
+    ! i = 0 到 dim
+    do i = 0, dim
+        idx = i - first_node + 1  ! i+4
+        do ivar = 1, 5
+            di_curr(ivar) = ff(i, ivar) * ac(2, idx) - di_prev(ivar) * ac(3, idx)
+            ff(i, ivar) = di_curr(ivar)
+            di_prev(ivar) = di_curr(ivar)
+        end do
+    end do
+    
+    ! i = dim+1
+    idx = (dim+1) - first_node + 1  ! dim+5
+    do ivar = 1, 5
+        di_curr(ivar) = d_plus1(ivar) * ac(2, idx) - di_prev(ivar) * ac(3, idx)
+        d_plus1(ivar) = di_curr(ivar)
+        di_prev(ivar) = di_curr(ivar)
+    end do
+    
+    ! i = dim+2
+    idx = (dim+2) - first_node + 1  ! dim+6
+    do ivar = 1, 5
+        di_curr(ivar) = d_plus2(ivar) * ac(2, idx) - di_prev(ivar) * ac(3, idx)
+        d_plus2(ivar) = di_curr(ivar)
+        di_prev(ivar) = di_curr(ivar)
+    end do
+    
+    ! i = dim+3
+    idx = (dim+3) - first_node + 1  ! dim+7
+    do ivar = 1, 5
+        di_curr(ivar) = d_plus3(ivar) * ac(2, idx) - di_prev(ivar) * ac(3, idx)
+        d_plus3(ivar) = di_curr(ivar)
+    end do
+    
+    ! 后向替换
+    ! 从 i = dim+3 开始
+    do ivar = 1, 5
+        xi_next(ivar) = d_plus3(ivar)
+    end do
+    
+    ! i = dim+2
+    idx = (dim+2) - first_node + 1  ! dim+6
+    do ivar = 1, 5
+        xi_curr(ivar) = d_plus2(ivar) - ac(1, idx) * xi_next(ivar)
+        d_plus2(ivar) = xi_curr(ivar)
+        xi_next(ivar) = xi_curr(ivar)
+    end do
+    
+    ! i = dim+1
+    idx = (dim+1) - first_node + 1  ! dim+5
+    do ivar = 1, 5
+        xi_curr(ivar) = d_plus1(ivar) - ac(1, idx) * xi_next(ivar)
+        d_plus1(ivar) = xi_curr(ivar)
+        xi_next(ivar) = xi_curr(ivar)
+    end do
+    
+    ! i = dim 到 0
+    do i = dim, 0, -1
+        idx = i - first_node + 1  ! i+4
+        do ivar = 1, 5
+            xi_curr(ivar) = ff(i, ivar) - ac(1, idx) * xi_next(ivar)
+            ff(i, ivar) = xi_curr(ivar)
+            xi_next(ivar) = xi_curr(ivar)
+        end do
+    end do
+    
+    ! i = -1
+    idx = (-1) - first_node + 1  ! 3
+    do ivar = 1, 5
+        xi_curr(ivar) = d_minus1(ivar) - ac(1, idx) * xi_next(ivar)
+        d_minus1(ivar) = xi_curr(ivar)
+        xi_next(ivar) = xi_curr(ivar)
+    end do
+    
+    ! i = -2
+    idx = (-2) - first_node + 1  ! 2
+    do ivar = 1, 5
+        xi_curr(ivar) = d_minus2(ivar) - ac(1, idx) * xi_next(ivar)
+        d_minus2(ivar) = xi_curr(ivar)
+        xi_next(ivar) = xi_curr(ivar)
+    end do
+    
+    ! i = -3
+    idx = (-3) - first_node + 1  ! 1
+    do ivar = 1, 5
+        xi_curr(ivar) = d_minus3(ivar) - ac(1, idx) * xi_next(ivar)
+        d_minus3(ivar) = xi_curr(ivar)
+    end do
+    
+    ! ============================================
+    ! 第三部分：批量边界条件处理
+    ! ============================================
+    
+    select case(nbctype)
+    case(1)
+        do ivar = 1, 5
+            ff(0, ivar) = f(0, ivar)
+        end do
+    case(2)
+        do ivar = 1, 5
+            ff(dim, ivar) = f(dim, ivar)
+        end do
+    case(4)
+        do ivar = 1, 5
+            ff(0, ivar) = f(0, ivar)
+            ff(dim, ivar) = f(dim, ivar)
+        end do
+    end select
+    
+end function compact_filter_batch_5_gpu
 
    !call copy_coeff_to_gpu after filter_coefficient_cal and filter_coefficient_explicit
    subroutine copy_coeff_to_gpu_cal()
