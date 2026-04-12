@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=100
+        maxstep=10
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -948,7 +948,7 @@ module mainloop
     use commarray
     use vtkio
 
-    integer, parameter :: nout = 5
+    integer, parameter :: nout = 10000
     character(len=100) :: filename
     character(len=20)  :: step_str
 
@@ -1109,9 +1109,12 @@ program boxsolver
 
     implicit none
     !
-    real :: tstart,tfinish
+    integer(8) :: tstart_rate, tstart_count, tend_count
+    real :: elapsed_time
+
     !
-    call cpu_time(tstart)
+    call system_clock(count_rate=tstart_rate)
+    call system_clock(count=tstart_count)
     
     call program_init
 
@@ -1122,11 +1125,11 @@ program boxsolver
     call flowfield_init
 
     call steploop
-    
-    call cpu_time(tfinish)
     !
+    call system_clock(count=tend_count)
+    elapsed_time = real(tend_count - tstart_count) / real(tstart_rate)
     !
-    print *, ' ** total CPU time: ', tfinish - tstart, ' seconds **'
+    print *, ' ** total time: ', elapsed_time, ' seconds **'
     !
     print *,' ** the job is done **'
     !
