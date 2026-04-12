@@ -6,6 +6,7 @@
 *.xdmf
 *.mod
 *.o
+*.vtk
 bin/
 obj/
 solid_in.stl

@@ -80,3 +80,30 @@ compute-sanitizer --tool memcheck ./tgvsolver
 nvfortran -O3 -Kieee -I. tgvsolver.F90 \
     commtype.o commvar.o constdef.o commfunc.o  singleton.o filter.o derivative.o\
     -o tgvsolver
+
+
+
+#带流场输出的正常运行
+nvfortran -O3 -Kieee -c commtype.F90 commvar.F90 constdef.F90 commfunc.F90  singleton.F90 filter.F90 derivative.F90 vtkio.F90
+
+nvfortran -O3 -gpu=cc89 -Kieee -c commarray_gpu.cuf commvar_gpu.cuf commfunc_gpu.cuf fludyna_gpu.cuf bc_gpu.cuf filter_gpu.cuf derivative_gpu.cuf solver_gpu.cuf
+
+nvfortran -O3 -gpu=cc89 -Kieee -I. tgvsolver.cuf \
+    commtype.o commvar.o constdef.o commfunc.o  singleton.o filter.o derivative.o vtkio.o\
+    commarray_gpu.o commvar_gpu.o commfunc_gpu.o fludyna_gpu.o bc_gpu.o filter_gpu.o derivative_gpu.o solver_gpu.o\
+    -o tgvsolver
+
+./tgvsolver
+    
+#end带流场输出的正常运行
+
+#带流场输出的正常运行
+nvfortran -O3 -Kieee -c commtype.F90 commvar.F90 constdef.F90 commfunc.F90  singleton.F90 filter.F90 derivative.F90 vtkio.F90
+
+nvfortran -O3 -Kieee -I. tgvsolver.F90 \
+    commtype.o commvar.o constdef.o commfunc.o  singleton.o filter.o derivative.o vtkio.o\
+    -o tgvsolver
+
+./tgvsolver
+    
+#end带流场输出的正常运行
