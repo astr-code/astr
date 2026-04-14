@@ -107,3 +107,11 @@ nvfortran -O3 -Kieee -I. tgvsolver.F90 \
 ./tgvsolver
     
 #end带流场输出的正常运行
+
+
+#误差场输出
+nvfortran -g -O0 -c  vtkio.F90
+nvfortran -g -O0 -I. compare_outputs.F90 \
+    vtkio.o\
+    -o compare_outputs
+./compare_outputs
