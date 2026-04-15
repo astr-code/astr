@@ -1,0 +1,718 @@
+module commarray
+
+  implicit none
+
+  real(8) :: dx,dy,dz
+
+  real(8),allocatable,dimension(:,:,:,:,:) :: dvel
+  real(8),allocatable,dimension(:,:,:,:) :: q,qrhs,vel,dtmp
+  real(8),allocatable,dimension(:,:,:) :: rho,prs,tmp
+
+  contains
+
+  subroutine allocommarray
+
+    use commvar, only : im,jm,km,hm,numq
+
+    ! local data
+    integer :: lallo
+
+    allocate( q(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:numq),stat=lallo)
+
+    allocate( rho(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+
+    allocate( prs(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+
+    allocate( tmp(-hm:im+hm,-hm:jm+hm,-hm:km+hm),stat=lallo)
+
+    allocate( vel(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3),stat=lallo)
+
+    allocate(qrhs(0:im,0:jm,0:km,1:numq),stat=lallo)
+
+    allocate(dvel(0:im,0:jm,0:km,1:3,1:3),stat=lallo)
+
+    allocate(dtmp(0:im,0:jm,0:km,1:3),stat=lallo)
+
+    print*,' ** global arrays allocated'
+
+  end subroutine allocommarray
+
+end module commarray
+
+module fludyna
+
+    implicit none
+
+    contains
+
+    subroutine fvar2q(q,density,velocity,pressure,temperature)
+
+        use commvar, only: const1,const6
+        !
+        real(8),intent(in) :: density,velocity(:)
+        real(8),intent(in),optional :: pressure,temperature
+        real(8),intent(out) :: q(:)
+        !
+        ! local data
+        real(8) :: var1
+        !
+        q(1)=density
+        q(2)=density*velocity(1)
+        q(3)=density*velocity(2)
+        q(4)=density*velocity(3)
+        
+        var1=0.5d0*sum(velocity(:)*velocity(:))
+        if(present(temperature)) then
+          q(5)=density*(temperature*const1+var1)
+        elseif(present(pressure)) then
+          q(5)=pressure*const6+density*var1
+        endif
+
+  end subroutine fvar2q
+
+  function thermal_scar(density,pressure,temperature,species) result(vout)
+
+      use commvar,only : const2,rgas
+      !
+      ! arguments
+      real(8) :: vout
+      real(8),intent(in) ,optional :: density,pressure,temperature,species(:)
+      !
+      real(8) :: rloc
+
+      if(present(density) .and. present(temperature)) then
+        vout=density*temperature/const2
+      elseif(present(density) .and. present(pressure)) then
+        vout=pressure/density*const2
+      elseif(present(temperature) .and. present(pressure)) then
+        vout=pressure/temperature*const2
+      endif
+  end function thermal_scar
+
+  subroutine q2fvar(q,density,velocity,pressure,temperature)
+    !
+    use commvar, only: const6
+    !
+    real(8),intent(in) :: q(:)
+    real(8),intent(out) :: density
+    real(8),intent(out),optional :: velocity(:),pressure,temperature
+    !
+    ! local data
+    integer :: jspec
+    real(8) :: var1
+    !
+    density   =q(1)
+    !
+    if(present(velocity) .or. present(pressure) .or. present(temperature)) then
+      velocity(1)=q(2)/density
+      velocity(2)=q(3)/density
+      velocity(3)=q(4)/density
+    endif
+
+    if(present(pressure) .or. present(temperature)) then
+      pressure  =( q(5)-0.5d0*density*(velocity(1)**2+velocity(2)**2+    &
+                                       velocity(3)**2) )/const6
+    endif
+    !
+    if(present(temperature)) then
+      temperature=thermal_scar(pressure=pressure,density=density)
+    endif
+
+  end subroutine q2fvar
+
+  pure real(8) function miucal(temper)
+    !
+    use commvar, only :  ref_tem
+    !
+    real(8),intent(in) :: temper
+    ! temper represent temperature, dimensionless
+    ! below calculate miucal using sutherland's law
+    !
+    real(8) :: tempconst,tempconst1
+    ! 
+    tempconst=110.4d0/ref_tem
+    tempconst1=1.d0+tempconst
+    !
+    miucal=temper*sqrt(temper)*tempconst1/(temper+tempconst)
+    !
+    return
+    !
+  end function miucal
+
+end module fludyna
+
+module initilise
+    
+    implicit none
+
+    integer :: maxstep
+
+    contains
+
+    subroutine program_init
+
+        use commvar, only : im,jm,km,hm,numq,difschm,alfa_filter
+
+        numq=5
+
+        im=256
+        jm=256
+        km=256
+
+        difschm='643c'
+
+        alfa_filter=0.49d0
+
+        maxstep=10
+
+        write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
+
+    end subroutine program_init
+
+    subroutine flowfield_init
+
+        use constdef
+        use commvar, only: im,jm,km,gamma,mach,reynolds,prandtl,ref_tem, &
+                           const1,const2,const3,const4,const5,const6,const7,time,deltat,nstep
+        use commarray, only: rho,prs,tmp,q,vel,dx,dy,dz,qrhs
+        use fludyna,   only: thermal_scar,fvar2q
+        !
+        integer :: i,j,k
+        real(8) :: var1,pinf,x1,x2,x3
+        !
+        ref_tem=273.15d0
+        gamma=1.4d0
+        mach =0.1d0
+        reynolds=1600.d0
+        prandtl=0.72d0
+        !
+        const1=1.d0/(gamma*(gamma-1.d0)*mach**2)
+        const2=gamma*mach**2
+        const3=(gamma-1.d0)/3.d0*prandtl*(mach**2)
+        const4=(gamma-1.d0)*mach**2*reynolds*prandtl
+        const5=(gamma-1.d0)*mach**2
+        const6=1.d0/(gamma-1.d0)
+        const7=(gamma-1.d0)*mach**2*Reynolds*prandtl
+        !
+        pinf=1.d0/const2
+        !
+        dx=2.d0*pi/dble(im)
+        dy=2.d0*pi/dble(jm)
+        dz=2.d0*pi/dble(km)
+        !
+        var1=0.d0
+        do k=0,km
+        do j=0,jm
+        do i=0,im
+          !
+          x1  =2.d0*pi/dble(im)*dble(i)
+          x2  =2.d0*pi/dble(jm)*dble(j)
+          x3  =2.d0*pi/dble(km)*dble(k)
+          !
+          rho(i,j,k)  =1.d0
+          vel(i,j,k,1)= sin(x1)*cos(x2)*cos(x3)
+          vel(i,j,k,2)=-cos(x1)*sin(x2)*cos(x3)
+          vel(i,j,k,3)=0.d0
+          prs(i,j,k)  =pinf+1.d0/16.d0*(cos(2.d0*x1)+cos(2.d0*x2))*(cos(2.d0*x3)+2.d0)
+          !
+          tmp(i,j,k)  =thermal_scar(density=rho(i,j,k),pressure=prs(i,j,k))
+          !
+          call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),velocity=vel(i,j,k,:),pressure=prs(i,j,k))
+          !
+        enddo
+        enddo
+        enddo
+
+        nstep=0
+
+        time =0.d0
+
+        deltat=1.d-3
+
+        print*,' ** flow field initilised'
+
+    end subroutine flowfield_init
+
+    subroutine solver_init
+
+        use commvar, only : difschm,im,jm,km,alfa_filter
+        use derivative, only : fd_scheme_initiate,fds_compact_i,fds_compact_j, &
+                               fds_compact_k,explicit_central,compact_central,fds
+        use filter,     only : compact_filter_initiate,filter_coefficient_cal, &
+                               filter_i,filter_j,filter_k,filter_ii,filter_jj, &
+                               filter_kk
+        use derivative_gpu
+
+        call fd_scheme_initiate(asolver=fds_compact_i,scheme=difschm,ntype=3,dim=im,dir=1)
+        call fd_scheme_initiate(asolver=fds_compact_j,scheme=difschm,ntype=3,dim=jm,dir=2)
+        call fd_scheme_initiate(asolver=fds_compact_k,scheme=difschm,ntype=3,dim=km,dir=3)
+
+        allocate(compact_central :: fds)
+        df_scheme_type = COMPACT
+
+        print*,' ** finite-difference solver initilised'
+
+        call filter_coefficient_cal(alfa=alfa_filter,beter_halo=1.11d0,beter_bouond=1.09d0)
+  
+        call compact_filter_initiate(afilter=filter_i,ntype=3,dim=im)
+        call compact_filter_initiate(afilter=filter_j,ntype=3,dim=jm)
+        call compact_filter_initiate(afilter=filter_k,ntype=3,dim=km)
+
+        print*,' ** low-pass filter initilised'
+
+    end subroutine solver_init
+
+end module initilise
+
+module bc
+
+    implicit none
+
+    contains
+
+    subroutine bchomo
+        !
+        use commvar, only: im,jm,km,hm
+        use commarray, only: rho,prs,tmp,vel,q
+        use fludyna,  only: fvar2q
+        !
+        integer :: i,j,k
+        !
+        ! b.c. at the i direction
+        do k=0,km
+        do j=0,jm
+          !
+          do i=-hm,-1
+            rho(i,j,k)  =rho(im+i,j,k)
+            vel(i,j,k,:)=vel(im+i,j,k,:)
+            tmp(i,j,k)  =tmp(im+i,j,k)
+            prs(i,j,k)  =prs(im+i,j,k)
+            !
+            call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),   &
+                                    velocity=vel(i,j,k,:), &
+                                    pressure=prs(i,j,k))
+          enddo
+          !
+          do i=im+1,im+hm
+            rho(i,j,k)  =rho(i-im,j,k)
+            vel(i,j,k,:)=vel(i-im,j,k,:)
+            tmp(i,j,k)  =tmp(i-im,j,k)
+            prs(i,j,k)  =prs(i-im,j,k)
+            !
+            call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),   &
+                                    velocity=vel(i,j,k,:), &
+                                    pressure=prs(i,j,k))
+          enddo
+          !
+        enddo
+        enddo
+        ! end of applying b.c. along i direction
+        !
+        ! b.c. at the j direction
+        do k=0,km
+        do i=0,im
+          !
+          do j=-hm,-1
+            rho(i,j,k)  =rho(i,jm+j,k)
+            vel(i,j,k,:)=vel(i,jm+j,k,:)
+            tmp(i,j,k)  =tmp(i,jm+j,k)
+            prs(i,j,k)  =prs(i,jm+j,k)
+            !
+            call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),   &
+                                    velocity=vel(i,j,k,:), &
+                                    pressure=prs(i,j,k))
+          enddo
+          !
+          do j=jm+1,jm+hm
+            rho(i,j,k)  =rho(i,j-jm,k)
+            vel(i,j,k,:)=vel(i,j-jm,k,:)
+            tmp(i,j,k)  =tmp(i,j-jm,k)
+            prs(i,j,k)  =prs(i,j-jm,k)
+            !
+            call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),   &
+                                    velocity=vel(i,j,k,:), &
+                                    pressure=prs(i,j,k))
+          enddo
+          !
+        enddo
+        enddo
+        ! end of applying b.c. along j direction
+        !
+        ! b.c. at the k direction
+        do j=0,jm
+        do i=0,im
+          !
+          do k=-hm,-1
+            rho(i,j,k)  =rho(i,j,km+k)
+            vel(i,j,k,:)=vel(i,j,km+k,:)
+            tmp(i,j,k)  =tmp(i,j,km+k)
+            prs(i,j,k)  =prs(i,j,km+k)
+            !
+            call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),   &
+                                   velocity=vel(i,j,k,:), &
+                                   pressure=prs(i,j,k))
+          enddo
+          !
+          do k=km+1,km+hm
+            rho(i,j,k)  =rho(i,j,k-km)
+            vel(i,j,k,:)=vel(i,j,k-km,:)
+            tmp(i,j,k)  =tmp(i,j,k-km)
+            prs(i,j,k)  =prs(i,j,k-km)
+            !
+            call fvar2q(q=q(i,j,k,:),density=rho(i,j,k),   &
+                                    velocity=vel(i,j,k,:), &
+                                    pressure=prs(i,j,k))
+          enddo
+          !
+        enddo
+        enddo
+        ! end of applying b.c. along k direction
+        !
+    end subroutine bchomo
+    !
+    subroutine bchomovec(var,dir)
+      !
+      use commvar, only: im,jm,km,hm
+      !
+      real(8),intent(inout) :: var(-hm:,-hm:,-hm:,1:)
+      integer,intent(in),optional :: dir
+      !
+      integer :: i,j,k,n,ndir
+      
+      if(present(dir)) then
+        ndir=dir
+      else
+        ndir=0
+      endif
+      
+      if(ndir==1 .or. ndir==0) then
+        ! b.c. at the i direction
+        do k=0,km
+        do j=0,jm
+          !
+          do i=-hm,-1
+            var(i,j,k,:)  =var(im+i,j,k,:)
+          enddo
+          !
+          do i=im+1,im+hm
+            var(i,j,k,:)=var(i-im,j,k,:)
+          enddo
+          !
+        enddo
+        enddo
+        ! end of applying b.c. along i direction
+      endif
+      !
+      if(ndir==2 .or. ndir==0) then
+        ! b.c. at the j direction
+        do k=0,km
+        do i=0,im
+          !
+          do j=-hm,-1
+            var(i,j,k,:)=var(i,jm+j,k,:)
+          enddo
+          !
+          do j=jm+1,jm+hm
+            var(i,j,k,:)=var(i,j-jm,k,:)
+          enddo
+          !
+        enddo
+        enddo
+        ! end of applying b.c. along j direction
+      endif
+      !
+      if(ndir==3 .or. ndir==0) then
+        ! b.c. at the k direction
+        do j=0,jm
+        do i=0,im
+          !
+          do k=-hm,-1
+            var(i,j,k,:)=var(i,j,km+k,:)
+          enddo
+          !
+          do k=km+1,km+hm
+            var(i,j,k,:)=var(i,j,k-km,:)
+          enddo
+          !
+        enddo
+        enddo
+        ! end of applying b.c. along k direction
+      endif
+      !
+    end subroutine bchomovec
+
+end module
+
+
+module mainloop
+
+  implicit none
+
+  contains
+
+  subroutine stacal
+    !
+    use commvar, only: im,jm,km,nstep,time
+    use commarray_gpu, only: rho_d,vel_d,dvel_d
+    !
+    integer :: i,j,k
+    real(8) :: tke,rhom,enst
+    real(8), device:: omega(3)
+    !
+    logical,save :: firstcall = .true.
+    integer,save :: filehand
+    !
+    if(firstcall) then
+      filehand=13
+      open(filehand,file='state.dat')
+      firstcall=.false.
+    endif
+    !
+    rhom=0.d0
+    tke =0.d0
+    enst=0.d0
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=1,km
+    do j=1,jm
+    do i=1,im
+      ! 
+      rhom=rhom+rho_d(i,j,k)
+      !
+      tke=tke+rho_d(i,j,k)*(vel_d(i,j,k,1)**2+vel_d(i,j,k,2)**2+vel_d(i,j,k,3)**2)
+      !
+      omega(1)=dvel_d(i,j,k,3,2)-dvel_d(i,j,k,2,3)
+      omega(2)=dvel_d(i,j,k,1,3)-dvel_d(i,j,k,3,1)
+      omega(3)=dvel_d(i,j,k,2,1)-dvel_d(i,j,k,1,2)
+      !
+      enst=enst+rho_d(i,j,k)*(omega(1)**2+omega(2)**2+omega(3)**2)
+      !
+    enddo
+    enddo
+    enddo
+    rhom=rhom/dble(im*jm*km)
+    tke =0.5d0*tke/dble(im*jm*km)
+    enst=0.5d0*enst/dble(im*jm*km)
+    !
+    ! print*,' ** rho=',rhom,', tke=',tke,', enstrophy=',enst
+    !
+    write(filehand,*)nstep,time,tke,enst
+    !
+    if(mod(nstep,10)==0) flush(filehand)
+    !
+  end subroutine stacal
+
+  subroutine steploop
+
+    use commvar, only: time,nstep,deltat,ctime
+    use initilise, only: maxstep
+    use commvar_gpu
+    use commarray_gpu
+    use vtkio
+    integer, parameter :: nout = 10000
+    character(len=100) :: filename
+    character(len=20)  :: step_str
+
+    call copy_commvar_to_gpu
+    call commarray_gpu_h2d
+    
+    do while(nstep<maxstep)
+
+      call rk3
+
+      nstep=nstep+1
+      time =time + deltat
+
+      !=====vtk流场输出=====
+      if (mod(nstep, nout) == 0) then
+        rho=rho_d
+        vel=vel_d
+        prs=prs_d
+        tmp=tmp_d
+
+        ! ===== 生成带编号文件名 =====
+        write(step_str, '(I6.6)') nstep   ! 6位，不足补0
+
+        filename = 'flow_' // trim(step_str) // '.vtk'
+
+        call write_vtk_binary(filename, rho, vel, prs, tmp)
+        print *, 'Saved vtk file: ', trim(filename)
+      endif
+
+
+      print*,nstep,time
+
+    enddo
+
+  end subroutine steploop
+
+  subroutine rk3(comptime)
+    
+    use constdef
+    use commvar, only: im,jm,km,numq,deltat,nstep,ctime
+    use commarray
+    use fludyna_gpu,  only: q2fvar_gpu
+    use bc_gpu, only: bchomo_gpu
+    use solver_gpu
+    use commarray_gpu
+    !
+    real,intent(inout),optional :: comptime
+    
+    ! local data
+    logical,save :: firstcall = .true.
+    real(8),save :: rkcoe(3,3)
+    real(8),allocatable,save :: qsave(:,:,:,:)
+    real(8), device, allocatable,save :: qsave_d(:,:,:,:)
+    integer :: rkstep,i,j,k,m
+    !
+    real :: tstart,tfinish
+
+    if(present(comptime)) then
+        call cpu_time(tstart)
+    endif
+    !
+    if(firstcall) then
+      !
+      rkcoe(1,1)=1.d0
+      rkcoe(2,1)=0.d0
+      rkcoe(3,1)=1.d0
+      !
+      rkcoe(1,2)=0.75d0
+      rkcoe(2,2)=0.25d0
+      rkcoe(3,2)=0.25d0
+      !
+      rkcoe(1,3)=num1d3
+      rkcoe(2,3)=num2d3
+      rkcoe(3,3)=num2d3
+
+      rkcoe_d=rkcoe
+      call init_solver_ac_arrays
+      call init_solver_ac_filter_arrays
+      !
+      allocate(qsave_d(0:im,0:jm,0:km,1:numq))
+      !
+      firstcall=.false.
+      !
+    endif
+    !
+    do rkstep=1,3
+
+      call bchomo_gpu
+
+      qrhs_d=0.d0
+
+      call gradcal
+      !
+      call convection
+      !
+      !$cuf kernel do(4) <<<*,*>>>
+      do m = 1, numq
+      do k = 0, km
+      do j = 0, jm
+      do i = 0, im
+        qrhs_d(i,j,k,m) = -qrhs_d(i,j,k,m)
+      enddo
+      enddo
+      enddo
+      enddo
+    
+      !
+      call diffusion
+      
+      !
+      if(rkstep==1) then
+        !
+        call stacal
+        !
+        !$cuf kernel do(4) <<<*,*>>>
+        do m = 1, numq
+        do k = 0, km
+        do j = 0, jm
+        do i = 0, im
+          qsave_d(i, j, k, m) = q_d(i, j, k, m)
+        enddo
+        enddo
+        enddo
+        enddo
+        !
+      endif
+      !
+      !$cuf kernel do(4) <<<*,*>>>
+      do m=1,numq
+      do k = 0, km
+      do j = 0, jm
+      do i = 0, im
+        q_d(i, j, k, m)=rkcoe_d(1,rkstep)*qsave_d(i, j, k, m)+&
+                              rkcoe_d(2,rkstep)*q_d(i, j, k, m)+&
+                              rkcoe_d(3,rkstep)*qrhs_d(i, j, k, m)*deltat                  
+      enddo
+      enddo
+      enddo
+      enddo
+      !
+      call filterq
+      !
+      !$cuf kernel do(3) <<<*,*>>>
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        call q2fvar_gpu(q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3),q_d(i,j,k,4), q_d(i,j,k,5),rho_d(i,j,k),vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3),prs_d(i,j,k), tmp_d(i,j,k) )
+      enddo
+      enddo
+      enddo
+      !
+    enddo
+    !
+    if(present(comptime)) then
+      call cpu_time(tfinish)
+      !
+      comptime=comptime+tfinish-tstart
+    endif
+    !
+  end subroutine rk3
+
+end module mainloop
+
+program boxsolver
+    
+    use initilise, only: program_init,flowfield_init,solver_init
+    use commarray, only: allocommarray
+    use mainloop,  only: steploop
+    use cudafor
+    use commarray_gpu
+
+    implicit none
+    integer :: istat
+    integer(kind=cuda_count_kind) :: heapSize
+    !
+    integer(8) :: tstart_rate, tstart_count, tend_count
+    real :: elapsed_time
+
+    heapSize = 1024_cuda_count_kind*1024_cuda_count_kind*1024_cuda_count_kind*4
+    istat = cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize)
+    !
+    call system_clock(count_rate=tstart_rate)
+    call system_clock(count=tstart_count)
+    
+    call program_init
+
+    call solver_init
+
+    call allocommarray
+
+    call allocommarray_gpu
+
+    call flowfield_init
+
+    call steploop
+
+    istat = cudaDeviceSynchronize()
+    
+    call system_clock(count=tend_count)
+    elapsed_time = real(tend_count - tstart_count) / real(tstart_rate)
+    !
+    print *, ' ** total time: ', elapsed_time, ' seconds **'
+    !
+    print *,' ** the job is done **'
+    !
+end program boxsolver
+

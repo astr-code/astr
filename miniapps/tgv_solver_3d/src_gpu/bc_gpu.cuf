@@ -1,0 +1,287 @@
+module bc_gpu
+
+   implicit none
+
+   contains
+
+   subroutine bchomo_gpu
+        !
+      use commvar, only: im,jm,km,hm
+      use commarray_gpu,only: q_d,rho_d,vel_d,prs_d,tmp_d
+      use cudafor
+      use fludyna_gpu,only: fvar2q_gpu
+        !
+         integer :: i,j,k
+
+         ! b.c. at the i direction
+         !$cuf kernel do(2) <<<*,*>>>
+         do k = 0, km
+         do j = 0, jm
+         do i = -hm, -1
+
+            rho_d(i,j,k) = rho_d(im+i,j,k)
+            tmp_d(i,j,k) = tmp_d(im+i,j,k)
+            prs_d(i,j,k) = prs_d(im+i,j,k)
+
+            vel_d(i,j,k,1) = vel_d(im+i,j,k,1)
+            vel_d(i,j,k,2) = vel_d(im+i,j,k,2)
+            vel_d(i,j,k,3) = vel_d(im+i,j,k,3)
+
+            call fvar2q_gpu( &
+               q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3), &
+               q_d(i,j,k,4), q_d(i,j,k,5), &
+               rho_d(i,j,k), &
+               vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3), &
+               prs_d(i,j,k), tmp_d(i,j,k) )
+
+         enddo
+         do i = im+1, im+hm
+
+            rho_d(i,j,k) = rho_d(i - im,j,k)
+            tmp_d(i,j,k) = tmp_d(i - im,j,k)
+            prs_d(i,j,k) = prs_d(i - im,j,k)
+
+            vel_d(i,j,k,1) = vel_d(i - im,j,k,1)
+            vel_d(i,j,k,2) = vel_d(i - im,j,k,2)
+            vel_d(i,j,k,3) = vel_d(i - im,j,k,3)
+
+            call fvar2q_gpu( &
+               q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3), &
+               q_d(i,j,k,4), q_d(i,j,k,5), &
+               rho_d(i,j,k), &
+               vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3), &
+               prs_d(i,j,k), tmp_d(i,j,k) )
+
+         enddo
+         enddo
+         enddo
+         ! end of applying b.c. along i direction
+
+         ! b.c. at the j direction
+         !$cuf kernel do(2) <<<*,*>>>
+         do k = 0, km
+         do i = 0, im
+         do j = -hm, -1
+
+            rho_d(i,j,k) = rho_d(i,jm + j,k)
+            tmp_d(i,j,k) = tmp_d(i,jm + j,k)
+            prs_d(i,j,k) = prs_d(i,jm + j,k)
+
+            vel_d(i,j,k,1) = vel_d(i,jm + j,k,1)
+            vel_d(i,j,k,2) = vel_d(i,jm + j,k,2)
+            vel_d(i,j,k,3) = vel_d(i,jm + j,k,3)
+
+            call fvar2q_gpu( &
+               q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3), &
+               q_d(i,j,k,4), q_d(i,j,k,5), &
+               rho_d(i,j,k), &
+               vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3), &
+               prs_d(i,j,k), tmp_d(i,j,k) )
+
+         enddo
+         do j = jm+1, jm+hm
+
+            rho_d(i,j,k) = rho_d(i,j - jm,k)
+            tmp_d(i,j,k) = tmp_d(i,j - jm,k)
+            prs_d(i,j,k) = prs_d(i,j - jm,k)
+
+            vel_d(i,j,k,1) = vel_d(i,j - jm,k,1)
+            vel_d(i,j,k,2) = vel_d(i,j - jm,k,2)
+            vel_d(i,j,k,3) = vel_d(i,j - jm,k,3)
+
+            call fvar2q_gpu( &
+               q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3), &
+               q_d(i,j,k,4), q_d(i,j,k,5), &
+               rho_d(i,j,k), &
+               vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3), &
+               prs_d(i,j,k), tmp_d(i,j,k) )
+
+         enddo
+         enddo
+         enddo
+         ! end of applying b.c. along j direction
+
+         ! b.c. at the k direction
+         !$cuf kernel do(2) <<<*,*>>>
+         do j = 0, jm
+         do i = 0, im
+         do k = -hm, -1
+
+            rho_d(i,j,k) = rho_d(i,j,km + k)
+            tmp_d(i,j,k) = tmp_d(i,j,km + k)
+            prs_d(i,j,k) = prs_d(i,j,km + k)
+
+            vel_d(i,j,k,1) = vel_d(i,j,km + k,1)
+            vel_d(i,j,k,2) = vel_d(i,j,km + k,2)
+            vel_d(i,j,k,3) = vel_d(i,j,km + k,3)
+
+            call fvar2q_gpu( &
+               q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3), &
+               q_d(i,j,k,4), q_d(i,j,k,5), &
+               rho_d(i,j,k), &
+               vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3), &
+               prs_d(i,j,k), tmp_d(i,j,k) )
+
+         enddo
+         do k = km+1, km+hm
+
+            rho_d(i,j,k) = rho_d(i,j,k - km)
+            tmp_d(i,j,k) = tmp_d(i,j,k - km)
+            prs_d(i,j,k) = prs_d(i,j,k - km)
+
+            vel_d(i,j,k,1) = vel_d(i,j,k - km,1)
+            vel_d(i,j,k,2) = vel_d(i,j,k - km,2)
+            vel_d(i,j,k,3) = vel_d(i,j,k - km,3)
+
+            call fvar2q_gpu( &
+               q_d(i,j,k,1), q_d(i,j,k,2), q_d(i,j,k,3), &
+               q_d(i,j,k,4), q_d(i,j,k,5), &
+               rho_d(i,j,k), &
+               vel_d(i,j,k,1), vel_d(i,j,k,2), vel_d(i,j,k,3), &
+               prs_d(i,j,k), tmp_d(i,j,k) )
+
+         enddo
+         enddo
+         enddo
+         ! end of applying b.c. along k direction
+
+
+
+
+
+   end subroutine bchomo_gpu
+
+   subroutine bchomovec_gpu(var_d, dir, im, jm, km, hm, numq)
+      use cudafor
+      implicit none
+
+      integer, intent(in) :: dir, im, jm, km, hm, numq
+      real(8), device :: var_d(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
+      type(dim3) :: block2d, grid_ij, grid_jk, grid_ik
+      integer :: istat
+
+      ! 2D block
+      block2d = dim3(16,16,1)
+
+      ! i方向: 遍历 (j,k)
+      grid_jk = dim3( (jm+16)/16, (km+16)/16, 1 )
+
+      ! j方向: 遍历 (i,k)
+      grid_ik = dim3( (im+16)/16, (km+16)/16, 1 )
+
+      ! k方向: 遍历 (i,j)
+      grid_ij = dim3( (im+16)/16, (jm+16)/16, 1 )
+
+      ! --------------------------
+      if (dir == 1 .or. dir == 0) then
+         call bchomovec_gpu_i<<<grid_jk, block2d>>>(var_d, im, jm, km, hm, numq)
+         istat = cudaDeviceSynchronize()
+      endif
+
+      if (dir == 2 .or. dir == 0) then
+         call bchomovec_gpu_j<<<grid_ik, block2d>>>(var_d, im, jm, km, hm, numq)
+         istat = cudaDeviceSynchronize()
+      endif
+
+      if (dir == 3 .or. dir == 0) then
+         call bchomovec_gpu_k<<<grid_ij, block2d>>>(var_d, im, jm, km, hm, numq)
+         istat = cudaDeviceSynchronize()
+      endif
+
+   end subroutine bchomovec_gpu
+
+   attributes(global) subroutine bchomovec_gpu_i(var_d, im, jm, km, hm, numq)
+      implicit none
+      integer, value :: im, jm, km, hm, numq
+      real(8), device :: var_d(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
+      integer :: j, k, i, n
+      integer :: gj, gk
+
+      ! 线程映射到 j, k
+      gj = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      gk = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      if (gj < 0 .or. gj > jm) return
+      if (gk < 0 .or. gk > km) return
+
+      do n = 1, numq
+
+         ! 左侧 ghost: i = -hm : -1
+         do i = -hm, -1
+         var_d(i, gj, gk, n) = var_d(im + i, gj, gk, n)
+         end do
+
+         ! 右侧 ghost: i = im+1 : im+hm
+         do i = im+1, im+hm
+            var_d(i, gj, gk, n) = var_d(i - im, gj, gk, n)
+         end do
+
+      end do
+
+   end subroutine bchomovec_gpu_i
+
+   attributes(global) subroutine bchomovec_gpu_j(var_d, im, jm, km, hm, numq)
+      implicit none
+      integer, value :: im, jm, km, hm, numq
+      real(8), device :: var_d(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
+      integer :: i, k, j, n
+      integer :: gi, gk
+
+      ! 线程映射到 i, k
+      gi = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      gk = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      if (gi < 0 .or. gi > im) return
+      if (gk < 0 .or. gk > km) return
+
+      do n = 1, numq
+
+      ! 下侧 ghost: j = -hm : -1
+      do j = -hm, -1
+         var_d(gi, j, gk, n) = var_d(gi, jm + j, gk, n)
+      end do
+
+      ! 上侧 ghost: j = jm+1 : jm+hm
+      do j = jm+1, jm+hm
+         var_d(gi, j, gk, n) = var_d(gi, j - jm, gk, n)
+      end do
+
+      end do
+
+   end subroutine bchomovec_gpu_j
+
+   attributes(global) subroutine bchomovec_gpu_k(var_d, im, jm, km, hm, numq)
+      implicit none
+      integer, value :: im, jm, km, hm, numq
+      real(8), device :: var_d(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
+      integer :: i, j, k, n
+      integer :: gi, gj
+
+      ! 线程映射到 i, j
+      gi = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      gj = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+
+      if (gi < 0 .or. gi > im) return
+      if (gj < 0 .or. gj > jm) return
+
+      do n = 1, numq
+
+         ! 前侧 ghost: k = -hm : -1
+         do k = -hm, -1
+            var_d(gi, gj, k, n) = var_d(gi, gj, km + k, n)
+         end do
+
+         ! 后侧 ghost: k = km+1 : km+hm
+         do k = km+1, km+hm
+            var_d(gi, gj, k, n) = var_d(gi, gj, k - km, n)
+         end do
+
+      end do
+
+   end subroutine bchomovec_gpu_k
+
+end module bc_gpu

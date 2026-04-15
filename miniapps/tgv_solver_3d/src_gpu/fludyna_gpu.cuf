@@ -1,0 +1,77 @@
+module fludyna_gpu
+
+    implicit none
+
+    contains
+
+    attributes(device) subroutine fvar2q_gpu(q1,q2,q3,q4,q5,density,u,v,w,pressure,temperature)
+
+        use commvar_gpu, only: const1_d,const6_d
+        !
+        real(8),intent(in) :: density,u,v,w
+        real(8),intent(in),optional :: pressure,temperature
+        real(8),intent(out) :: q1,q2,q3,q4,q5
+        !
+        ! local data
+        real(8) :: var1
+        !
+        q1=density
+        q2=density*u
+        q3=density*v
+        q4=density*w
+        
+        var1=0.5d0*(u*u + v*v + w*w)
+        if(present(temperature)) then
+          q5=density*(temperature*const1_d+var1)
+        elseif(present(pressure)) then
+          q5=pressure*const6_d+density*var1
+        endif
+
+    end subroutine fvar2q_gpu
+
+    attributes(device) function thermal_scar_gpu(density,pressure,temperature) result(vout)
+
+      use commvar_gpu,only : const2_d
+      !
+      ! arguments
+      real(8) :: vout
+      real(8),intent(in) ,optional :: density,pressure,temperature
+
+      if(present(density) .and. present(temperature)) then
+        vout=density*temperature/const2_d
+      elseif(present(density) .and. present(pressure)) then
+        vout=pressure/density*const2_d
+      elseif(present(temperature) .and. present(pressure)) then
+        vout=pressure/temperature*const2_d
+      endif
+    end function thermal_scar_gpu
+
+    attributes(device) subroutine q2fvar_gpu(q1,q2,q3,q4,q5,density,u,v,w,pressure,temperature)
+    
+        use commvar_gpu, only: const6_d
+    
+        real(8),intent(in) :: q1,q2,q3,q4,q5
+        real(8),intent(out) :: density
+        real(8),intent(out),optional :: u,v,w,pressure,temperature
+
+
+        density=q1
+
+
+        if(present(u) .or. present(pressure) .or. present(temperature)) then
+
+          u=q2/density
+          v=q3/density
+          w=q4/density
+        endif
+
+        if(present(pressure) .or. present(temperature)) then
+        pressure  =( q5-0.5d0*density*(u**2+v**2+w**2) )/const6_d
+        endif
+        
+        if(present(temperature)) then
+        temperature=thermal_scar_gpu(pressure=pressure,density=density)
+        endif
+    end subroutine q2fvar_gpu
+
+end module fludyna_gpu
