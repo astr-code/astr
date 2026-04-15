@@ -385,7 +385,7 @@ module bc
       if(bctype(n)==11) then
         call inflow(n)
       endif
-      !
+
       if(bctype(n)==21) then
         call outflow(n)
       endif
@@ -397,14 +397,12 @@ module bc
       if(bctype(n)==0) then
         call udf_bc(n)
       endif
-      !
+      
     enddo
     !
     ! if(present(subtime)) time_beg=ptime()
     !
     ! if(present(subtime)) subtime=subtime+ptime()-time_beg
-    !
-    ! call mpistop
     !
     return
     !
@@ -1427,36 +1425,63 @@ module bc
       do j=0,jm
         !
         rho_ref = rho(i+1,j,k)
-        ! css=sos(tmp(i,j,k))
-        ! ub =vel_in(j,k,1)
         css=sos(tmp_prof(j),spc_prof(j,:))
-        !
-        ub=vel_prof(j,1)
-        ! ub =vel(i,j,k,1)
-        !
-        vel(i,j,k,:)=vel_in(j,k,:)
-        tmp(i,j,k)  =tmp_in(j,k)
+
+        ! if(vel_in(j,k,1)>css) then
+        !   ! supersonic inflow
+        !   vel(i,j,k,:)=vel_in(j,k,:)
+        !   spc(i,j,k,:)=spc_in(j,k,:)
+        !   tmp(i,j,k)  =tmp_in(j,k)
+        !   prs(i,j,k)  =pinf
+        ! else
+          ! subsonic inflow
+          vel(i,j,k,2:3)=vel_in(j,k,2:3)
+          spc(i,j,k,:)  =spc_in(j,k,:)
+          tmp(i,j,k)    =tmp_in(j,k)
+
+          prs(i,j,k)  =extrapolate(prs(i+1,j,k),   prs(i+2,j,k),  dv=0.d0)
+
+          pe  = extrapolate(prs(i+1,j,k),   prs(i+2,j,k),  dv=0.d0)
+          ue  = extrapolate(vel(i+1,j,k,1), vel(i+2,j,k,1),  dv=0.d0)
+
+          pwave_in   = pinf
+          malo=vel_in(j,k,1)/css
+          blend=0.5d0*(tanh((malo-1.d0)*6.d0)+1.d0) ! (-3~3)~0-1
+
+          prs(i,j,k)  =(0.5d0*(pwave_in+pe)+0.5d0*rho_ref*css*(vel_in(j,k,1)-ue))*(1.d0-blend)+pwave_in*blend
+          vel(i,j,k,1)=vel_in(j,k,1)+(pinf-prs(i,j,k))/rho_ref/css
+
+        ! endif
+
+        ! ! ub =vel_in(j,k,1)
+        ! css=sos(tmp_prof(j),spc_prof(j,:))
+        ! !
+        ! ub=vel_prof(j,1)
+        ! ! ub =vel(i,j,k,1)
+        ! !
+        ! vel(i,j,k,:)=vel_in(j,k,:)
+        ! tmp(i,j,k)  =tmp_in(j,k)
         
-        spc(i,j,k,:)=spc_in(j,k,:)
+        ! spc(i,j,k,:)=spc_in(j,k,:)
         
-        pe  = extrapolate(prs(i+1,j,k),   prs(i+2,j,k),  dv=0.d0)
-        ue  = extrapolate(vel(i+1,j,k,1), vel(i+2,j,k,1),  dv=0.d0)
+        ! pe  = extrapolate(prs(i+1,j,k),   prs(i+2,j,k),  dv=0.d0)
+        ! ue  = extrapolate(vel(i+1,j,k,1), vel(i+2,j,k,1),  dv=0.d0)
 
-        pwave_in   = prs_in(j,k)
-        malo=ub/css
-        blend=0.5d0*(tanh((malo-1.d0)*6.d0)+1.d0) ! (-3~3)~0-1
+        ! pwave_in   = prs_in(j,k)
+        ! malo=ub/css
+        ! blend=0.5d0*(tanh((malo-1.d0)*6.d0)+1.d0) ! (-3~3)~0-1
         
-        ! prs(i,j,k) = pe*(1.d0-blend)+pwave_in*blend
+        ! ! prs(i,j,k) = pe*(1.d0-blend)+pwave_in*blend
 
-        prs(i,j,k)  =(0.5d0*(pwave_in+pe)+0.5d0*rho_ref*css*(vel_in(j,k,1)-ue))*(1.d0-blend)+pwave_in*blend
+        ! prs(i,j,k)  =(0.5d0*(pwave_in+pe)+0.5d0*rho_ref*css*(vel_in(j,k,1)-ue))*(1.d0-blend)+pwave_in*blend
 
-        vel(i,j,k,1)=vel_in(j,k,1)+(pinf-prs(i,j,k))/rho_ref/css
+        ! vel(i,j,k,1)=vel_in(j,k,1)+(pinf-prs(i,j,k))/rho_ref/css
 
-        rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k))
+        rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
 
-        call fvar2q(       q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                    velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
-                     species=spc(i,j,k,:)                               )
+        call fvar2q(       q=  q(i,j,k,:),     density=rho(i,j,k),        &
+                    velocity=vel(i,j,k,:), temperature=tmp(i,j,k),        &
+                     species=spc(i,j,k,:)                                 )
         
         qrhs(i,j,k,:)=0.d0
         
@@ -2502,7 +2527,7 @@ module bc
       do k=0,km
       do i=0,im
         !
-        css=sos(tmp(i,j,k))
+        css=sos(tmp(i,j,k),spc(i,j,k,:))
         ! ub =vel(i,j,k,1)*bvec_jm(i,k,1)+vel(i,j,k,2)*bvec_jm(i,k,2)+   &
         !     vel(i,j,k,3)*bvec_jm(i,k,3)
         !
@@ -2524,11 +2549,11 @@ module bc
         vel(i,j,k,1)=ue
         vel(i,j,k,2)=ve
         vel(i,j,k,3)=we
-        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k))
+        tmp(i,j,k)  =thermal(pressure=prs(i,j,k),density=rho(i,j,k),species=spc(i,j,k,:))
         spc(i,j,k,:)=spce(:)
         !
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
-                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+        call fvar2q(      q=  q(i,j,k,:),      density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),        &
                     species=spc(i,j,k,:)                               )
         !
         qrhs(i,j,k,:)=0.d0
@@ -3490,7 +3515,7 @@ module bc
         endif
         !
         rho(i,j,k)  =thermal(pressure=prs(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
-        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),         &
+        call fvar2q(      q=  q(i,j,k,:),     density=rho(i,j,k),       &
                       velocity=vel(i,j,k,:),  temperature=tmp(i,j,k),   &
                       species=spc(i,j,k,:)                              )
         
@@ -6457,7 +6482,7 @@ module bc
         else
           vwall=0.d0
         endif
-        !
+        
         j=0
         
         xtran=1.d0

@@ -407,7 +407,6 @@ module mainloop
 
       qrhs=0.d0
       
-      
       if(limmbou) then
         call immbody(timerept=ltimrpt)
 
@@ -421,6 +420,7 @@ module mainloop
       call gradcal()
 
       if(flowtype(1:2)=='0d') jacob=1.d0
+
 
       time_beg_2=ptime()
 
