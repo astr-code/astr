@@ -159,11 +159,11 @@ module initilise
         jm=256
         km=256
 
-        difschm='643c'
+        difschm='643e'
 
-        alfa_filter=0.49d0
+        alfa_filter=0.0d0
 
-        maxstep=10
+        maxstep=100
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -238,7 +238,7 @@ module initilise
         use commvar, only : difschm,im,jm,km,alfa_filter
         use derivative, only : fd_scheme_initiate,fds_compact_i,fds_compact_j, &
                                fds_compact_k,explicit_central,compact_central,fds
-        use filter,     only : compact_filter_initiate,filter_coefficient_cal, &
+        use filter,     only : compact_filter_initiate,filter_coefficient_explicit, &
                                filter_i,filter_j,filter_k,filter_ii,filter_jj, &
                                filter_kk
 
@@ -246,17 +246,11 @@ module initilise
         call fd_scheme_initiate(asolver=fds_compact_j,scheme=difschm,ntype=3,dim=jm,dir=2)
         call fd_scheme_initiate(asolver=fds_compact_k,scheme=difschm,ntype=3,dim=km,dir=3)
 
-        allocate(compact_central :: fds)
+        allocate(explicit_central :: fds)
 
-        print*,' ** finite-difference solver initilised'
+        print*,' ** explicit finite-difference solver initilised'
 
-        call filter_coefficient_cal(alfa=alfa_filter,beter_halo=1.11d0,beter_bouond=1.09d0)
-  
-        call compact_filter_initiate(afilter=filter_i,ntype=3,dim=im)
-        call compact_filter_initiate(afilter=filter_j,ntype=3,dim=jm)
-        call compact_filter_initiate(afilter=filter_k,ntype=3,dim=km)
-
-        print*,' ** low-pass filter initilised'
+        call filter_coefficient_explicit
 
     end subroutine solver_init
 
@@ -451,7 +445,7 @@ module solver
 
         use commvar,    only : im,jm,km,hm,difschm,ndims
         use commarray,  only : vel,tmp,dvel,dtmp,dx,dy,dz
-        use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+        use derivative, only : diff6ec
 
         ! local data
         integer :: i,j,k,n,ncolm
@@ -474,7 +468,7 @@ module solver
           ff(:,4)=tmp(:,j,k)
 
           do n=1,ncolm
-            df(:,n)=fds%central(fds_compact_i,f=ff(:,n),dim=im)
+            df(:,n)= diff6ec(ff(:,n),im,3)
           enddo
 
           dvel(:,j,k,1,1)=df(:,1)/dx
@@ -498,7 +492,7 @@ module solver
           ff(:,4)=tmp(i,:,k)
 
           do n=1,ncolm
-            df(:,n)=fds%central(fds_compact_j,f=ff(:,n),dim=jm)
+            df(:,n)= diff6ec(ff(:,n),jm,3)
           enddo
 
           dvel(i,:,k,1,2)=df(:,1)/dy
@@ -521,7 +515,7 @@ module solver
           ff(:,4)=tmp(i,j,:)
 
           do n=1,ncolm
-            df(:,n)=fds%central(fds_compact_k,f=ff(:,n),dim=km)
+            df(:,n)= diff6ec(ff(:,n),km,3)
           enddo
 
           dvel(i,j,:,1,3)=df(:,1)/dz
@@ -540,7 +534,7 @@ module solver
 
         use commvar,  only: im,jm,km,hm,numq
         use commarray,only: q,vel,rho,prs,tmp,qrhs,dx,dy,dz
-        use derivative,only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+        use derivative,only : diff6ec
         !
         !
         ! local data
@@ -564,7 +558,7 @@ module solver
           fcs(:,5)= (q(:,j,k,5)+prs(:,j,k) )*uu
     
           do n=1,numq
-            dfcs(:,n)=fds%central(fds_compact_i,fcs(:,n),dim=im)
+            dfcs(:,n)=diff6ec(fcs(:,n),im,3)
           enddo
 
           qrhs(0:im,j,k,:)=qrhs(0:im,j,k,:)+dfcs(0:im,:)/dx
@@ -591,7 +585,7 @@ module solver
           fcs(:,5)=( q(i,:,k,5)+prs(i,:,k) )*uu
     
           do n=1,numq
-            dfcs(:,n)=fds%central(fds_compact_j,fcs(:,n),dim=jm)
+            dfcs(:,n)=diff6ec(fcs(:,n),jm,3)
           enddo
 
           qrhs(i,0:jm,k,:)=qrhs(i,0:jm,k,:)+dfcs(0:jm,:)/dy
@@ -618,7 +612,7 @@ module solver
           fcs(:,5)= ( q(i,j,:,5)+prs(i,j,:) )*uu
 
           do n=1,numq
-            dfcs(:,n)=fds%central(fds_compact_k,fcs(:,n),dim=km)
+            dfcs(:,n)=diff6ec(fcs(:,n),km,3)
           enddo
 
           qrhs(i,j,0:km,:)=qrhs(i,j,0:km,:)+dfcs(0:km,:)/dz
@@ -638,7 +632,7 @@ module solver
         use commvar,  only: im,jm,km,hm,reynolds,prandtl,const5
         use commarray,only: vel,dvel,dtmp,qrhs,tmp,dx,dy,dz
         use fludyna,  only: miucal
-        use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+        use derivative, only : diff6ec
         use bc, only: bchomovec
 
         real(8),allocatable,dimension(:,:,:,:),save :: sigma,qflux
@@ -713,7 +707,7 @@ module solver
           !|    calculate derivative      |
           !+------------------------------+
           do n=2,ncolm
-            df(:,n)=fds%central(fds_compact_i,f=ff(:,n),dim=im)
+            df(:,n)=diff6ec(ff(:,n),im,3)
           enddo
           !
           !+------------------------------+
@@ -744,7 +738,7 @@ module solver
           !|    calculate derivative      |
           !+------------------------------+
           do n=2,ncolm
-            df(:,n)=fds%central(fds_compact_j,f=ff(:,n),dim=jm)
+            df(:,n)=diff6ec(ff(:,n),jm,3)
           enddo
           !+------------------------------+
           !| end of calculate derivative  |
@@ -773,7 +767,7 @@ module solver
           enddo
 
           do n=2,ncolm
-            df(:,n)=fds%central(fds_compact_k,f=ff(:,n),dim=km)
+            df(:,n)=diff6ec(ff(:,n),km,3)
           enddo
 
           qrhs(i,j,0:km,2)=qrhs(i,j,0:km,2)+df(0:km,2)/dz
@@ -789,98 +783,84 @@ module solver
     end subroutine diffusion
 
     subroutine filterq
-    !
-    use commvar,  only : im,jm,km,hm,numq
-    use commarray,only : q
-    use filter,   only : compact_filter,filter_i,filter_j,filter_k
-    use bc, only : bchomovec
-    !
-    ! local data
-    integer :: i,j,k,n,m
-    real(8),allocatable :: phi(:,:),fph(:,:)
-    !
-    real(8) :: time_beg
-    real(8),save :: subtime=0.d0
-    !
-    ! filtering in i direction
-    call bchomovec(var=q,dir=1)
-    !
-    allocate(phi(-hm:im+hm,1:numq),fph(0:im,1:numq))
-    !
-    do k=0,km
-    do j=0,jm
       !
-      phi(:,:)=q(:,j,k,:)
+      use commvar,  only : im,jm,km,hm,numq
+      use commarray,only : q
+      use filter, only : coef6e
+      use bc, only : bchomovec
       !
-      do n=1,numq
-        fph(:,n)=compact_filter(afilter=filter_i,f=phi(:,n),dim=im)
-      enddo
+      ! local data
+      integer :: i,j,k,n,m
       !
-      q(0:im,j,k,:)=fph(0:im,:)
+      real(8) :: qbuf(-hm:im + hm, -hm:jm + hm, -hm:km + hm, 1:numq)
       !
-    end do
-    end do
-    !
-    deallocate(phi,fph)
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end filter in i direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    ! filtering in j direction
-    call bchomovec(var=q,dir=2)
-    !
-    allocate(phi(-hm:jm+hm,1:numq),fph(0:jm,1:numq))
-    !
-    do k=0,km
-    do i=0,im
-      !
-      phi(:,:)=q(i,:,k,:)
-      !
-      do n=1,numq
-        fph(:,n)=compact_filter(afilter=filter_j,f=phi(:,n),dim=jm)
-      enddo
-      !
-      q(i,0:jm,k,:)=fph(0:jm,:)
-      !
-    end do
-    end do
-    !
-    deallocate(phi,fph)
-    !
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end filter in j direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    ! filtering in k direction
-    call bchomovec(var=q,dir=3)
+      ! filtering in i direction
+      call bchomovec(var=q,dir=1)
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+         do n = 1, numq
+         qbuf(i,j,k,n) = &
+            coef6e(0)*(2*q(i,j,k,n)) + &
+            coef6e(1)*(q(i-1,j,k,n)+q(i+1,j,k,n)) + &
+            coef6e(2)*(q(i-2,j,k,n)+q(i+2,j,k,n)) + &
+            coef6e(3)*(q(i-3,j,k,n)+q(i+3,j,k,n))
+         end do
+      end do
+      end do
+      end do
 
-    allocate(phi(-hm:km+hm,1:numq),fph(0:km,1:numq))
-    
-    do j=0,jm
-    do i=0,im
       !
-      phi(:,:)=q(i,j,:,:)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end filter in i direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !
-      do n=1,numq
-        fph(:,n)=compact_filter(afilter=filter_k,f=phi(:,n),dim=km)
-      enddo
+      ! filtering in j direction
+      call bchomovec(var=qbuf,dir=2)
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+         do n = 1, numq
+         q(i,j,k,n) = &
+            coef6e(0)*(2*qbuf(i,j,k,n)) + &
+            coef6e(1)*(qbuf(i,j-1,k,n)+qbuf(i,j+1,k,n)) + &
+            coef6e(2)*(qbuf(i,j-2,k,n)+qbuf(i,j+2,k,n)) + &
+            coef6e(3)*(qbuf(i,j-3,k,n)+qbuf(i,j+3,k,n))
+         end do
+      end do
+      end do
+      end do
       !
-      q(i,j,0:km,:)=fph
       !
-    end do
-    end do
-    !
-    deallocate(phi,fph)
-    !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! end filter in k direction.
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !
-    return
-    !
-  end subroutine filterq
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end filter in j direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+      ! filtering in k direction
+      call bchomovec(var=q,dir=3)
+      qbuf=q
+      do j=0,jm
+      do i=0,im
+      do k=0,km
+         do n = 1, numq
+         qbuf(i,j,k,n) = &
+            coef6e(0)*(2*q(i,j,k,n)) + &
+            coef6e(1)*(q(i,j,k-1,n)+q(i,j,k+1,n)) + &
+            coef6e(2)*(q(i,j,k-2,n)+q(i,j,k+2,n)) + &
+            coef6e(3)*(q(i,j,k-3,n)+q(i,j,k+3,n))
+         end do
+      end do
+      end do
+      end do
+      q = qbuf
+      !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! end filter in k direction.
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !
+      return
+      !
+    end subroutine filterq
 
 end module solver
 
@@ -948,7 +928,7 @@ module mainloop
     use commarray
     use vtkio
 
-    integer, parameter :: nout = 10000
+    integer, parameter :: nout = 100000
     character(len=100) :: filename
     character(len=20)  :: step_str
 

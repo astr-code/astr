@@ -163,7 +163,7 @@ module initilise
 
         alfa_filter=0.49d0
 
-        maxstep=10
+        maxstep=100
 
         write(*,'(3(A,I0))')'  ** dimension set: ',im,' x ',jm,' x ',km
 
@@ -234,29 +234,9 @@ module initilise
     end subroutine flowfield_init
 
     subroutine solver_init
+        use filter,     only :filter_coefficient_explicit
 
-        use commvar, only : difschm,im,jm,km,alfa_filter
-        use derivative, only : fd_scheme_initiate,fds_compact_i,fds_compact_j, &
-                               fds_compact_k,explicit_central,compact_central,fds
-        use filter,     only : compact_filter_initiate,filter_coefficient_cal, &
-                               filter_i,filter_j,filter_k,filter_ii,filter_jj, &
-                               filter_kk
-        use derivative_gpu
-
-        call fd_scheme_initiate(asolver=fds_compact_i,scheme=difschm,ntype=3,dim=im,dir=1)
-        call fd_scheme_initiate(asolver=fds_compact_j,scheme=difschm,ntype=3,dim=jm,dir=2)
-        call fd_scheme_initiate(asolver=fds_compact_k,scheme=difschm,ntype=3,dim=km,dir=3)
-
-        allocate(compact_central :: fds)
-        df_scheme_type = COMPACT
-
-        print*,' ** finite-difference solver initilised'
-
-        call filter_coefficient_cal(alfa=alfa_filter,beter_halo=1.11d0,beter_bouond=1.09d0)
-  
-        call compact_filter_initiate(afilter=filter_i,ntype=3,dim=im)
-        call compact_filter_initiate(afilter=filter_j,ntype=3,dim=jm)
-        call compact_filter_initiate(afilter=filter_k,ntype=3,dim=km)
+        call filter_coefficient_explicit
 
         print*,' ** low-pass filter initilised'
 
@@ -560,7 +540,6 @@ module mainloop
     ! local data
     logical,save :: firstcall = .true.
     real(8),save :: rkcoe(3,3)
-    real(8),allocatable,save :: qsave(:,:,:,:)
     real(8), device, allocatable,save :: qsave_d(:,:,:,:)
     integer :: rkstep,i,j,k,m
     !
@@ -585,8 +564,6 @@ module mainloop
       rkcoe(3,3)=num2d3
 
       rkcoe_d=rkcoe
-      call init_solver_ac_arrays
-      call init_solver_ac_filter_arrays
       !
       allocate(qsave_d(0:im,0:jm,0:km,1:numq))
       !
