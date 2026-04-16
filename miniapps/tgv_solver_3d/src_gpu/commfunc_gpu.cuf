@@ -42,6 +42,31 @@ module commfunc_gpu
       end do
    end subroutine tridiagonal_thomas_solver_gpu
 
+   attributes(global) subroutine rk_substep_advance(im, jm, km,qsave_d,rkstep,deltat,numq)
+      use commarray_gpu,only: q_d,qrhs_d,rkcoe_d
+      implicit none
+      real(8), device, intent(in) ::qsave_d(0:im,0:jm,0:km,1:numq)
+      integer, value :: im, jm, km,rkstep,numq
+      real(8), value :: deltat
+      integer ::  i, j, k, m
 
-   
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         do m=1,numq
+            q_d(i, j, k, m)=rkcoe_d(1,rkstep)*qsave_d(i, j, k, m)+&
+                           rkcoe_d(2,rkstep)*q_d(i, j, k, m)+&
+                           rkcoe_d(3,rkstep)*qrhs_d(i, j, k, m)*deltat
+         end do
+      endif
+
+   end subroutine
+
+   !block = dim3(blksz, blksz, blksz)
+   !grid%x = ceiling(real(im+1)/blksz)
+   !grid%y = ceiling(real(jm+1)/blksz)
+   !grid%z = ceiling(real(km+1)/blksz)
+   !call rk_substep_advance <<< grid, block >>> (im, jm, km,qsave_d,rkstep,deltat,numq)
+
 end module commfunc_gpu
