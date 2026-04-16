@@ -2,344 +2,456 @@ module solver_gpu
     use derivative_gpu
     use filter_gpu
 implicit none
-   ! ========== 导数系数数组（用于convection, gradcal, diffusion） ==========
-   real(8), device, allocatable, save :: ac_i_d(:, :)
-   real(8), device, allocatable, save :: ac_j_d(:, :)
-   real(8), device, allocatable, save :: ac_k_d(:, :)
-
-   !  ========== 滤波系数数组（用于filterq） ==========
-   real(8), device, allocatable, save :: ac_filter_i_d(:, :)
-   real(8), device, allocatable, save :: ac_filter_j_d(:, :)
-   real(8), device, allocatable, save :: ac_filter_k_d(:, :)
-
    contains
-   !初始化AC数组
-   subroutine init_solver_ac_arrays
-      use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
-      implicit none
 
-      integer :: dim_i, dim_j, dim_k
-      integer :: i
-   
-      ! 分配布局 (3,)
-      allocate(ac_i_d(3,size(fds_compact_i%ac, 2)))
-      allocate(ac_j_d(3,size(fds_compact_j%ac, 2)))
-      allocate(ac_k_d(3,size(fds_compact_k%ac, 2)))
-
-      ! 使用转置复制
-
-      ac_i_d=fds_compact_i%ac
-      ac_j_d=fds_compact_j%ac
-      ac_k_d=fds_compact_k%ac
-
-   end subroutine init_solver_ac_arrays
-
-   !初始化AC_filter数组
-   subroutine init_solver_ac_filter_arrays
-      use filter,   only : compact_filter,filter_i,filter_j,filter_k
-      implicit none
-    
-      ! 分配转置布局 (节点数, 3)
-      allocate(ac_filter_i_d(3,size(filter_i%ac, 2)))
-      allocate(ac_filter_j_d(3,size(filter_j%ac, 2)))
-      allocate(ac_filter_k_d(3,size(filter_k%ac, 2)))
-
-      ! 使用转置复制
-
-      ac_filter_i_d=filter_i%ac
-      ac_filter_j_d=filter_j%ac
-      ac_filter_k_d=filter_k%ac
-
-   end subroutine init_solver_ac_filter_arrays
-
-   attributes(global) subroutine gradcal_2d_kernel_i( dx, dy, dz, im, jm, km, ncolm, first_node, last_node, nbctype)
+   attributes(global) subroutine gradcal_3d_kernel_i( dx, dy, dz, im, jm, km)
       use commvar, only: hm
+      use constdef, only : num1d60
       use commarray_gpu,only: vel_d,tmp_d,dvel_d,dtmp_d
       implicit none
 
-      integer, value :: im, jm, km, ncolm, first_node, last_node, nbctype
+      integer, value :: im, jm, km
       real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
-
-      real(8) :: ff(-hm:im + hm, ncolm)
-      real(8) :: df(0:im, ncolm)
-
-      j = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      k = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-
-      ! 边界判断
-      if (j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
-            ff(:, 1) = vel_d(:, j, k, 1)
-            ff(:, 2) = vel_d(:, j, k, 2)
-            ff(:, 3) = vel_d(:, j, k, 3)
-            ff(:, 4) = tmp_d(:, j, k)
-
-            df = df_compact_batch_4_gpu(first_node, last_node, nbctype, ac_i_d, ff, im)
-
-            dvel_d(:, j, k, 1, 1) = df(:, 1)/dx
-            dvel_d(:, j, k, 2, 1) = df(:, 2)/dx
-            dvel_d(:, j, k, 3, 1) = df(:, 3)/dx
-
-            dtmp_d(:, j, k, 1) = df(:, 4)/dx
-
-      end if
-
-   end subroutine gradcal_2d_kernel_i
-
-   attributes(global) subroutine gradcal_2d_kernel_j( dx, dy, dz, im, jm, km, ncolm, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu,only: vel_d,tmp_d,dvel_d,dtmp_d
-      implicit none
-
-      integer, value :: im, jm, km, ncolm, first_node, last_node, nbctype
-      real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
-
-      real(8) :: ff(-hm:jm + hm, ncolm)
-      real(8) :: df(0:jm, ncolm)
-
-      k = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      i = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-
-      ! 边界判断
-      if (k >= 0 .and. k <= km .and. i >= 0 .and. i <= im) then
-            ff(:, 1) = vel_d(i, :, k, 1)
-            ff(:, 2) = vel_d(i, :, k, 2)
-            ff(:, 3) = vel_d(i, :, k, 3)
-            ff(:, 4) = tmp_d(i, :, k)
-
-            df = df_compact_batch_4_gpu(first_node, last_node, nbctype, ac_j_d, ff, jm)
-
-            dvel_d(i, :, k, 1, 2) = df(:, 1)/dy
-            dvel_d(i, :, k, 2, 2) = df(:, 2)/dy
-            dvel_d(i, :, k, 3, 2) = df(:, 3)/dy
-
-            dtmp_d(i, :, k, 2) = df(:, 4)/dy
-
-      end if
-
-   end subroutine gradcal_2d_kernel_j
-
-   attributes(global) subroutine gradcal_2d_kernel_k( dx, dy, dz, im, jm, km, ncolm, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu,only: vel_d,tmp_d,dvel_d,dtmp_d
-      implicit none
-
-      integer, value :: im, jm, km, ncolm, first_node, last_node, nbctype
-      real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
-
-      real(8) :: ff(-hm:km + hm, ncolm)
-      real(8) :: df(0:km, ncolm)
+      integer ::  i, j, k
 
       i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
       j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
 
       ! 边界判断
-      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm) then
-            ff(:, 1) = vel_d(i, j, :, 1)
-            ff(:, 2) = vel_d(i, j, :, 2)
-            ff(:, 3) = vel_d(i, j, :, 3)
-            ff(:, 4) = tmp_d(i, j, :)
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         ! ---- velocity ----
+         dvel_d(i,j,k,1,1) = ( &
+            0.75d0*(vel_d(i+1,j,k,1)-vel_d(i-1,j,k,1)) - &
+            0.15d0*(vel_d(i+2,j,k,1)-vel_d(i-2,j,k,1)) + &
+            num1d60*(vel_d(i+3,j,k,1)-vel_d(i-3,j,k,1)) ) / dx
 
-            df = df_compact_batch_4_gpu(first_node, last_node, nbctype, ac_k_d, ff, km)
+         dvel_d(i,j,k,2,1) = ( &
+            0.75d0*(vel_d(i+1,j,k,2)-vel_d(i-1,j,k,2)) - &
+            0.15d0*(vel_d(i+2,j,k,2)-vel_d(i-2,j,k,2)) + &
+            num1d60*(vel_d(i+3,j,k,2)-vel_d(i-3,j,k,2)) ) / dx
 
-            dvel_d(i, j, :, 1, 3) = df(:, 1)/dz
-            dvel_d(i, j, :, 2, 3) = df(:, 2)/dz
-            dvel_d(i, j, :, 3, 3) = df(:, 3)/dz
+         dvel_d(i,j,k,3,1) = ( &
+            0.75d0*(vel_d(i+1,j,k,3)-vel_d(i-1,j,k,3)) - &
+            0.15d0*(vel_d(i+2,j,k,3)-vel_d(i-2,j,k,3)) + &
+            num1d60*(vel_d(i+3,j,k,3)-vel_d(i-3,j,k,3)) ) / dx
 
-            dtmp_d(i, j, :, 3) = df(:, 4)/dz
-
+         ! ---- temperature ----
+         dtmp_d(i,j,k,1) = ( &
+            0.75d0*(tmp_d(i+1,j,k)-tmp_d(i-1,j,k)) - &
+            0.15d0*(tmp_d(i+2,j,k)-tmp_d(i-2,j,k)) + &
+            num1d60*(tmp_d(i+3,j,k)-tmp_d(i-3,j,k)) ) / dx
       end if
 
-   end subroutine gradcal_2d_kernel_k
+   end subroutine gradcal_3d_kernel_i
+
+   attributes(global) subroutine gradcal_3d_kernel_j(dx, dy, dz, im, jm, km)
+      use commvar, only: hm
+      use constdef, only : num1d60
+      use commarray_gpu,only: vel_d,tmp_d,dvel_d,dtmp_d
+      implicit none
+
+      integer, value :: im, jm, km
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+          dvel_d(i,j,k,1,2) = ( &
+            0.75d0*(vel_d(i,j+1,k,1)-vel_d(i,j-1,k,1)) - &
+            0.15d0*(vel_d(i,j+2,k,1)-vel_d(i,j-2,k,1)) + &
+            num1d60*(vel_d(i,j+3,k,1)-vel_d(i,j-3,k,1)) ) / dy
+
+          dvel_d(i,j,k,2,2) = ( &
+            0.75d0*(vel_d(i,j+1,k,2)-vel_d(i,j-1,k,2)) - &
+            0.15d0*(vel_d(i,j+2,k,2)-vel_d(i,j-2,k,2)) + &
+            num1d60*(vel_d(i,j+3,k,2)-vel_d(i,j-3,k,2)) ) / dy
+
+          dvel_d(i,j,k,3,2) = ( &
+            0.75d0*(vel_d(i,j+1,k,3)-vel_d(i,j-1,k,3)) - &
+            0.15d0*(vel_d(i,j+2,k,3)-vel_d(i,j-2,k,3)) + &
+            num1d60*(vel_d(i,j+3,k,3)-vel_d(i,j-3,k,3)) ) / dy
+
+          dtmp_d(i,j,k,2) = ( &
+            0.75d0*(tmp_d(i,j+1,k)-tmp_d(i,j-1,k)) - &
+            0.15d0*(tmp_d(i,j+2,k)-tmp_d(i,j-2,k)) + &
+            num1d60*(tmp_d(i,j+3,k)-tmp_d(i,j-3,k)) ) / dy
+      end if
+
+   end subroutine gradcal_3d_kernel_j
+
+   attributes(global) subroutine gradcal_3d_kernel_k(dx, dy, dz, im, jm, km)
+      use commvar, only: hm
+      use constdef, only : num1d60
+      use commarray_gpu,only: vel_d,tmp_d,dvel_d,dtmp_d
+      implicit none
+
+      integer, value :: im, jm, km
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         dvel_d(i,j,k,1,3) = ( &
+            0.75d0*(vel_d(i,j,k+1,1)-vel_d(i,j,k-1,1)) - &
+            0.15d0*(vel_d(i,j,k+2,1)-vel_d(i,j,k-2,1)) + &
+            num1d60*(vel_d(i,j,k+3,1)-vel_d(i,j,k-3,1)) ) / dz
+
+         dvel_d(i,j,k,2,3) = ( &
+            0.75d0*(vel_d(i,j,k+1,2)-vel_d(i,j,k-1,2)) - &
+            0.15d0*(vel_d(i,j,k+2,2)-vel_d(i,j,k-2,2)) + &
+            num1d60*(vel_d(i,j,k+3,2)-vel_d(i,j,k-3,2)) ) / dz
+
+         dvel_d(i,j,k,3,3) = ( &
+            0.75d0*(vel_d(i,j,k+1,3)-vel_d(i,j,k-1,3)) - &
+            0.15d0*(vel_d(i,j,k+2,3)-vel_d(i,j,k-2,3)) + &
+            num1d60*(vel_d(i,j,k+3,3)-vel_d(i,j,k-3,3)) ) / dz
+
+         dtmp_d(i,j,k,3) = ( &
+            0.75d0*(tmp_d(i,j,k+1)-tmp_d(i,j,k-1)) - &
+            0.15d0*(tmp_d(i,j,k+2)-tmp_d(i,j,k-2)) + &
+            num1d60*(tmp_d(i,j,k+3)-tmp_d(i,j,k-3)) ) / dz
+      end if
+
+   end subroutine gradcal_3d_kernel_k
 
    subroutine gradcal
       use cudafor
-      use commarray_gpu,only: vel_d,dvel_d,dtmp_d,qrhs_d,tmp_d
+      use commarray_gpu,only: vel_d,dvel_d,dtmp_d,tmp_d
         use commvar,    only : im,jm,km,hm
         use commarray,  only : dx,dy,dz
-        use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
       implicit none
-      ! 输入输出参数
-      integer :: ncolm=4
-      
 
-      integer :: first_node, last_node, nbctype, istat
-      integer :: blksz=16
+
+      integer :: istat
+      integer :: blksz=8
 
       type(dim3) :: grid, block
 
-      first_node = fds_compact_i%first_node
-      last_node = fds_compact_i%last_node
-      nbctype = fds_compact_i%nbctype
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(jm+1)/blksz)
-      grid%y = ceiling(real(km+1)/blksz)
-      grid%z = 1
-      call gradcal_2d_kernel_i <<< grid, block >>> ( dx, dy, dz, im, jm, km, ncolm, first_node, last_node, nbctype)
-      
-      first_node = fds_compact_j%first_node
-      last_node = fds_compact_j%last_node
-      nbctype = fds_compact_j%nbctype
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(km+1)/blksz)
-      grid%y = ceiling(real(im+1)/blksz)
-      grid%z = 1
-      call gradcal_2d_kernel_j <<< grid, block >>> ( dx, dy, dz, im, jm, km, ncolm, first_node, last_node, nbctype)
-      
-      first_node = fds_compact_k%first_node
-      last_node = fds_compact_k%last_node
-      nbctype = fds_compact_k%nbctype
-
-      block = dim3(blksz, blksz, 1)
+      block = dim3(blksz, blksz, blksz)
       grid%x = ceiling(real(im+1)/blksz)
       grid%y = ceiling(real(jm+1)/blksz)
-      grid%z = 1
-      call gradcal_2d_kernel_k <<< grid, block >>> ( dx, dy, dz, im, jm, km, ncolm, first_node, last_node, nbctype)
+      grid%z = ceiling(real(km+1)/blksz)
+      call gradcal_3d_kernel_i <<< grid, block >>> (dx, dy, dz, im, jm, km)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
 
+      block = dim3(blksz, blksz, blksz)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = ceiling(real(km+1)/blksz)
+      call gradcal_3d_kernel_j <<< grid, block >>> (dx, dy, dz, im, jm, km)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
+      
+      block = dim3(blksz, blksz, blksz)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = ceiling(real(km+1)/blksz)
+      call gradcal_3d_kernel_k <<< grid, block >>> (dx, dy, dz, im, jm, km)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
    end subroutine gradcal
 
    subroutine convection
       use cudafor
       use commarray_gpu,only: q_d,vel_d,prs_d,qrhs_d
-        use commvar,  only: im,jm,km,hm,numq
-        use commarray,only: dx,dy,dz
-        use derivative,only : fds,fds_compact_i,fds_compact_j,fds_compact_k
+      use commvar,  only: im,jm,km,hm,numq
+      use commarray,only: dx,dy,dz
       implicit none
       ! 输入输出参数
 
-      integer :: first_node, last_node, nbctype, istat
-      integer :: blksz=16
+      integer :: istat
+      integer :: blksz=8
 
       type(dim3) :: grid, block
 
-      first_node = fds_compact_i%first_node
-      last_node = fds_compact_i%last_node
-      nbctype = fds_compact_i%nbctype
 
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(jm+1)/blksz)
-      grid%y = ceiling(real(km+1)/blksz)
-      grid%z = 1
-      call convection_2d_kernel_i <<< grid, block >>>( dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
-
-      first_node = fds_compact_j%first_node
-      last_node = fds_compact_j%last_node
-      nbctype = fds_compact_j%nbctype
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(km+1)/blksz)
-      grid%y = ceiling(real(im+1)/blksz)
-      grid%z = 1
-      call convection_2d_kernel_j <<< grid, block >>>( dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
-      
-      first_node = fds_compact_k%first_node
-      last_node = fds_compact_k%last_node
-      nbctype = fds_compact_k%nbctype
-
-      block = dim3(blksz, blksz, 1)
+      block = dim3(blksz, blksz, blksz)
       grid%x = ceiling(real(im+1)/blksz)
       grid%y = ceiling(real(jm+1)/blksz)
-      grid%z = 1
-      call convection_2d_kernel_k <<< grid, block >>>( dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
+      grid%z = ceiling(real(km+1)/blksz)
+      call convection_3d_kernel_i <<< grid, block >>>(dx, dy, dz, im, jm, km)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
+
+      block = dim3(blksz, blksz, blksz)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = ceiling(real(km+1)/blksz)
+      call convection_3d_kernel_j <<< grid, block >>>(dx, dy, dz, im, jm, km)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
+      
+      block = dim3(blksz, blksz, blksz)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = ceiling(real(km+1)/blksz)
+      call convection_3d_kernel_k <<< grid, block >>>(dx, dy, dz, im, jm, km)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
 
    end subroutine convection
 
-   attributes(global) subroutine convection_2d_kernel_i( dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
+   attributes(global) subroutine convection_3d_kernel_i(dx, dy, dz, im, jm, km)
       use commvar, only: hm
+      use constdef, only : num1d60
       use commarray_gpu,only: q_d,vel_d,prs_d,qrhs_d
 
       implicit none
 
-      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
+      integer, value :: im, jm, km
       real(8), value :: dx, dy, dz
       integer ::  i, j, k, n
-
-      real(8) :: fcs(-hm:im + hm, 1:numq), dfcs(0:im, 1:numq), uu(-hm:im + hm)
-
-      j = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      k = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-
-      ! 边界判断
-      if (j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
-         uu(:) = vel_d(:, j, k, 1)
-         fcs(:, 1) = q_d(:, j, k, 1)*uu
-         fcs(:, 2) = q_d(:, j, k, 2)*uu + prs_d(:, j, k)
-         fcs(:, 3) = q_d(:, j, k, 3)*uu
-         fcs(:, 4) = q_d(:, j, k, 4)*uu
-         fcs(:, 5) = (q_d(:, j, k, 5) + prs_d(:, j, k))*uu
-
-         dfcs = df_compact_batch_5_gpu(first_node, last_node, nbctype, ac_i_d, fcs, im)
-
-         qrhs_d(0:im, j, k, :) = qrhs_d(0:im, j, k, :) + dfcs(0:im, :)/dx
-      end if
-
-   end subroutine convection_2d_kernel_i
-
-   attributes(global) subroutine convection_2d_kernel_j( dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu,only: q_d,vel_d,prs_d,qrhs_d
-
-      implicit none
-
-      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
-      real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
-
-      real(8) :: fcs(-hm:jm + hm, 1:numq), dfcs(0:jm, 1:numq), uu(-hm:jm + hm)
-
-      k = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      i = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-
-      ! 边界判断
-      if (k >= 0 .and. k <= km .and. i >= 0 .and. i <= im) then
-         uu(:) = vel_d(i, :, k, 2)
-         fcs(:, 1) = q_d(i, :, k, 1)*uu
-         fcs(:, 2) = q_d(i, :, k, 2)*uu
-         fcs(:, 3) = q_d(i, :, k, 3)*uu + prs_d(i, :, k)
-         fcs(:, 4) = q_d(i, :, k, 4)*uu
-         fcs(:, 5) = (q_d(i, :, k, 5) + prs_d(i, :, k))*uu
-
-         dfcs = df_compact_batch_5_gpu(first_node, last_node, nbctype, ac_j_d, fcs, jm)
-
-         qrhs_d(i, 0:jm, k, :) = qrhs_d(i, 0:jm, k, :) + dfcs(0:jm, :)/dy
-      end if
-
-   end subroutine convection_2d_kernel_j
-
-   attributes(global) subroutine convection_2d_kernel_k( dx, dy, dz, im, jm, km, numq, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu,only: q_d,vel_d,prs_d,qrhs_d
-
-      implicit none
-
-      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
-      real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
-
-      real(8) :: fcs(-hm:km + hm, 1:numq), dfcs(0:km, 1:numq), uu(-hm:km + hm)
+      real(8)::f1p,f1m,f2p,f2m,f3p,f3m,f4p,f4m,f5p,f5m
 
       i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
       j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
 
       ! 边界判断
-      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm) then
-         uu(:) = vel_d(i, j, :, 3)
-         fcs(:, 1) = q_d(i, j, :, 1)*uu
-         fcs(:, 2) = q_d(i, j, :, 2)*uu
-         fcs(:, 3) = q_d(i, j, :, 3)*uu
-         fcs(:, 4) = q_d(i, j, :, 4)*uu + prs_d(i, j, :)
-         fcs(:, 5) = (q_d(i, j, :, 5) + prs_d(i, j, :))*uu
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         ! --- +1 ---
+         f1p = q_d(i+1,j,k,1)*vel_d(i+1,j,k,1)
+         f2p = q_d(i+1,j,k,2)*vel_d(i+1,j,k,1)+prs_d(i+1,j,k)
+         f3p = q_d(i+1,j,k,3)*vel_d(i+1,j,k,1)
+         f4p = q_d(i+1,j,k,4)*vel_d(i+1,j,k,1)
+         f5p = (q_d(i+1,j,k,5)+prs_d(i+1,j,k))*vel_d(i+1,j,k,1)
 
-         dfcs = df_compact_batch_5_gpu(first_node, last_node, nbctype, ac_k_d, fcs, km)
+         f1m = q_d(i-1,j,k,1)*vel_d(i-1,j,k,1)
+         f2m = q_d(i-1,j,k,2)*vel_d(i-1,j,k,1)+prs_d(i-1,j,k)
+         f3m = q_d(i-1,j,k,3)*vel_d(i-1,j,k,1)
+         f4m = q_d(i-1,j,k,4)*vel_d(i-1,j,k,1)
+         f5m = (q_d(i-1,j,k,5)+prs_d(i-1,j,k))*vel_d(i-1,j,k,1)
 
-         qrhs_d(i, j, 0:km, :) = qrhs_d(i, j, 0:km, :) + dfcs(0:km, :)/dz
+         qrhs_d(i,j,k,1) = qrhs_d(i,j,k,1) + &
+            (0.75d0*(f1p-f1m) - 0.15d0*(flux_i(i,2,j,k,1)-flux_i(i,-2,j,k,1)) + &
+           num1d60*(flux_i(i,3,j,k,1)-flux_i(i,-3,j,k,1)))/dx
+
+         qrhs_d(i,j,k,2) = qrhs_d(i,j,k,2) + &
+           (0.75d0*(f2p-f2m) - 0.15d0*(flux_i(i,2,j,k,2)-flux_i(i,-2,j,k,2)) + &
+           num1d60*(flux_i(i,3,j,k,2)-flux_i(i,-3,j,k,2)))/dx
+
+         qrhs_d(i,j,k,3) = qrhs_d(i,j,k,3) + &
+           (0.75d0*(f3p-f3m) - 0.15d0*(flux_i(i,2,j,k,3)-flux_i(i,-2,j,k,3)) + &
+           num1d60*(flux_i(i,3,j,k,3)-flux_i(i,-3,j,k,3)))/dx
+
+         qrhs_d(i,j,k,4) = qrhs_d(i,j,k,4) + &
+            (0.75d0*(f4p-f4m) - 0.15d0*(flux_i(i,2,j,k,4)-flux_i(i,-2,j,k,4)) + &
+           num1d60*(flux_i(i,3,j,k,4)-flux_i(i,-3,j,k,4)))/dx
+
+         qrhs_d(i,j,k,5) = qrhs_d(i,j,k,5) + &
+           (0.75d0*(f5p-f5m) - 0.15d0*(flux_i(i,2,j,k,5)-flux_i(i,-2,j,k,5)) + &
+           num1d60*(flux_i(i,3,j,k,5)-flux_i(i,-3,j,k,5)))/dx
       end if
 
-   end subroutine convection_2d_kernel_k
+   end subroutine convection_3d_kernel_i
+
+   attributes(global) subroutine convection_3d_kernel_j(dx, dy, dz, im, jm, km)
+      use commvar, only: hm
+      use constdef, only : num1d60
+      use commarray_gpu,only: q_d,vel_d,prs_d,qrhs_d
+
+      implicit none
+
+      integer, value :: im, jm, km
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k, n
+      real(8)::f1p,f1m,f2p,f2m,f3p,f3m,f4p,f4m,f5p,f5m
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+
+         ! ---- +1 ----
+         f1p = q_d(i,j+1,k,1)*vel_d(i,j+1,k,2)
+         f2p = q_d(i,j+1,k,2)*vel_d(i,j+1,k,2)
+         f3p = q_d(i,j+1,k,3)*vel_d(i,j+1,k,2) + prs_d(i,j+1,k)
+         f4p = q_d(i,j+1,k,4)*vel_d(i,j+1,k,2)
+         f5p = (q_d(i,j+1,k,5)+prs_d(i,j+1,k))*vel_d(i,j+1,k,2)
+
+         ! ---- -1 ----
+         f1m = q_d(i,j-1,k,1)*vel_d(i,j-1,k,2)
+         f2m = q_d(i,j-1,k,2)*vel_d(i,j-1,k,2)
+         f3m = q_d(i,j-1,k,3)*vel_d(i,j-1,k,2) + prs_d(i,j-1,k)
+         f4m = q_d(i,j-1,k,4)*vel_d(i,j-1,k,2)
+         f5m = (q_d(i,j-1,k,5)+prs_d(i,j-1,k))*vel_d(i,j-1,k,2)
+
+         ! ---- 写入 RHS ----
+         qrhs_d(i,j,k,1) = qrhs_d(i,j,k,1) + &
+           (0.75d0*(f1p-f1m) - 0.15d0*(flux_j(i,j,k,2,1)-flux_j(i,j,k,-2,1)) + &
+           num1d60*(flux_j(i,j,k,3,1)-flux_j(i,j,k,-3,1)))/dy
+
+         qrhs_d(i,j,k,2) = qrhs_d(i,j,k,2) + &
+           (0.75d0*(f2p-f2m) - 0.15d0*(flux_j(i,j,k,2,2)-flux_j(i,j,k,-2,2)) + &
+           num1d60*(flux_j(i,j,k,3,2)-flux_j(i,j,k,-3,2)))/dy
+
+         qrhs_d(i,j,k,3) = qrhs_d(i,j,k,3) + &
+           (0.75d0*(f3p-f3m) - 0.15d0*(flux_j(i,j,k,2,3)-flux_j(i,j,k,-2,3)) + &
+           num1d60*(flux_j(i,j,k,3,3)-flux_j(i,j,k,-3,3)))/dy
+
+         qrhs_d(i,j,k,4) = qrhs_d(i,j,k,4) + &
+           (0.75d0*(f4p-f4m) - 0.15d0*(flux_j(i,j,k,2,4)-flux_j(i,j,k,-2,4)) + &
+           num1d60*(flux_j(i,j,k,3,4)-flux_j(i,j,k,-3,4)))/dy
+
+         qrhs_d(i,j,k,5) = qrhs_d(i,j,k,5) + &
+            (0.75d0*(f5p-f5m) - 0.15d0*(flux_j(i,j,k,2,5)-flux_j(i,j,k,-2,5)) + &
+            num1d60*(flux_j(i,j,k,3,5)-flux_j(i,j,k,-3,5)))/dy
+      end if
+
+   end subroutine convection_3d_kernel_j
+
+   attributes(global) subroutine convection_3d_kernel_k(dx, dy, dz, im, jm, km)
+      use commvar, only: hm
+      use constdef, only : num1d60
+      use commarray_gpu,only: q_d,vel_d,prs_d,qrhs_d
+
+      implicit none
+
+      integer, value :: im, jm, km
+      real(8), value :: dx, dy, dz
+      integer ::  i, j, k, n
+      real(8)::f1p,f1m,f2p,f2m,f3p,f3m,f4p,f4m,f5p,f5m
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         ! ---- +1 ----
+         f1p = q_d(i,j,k+1,1)*vel_d(i,j,k+1,3)
+         f2p = q_d(i,j,k+1,2)*vel_d(i,j,k+1,3)
+         f3p = q_d(i,j,k+1,3)*vel_d(i,j,k+1,3)
+         f4p = q_d(i,j,k+1,4)*vel_d(i,j,k+1,3) + prs_d(i,j,k+1)
+         f5p = (q_d(i,j,k+1,5)+prs_d(i,j,k+1))*vel_d(i,j,k+1,3)
+
+         ! ---- -1 ----
+         f1m = q_d(i,j,k-1,1)*vel_d(i,j,k-1,3)
+         f2m = q_d(i,j,k-1,2)*vel_d(i,j,k-1,3)
+         f3m = q_d(i,j,k-1,3)*vel_d(i,j,k-1,3)
+         f4m = q_d(i,j,k-1,4)*vel_d(i,j,k-1,3) + prs_d(i,j,k-1)
+         f5m = (q_d(i,j,k-1,5)+prs_d(i,j,k-1))*vel_d(i,j,k-1,3)
+
+         ! ---- 写入 RHS ----
+         qrhs_d(i,j,k,1) = qrhs_d(i,j,k,1) + &
+            (0.75d0*(f1p-f1m) - 0.15d0*(flux_k(i,j,k,2,1)-flux_k(i,j,k,-2,1)) + &
+            num1d60*(flux_k(i,j,k,3,1)-flux_k(i,j,k,-3,1)))/dz
+
+         qrhs_d(i,j,k,2) = qrhs_d(i,j,k,2) + &
+            (0.75d0*(f2p-f2m) - 0.15d0*(flux_k(i,j,k,2,2)-flux_k(i,j,k,-2,2)) + &
+            num1d60*(flux_k(i,j,k,3,2)-flux_k(i,j,k,-3,2)))/dz
+
+         qrhs_d(i,j,k,3) = qrhs_d(i,j,k,3) + &
+            (0.75d0*(f3p-f3m) - 0.15d0*(flux_k(i,j,k,2,3)-flux_k(i,j,k,-2,3)) + &
+            num1d60*(flux_k(i,j,k,3,3)-flux_k(i,j,k,-3,3)))/dz
+
+         qrhs_d(i,j,k,4) = qrhs_d(i,j,k,4) + &
+            (0.75d0*(f4p-f4m) - 0.15d0*(flux_k(i,j,k,2,4)-flux_k(i,j,k,-2,4)) + &
+            num1d60*(flux_k(i,j,k,3,4)-flux_k(i,j,k,-3,4)))/dz
+
+         qrhs_d(i,j,k,5) = qrhs_d(i,j,k,5) + &
+            (0.75d0*(f5p-f5m) - 0.15d0*(flux_k(i,j,k,2,5)-flux_k(i,j,k,-2,5)) + &
+            num1d60*(flux_k(i,j,k,3,5)-flux_k(i,j,k,-3,5)))/dz
+      end if
+
+   end subroutine convection_3d_kernel_k
+
+   attributes(device) function flux_i(i,shift,j,k,n) result(f)
+         use commarray_gpu,only: q_d,vel_d,prs_d
+         implicit none
+            integer,intent(in)::i,shift,j,k,n
+            real(8)::f,uu
+            uu = vel_d(i+shift,j,k,1)
+
+            select case(n)
+            case(1)
+              f = q_d(i+shift,j,k,1)*uu
+            case(2)
+              f = q_d(i+shift,j,k,2)*uu + prs_d(i+shift,j,k)
+            case(3)
+              f = q_d(i+shift,j,k,3)*uu
+            case(4)
+              f = q_d(i+shift,j,k,4)*uu
+            case(5)
+              f = (q_d(i+shift,j,k,5)+prs_d(i+shift,j,k))*uu
+            end select
+   end function flux_i
+
+   attributes(device) function flux_j(i,j,k,shift,n) result(f)
+         use commarray_gpu,only: q_d,vel_d,prs_d
+         implicit none
+            integer,intent(in)::i,j,k,shift,n
+            real(8)::f,uu
+
+            uu = vel_d(i,j+shift,k,2)
+
+            select case(n)
+            case(1)
+              f = q_d(i,j+shift,k,1)*uu
+            case(2)
+              f = q_d(i,j+shift,k,2)*uu
+            case(3)
+              f = q_d(i,j+shift,k,3)*uu + prs_d(i,j+shift,k)
+            case(4)
+              f = q_d(i,j+shift,k,4)*uu
+            case(5)
+              f = (q_d(i,j+shift,k,5)+prs_d(i,j+shift,k))*uu
+            end select
+
+   end function flux_j
+
+   attributes(device) function flux_k(i,j,k,shift,n) result(f)
+         use commarray_gpu,only: q_d,vel_d,prs_d
+         implicit none
+            integer,intent(in)::i,j,k,shift,n
+            real(8)::f,uu
+
+            uu = vel_d(i,j,k+shift,3)
+
+            select case(n)
+            case(1)
+              f = q_d(i,j,k+shift,1)*uu
+            case(2)
+              f = q_d(i,j,k+shift,2)*uu
+            case(3)
+              f = q_d(i,j,k+shift,3)*uu
+            case(4)
+              f = q_d(i,j,k+shift,4)*uu + prs_d(i,j,k+shift)
+            case(5)
+              f = (q_d(i,j,k+shift,5)+prs_d(i,j,k+shift))*uu
+            end select
+
+   end function flux_k
 
    subroutine diffusion
 
@@ -347,22 +459,17 @@ implicit none
       use constdef
       use commvar,  only: im,jm,km,hm,reynolds,prandtl,const5,ref_tem
       use commvar_gpu
-      use commarray_gpu,only: vel_d,dvel_d,dtmp_d,qrhs_d,tmp_d
+      use commarray_gpu,only: vel_d,dvel_d,dtmp_d,qrhs_d,tmp_d,sigma_d,qflux_d
       use commarray, only: dx,dy,dz
-      use derivative, only : fds,fds_compact_i,fds_compact_j,fds_compact_k
       use bc_gpu, only : bchomovec_gpu
       use cudafor
 
 
-      real(8), device, allocatable, save :: sigma_d(:,:,:,:)
-      real(8), device, allocatable, save :: qflux_d(:,:,:,:)
-
-      integer :: first_node, last_node, nbctype, istat
-      integer :: blksz=16
+      integer :: blksz=8,istat
 
       type(dim3) :: block,grid
 
-      integer :: i,j,k,n,ncolm
+      integer :: i,j,k
 
       real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
 
@@ -370,12 +477,6 @@ implicit none
 
       call copy_commvar_to_gpu()
 
-      if(firstcall) then
-         allocate( sigma_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),              &
-                  qflux_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3) )
-         !
-         firstcall=.false.
-      endif
       !$cuf kernel do(3) <<<*,*>>>
       do k=0,km
       do j=0,jm
@@ -413,54 +514,59 @@ implicit none
       enddo
       enddo
       enddo
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
 
       call bchomovec_gpu(sigma_d, 0, im, jm, km, hm, 6)
 
       call bchomovec_gpu(qflux_d, 0, im, jm, km, hm, 3)
 
-      ncolm=4
-
-      first_node = fds_compact_i%first_node
-      last_node = fds_compact_i%last_node
-      nbctype = fds_compact_i%nbctype
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(jm+1)/blksz)
-      grid%y = ceiling(real(km+1)/blksz)
-      grid%z = 1
-      call diffusion_2d_kernel_i <<< grid, block >>>(sigma_d,qflux_d,ncolm,im, jm, km,dx, dy, dz, first_node, last_node, nbctype)
-      
-      first_node = fds_compact_j%first_node
-      last_node = fds_compact_j%last_node
-      nbctype = fds_compact_j%nbctype
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(km+1)/blksz)
-      grid%y = ceiling(real(im+1)/blksz)
-      grid%z = 1
-      call diffusion_2d_kernel_j <<< grid, block >>>(sigma_d,qflux_d,ncolm,im, jm, km,dx, dy, dz, first_node, last_node, nbctype)
-      
-      
-      first_node = fds_compact_k%first_node
-      last_node = fds_compact_k%last_node
-      nbctype = fds_compact_k%nbctype
-
-      block = dim3(blksz, blksz, 1)
+      block = dim3(blksz, blksz, blksz)
       grid%x = ceiling(real(im+1)/blksz)
       grid%y = ceiling(real(jm+1)/blksz)
-      grid%z = 1
-      call diffusion_2d_kernel_k <<< grid, block >>>(sigma_d,qflux_d,ncolm,im, jm, km,dx, dy, dz, first_node, last_node, nbctype)
+      grid%z = ceiling(real(km+1)/blksz)
+      call diffusion_3d_kernel_i <<< grid, block >>>(im, jm, km, dx, dy, dz)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
+      
+      block = dim3(blksz, blksz, blksz)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = ceiling(real(km+1)/blksz)
+      call diffusion_3d_kernel_j <<< grid, block >>>(im, jm, km, dx, dy, dz)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
+      
+      
+      block = dim3(blksz, blksz, blksz)
+      grid%x = ceiling(real(im+1)/blksz)
+      grid%y = ceiling(real(jm+1)/blksz)
+      grid%z = ceiling(real(km+1)/blksz)
+      call diffusion_3d_kernel_k <<< grid, block >>>(im, jm, km, dx, dy, dz)
+      istat=cudaDeviceSynchronize()
+      if (istat /= 0) then
+         print *, "CUDA error =", istat
+         stop
+      end if
 
    end subroutine diffusion
 
-   attributes(global) subroutine viscous_flux(sigma_d,qflux_d,im, jm, km)
+   attributes(global) subroutine viscous_flux(im, jm, km)
       use commvar_gpu
       use constdef
-      use commarray_gpu,only: vel_d,dvel_d,dtmp_d,tmp_d
+      use commarray_gpu,only: vel_d,dvel_d,dtmp_d,tmp_d,sigma_d,qflux_d
 
       implicit none
       
-      real(8), device, intent(inout) :: sigma_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),qflux_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
       real(8) :: s11,s12,s13,s22,s23,s33,skk,miu,miu2,hcc
       integer, value :: im, jm, km
       integer ::  i, j, k
@@ -505,284 +611,277 @@ implicit none
 
    end subroutine viscous_flux
 
-   attributes(global) subroutine diffusion_2d_kernel_i(sigma_d,qflux_d,ncolm,im, jm, km, dx, dy, dz, first_node, last_node, nbctype)
+   attributes(global) subroutine diffusion_3d_kernel_i(im, jm, km, dx, dy, dz)
       use commvar, only: hm
-      use commarray_gpu,only:qrhs_d
+      use commarray_gpu,only:qrhs_d,sigma_d,qflux_d
 
       implicit none
 
-      real(8), device, intent(inout) :: sigma_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),qflux_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
-      real(8) :: ff(-hm:im + hm, ncolm)
-      real(8) :: df(0:im, ncolm)
-
-
-      integer, value :: im, jm, km,ncolm,first_node, last_node, nbctype
+      integer, value :: im, jm, km
       real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
+      integer ::  i, j, k
 
-      j = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      k = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
 
-      if (j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
-          !
-          ff(:,1)= sigma_d(:,j,k,1)
-          ff(:,2)= sigma_d(:,j,k,2)
-          ff(:,3)= sigma_d(:,j,k,3)
-          ff(:,4)= qflux_d(:,j,k,1)
-          !
-          !+------------------------------+
-          !|    calculate derivative      |
-          !+------------------------------+
-          df=df_compact_batch_4_gpu(first_node, last_node, nbctype, ac_i_d, ff, im)
-          !
-          !+------------------------------+
-          !| end of calculate derivative  |
-          !+------------------------------+
-          !
-          do i = 0, im
-          qrhs_d(i,j,k,2)=qrhs_d(i,j,k,2)+df(i,1)/dx
-          qrhs_d(i,j,k,3)=qrhs_d(i,j,k,3)+df(i,2)/dx
-          qrhs_d(i,j,k,4)=qrhs_d(i,j,k,4)+df(i,3)/dx
-          qrhs_d(i,j,k,5)=qrhs_d(i,j,k,5)+df(i,4)/dx
-          end do
-      
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         qrhs_d(i,j,k,2) = qrhs_d(i,j,k,2) + deriv_i_sigma(i,j,k,1)/dx
+         qrhs_d(i,j,k,3) = qrhs_d(i,j,k,3) + deriv_i_sigma(i,j,k,2)/dx
+         qrhs_d(i,j,k,4) = qrhs_d(i,j,k,4) + deriv_i_sigma(i,j,k,3)/dx
+         qrhs_d(i,j,k,5) = qrhs_d(i,j,k,5) + deriv_i_qflux(i,j,k,1)/dx
       end if
 
-   end subroutine diffusion_2d_kernel_i
+   end subroutine diffusion_3d_kernel_i
    
-   attributes(global) subroutine diffusion_2d_kernel_j(sigma_d,qflux_d,ncolm,im, jm, km, dx, dy, dz, first_node, last_node, nbctype)
+   attributes(global) subroutine diffusion_3d_kernel_j(im, jm, km, dx, dy, dz)
       use commvar, only: hm
-      use commarray_gpu,only:qrhs_d
+      use commarray_gpu,only:qrhs_d,sigma_d,qflux_d
 
       implicit none
 
-      real(8), device, intent(inout) :: sigma_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),qflux_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
-      real(8) :: ff(-hm:jm + hm, ncolm)
-      real(8) :: df(0:jm, ncolm)
-
-
-      integer, value :: im, jm, km,ncolm,first_node, last_node, nbctype
+      integer, value :: im, jm, km
       real(8), value :: dx, dy, dz
-      integer ::  i, j, k, n
+      integer ::  i, j, k
 
-      k = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      i = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
 
-      if (k >= 0 .and. k <= km .and. i >= 0 .and. i <= im) then
-          !
-          ff(:,1)= sigma_d(i,:,k,2)
-          ff(:,2)= sigma_d(i,:,k,4)
-          ff(:,3)= sigma_d(i,:,k,5)
-          ff(:,4)= qflux_d(i,:,k,2)
-          !
-          !+------------------------------+
-          !|    calculate derivative      |
-          !+------------------------------+
-           df=df_compact_batch_4_gpu(first_node, last_node, nbctype, ac_j_d, ff, jm)
-          !
-          !+------------------------------+
-          !| end of calculate derivative  |
-          !+------------------------------+
-          !
-          do j = 0, jm
-          qrhs_d(i,j,k,2)=qrhs_d(i,j,k,2)+df(j,1)/dy
-          qrhs_d(i,j,k,3)=qrhs_d(i,j,k,3)+df(j,2)/dy
-          qrhs_d(i,j,k,4)=qrhs_d(i,j,k,4)+df(j,3)/dy
-          qrhs_d(i,j,k,5)=qrhs_d(i,j,k,5)+df(j,4)/dy
-          end do
-      
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         qrhs_d(i,j,k,2) = qrhs_d(i,j,k,2) + deriv_j_sigma(i,j,k,2)/dy
+         qrhs_d(i,j,k,3) = qrhs_d(i,j,k,3) + deriv_j_sigma(i,j,k,4)/dy
+         qrhs_d(i,j,k,4) = qrhs_d(i,j,k,4) + deriv_j_sigma(i,j,k,5)/dy
+         qrhs_d(i,j,k,5) = qrhs_d(i,j,k,5) + deriv_j_qflux(i,j,k,2)/dy
       end if
 
-   end subroutine diffusion_2d_kernel_j
+   end subroutine diffusion_3d_kernel_j
 
-   attributes(global) subroutine diffusion_2d_kernel_k(sigma_d,qflux_d,ncolm,im, jm, km, dx, dy, dz, first_node, last_node, nbctype)
+   attributes(global) subroutine diffusion_3d_kernel_k(im, jm, km, dx, dy, dz)
       use commvar, only: hm
-      use commarray_gpu,only:qrhs_d
+      use commarray_gpu,only:qrhs_d,sigma_d,qflux_d
 
       implicit none
 
-      real(8), device, intent(inout) :: sigma_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:6),qflux_d(-hm:im+hm,-hm:jm+hm,-hm:km+hm,1:3)
-      real(8) :: ff(-hm:km + hm, ncolm)
-      real(8) :: df(0:km, ncolm)
-
-
-      integer, value :: im, jm, km,ncolm,first_node, last_node, nbctype
+      integer, value :: im, jm, km
       real(8), value :: dx, dy, dz
+      integer ::  i, j, k
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         qrhs_d(i,j,k,2) = qrhs_d(i,j,k,2) + deriv_k_sigma(i,j,k,3)/dz
+         qrhs_d(i,j,k,3) = qrhs_d(i,j,k,3) + deriv_k_sigma(i,j,k,5)/dz
+         qrhs_d(i,j,k,4) = qrhs_d(i,j,k,4) + deriv_k_sigma(i,j,k,6)/dz
+         qrhs_d(i,j,k,5) = qrhs_d(i,j,k,5) + deriv_k_qflux(i,j,k,3)/dz
+      end if
+
+   end subroutine diffusion_3d_kernel_k
+   ! =========================================================
+   ! 通用 stencil（i方向 sigma）
+   ! =========================================================
+   attributes(device) function deriv_i_sigma(i,j,k,comp) result(df)
+      use constdef, only : num1d60
+      use commarray_gpu,only:sigma_d,qflux_d
+      implicit none
+      integer,intent(in)::i,j,k,comp
+      real(8)::df
+
+      df = 0.75d0*(sigma_d(i+1,j,k,comp)-sigma_d(i-1,j,k,comp)) - &
+         0.15d0*(sigma_d(i+2,j,k,comp)-sigma_d(i-2,j,k,comp)) + &
+         num1d60*(sigma_d(i+3,j,k,comp)-sigma_d(i-3,j,k,comp))
+
+   end function
+
+   attributes(device) function deriv_i_qflux(i,j,k,comp) result(df)
+      use constdef, only : num1d60
+      use commarray_gpu,only:sigma_d,qflux_d
+      implicit none
+      integer,intent(in)::i,j,k,comp
+      real(8)::df
+
+      df = 0.75d0*(qflux_d(i+1,j,k,comp)-qflux_d(i-1,j,k,comp)) - &
+         0.15d0*(qflux_d(i+2,j,k,comp)-qflux_d(i-2,j,k,comp)) + &
+         num1d60*(qflux_d(i+3,j,k,comp)-qflux_d(i-3,j,k,comp))
+
+   end function
+
+   ! =========================================================
+   ! j方向
+   ! =========================================================
+   attributes(device) function deriv_j_sigma(i,j,k,comp) result(df)
+      use constdef, only : num1d60
+      use commarray_gpu,only:sigma_d,qflux_d
+      implicit none
+      integer,intent(in)::i,j,k,comp
+      real(8)::df
+
+      df = 0.75d0*(sigma_d(i,j+1,k,comp)-sigma_d(i,j-1,k,comp)) - &
+         0.15d0*(sigma_d(i,j+2,k,comp)-sigma_d(i,j-2,k,comp)) + &
+         num1d60*(sigma_d(i,j+3,k,comp)-sigma_d(i,j-3,k,comp))
+
+   end function
+
+   attributes(device) function deriv_j_qflux(i,j,k,comp) result(df)
+      use constdef, only : num1d60
+      use commarray_gpu,only:sigma_d,qflux_d
+      implicit none
+      integer,intent(in)::i,j,k,comp
+      real(8)::df
+
+      df = 0.75d0*(qflux_d(i,j+1,k,comp)-qflux_d(i,j-1,k,comp)) - &
+         0.15d0*(qflux_d(i,j+2,k,comp)-qflux_d(i,j-2,k,comp)) + &
+         num1d60*(qflux_d(i,j+3,k,comp)-qflux_d(i,j-3,k,comp))
+
+   end function
+
+   ! =========================================================
+   ! k方向  
+   ! =========================================================
+   attributes(device) function deriv_k_sigma(i,j,k,comp) result(df)
+      use constdef, only : num1d60
+      use commarray_gpu,only:sigma_d,qflux_d
+      implicit none
+      integer,intent(in)::i,j,k,comp
+      real(8)::df
+
+      df = 0.75d0*(sigma_d(i,j,k+1,comp)-sigma_d(i,j,k-1,comp)) - &
+         0.15d0*(sigma_d(i,j,k+2,comp)-sigma_d(i,j,k-2,comp)) + &
+         num1d60*(sigma_d(i,j,k+3,comp)-sigma_d(i,j,k-3,comp))
+
+   end function
+
+   attributes(device) function deriv_k_qflux(i,j,k,comp) result(df)
+      use constdef, only : num1d60
+      use commarray_gpu,only:sigma_d,qflux_d
+      implicit none
+      integer,intent(in)::i,j,k,comp
+      real(8)::df
+
+      df = 0.75d0*(qflux_d(i,j,k+1,comp)-qflux_d(i,j,k-1,comp)) - &
+         0.15d0*(qflux_d(i,j,k+2,comp)-qflux_d(i,j,k-2,comp)) + &
+         num1d60*(qflux_d(i,j,k+3,comp)-qflux_d(i,j,k-3,comp))
+
+   end function
+
+
+    attributes(global) subroutine compact_filter_3d_kernel_i(q_in, q_out,im,jm,km,numq)
+      use commvar,only:hm
+      use filter_gpu
+      implicit none
+      integer,value:: im,jm,km,numq
+      real(8), device :: q_in(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+      real(8), device :: q_out(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
       integer ::  i, j, k, n
 
       i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
       j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-
-      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm) then
-          !
-            ff(:,1)=sigma_d(i,j,:,3)
-            ff(:,2)=sigma_d(i,j,:,5)
-            ff(:,3)=sigma_d(i,j,:,6)
-            ff(:,4)=qflux_d(i,j,:,3)
-          !
-          !+------------------------------+
-          !|    calculate derivative      |
-          !+------------------------------+
-          df=df_compact_batch_4_gpu(first_node, last_node, nbctype, ac_k_d, ff, km)
-          !
-          !+------------------------------+
-          !| end of calculate derivative  |
-          !+------------------------------+
-          !
-          do k = 0, km
-          qrhs_d(i,j,k,2)=qrhs_d(i,j,k,2)+df(k,1)/dz
-          qrhs_d(i,j,k,3)=qrhs_d(i,j,k,3)+df(k,2)/dz
-          qrhs_d(i,j,k,4)=qrhs_d(i,j,k,4)+df(k,3)/dz
-          qrhs_d(i,j,k,5)=qrhs_d(i,j,k,5)+df(k,4)/dz
-          end do
-      
-      end if
-
-   end subroutine diffusion_2d_kernel_k
-
-    attributes(global) subroutine compact_filter_2d_kernel_i( im, jm, km, numq, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu, only: q_d
-      implicit none
-      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
-      integer ::  i, j, k, n
-
-      real(8) :: f(-hm:im+hm, 1:numq)
-      real(8) :: ff(0:im,1:numq)
-
-      ! 计算全局 j,k 索引
-      j = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      k = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
       
 
       ! 边界判断
-      if (j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
-  
-            ! gather
-            f(-hm:im+hm, :) = q_d(-hm:im+hm, j, k, :)
-
-            ! filter
-            ff = compact_filter_batch_5_gpu(first_node, last_node, nbctype, ac_filter_i_d, f, im)
-
-            ! scatter
-            q_d(0:im, j, k, :) = ff(0:im,:)
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         do n = 1, numq
+         q_out(i,j,k,n) = &
+            coef6e_d(0)*(2*q_in(i,j,k,n)) + &
+            coef6e_d(1)*(q_in(i-1,j,k,n)+q_in(i+1,j,k,n)) + &
+            coef6e_d(2)*(q_in(i-2,j,k,n)+q_in(i+2,j,k,n)) + &
+            coef6e_d(3)*(q_in(i-3,j,k,n)+q_in(i+3,j,k,n))
+         end do
       end if
 
-   end subroutine compact_filter_2d_kernel_i
+   end subroutine compact_filter_3d_kernel_i
 
-   attributes(global) subroutine compact_filter_2d_kernel_j( im, jm, km, numq, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu, only: q_d
-
+   attributes(global) subroutine compact_filter_3d_kernel_j(q_in, q_out,im,jm,km,numq)
+      use commvar,only:hm
+      use filter_gpu
       implicit none
-      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
+      integer,value:: im,jm,km,numq
+      real(8), device :: q_in(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+      real(8), device :: q_out(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
       integer ::  i, j, k, n
 
-      real(8) :: f(-hm:jm + hm,1:numq)
-      real(8) :: ff(0:jm,1:numq)
-
-      ! 计算全局 k,i 索引
-      k = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
-      i = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-      
-      ! 边界判断
-      if (k >= 0 .and. k <= km .and. i >= 0 .and. i <= im) then
-
-            ! gather
-            f(-hm:jm+hm,:) = q_d(i, -hm:jm+hm, k, :)
-
-            ! filter
-            ff = compact_filter_batch_5_gpu(first_node, last_node, nbctype, ac_filter_j_d, f, jm)
-
-            ! scatter
-            q_d(i, 0:jm, k, :) = ff(0:jm,:)
-         
-      end if
-
-   end subroutine compact_filter_2d_kernel_j
-
-   attributes(global) subroutine compact_filter_2d_kernel_k( im, jm, km, numq, first_node, last_node, nbctype)
-      use commvar, only: hm
-      use commarray_gpu, only: q_d
-
-      implicit none
-      integer, value :: im, jm, km, numq, first_node, last_node, nbctype
-      integer ::  i, j, k, n
-
-      real(8) :: f(-hm:km + hm,1:numq)
-      real(8) :: ff(0:km,1:numq)
-
-      ! 计算全局 i,j 索引
       i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
       j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
-
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+      
       ! 边界判断
-      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm) then
-            ! gather
-            f(-hm:km+hm,:) = q_d( i, j, -hm:km+hm, :)
-
-            ! filter
-            ff = compact_filter_batch_5_gpu(first_node, last_node, nbctype, ac_filter_k_d, f, km)
-
-            ! scatter
-            q_d(i, j, 0:km, :) = ff(0:km,:)
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         do n = 1, numq
+         q_out(i,j,k,n) = &
+            coef6e_d(0)*(2*q_in(i,j,k,n)) + &
+            coef6e_d(1)*(q_in(i,j-1,k,n)+q_in(i,j+1,k,n)) + &
+            coef6e_d(2)*(q_in(i,j-2,k,n)+q_in(i,j+2,k,n)) + &
+            coef6e_d(3)*(q_in(i,j-3,k,n)+q_in(i,j+3,k,n))
+         end do
       end if
 
-   end subroutine compact_filter_2d_kernel_k
+   end subroutine compact_filter_3d_kernel_j
+
+   attributes(global) subroutine compact_filter_3d_kernel_k(q_in, q_out,im,jm,km,numq)
+      use commvar,only:hm
+      use filter_gpu
+      implicit none
+      integer,value:: im,jm,km,numq
+      real(8), device :: q_in(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+      real(8), device :: q_out(-hm:im+hm, -hm:jm+hm, -hm:km+hm, 1:numq)
+
+      integer ::  i, j, k, n
+
+      i = (blockIdx%x - 1)*blockDim%x + threadIdx%x - 1
+      j = (blockIdx%y - 1)*blockDim%y + threadIdx%y - 1
+      k = (blockIdx%z - 1)*blockDim%z + threadIdx%z - 1
+
+      ! 边界判断
+      if (i >= 0 .and. i <= im .and. j >= 0 .and. j <= jm .and. k >= 0 .and. k <= km) then
+         do n = 1, numq
+         q_out(i,j,k,n) = &
+            coef6e_d(0)*(2*q_in(i,j,k,n)) + &
+            coef6e_d(1)*(q_in(i,j,k-1,n)+q_in(i,j,k+1,n)) + &
+            coef6e_d(2)*(q_in(i,j,k-2,n)+q_in(i,j,k+2,n)) + &
+            coef6e_d(3)*(q_in(i,j,k-3,n)+q_in(i,j,k+3,n))
+         end do
+      end if
+
+   end subroutine compact_filter_3d_kernel_k
 
    subroutine filterq
       use commvar,  only : im,jm,km,hm,numq
-      use filter,   only : compact_filter,filter_i,filter_j,filter_k
       use filter_gpu
       use cudafor
-      use commarray_gpu, only: q_d
+      use commarray_gpu, only: q_d,qbuf_d
       use bc_gpu, only: bchomovec_gpu
       implicit none
       ! 输入输出参数
 
-      integer :: first_node, last_node, nbctype, istat
-      integer :: blksz=16
+      integer :: istat
+      integer :: blksz=8
 
       type(dim3) :: grid, block
-      call copy_coeff_to_gpu_cal()
+      call copy_coeff_to_gpu_explicit()
 
 
-      first_node = filter_i%first_node
-      last_node = filter_i%last_node
-      nbctype = filter_i%nbctype
-
-      call bchomovec_gpu(q_d, 1, im, jm, km, hm, numq)
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(jm+1)/blksz)
-      grid%y = ceiling(real(km+1)/blksz)
-      grid%z = 1
-      call compact_filter_2d_kernel_i <<< grid, block >>> ( im, jm, km, numq, first_node, last_node, nbctype)
-
-      first_node = filter_j%first_node
-      last_node = filter_j%last_node
-      nbctype = filter_j%nbctype
-
-      call bchomovec_gpu(q_d, 2, im, jm, km, hm, numq)
-
-      block = dim3(blksz, blksz, 1)
-      grid%x = ceiling(real(km+1)/blksz)
-      grid%y = ceiling(real(im+1)/blksz)
-      grid%z = 1
-      call compact_filter_2d_kernel_j <<< grid, block >>> ( im, jm, km, numq, first_node, last_node, nbctype)
-
-
-      first_node = filter_k%first_node
-      last_node = filter_k%last_node
-      nbctype = filter_k%nbctype
-
-      call bchomovec_gpu(q_d, 3, im, jm, km, hm, numq)
-
-      block = dim3(blksz, blksz, 1)
+      block = dim3(blksz, blksz, blksz)
       grid%x = ceiling(real(im+1)/blksz)
       grid%y = ceiling(real(jm+1)/blksz)
-      grid%z = 1
-      call compact_filter_2d_kernel_k <<< grid, block >>> ( im, jm, km, numq, first_node, last_node, nbctype)
+      grid%z = ceiling(real(km+1)/blksz)
+
+
+      call bchomovec_gpu(q_d, 1, im, jm, km, hm, numq)
+      call compact_filter_3d_kernel_i <<< grid, block >>> (q_d, qbuf_d,im,jm,km,numq)
+
+
+      call bchomovec_gpu(qbuf_d, 2, im, jm, km, hm, numq)
+      call compact_filter_3d_kernel_j <<< grid, block >>> (qbuf_d, q_d,im,jm,km,numq)
+
+
+      call bchomovec_gpu(q_d, 3, im, jm, km, hm, numq)
+      call compact_filter_3d_kernel_k <<< grid, block >>> (q_d, qbuf_d,im,jm,km,numq)
+      q_d=qbuf_d
       
    end subroutine filterq
     
