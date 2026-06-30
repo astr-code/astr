@@ -82,12 +82,13 @@ contains
         print*,' >> bldef.txt'
       endif
 
-      if(io==0 .and. Twall > 0._wp) then
+      if(Twall > 0._wp) then
       else
         r=sqrt(Pr) !https://www.thermopedia.com/content/291/
         Twall=1.0_wp+0.5_wp*r*(gamma-1._wp)*Me*Me
       endif
       
+
       if(delta_target>0._wp) then
         xin=(delta_target/5.29_wp)**2*Re
       else

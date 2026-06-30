@@ -20,7 +20,8 @@ contains
 
       if(trim(gtype)=='bl') then
         print*,' ** to generate a boundary layer grid'
-        call grid_bl()
+        ! call grid_bl()
+        call grid_bl_simple()
       elseif(trim(gtype)=='zextent') then
         print*,' ** to extent a 2D mesh in z-direction'
         call grid_zextent()
@@ -77,6 +78,150 @@ contains
       call h5_writearray3d(z,im,jm,km,'z','grid.h5')
 
     end subroutine grid_zextent
+
+    subroutine grid_bl_simple
+
+      use pastr_io,     only: parse_command_line
+      use pastr_gradients, only: grad_y
+      use pastr_h5io
+      use pastr_tecio
+
+      real(wp) :: bl_thickness,xmax,ymax,ylen,zmax,xlen,xlen1,lvis,dxmin,dymin
+      real(wp),allocatable :: x1(:),y1(:),z1(:),dx(:),dy(:)
+      real(wp),allocatable :: x(:,:,:),y(:,:,:),z(:,:,:)
+      integer :: im,jm,km,in,in1,in2,jn,i,j,k
+      real(wp) :: vtemp1,utaw
+
+      call parse_command_line( inumber=im )
+      call parse_command_line( inumber=jm )
+      call parse_command_line( inumber=km )
+
+      open(11,file='tbl_stat.txt')
+      read(11,*)lvis
+      read(11,*)bl_thickness
+      close(11)
+      print*,' >> tbl_stat.txt'
+
+      print*,' ** TBL thickness:   ',bl_thickness
+      print*,' ** viscous length:  ',1.d0/lvis
+
+      print*,' ** mesh dimenson:  ',im,'x',jm,'x',km
+
+      ! bl_thickness=0.01d0
+      ! utaw=3.6d-2
+
+      xlen=1.d0
+      xmax=1.25d0
+      dymin=2.d-5
+      ylen=0.8d-1
+      ymax=1.2d-1
+      zmax=0.05d0 !1.d0*bl_thickness
+
+      print*,' ** xlen:',xlen
+      print*,' ** xmax:',xmax
+      print*,' ** ylen:',ylen
+      print*,' ** ymax:',ymax
+      print*,' ** zmax:',zmax
+
+      allocate(x1(0:im),y1(0:jm),z1(0:km),dx(0:im),dy(0:jm))
+
+      ! in1=im/20
+      ! xlen1=0.2d0*xlen
+      ! do i=0,in1
+      !   x1(i)=xlen1/dble(in1)*dble(i)
+      ! enddo
+      ! print*,' ** Delta_x0+=',(x1(in1)-x1(in1-1))*lvis,'x',x1(in1)
+      ! vtemp1=x1(in1)
+
+      ! dxmin=10.5d0/lvis
+
+      ! in2=in1+20
+
+      ! x1(in1:in2)=halfcosmesh(jn=in2-in1,dymin=dxmin,dymax=x1(in1)-x1(in1-1),mode='>')+vtemp1
+      ! print*,' ** Delta_x+=',(x1(in2)-x1(in2-1))*lvis,'x:',x1(in2)
+
+      ! in=im-50
+      ! vtemp1=x1(in2)-x1(in2-1)
+      ! do i=in2,in
+      !   x1(i)=x1(i-1)+vtemp1
+      ! enddo
+      ! print*,' ** Delta_x+=',(x1(in)-x1(in-1))*lvis,'x:',x1(in)
+
+      ! call spongstretch(im-in,xmax,x1(in-2:im))
+
+      in=im-50
+      do i=0,in
+        x1(i)=xlen/dble(in)*dble(i)
+      enddo
+      print*,' ** x_1:',x1(1),x1(1)*lvis
+      print*,' ** x_n:',x1(in)
+
+      call spongstretch(im-in,xmax,x1(in-2:im))
+
+      dx=grad_y(x1)
+      open(18,file='gridx.dat')
+      do i=0,im
+        write(18,*)i,x1(i),dx(i)
+      end do
+      close(18)
+      print*,' << gridx.dat ... done.'
+
+      ! dymin=0.75d0/lvis
+
+      jn=jm-20
+      y1(0:jn)=quatcosmesh(jn=jn,dymin=dymin,ymax=ylen)
+
+      print*,' ** Delta_y1+=',y1(1),y1(1)*lvis
+
+      call spongstretch(jm-jn,ymax,y1(jn-2:jm))
+
+      do j=1,jm
+        if(y1(j)>=bl_thickness) then
+          print*,' ** Delta_yd+=',(y1(j)-y1(j-1)),(y1(j)-y1(j-1))*lvis
+          exit
+        endif
+      enddo
+      print*,' ** Delta_ymax+=',(y1(jm)-y1(jm-1))*lvis
+
+      dy=grad_y(y1)
+      open(18,file='gridy.dat')
+      do j=0,jm
+        write(18,*)j,y1(j),dy(j)
+      end do
+      close(18)
+      print*,' << gridy.dat ... done.'
+
+      if(km==0) then
+        z1=0.d0
+      else
+        do k=0,km
+          z1(k)=zmax/dble(km)*dble(k)
+        enddo
+        print*,' ** Delta_z+=',z1(1)*lvis
+      endif
+
+      allocate(x(0:im,0:jm,0:km),y(0:im,0:jm,0:km),z(0:im,0:jm,0:km))
+      do k=0,km
+      do j=0,jm
+      do i=0,im
+        x(i,j,k)=x1(i)
+        y(i,j,k)=y1(j)
+        z(i,j,k)=z1(k)
+      enddo
+      enddo
+      enddo
+
+      call tecbin('tecgrid_2d.plt',x(:,:,0),'x',y(:,:,0),'y')
+
+      call h5_writearray3d(x,im,jm,km,'x','grid.h5')
+      call h5_writearray3d(y,im,jm,km,'y','grid.h5')
+      call h5_writearray3d(z,im,jm,km,'z','grid.h5')
+
+      call H5WriteArray(x(0:im,0:jm,0),im,jm,'x','grid.2d')
+      call H5WriteArray(y(0:im,0:jm,0),im,jm,'y','grid.2d')
+      call H5WriteArray(z(0:im,0:jm,0),im,jm,'z','grid.2d')
+
+    end subroutine grid_bl_simple
 
     subroutine grid_bl
 

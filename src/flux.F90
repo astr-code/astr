@@ -278,6 +278,7 @@ module flux
       !
       if((ntype==1 .and. inode==0)    .or.(ntype==2 .and. inode==dim-1)) then
         !
+        ! fc=f(4)
         select case(reschem)
         case(-1)
           fc=f(4)
@@ -286,15 +287,14 @@ module flux
         end select
         !
       elseif((ntype==1 .and. inode==1).or.(ntype==2 .and. inode==dim-2)) then
-        !
+        
         select case(reschem)
         case(-1)
           fc=f(4)
         case default
           fc=SUW3(f(3:5))
         end select
-        !
-      ! else
+
       elseif((ntype==1 .and. inode==2).or.(ntype==2 .and. inode==dim-3)) then
         !
         select case(reschem)
@@ -308,19 +308,22 @@ module flux
           fc=weno5z(f(2:6))
         case(3)
           fc=mp5(f(2:6))
-        ! case(4)
-        !   call weno7sym(f(1:8),var1)
+        case(4)
+          stop 'wenosym not activated'
+          ! call weno7sym(f(1:8),fc)
         case(5)
           fc=mp5ld(f(2:7),bfacmpld,shock,solid)
         case(6) !xi
           fc=round(f(3:5))  
+        case(7)
+          fc=MP5round(f(2:6),shock)
         case default
           print*,' !! 1 Reconstruction scheme not defined @ recons_exp !!'
           stop
         end select
         !
       else
-        !
+
         select case(reschem)
         case(-1)
           fc=f(4)
@@ -332,12 +335,14 @@ module flux
           fc=weno7z(f(1:7))
         case(3)
           fc=mp7(f(1:7))
-        ! case(4)
-        !   call weno7sym(f(1:8),var1)
+        case(4)
+          ! call weno7sym(f(1:8),fc)
         case(5)
           fc=mp7ld(f(1:8),bfacmpld,shock,solid)
         case(6) !xi
           fc=round(f(3:5))
+        case(7)
+          fc=MP7round(f(1:7),shock)
         case default
           print*,' !! 2 Reconstruction scheme not defined @ recons_exp !!'
           stop
@@ -706,7 +711,129 @@ module flux
       return
       !
     end function MP7LD
-    !
+    
+    pure function MP5round(u,discont,ul)  result(uh)
+      
+      use commfunc, only : minmod2,minmod4
+
+      real(8),intent(in) :: u(1:5)
+      logical,intent(in) :: discont
+      real(8),intent(in),optional :: ul
+      real(8) :: uh
+      !
+      real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
+      real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+      !
+      if(discont) then
+        uh=round_aplus(u(2:4))
+      else
+
+        if(present(ul)) then
+          ulinear=ul
+        else
+          ulinear=(2.d0*u(1)-13.d0*u(2)+47.d0*u(3)+27.d0*u(4)-3.d0*u(5))/60.d0
+        endif
+        !
+        var1=u(4)-u(3)
+        var2=4.d0*(u(3)-u(2))
+        uMP=u(3)+minmod2(var1,var2)
+        !
+        var1=(ulinear-u(3))*(ulinear-uMP)
+        if(var1>=1.d-10) then
+          !
+          dm1=u(1)-2.d0*u(2)+u(3)
+          d0= u(2)-2.d0*u(3)+u(4)
+          d1= u(3)-2.d0*u(4)+u(5)
+          !
+          dhm1=minmod4( 4.d0*dm1-d0,4.d0*d0-dm1,dm1,d0 )
+          dh0 =minmod4(  4.d0*d0-d1, 4.d0*d1-d0, d0,d1 )
+          !
+          uUL=u(3)+4.d0*(u(3)-u(2))
+          uAV=0.5d0*(u(3)+u(4))
+          uMD=uAV-0.5d0*dh0
+          uLC=u(3)+0.5d0*(u(3)-u(2))+1.333333333333333d0*dhm1
+          !
+          var1=min(u(3),u(4),uMD)
+          var2=min(u(3),uUL,uLC)
+          uMIN=max(var1,var2)
+          !
+          var1=max(u(3),u(4),uMD)
+          var2=max(u(3),uUL,uLC)
+          uMAX=min(var1,var2)
+          !
+          var1=uMIN-ulinear
+          var2=uMAX-ulinear
+          uh=ulinear+minmod2(var1,var2)
+        else
+          uh=ulinear
+          ! No limiter is needed
+        end if
+      endif
+      !
+      return
+      !
+    end function MP5round
+
+    pure function MP7round(u,discont,ul) result(uh)
+
+      use commfunc, only : minmod2,minmod4
+
+      real(8),intent(in) :: u(0:6)
+      logical,intent(in) :: discont
+      real(8),intent(in),optional :: ul
+      real(8) :: uh
+      !
+      real(8) :: ulinear,uMP,uUL,uAV,uMD,uLC,uMIN,uMAX
+      real(8) :: var1,var2,dm1,d0,d1,dhm1,dh0
+      
+      if(discont) then
+        uh=round_aplus(u(2:4))
+      else
+        if(present(ul)) then
+          ulinear=ul
+        else
+          ulinear=(-3.d0*u(0)+25.d0*u(1)-101.d0*u(2)+319.d0*u(3)+          &
+                   214.d0*u(4)-38.d0*u(5)+ 4.d0*u(6))/420.d0
+        endif
+        !
+        var1=u(4)-u(3)
+        var2=4.d0*(u(3)-u(2))
+        uMP=u(3)+minmod2(var1,var2)
+        !
+        var1=(ulinear-u(3))*(ulinear-uMP)
+        if(var1>=1.d-10) then
+          dm1=u(1)-2.d0*u(2)+u(3)
+          d0= u(2)-2.d0*u(3)+u(4)
+          d1= u(3)-2.d0*u(4)+u(5)
+          !
+          dhm1=minmod4( 4.d0*dm1-d0,4.d0*d0-dm1,dm1,d0 )
+          dh0 =minmod4(  4.d0*d0-d1, 4.d0*d1-d0, d0,d1 )
+          !
+          uUL=u(3)+4.d0*(u(3)-u(2))
+          uAV=0.5d0*(u(3)+u(4))
+          uMD=uAV-0.5d0*dh0
+          uLC=u(3)+0.5d0*(u(3)-u(2))+1.333333333333333d0*dhm1
+          !
+          var1=min(u(3),u(4),uMD)
+          var2=min(u(3),uUL,uLC)
+          uMIN=max(var1,var2)
+          !
+          var1=max(u(3),u(4),uMD)
+          var2=max(u(3),uUL,uLC)
+          uMAX=min(var1,var2)
+          !
+          var1=uMIN-ulinear
+          var2=uMAX-ulinear
+          uh=ulinear+minmod2(var1,var2)
+        else
+          uh=ulinear
+        end if
+        !
+      endif
+
+      return
+      !
+    end function MP7round
   
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !Three point ROUND schemes: Reconstruction Operator on Unified    
@@ -740,8 +867,8 @@ module flux
       p1c=0.833333333333333d0*z0c+0.333333333333333d0+max(plc,0.0d0)+max(prc,0.0d0)
       p2c=1.5d0*z0c
       p3c=0.5d0*z0c+0.5d0
-      wc1c=1.0d0/a1c/a1c/a1c/a1c
-      wc2c=1.0d0/a2c/a2c/a2c/a2c/a2c/a2c/a2c/a2c
+      wc1c=1.0d0/(a1c*a1c*a1c*a1c)
+      wc2c=1.0d0/(a2c*a2c*a2c*a2c*a2c*a2c*a2c*a2c)
       
       gc=(p1c*(1.0d0-wc1c)+p2c*wc1c)*(1.0d0-wc2c)+p3c*wc2c
       
@@ -750,6 +877,134 @@ module flux
       return
       
     end function round
+
+    pure real(8) function round_aplus(u) result(ul)
+
+      real(8), intent(in) :: u(3)
+   
+       real(8), parameter :: zeps = 1.0d-20
+       real(8) :: z0, g, a, w, gp
+   
+       z0 = (u(2) - u(1) + zeps) / (u(3) - u(1) + zeps)
+       g  = z0
+   
+       if (z0 > 0.0d0 .and. z0 <= 0.5d0) then
+   
+         a = 1100.0d0
+         w = 1.0d0 / (1.0d0 + a * (z0 - 0.5d0)**4)**2
+         gp = (1.0d0/3.0d0 + 5.0d0/6.0d0*z0) * w &
+            + 2.0d0*z0 * (1.0d0 - w)
+   
+         g = min(gp, 2.0d0*z0)
+   
+       end if
+   
+       if (z0 > 0.5d0 .and. z0 < 1.0d0) then
+   
+         a = 800.0d0
+         w = 1.0d0 / (1.0d0 + a * (z0 - 0.5d0)**4)**2
+         gp = (1.0d0/3.0d0 + 5.0d0/6.0d0*z0) * w &
+            + (0.15d0*z0 + 0.85d0) * (1.0d0 - w)
+   
+         g = min(gp, 0.15d0*z0 + 0.85d0)
+   
+       end if
+   
+       ul = g * (u(3) - u(1)) + u(1)
+   
+    end function round_aplus
+
+    pure real(8) function round_w(u1, u2, u3) result(ul)
+      real(8), intent(in) :: u1, u2, u3
+  
+      real(8), parameter :: zeps = 1.0d-20
+      real(8) :: z0, w1, w2, g
+  
+      z0 = (u2 - u1 + zeps) / (u3 - u1 + zeps)
+  
+      w1 = 1.0d0 / (1.0d0 + 25.0d0*z0*z0)**2
+      w2 = 1.0d0 / (1.0d0 + 25.0d0*(1.0d0 - z0)*(1.0d0 - z0))**2
+  
+      g = (5.0d0/6.0d0 + 2.0d0/3.0d0*w1 - 1.0d0/3.0d0*w2) * z0 &
+        + 1.0d0/3.0d0 - 1.0d0/3.0d0*w1 + 1.0d0/6.0d0*w2
+  
+      ul = g * (u3 - u1) + u1
+  
+    end function round_w
+
+    pure real(8) function round_l(u1, u2, u3) result(ul)
+      real(8), intent(in) :: u1, u2, u3
+  
+      real(8), parameter :: zeps = 1.0d-20
+      real(8) :: z0, g, a, b, w, gp
+  
+      z0 = (u2 - u1 + zeps) / (u3 - u1 + zeps)
+      g  = z0
+  
+      if (z0 <= 0.0d0) then
+  
+        a = -0.5d0 * z0
+        b = 1.0d0/3.0d0 + 5.0d0/6.0d0*z0
+        g = min(a, b)
+  
+      else if (z0 > 0.0d0 .and. z0 <= 0.5d0) then
+  
+        a = 1100.0d0
+        w = 1.0d0 / (1.0d0 + a * (z0 - 0.5d0)**4)**2
+        gp = (1.0d0/3.0d0 + 5.0d0/6.0d0*z0) * w &
+           + 2.0d0*z0 * (1.0d0 - w)
+  
+        g = min(gp, 2.0d0*z0)
+  
+      else if (z0 > 0.5d0 .and. z0 < 1.0d0) then
+  
+        a = 800.0d0
+        w = 1.0d0 / (1.0d0 + a * (z0 - 0.5d0)**4)**2
+        gp = (1.0d0/3.0d0 + 5.0d0/6.0d0*z0) * w &
+           + (0.15d0*z0 + 0.85d0) * (1.0d0 - w)
+  
+        g = min(gp, 0.15d0*z0 + 0.85d0)
+  
+      else
+  
+        a = 1.2d0 * (z0 - 1.0d0) + 1.0d0
+        b = 1.0d0/3.0d0 + 5.0d0/6.0d0*z0
+        g = min(a, b)
+  
+      end if
+  
+      ul = g * (u3 - u1) + u1
+  
+    end function round_l
+  
+  
+    pure real(8) function round_lplus(u1, u2, u3) result(ul)
+      real(8), intent(in) :: u1, u2, u3
+  
+      real(8), parameter :: zeps = 1.0d-20
+      real(8) :: z0, g
+      real(8) :: a1, a2, pl, pr, p1, p2, p3, wc1, wc2
+  
+      z0 = (u2 - u1 + zeps) / (u3 - u1 + zeps)
+  
+      a1 = 1.0d0 + 12.0d0*z0*z0
+      a2 = 1.0d0 + 5.0d0*(z0 - 1.0d0)*(z0 - 1.0d0)
+  
+      pl = 1100.0d0 * (z0 - 0.05d0)**3 * (0.47d0 - z0)**3
+      pr = 18000.0d0 * (z0 - 0.55d0)**3 * (0.97d0 - z0)**5
+  
+      p1 = 5.0d0/6.0d0*z0 + 1.0d0/3.0d0 + max(pl, 0.0d0) + max(pr, 0.0d0)
+      p2 = 1.5d0*z0
+      p3 = 0.5d0*z0 + 0.5d0
+  
+      wc1 = 1.0d0 / a1**4
+      wc2 = 1.0d0 / a2**8
+  
+      g = (p1 * (1.0d0 - wc1) + p2 * wc1) * (1.0d0 - wc2) + p3 * wc2
+  
+      ul = g * (u3 - u1) + u1
+  
+    end function round_lplus
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! End of the subroutine ROUND.
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 

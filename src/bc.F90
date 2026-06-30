@@ -1365,7 +1365,7 @@ module bc
   !+-------------------------------------------------------------------+
   subroutine inflow(ndir)
     !
-    use commvar,   only : turbmode,nondimen,spcinf,rkstep
+    use commvar,   only : turbmode,nondimen,spcinf,rkstep,cp
     use fludyna,   only : thermal,fvar2q,q2fvar,sos
     use commfunc,  only : extrapolate
     use commarray, only : tke,omg
@@ -1379,7 +1379,7 @@ module bc
     !
     ! local data
     integer :: i,j,k,l,jspc
-    real(8) :: css,csse,ub,pe,roe,ue,pwave_out,pwave_in,malo,rho_ref,cs_ref,blend,rp,rm,te
+    real(8) :: css,csse,cs02,ub,pe,roe,ue,pwave_out,pwave_in,malo,rho_ref,cs_ref,blend,rp,rm,te
     real(8) :: ce,ri_plus,ri_mins,cb,sb,gmr
     real(8) :: spce(1:num_species)
     !
@@ -1426,55 +1426,47 @@ module bc
       do k=0,km
       do j=0,jm
 
-        ! ue  = extrapolate(vel(i+1,j,k,1),      vel(i+2,j,k,1),    dv=0.d0)
-        ! ce  = extrapolate(sos(tmp(i+1,j,k),spc(i+1,j,k,:)),   &
-        !                   sos(tmp(i+2,j,k),spc(i+2,j,k,:)), dv=0.d0)
-        ! te=extrapolate(tmp(i+1,j,k),     tmp(i+2,j,k),    dv=0.d0)
-        ! do jspc=1,num_species
-        !   spce(jspc)=extrapolate(spc(i+1,j,k,jspc),                  &
-        !                          spc(i+2,j,k,jspc),dv=0.d0)
-        ! enddo
-
-        ! malo=vel(i,j,k,1)/sos(tmp(i,j,k),spc(i,j,k,:))
-
-        ! gmr=gammarmix(tmp_in(j,k),spc_in(j,k,:))
-
-        ! css=sos(tmp_in(j,k),spc_in(j,k,:))
+        css=sos(tmp_in(j,k),spc_in(j,k,:))
         
-        ! ri_plus=vel_in(j,k,1)+2.d0*css/(gmr-1.d0)
-        ! ri_mins=ue           -2.d0*ce /(gmr-1.d0)
+        ! if(vel_in(j,k,1)>css) then
+        if(.true.) then
+          ! supersonic inflow
+          vel(i,j,k,:)=vel_in(j,k,:)
+          spc(i,j,k,:)=spc_in(j,k,:)
+          tmp(i,j,k)  =tmp_in(j,k)
+          prs(i,j,k)  =prs_in(j,k)
+          rho(i,j,k)  =rho_in(j,k)
+        else
+          ! subsonic inflow
+          malo=vel(i,j,k,1)/css
+
+          ! gmr=gammarmix(tmp_in(j,k),spc_in(j,k,:))
+          gmr=gamma
+          ue  = extrapolate(vel(i+1,j,k,1),  vel(i+2,j,k,1),  dv=0.d0)
+          ce  = extrapolate(sos(tmp(i+1,j,k),spc(i+1,j,k,:)),   &
+                            sos(tmp(i+2,j,k),spc(i+2,j,k,:)), dv=0.d0)
+
+          ri_plus=vel_in(j,k,1)+2.d0*css/(gmr-1.d0) ! incoming Riemann invariants
+          ri_mins=ue           -2.d0*ce /(gmr-1.d0) ! outgoing Riemann invariants
 
         ! if(malo>=1.d0) then
         !   rp=ri_plus
         !   rm=ri_mins
         ! else
-        !   rp=ri_plus
-        !   rm=ri_mins*(1.d0-malo)+ri_plus*malo
+          rp=ri_plus
+          rm=ri_mins !*(1.d0-malo)+ri_plus*malo
         ! endif
 
-        ! ub=0.5d0*(rp+rm)
-        ! cb=0.25d0*(gmr-1.d0)*(rp-rm)
-        ! sb=css*css/(gmr*rho_in(j,k)**(gmr-1.d0))
+          ub=0.5d0*(rp+rm)
+          cb=0.25d0*(gmr-1.d0)*(rp-rm)
+          sb=css*css/(gmr*rho_in(j,k)**(gmr-1.d0))
 
-        ! rho(i,j,k)=(cb*cb/(gmr*sb))**(1.d0/(gmr-1.d0))
-        ! prs(i,j,k)=rho(i,j,k)*cb*cb/gmr
-        ! vel(i,j,k,1)=ub
-        ! vel(i,j,k,2)=vel_in(j,k,2)
-        ! vel(i,j,k,3)=vel_in(j,k,3)
+          rho(i,j,k)=(cb*cb/(gmr*sb))**(1.d0/(gmr-1.d0))
+          prs(i,j,k)=rho(i,j,k)*cb*cb/gmr
+          vel(i,j,k,1)=ub
+          vel(i,j,k,2)=vel_in(j,k,2)
+          vel(i,j,k,3)=vel_in(j,k,3)
 
-        ! spc(i,j,k,:)=spc_in(j,k,:)
-
-        ! rho_ref = rho(i+1,j,k)
-        ! css=sos(tmp_prof(j),spc_prof(j,:))
-
-        ! if(vel_in(j,k,1)>css) then
-        !   ! supersonic inflow
-          vel(i,j,k,:)=vel_in(j,k,:)
-          spc(i,j,k,:)=spc_in(j,k,:)
-          tmp(i,j,k)  =tmp_in(j,k)
-          prs(i,j,k)  =prs_in(j,k)
-        ! else
-          ! subsonic inflow
           ! vel(i,j,k,2:3)=vel_in(j,k,2:3)
           ! spc(i,j,k,:)  =spc_in(j,k,:)
           ! tmp(i,j,k)    =tmp_in(j,k)
@@ -1491,7 +1483,7 @@ module bc
           ! prs(i,j,k)  =(0.5d0*(pwave_in+pe)+0.5d0*rho_ref*css*(vel_in(j,k,1)-ue))*(1.d0-blend)+pwave_in*blend
           ! vel(i,j,k,1)=vel_in(j,k,1)+(pinf-prs(i,j,k))/rho_ref/css
 
-        ! endif
+        endif
 
         ! ! ub =vel_in(j,k,1)
         ! css=sos(tmp_prof(j),spc_prof(j,:))
@@ -1530,7 +1522,35 @@ module bc
       enddo
       !
     endif
-    !
+
+    if(ndir==3 .and. jrk==jrkm) then
+      !
+      j=jm
+      do k=0,km
+      do i=0,im
+        !
+        css=sos(tmp(i,j,k))
+        ub =vel(i,j,k,1)
+        !
+        vel(i,j,k,1)=uinf
+        vel(i,j,k,2)=vinf
+        vel(i,j,k,3)=0.d0
+        tmp(i,j,k)  =tinf
+        rho(i,j,k)  =roinf
+        
+        prs(i,j,k)  =thermal(density=rho(i,j,k),temperature=tmp(i,j,k),species=spc(i,j,k,:))
+        !
+        call fvar2q(      q=  q(i,j,k,:),   density=rho(i,j,k),        &
+                   velocity=vel(i,j,k,:),  pressure=prs(i,j,k),        &
+                    species=spc(i,j,k,:)                               )
+        !
+        qrhs(i,j,k,:)=0.d0
+        !
+      enddo
+      enddo
+      !
+    endif
+
     ! if(ndir==3 .and. jrk==0) then
     !   !
     !   if(lfirstcal) then
@@ -1939,7 +1959,7 @@ module bc
         end do
         end do
         !
-        ! call tecbin('Testout/tecyz'//mpirankname//'.plt',                &
+        ! call tecbin('testout/tecyz'//mpirankname//'.plt',                &
         !                                   x(0,0:jm,0:km,1),'x',          &
         !                                   x(0,0:jm,0:km,2),'y',          &
         !                                   x(0,0:jm,0:km,3),'z',          &
@@ -1948,7 +1968,8 @@ module bc
         !                                   vel_in(0:jm,0:km,2),'v',       &
         !                                   vel_in(0:jm,0:km,3),'w',       &
         !                                   tmp_in(0:jm,0:km),'t')
-        ! !
+        ! stop
+        ! ! !
         ! if(mpirank==0) then
         !   !
         !   print*,'time0',time0

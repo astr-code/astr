@@ -1192,7 +1192,7 @@ module initialisation
     real(8) :: radi,miu,delta,beta1
     !
     beta1=0.075d0
-    !
+
     do k=0,km
     do j=0,jm
     do i=0,im
@@ -1216,7 +1216,7 @@ module initialisation
           !
         endif
       else
-        spc(i,j,k,:)=spcinf
+        if(num_species>1) spc(i,j,k,:)=spcinf
 
         prs(i,j,k)=thermal(density=rho(i,j,k),temperature=tmp(i,j,k), &
                            species=spc(i,j,k,:))
@@ -1429,7 +1429,8 @@ module initialisation
   !+-------------------------------------------------------------------+
   subroutine inletprofile
     !
-    use commvar,  only: flowtype,nondimen,spcinf,num_species,jm
+    use commvar,  only: flowtype,nondimen,spcinf,num_species,jm,       &
+                        ref_den,ref_vel,ref_tem
     use commarray,only: x
     use parallel, only: preadprofile
     use bc,       only: rho_prof,vel_prof,tmp_prof,prs_prof,spc_prof,turbinf
@@ -1475,7 +1476,11 @@ module initialisation
       call preadprofile('datin/inlet.prof',dir='j',                     &
                                 var1=rho_prof,     var2=vel_prof(:,1), &
                                 var3=vel_prof(:,2),var4=tmp_prof,skipline=4)
-      !
+      
+      rho_prof=rho_prof*ref_den
+      vel_prof=vel_prof*ref_vel
+      tmp_prof=tmp_prof*ref_tem
+
       vel_prof(:,3)=0.d0
       ! vel_prof(:,1)=vel_prof(:,1) + 1.d0
       !

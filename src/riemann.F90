@@ -9,6 +9,8 @@ module riemann
   !
   use parallel, only : mpirank
   !
+  use commvar,only: mach,gamma,const2
+
   implicit none
   !
   contains
@@ -162,6 +164,186 @@ module riemann
   !+-------------------------------------------------------------------+
   !| The end of the subroutine flux_steger_warming.                    |
   !+-------------------------------------------------------------------+
-  !!
-  !
+  
+  function ausmpwp3d(fhc_l,fhc_r,p1_l,p2_l,p1_r,p2_r) result(fh)
+      !
+      real(8) :: fh(5)
+      real(8),intent(in) :: fhc_l(9),fhc_r(9)
+      real(8),intent(in),optional :: p1_l,p2_l,p1_r,p2_r
+      !
+      real(8) :: ro_l,rou_l,e_l,p_l,u_l,v_l,w_l,un_l,h_l,cs_l,ma_l,ma_l_p,f_l,plp,ut_l2
+      real(8) :: ro_r,rou_r,e_r,p_r,u_r,v_r,w_r,un_r,h_r,cs_r,ma_r,ma_r_m,f_r,prm,ut_r2
+      real(8) :: cs,cs_m,ma_m,h_m,det_m,jac_m
+      real(8) :: var1,var2,det_l,det_r
+      real(8) :: w,ps
+      real(8) :: mass_flux_l,mass_flux_r,m_l_plus,m_r_minus,p_r_minus,p_l_plus
+      real(8) :: m_bar_l_plus,m_bar_r_minus
+      real(8) :: xi_l(3),xi_r(3),ja_l,ja_r
+      !
+      ! left                                         ! right
+      ro_l=fhc_l(1);                                 ro_r=fhc_r(1)
+      u_l =fhc_l(2)/ro_l;                            u_r =fhc_r(2)/ro_r
+      v_l =fhc_l(3)/ro_l;                            v_r =fhc_r(3)/ro_r
+      w_l =fhc_l(4)/ro_l;                            w_r =fhc_r(4)/ro_r
+      e_l =fhc_l(5);                                 e_r =fhc_r(5)   
+      p_l=(e_l-0.5d0*ro_l*(u_l**2+v_l**2+w_l**2))*(gamma-1.d0)
+      p_r=(e_r-0.5d0*ro_r*(u_r**2+v_r**2+w_r**2))*(gamma-1.d0)
+      h_l =(e_l+p_l)/ro_l;                           h_r =(e_r+p_r)/ro_r
+      xi_l(1:3)=fhc_l(6:8);                          xi_r(1:3)=fhc_r(6:8)
+      ja_l=fhc_l(9);                                 ja_r=fhc_r(9)
+      !
+      un_l=u_l*xi_l(1)+v_l*xi_l(2)+w_l*xi_l(3);      un_r=u_r*xi_r(1)+v_r*xi_r(2)+w_r*xi_r(3)
+      det_l=sqrt(xi_l(1)**2+xi_l(2)**2+xi_l(3)**2);  det_r=sqrt(xi_r(1)**2+xi_r(2)**2+xi_r(3)**2)
+      un_l=un_l/det_l;                               un_r=un_r/det_r
+      ! 
+      ut_l2=u_l**2+v_l**2+w_l**2-un_l**2;            ut_r2=u_r**2+v_r**2+w_r**2-un_r**2
+      ! det_m=0.5d0*(det_l+det_r)
+      ! jac_m=0.5d0*(ja_l +ja_r)
+      !               
+      h_m=0.5d0*(h_l-0.5d0*ut_l2+h_r-0.5d0*ut_r2)
+      ! h_m=min(h_l-0.5d0*ut_l2,h_r-0.5d0*ut_r2)
+      cs=sqrt(2.d0*h_m*(gamma-1.d0)/(gamma+1.d0))
+      ! !
+      if(0.5d0*(un_l+un_r)<0.d0) then
+        cs_m=cs**2/max(cs,abs(un_r))  
+      else
+        cs_m=cs**2/max(cs,abs(un_l))  
+      endif
+      ! cs_l=sqrt(2.d0*h_l*(gamma-1.d0)/(gamma+1.d0)); cs_r=sqrt(2.d0*h_r*(gamma-1.d0)/(gamma+1.d0))
+      ! !
+      ! cs_l=cs_l**2/max(abs(un_l),cs_l);              cs_r=cs_r**2/max(abs(un_r),cs_r)
+      ! !
+      ! cs_m=min(cs_l,cs_r)
+      !
+      ma_l=un_l/cs_m;                                  ma_r=un_r/cs_m
+      !
+      ! print*,xi_l(2),xi_r(2)
+      ! print*,'================================'
+      ! mach splitting functions
+      m_l_plus  = mach_split_plus(ma_l)
+      m_r_minus = mach_split_minus(ma_r)
+      ! pressure splitting functions
+      p_r_minus = pressure_split_minus(ma_r)
+      p_l_plus  = pressure_split_plus(ma_l)
+      !
+      w = get_w(p_l=p_l, p_r=p_r)
+      !
+      ps=p_l * p_l_plus + p_r * p_r_minus
+      !
+      if(present(p1_l) .and. present(p2_l) .and. present(p1_r) .and. present(p2_r)) then
+        call get_f(p_l=p_l,p_r=p_r,p_s=ps,p1_l=p1_l,p1_r=p1_r,p2_l=p2_l,p2_r=p2_r,f_l=f_l,f_r=f_r)
+      else
+        call get_f(p_l=p_l,p_r=p_r,p_s=ps,p1_l=p_l,p1_r=p_r,p2_l=p_l,p2_r=p_r,f_l=f_l,f_r=f_r)
+      endif
+      !
+
+      if(m_l_plus + m_r_minus < 0.0d0) then
+        m_bar_l_plus = m_l_plus * w * (1.0d0 + f_l)
+        m_bar_r_minus = m_r_minus + m_l_plus * ((1.0d0 - w) * (1.0d0 + f_l) - f_r)
+      else ! from eq. 24 (i) in ref [1]
+        m_bar_l_plus = m_l_plus + m_r_minus * ((1.0d0 - w) * (1.0d0 + f_r) - f_l)
+        m_bar_r_minus = m_r_minus * w * (1.0d0 + f_r)
+      end if
+      !
+      mass_flux_l = ja_l*det_l*m_bar_l_plus*cs_m*ro_l
+      mass_flux_r = ja_r*det_r*m_bar_r_minus*cs_m*ro_r
+      !
+      p_l_plus=p_l_plus*ja_l*p_l
+      p_r_minus=p_r_minus*ja_r*p_r
+      !
+      !
+      fh(1)=mass_flux_l+mass_flux_r
+      fh(2)=mass_flux_l*u_l+mass_flux_r*u_r+p_l_plus*xi_l(1)+p_r_minus*xi_r(1)
+      fh(3)=mass_flux_l*v_l+mass_flux_r*v_r+p_l_plus*xi_l(2)+p_r_minus*xi_r(2)
+      fh(4)=mass_flux_l*w_l+mass_flux_r*w_r+p_l_plus*xi_l(3)+p_r_minus*xi_r(3)
+      fh(5)=(mass_flux_l*h_l)+(mass_flux_r*h_r)
+      !
+    end function ausmpwp3d
+
+    pure subroutine get_f(p_L, p_R, p_s, p1_L, p1_R, p2_L, p2_R, f_L, f_R)
+      !< Implementation of the f function (Eq. 26 in Ref [1]). This is used to help determine
+      !< where shock discontinuities are
+      real(8), intent(in) :: p_L    !< L pressure
+      real(8), intent(in) :: p_R    !< R pressure
+      real(8), intent(in) :: p1_L   !< L pressure, j+1 for i direction, i-1 for j direction
+      real(8), intent(in) :: p1_R   !< R pressure, j-1 for i direction, i+1 for j direction
+      real(8), intent(in) :: p2_L   !< L pressure, j+1 for i direction, i-1 for j direction
+      real(8), intent(in) :: p2_R   !< R pressure, j-1 for i direction, i+1 for j direction
+      real(8), intent(in) :: p_s !< p_s = p_L * P_L(+) + p_R * P_R(-)
+
+      real(8), intent(out) :: f_L !< L "f" function
+      real(8), intent(out) :: f_R !< R "f" function
+
+      real(8) :: min_term
+
+      if(abs(p_s) < tiny(1.0d0)) then ! p_s == 0
+        f_L = 0.0d0
+        f_R = 0.0d0
+      else
+        min_term = min(1.0d0, min(p1_L, p1_R, p2_L, p2_R) / min(p_L, p_R))**2
+        f_L = ((p_L / p_s) - 1.0d0) * min_term
+        f_R = ((p_R / p_s) - 1.0d0) * min_term
+      end if
+    end subroutine get_f
+    !
+    pure real(8) function get_w(p_L, p_R) result(w)
+      !< Discontinuity sensor w_1 (Eq. 25 in Ref [1]). This detects whether a shock
+      !< exists in the normal direction to the cell-interface or not
+      real(8), intent(in) :: p_L !< left interface pressure
+      real(8), intent(in) :: p_R !< right interface pressure
+
+      real(8) :: min_term
+
+      min_term = min((p_L / p_R),(p_R / p_L))
+      w = 1.0d0 - min_term * min_term * min_term
+    end function get_w
+    !
+    pure real(8) function mach_split_plus(M) result(M_plus)
+      !< The Mach splitting function (Eq. 9 in Ref[1]). This is the M+ version. This is kept
+      !< simple for inlining
+      real(8), intent(in) :: M !< interface Mach number
+
+      if(abs(M) > 1.0d0) then
+        M_plus = 0.5d0 * (M + abs(M))
+      else ! |M| <= 1
+        M_plus = 0.25d0 * (M + 1.0d0)**2
+      endif
+    end function mach_split_plus
+    !
+    pure real(8) function mach_split_minus(M) result(M_minus)
+      !< The Mach splitting function (Eq. 9 in Ref [1]). This is the M- version. This is kept
+      !< simple for inlining
+      real(8), intent(in) :: M !< interface Mach number
+      !
+      if(abs(M) > 1.0d0) then
+        M_minus = 0.5d0 * (M - abs(M))
+      else ! |M| <= 1
+        M_minus = -0.25d0 * (M - 1.0d0)**2
+      endif
+    end function mach_split_minus
+    !
+    pure real(8) function pressure_split_plus(M) result(P_plus)
+      !< The pressure splitting function (Eq. 10 in Ref[1]). This is the P+ version
+      real(8), intent(in) :: M !< interface Mach number
+
+      ! real(8) :: alfa=0.d0
+  
+      if(abs(M) > 1.0d0) then
+        P_plus = 0.5d0 * (1.0d0 + sign(1.0d0, M))
+      else ! |M| <= 1
+        P_plus = 0.25d0 * (M + 1.0d0)**2 * (2.0d0 - M) + 0.d0 * M * (M**2 - 1.0d0)**2
+      endif
+    end function pressure_split_plus
+    !
+    pure real(8) function pressure_split_minus(M) result(P_minus)
+      !< The pressure splitting function (Eq. 10 in Ref[1]). This is the P- version
+      real(8), intent(in) :: M !< interface Mach number
+  
+      if(abs(M) > 1.0d0) then
+        P_minus = 0.5d0 * (1.0d0 - sign(1.0d0, M))
+      else ! |M| <= 1
+        P_minus = 0.25d0 * (M - 1.0d0)**2 * (2.0d0 + M) - 0.d0 * M * (M**2 - 1.0d0)**2
+      endif
+    end function pressure_split_minus
+    
 end module riemann

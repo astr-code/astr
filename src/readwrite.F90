@@ -246,6 +246,8 @@ module readwrite
             write(*,'(A56,F8.3)')'            b factor = ',bfacmpld
           case(6)
             write(*,'(24A)')'      round construction'
+          case(7)
+            write(*,'(24A)')'   mp-round construction'
           case default
             stop ' !! reconstruction scheme not defined !!' 
           end select
