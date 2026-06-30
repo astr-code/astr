@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/onedflame)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/onedflame)
+install(DIRECTORY DESTINATION examples/onedflame)
+install(DIRECTORY datin DESTINATION examples/onedflame)
 
 # If testing active add test for Shuosher case
 if (${BUILD_TESTING})

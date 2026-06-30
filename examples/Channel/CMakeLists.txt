@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Channel)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Channel)
+install(DIRECTORY DESTINATION examples/Channel)
+install(DIRECTORY datin DESTINATION examples/Channel)
 
 # If testing active add test for Channel case
 if (${BUILD_TESTING})

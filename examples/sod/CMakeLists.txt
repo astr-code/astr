@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/sod)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/sod)
+install(DIRECTORY DESTINATION examples/sod)
+install(DIRECTORY datin DESTINATION examples/sod)
 
 # If testing active add test for sod case
 if (${BUILD_TESTING})

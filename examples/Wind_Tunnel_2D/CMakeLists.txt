@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Wind_Tunnel_2D)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Wind_Tunnel_2D)
+install(DIRECTORY DESTINATION examples/Wind_Tunnel_2D)
+install(DIRECTORY datin DESTINATION examples/Wind_Tunnel_2D)
 
 # If testing active add test for Shuosher case
 if (${BUILD_TESTING})

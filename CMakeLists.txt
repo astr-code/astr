@@ -1,199 +1,148 @@
-cmake_minimum_required(VERSION 3.0.2)                        
-cmake_policy(SET CMP0048 NEW)
+cmake_minimum_required(VERSION 3.16)
 
-project(ASTR LANGUAGES Fortran)
-
-set(AUTHOR "Jian Fang")
-set(AUTHOR_DETAILS "jian.fang@stfc.ac.uk")
-set(DESCRIPTION "Building ASTR using cmake")
-
-message(STATUS "building ${PROJECT_NAME}")
+project(ASTR
+  VERSION 2.6.0
+  DESCRIPTION "High-order finite-difference solver for compressible turbulence"
+  LANGUAGES Fortran)
 
 include(GNUInstallDirs)
-set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR})
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/opt" CACHE PATH "..." FORCE)
+include(CTest)
+
+option(CHEMISTRY "Build ASTR with chemistry" OFF)
+option(ASTR_MPI_OVERSUBSCRIBE "Pass --oversubscribe to MPI test runs" ON)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-# Add support for CMAKE_DEPENDENT_OPTION
-INCLUDE(CMakeDependentOption)
-INCLUDE(CMakeParseArguments)
+set(CMAKE_Fortran_MODULE_DIRECTORY "${PROJECT_BINARY_DIR}/mod")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 
-# Find the modules included with ASTR
-#SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
+message(STATUS "Building ${PROJECT_NAME} ${PROJECT_VERSION}")
+message(STATUS "Fortran compiler: ${CMAKE_Fortran_COMPILER_ID} ${CMAKE_Fortran_COMPILER_VERSION}")
 
-# make sure that the default is a RELEASE
-if (NOT CMAKE_BUILD_TYPE)
-  set (CMAKE_BUILD_TYPE RELEASE CACHE STRING
-      "Choose the type of build, options are: None Debug Release."
-      FORCE)
-endif (NOT CMAKE_BUILD_TYPE)
+add_library(astr_build_options INTERFACE)
 
-set(Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER_ID} )
-message(STATUS "COMP ID ${Fortran_COMPILER_NAME}")
-message(STATUS "Fortran compiler name ${Fortran_COMPILER_NAME}")
-message(STATUS "Fortran compiler version ${CMAKE_Fortran_COMPILER_VERSION}")
-if (Fortran_COMPILER_NAME MATCHES "GNU")
-  # gfortran
-  message(STATUS "Setting gfortran flags")
-  set(CMAKE_Fortran_FLAGS "-cpp -funroll-loops -floop-optimize -g -fcray-pointer -fbacktrace -ffree-line-length-none")
-  if (CMAKE_Fortran_COMPILER_VERSION GREATER_EQUAL "10")
-    message(STATUS "Set New Fortran basic flags")
-    set(CMAKE_Fortran_FLAGS "-cpp -funroll-loops -floop-optimize -g -fcray-pointer -fbacktrace -ffree-line-length-none -fallow-argument-mismatch")
-  endif (CMAKE_Fortran_COMPILER_VERSION GREATER_EQUAL "10")
-  set(CMAKE_Fortran_FLAGS_RELEASE "-funroll-all-loops -fno-f2c -O3")
-  set(CMAKE_Fortran_FLAGS_DEBUG   "-DDEBG -O0 -g")
-elseif (Fortran_COMPILER_NAME MATCHES "Intel")
-  message(STATUS "Setting ifort flags")
-  set(CMAKE_Fortran_FLAGS "-fpp -xHost -heaparrays -safe-cray-ptr -g -traceback")
-  set (CMAKE_Fortran_FLAGS_RELEASE "-O3 -ipo")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -DDEBG")
-  #set(CMAKE_Fortran_FLAGS "-cpp xSSE4.2 -axAVX,CORE-AVX-I,CORE-AVX2 -ipo -fp-model fast=2 -mcmodel=large -safe-cray-ptr")
-elseif (Fortran_COMPILER_NAME MATCHES "NAG")
-  message(STATUS "Setting nagfor flags")
-  set(CMAKE_Fortran_FLAGS "-fpp")
-  set (CMAKE_Fortran_FLAGS_RELEASE "-O3")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g")
-elseif (Fortran_COMPILER_NAME MATCHES "Cray")
-  message(STATUS "Setting cray fortran flags")
-  set(CMAKE_Fortran_FLAGS "-eF -g -N 1023")
-  set (CMAKE_Fortran_FLAGS_RELEASE "-O3")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g")
-elseif (Fortran_COMPILER_NAME MATCHES "PGI")
-  message(STATUS "Setting PGI fortran flags")
-  set(CMAKE_Fortran_FLAGS "-cpp -acc -Mfree -Kieee -Minfo=accel -g")
-  set (CMAKE_Fortran_FLAGS_RELEASE "-O3")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -DDEBG")
-elseif (Fortran_COMPILER_NAME MATCHES "Fujitsu")
-  message(STATUS "Setting Fujitsu fortran flags")
-  set (CMAKE_Fortran_FLAGS "-Cpp")
-  set (CMAKE_Fortran_FLAGS_RELEASE "-O3")
-  set (CMAKE_Fortran_FLAGS_DEBUG "-O0")
-else (Fortran_COMPILER_NAME MATCHES "GNU")
-  message ("CMAKE_Fortran_COMPILER full path: " ${CMAKE_Fortran_COMPILER})
-  message ("Fortran compiler: " ${Fortran_COMPILER_NAME})
-  message ("No optimized Fortran compiler flags are known, we just try -O2...")
-  set (CMAKE_Fortran_FLAGS_RELEASE "-O2")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g")
-endif (Fortran_COMPILER_NAME MATCHES "GNU")
-
-if (CMAKE_BUILD_TYPE MATCHES "DEBUG")
-  add_definitions("-DDEBG")
-endif (CMAKE_BUILD_TYPE MATCHES "DEBUG")
-
-
-find_package(MPI REQUIRED)
-# Stop if there is no MPI_Fortran_Compiler
-if (MPI_Fortran_COMPILER)
-    message(STATUS "MPI_Fortran_COMPILER found: ${MPI_Fortran_COMPILER}")
-else (MPI_Fortran_COMPILER)
-    message(SEND_ERROR "This application cannot compile without MPI")
-endif(MPI_Fortran_COMPILER)
-# Warning if Include are not found => can be fixed with more recent cmake version
-if (MPI_FOUND)
-    message(STATUS "MPI FOUND: ${MPI_FOUND}")
-    include_directories(SYSTEM ${MPI_INCLUDE_PATH})
-    message(STATUS "MPI INCL : ${MPI_INCLUDE_PATH}")
-else (MPI_FOUND)
-    message(STATUS "NO MPI include have been found. The executable won't be targeted with MPI include")
-    message(STATUS "Code will compile but performaces can be compromised")
-    message(STATUS "Using a CMake vers > 3.10 should solve the problem")
-    message(STATUS "Alternatively use ccmake to manually set the include if available")
-endif (MPI_FOUND)
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(astr_build_options INTERFACE
+    -cpp
+    -funroll-loops
+    -floop-optimize
+    -fcray-pointer
+    -fbacktrace
+    -ffree-line-length-none
+    $<$<CONFIG:Debug>:-DDEBG;-O0;-g>
+    $<$<CONFIG:Release>:-funroll-all-loops;-fno-f2c;-O3>)
+  if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+    target_compile_options(astr_build_options INTERFACE -fallow-argument-mismatch)
+  endif()
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel|IntelLLVM")
+  target_compile_options(astr_build_options INTERFACE
+    -fpp
+    -heaparrays
+    -safe-cray-ptr
+    -traceback
+    $<$<CONFIG:Debug>:-DDEBG;-O0;-g>
+    $<$<CONFIG:Release>:-O3>)
+elseif(CMAKE_Fortran_COMPILER_ID STREQUAL "NAG")
+  target_compile_options(astr_build_options INTERFACE
+    -fpp
+    $<$<CONFIG:Debug>:-O0;-g>
+    $<$<CONFIG:Release>:-O3>)
+elseif(CMAKE_Fortran_COMPILER_ID STREQUAL "Cray")
+  target_compile_options(astr_build_options INTERFACE
+    -eF
+    -N
+    1023
+    $<$<CONFIG:Debug>:-O0;-g>
+    $<$<CONFIG:Release>:-O3>)
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "PGI|NVHPC")
+  target_compile_options(astr_build_options INTERFACE
+    -cpp
+    -Mfree
+    -Kieee
+    $<$<CONFIG:Debug>:-DDEBG;-O0>
+    $<$<CONFIG:Release>:-O3>)
+elseif(CMAKE_Fortran_COMPILER_ID STREQUAL "Fujitsu")
+  target_compile_options(astr_build_options INTERFACE
+    -Cpp
+    $<$<CONFIG:Debug>:-O0>
+    $<$<CONFIG:Release>:-O3>)
+else()
+  target_compile_options(astr_build_options INTERFACE
+    $<$<CONFIG:Debug>:-O0;-g>
+    $<$<CONFIG:Release>:-O2>)
+endif()
 
 set(HDF5_PREFER_PARALLEL TRUE)
 find_package(HDF5 REQUIRED COMPONENTS Fortran HL)
 
-message(STATUS "HDF5_Fortran_COMPILER found: ${HDF5_Fortran_COMPILER_EXECUTABLE}")
-message(STATUS "HDF5_DIR: ${HDF5_DIR}")
+find_package(MPI REQUIRED COMPONENTS Fortran)
 
-# Stop if there is no HDF5
-# if (HDF5_Fortran_COMPILER)
-#    message(STATUS "HDF5_Fortran_COMPILER found: ${HDF5_Fortran_COMPILER}")
-# else (HDF5_Fortran_COMPILER)
-#    message(SEND_ERROR "This application cannot compile without HDF5")
-# endif(HDF5_Fortran_COMPILER)
+add_library(astr_dependencies INTERFACE)
 
-# Warning if Include are not found => can be fixed with more recent cmake version
-if (HDF5_FOUND)
-    message(STATUS "HDF5 FOUND: ${HDF5_FOUND}")
-    include_directories(${HDF5_INCLUDE_DIRS})
-    message(STATUS "HDF5 INCL: ${HDF5_INCLUDE_DIRS}")
-    link_libraries(${HDF5_LIBRARIES})
-    message(STATUS "HDF5_LIB: ${HDF5_LIBRARIES}")
-    link_libraries(${HDF5_HL_LIBRARIES})
-    message(STATUS "HDF5_HL_LIB: ${HDF5_HL_LIBRARIES}")
-    link_libraries(${HDF5_Fortran_LIBRARIES})
-    message(STATUS "HDF5_Fortran_LIBRARIES: ${HDF5_Fortran_LIBRARIES}")
-    link_libraries(${HDF5_Fortran_HL_LIBRARIES})
-    message(STATUS "HDF5_Fortran_HL_LIBRARIES: ${HDF5_Fortran_HL_LIBRARIES}")
-    add_definitions("-DHDF5")
-else (HDF5_FOUND)
-    message(STATUS "NO HDF5 include have been found. The executable won't be targeted with HDF5 include")
-    message(STATUS "Code will compile but performaces can be compromised")
-    message(STATUS "Using a CMake vers > 3.10 should solve the problem")
-    message(STATUS "Alternatively use ccmake to manually set the include if available")
-endif (HDF5_FOUND)
+target_compile_definitions(astr_dependencies INTERFACE HDF5)
+target_include_directories(astr_dependencies INTERFACE ${HDF5_INCLUDE_DIRS})
+target_link_libraries(astr_dependencies INTERFACE
+  ${HDF5_LIBRARIES}
+  ${HDF5_HL_LIBRARIES}
+  ${HDF5_Fortran_LIBRARIES}
+  ${HDF5_Fortran_HL_LIBRARIES}
+  MPI::MPI_Fortran)
 
-# set chemistry library
-option(CHEMISTRY "Build ASTR with chemistry" OFF)
-if (CHEMISTRY)
-  IF(EXISTS ${CANTERA_DIR})
-    MESSAGE(STATUS "CANTERA directory " ${CANTERA_DIR})
-    set(CTRDIR ${CANTERA_DIR})
-    include_directories(${CTRDIR}/include/cantera)
-    link_directories(${CTRDIR}/lib)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    add_definitions(-DCOMB)
-  else()
-    message(FATAL_ERROR " !! CANTERA path not found: " ${CANTERA_DIR})
-  endif(EXISTS ${CANTERA_DIR})
-else(CHEMISTRY)
-  message("chemistry is not activated")
-endif (CHEMISTRY)
+if(CHEMISTRY)
+  if(NOT CANTERA_DIR)
+    message(FATAL_ERROR "CHEMISTRY=ON requires -DCANTERA_DIR=<path>")
+  endif()
+  if(NOT EXISTS "${CANTERA_DIR}")
+    message(FATAL_ERROR "CANTERA_DIR does not exist: ${CANTERA_DIR}")
+  endif()
 
-set(ASTR_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-message(STATUS "ASTR directory: ${ASTR_ROOT}")
-set(CMAKE_INSTALL_PREFIX ${ASTR_ROOT})
+  target_compile_definitions(astr_dependencies INTERFACE COMB)
+  target_include_directories(astr_dependencies INTERFACE "${CANTERA_DIR}/include/cantera")
+  target_link_directories(astr_dependencies INTERFACE "${CANTERA_DIR}/lib")
+  target_link_libraries(astr_dependencies INTERFACE cantera_fortran cantera stdc++ pthread)
+endif()
 
-
-# Create the ASTR executable
-add_subdirectory(src)
-
-# Create an example dir with all input.i3d example files
-option(BUILD_TESTING "Build with tests" ON)
+set(ASTR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 set(test_dir "${PROJECT_BINARY_DIR}/Test")
-add_subdirectory(examples)
-message(STATUS "Before test main ${test_dir}")
-set(osub "--oversubscribe")
 
-if (${BUILD_TESTING})
-  include(CTest)
-  message(STATUS "MPI INCL ALSO FOUND: ${MPI_INCLUDE_PATH}")
-  message(STATUS "MPI EXEC: ${MPIEXEC_EXECUTABLE}") 
-  add_test(NAME SOD COMMAND ${MPIEXEC_EXECUTABLE} -n 2 ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.sod WORKING_DIRECTORY ${test_dir}/sod)
-  set_tests_properties(SOD PROPERTIES LABELS "nondim") 
-  add_test(NAME Shuosher COMMAND ${MPIEXEC_EXECUTABLE} -n 2 ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.shuosher  WORKING_DIRECTORY ${test_dir}/Shuosher)
-  set_tests_properties(Shuosher PROPERTIES LABELS "nondim")  
-  add_test(NAME VT COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.2dvort WORKING_DIRECTORY ${test_dir}/VT)
-  set_tests_properties(VT PROPERTIES LABELS "nondim")
-  add_test(NAME mixinglayer COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.2d WORKING_DIRECTORY ${test_dir}/mixinglayer)
-  set_tests_properties(mixinglayer PROPERTIES LABELS "nondim")  
-  add_test(NAME WT2D COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input2d.windtunn WORKING_DIRECTORY ${test_dir}/WT2D)
-  set_tests_properties(WT2D PROPERTIES LABELS "nondim")  
-  add_test(NAME TGV COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.tgv WORKING_DIRECTORY ${test_dir}/TGV)
-  set_tests_properties(TGV PROPERTIES LABELS "nondim")  
-  add_test(NAME RTI COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.rti WORKING_DIRECTORY ${test_dir}/RTI)
-  set_tests_properties(RTI PROPERTIES LABELS "nondim")  
-  add_test(NAME Channel COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.chl WORKING_DIRECTORY ${test_dir}/Channel)
-  set_tests_properties(Channel PROPERTIES LABELS "nondim")  
-  add_test(NAME SWLBI COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.2d WORKING_DIRECTORY ${test_dir}/SWLBI)
-  set_tests_properties(SWLBI PROPERTIES LABELS "nondim")  
-  add_test(NAME onedflame COMMAND ${MPIEXEC_EXECUTABLE} ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.onedflame WORKING_DIRECTORY ${test_dir}/onedflame)
-  set_tests_properties(onedflame PROPERTIES LABELS "combustion")
-  add_test(NAME airreactor COMMAND ${MPIEXEC_EXECUTABLE} ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.airreactor WORKING_DIRECTORY ${test_dir}/airreactor)
-  set_tests_properties(airreactor PROPERTIES LABELS "combustion")
-  add_test(NAME TGVflame COMMAND ${MPIEXEC_EXECUTABLE} -n 8 ${osub} ${CMAKE_INSTALL_PREFIX}/bin/astr run ./datin/input.tgvflame WORKING_DIRECTORY ${test_dir}/TGVflame)
-  set_tests_properties(TGVflame PROPERTIES LABELS "combustion") 
+add_subdirectory(src)
+add_subdirectory(examples)
+
+if(BUILD_TESTING)
+  set(ASTR_MPI_OVERSUBSCRIBE_FLAG)
+  if(ASTR_MPI_OVERSUBSCRIBE)
+    set(ASTR_MPI_OVERSUBSCRIBE_FLAG --oversubscribe)
+  endif()
+
+  function(astr_add_mpi_test test_name ranks workdir input_file label)
+    add_test(
+      NAME "${test_name}"
+      COMMAND
+        ${MPIEXEC_EXECUTABLE}
+        ${MPIEXEC_NUMPROC_FLAG} ${ranks}
+        ${ASTR_MPI_OVERSUBSCRIBE_FLAG}
+        $<TARGET_FILE:astr>
+        run
+        "${input_file}"
+      WORKING_DIRECTORY "${workdir}")
+    set_tests_properties("${test_name}" PROPERTIES LABELS "${label}")
+  endfunction()
+
+  astr_add_mpi_test(SOD 2 "${test_dir}/sod" "./datin/input.sod" nondim)
+  astr_add_mpi_test(Shuosher 2 "${test_dir}/Shuosher" "./datin/input.shuosher" nondim)
+  astr_add_mpi_test(VT 8 "${test_dir}/VT" "./datin/input.2dvort" nondim)
+  astr_add_mpi_test(mixinglayer 8 "${test_dir}/mixinglayer" "./datin/input.2d" nondim)
+  astr_add_mpi_test(WT2D 8 "${test_dir}/WT2D" "./datin/input2d.windtunn" nondim)
+  astr_add_mpi_test(TGV 8 "${test_dir}/TGV" "./datin/input.tgv" nondim)
+  astr_add_mpi_test(RTI 8 "${test_dir}/RTI" "./datin/input.rti" nondim)
+  astr_add_mpi_test(Channel 8 "${test_dir}/Channel" "./datin/input.chl" nondim)
+  astr_add_mpi_test(SWLBI 8 "${test_dir}/SWLBI" "./datin/input.2d" nondim)
+  astr_add_mpi_test(onedflame 1 "${test_dir}/onedflame" "./datin/input.onedflame" combustion)
+  astr_add_mpi_test(airreactor 1 "${test_dir}/airreactor" "./datin/input.airreactor" combustion)
+  astr_add_mpi_test(TGVflame 8 "${test_dir}/TGVflame" "./datin/input.tgvflame" combustion)
 endif()

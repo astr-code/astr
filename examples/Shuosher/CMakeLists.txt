@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Shuosher)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Shuosher)
+install(DIRECTORY DESTINATION examples/Shuosher)
+install(DIRECTORY datin DESTINATION examples/Shuosher)
 
 # If testing active add test for Shuosher case
 if (${BUILD_TESTING})

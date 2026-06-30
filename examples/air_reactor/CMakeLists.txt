@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/air_reactor)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/air_reactor)
+install(DIRECTORY DESTINATION examples/air_reactor)
+install(DIRECTORY datin DESTINATION examples/air_reactor)
 
 # If testing active add test for air_reactor case
 if (${BUILD_TESTING})

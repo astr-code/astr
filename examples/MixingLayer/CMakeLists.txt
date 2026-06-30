@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/MixingLayer)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/MixingLayer)
+install(DIRECTORY DESTINATION examples/MixingLayer)
+install(DIRECTORY datin DESTINATION examples/MixingLayer)
 
 # If testing active add test for mixing layer case
 if (${BUILD_TESTING})

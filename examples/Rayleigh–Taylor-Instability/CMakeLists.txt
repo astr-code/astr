@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Rayleigh–Taylor-Instability)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Rayleigh–Taylor-Instability)
+install(DIRECTORY DESTINATION examples/Rayleigh–Taylor-Instability)
+install(DIRECTORY datin DESTINATION examples/Rayleigh–Taylor-Instability)
 
 # If testing active add test for RTI case
 if (${BUILD_TESTING})

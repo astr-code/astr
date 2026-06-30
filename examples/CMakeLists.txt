@@ -1,4 +1,4 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples)
+install(DIRECTORY DESTINATION examples)
 add_subdirectory(Taylor_Green_Vortex)
 add_subdirectory(Taylor_Green_Vortex_2D)
 add_subdirectory(Channel)

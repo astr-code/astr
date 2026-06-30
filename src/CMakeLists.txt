@@ -1,10 +1,6 @@
-message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
-message(STATUS "PROJECT_BINARY_DIR: ${PROJECT_BINARY_DIR}")
-
-add_executable(astr 
+add_executable(astr
                     astr.F90
                     bc.F90
-                    CMakeLists.txt
                     cmdefne.F90
                     commarray.F90
                     comsolver.F90
@@ -43,15 +39,11 @@ add_executable(astr
                     ../user_define_module/userdefine.F90
                     utility.F90
                     vtkio.F90)
-                    
-target_link_libraries(astr)
-if (MPI_FOUND)
-  target_link_libraries(astr PRIVATE MPI::MPI_Fortran)
-endif (MPI_FOUND)
-if (CHEMISTRY)
-  message(STATUS "CANTERA library: ${CTRDIR}/lib")
-  target_link_libraries(astr PRIVATE -L${CTRDIR}/lib -lcantera_fortran -lcantera -lstdc++ -pthread)
-endif (CHEMISTRY)
+
+target_link_libraries(astr
+  PRIVATE
+    astr_build_options
+    astr_dependencies)
 
 install(TARGETS astr
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

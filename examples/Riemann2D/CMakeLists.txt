@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Riemann2D)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Riemann2D)
+install(DIRECTORY DESTINATION examples/Riemann2D)
+install(DIRECTORY datin DESTINATION examples/Riemann2D)
 
 # If testing active add test for Riemann2D case
 if (${BUILD_TESTING})

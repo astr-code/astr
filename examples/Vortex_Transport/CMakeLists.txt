@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Vortex_Transport)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Vortex_Transport)
+install(DIRECTORY DESTINATION examples/Vortex_Transport)
+install(DIRECTORY datin DESTINATION examples/Vortex_Transport)
 
 # If testing active add test for vortex trasport case
 if (${BUILD_TESTING})

@@ -1,5 +1,5 @@
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Lid-Driven-Cavity)
-install(DIRECTORY datin DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/Lid-Driven-Cavity)
+install(DIRECTORY DESTINATION examples/Lid-Driven-Cavity)
+install(DIRECTORY datin DESTINATION examples/Lid-Driven-Cavity)
 
 # If testing active add test for Lid-Driven-Cavity case
 if (${BUILD_TESTING})
